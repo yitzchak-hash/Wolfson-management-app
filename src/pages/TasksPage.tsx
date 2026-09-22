@@ -77,6 +77,9 @@ export function TasksPage() {
   const [addForm, setAddForm] = useState({ contractorId: '', aptId: '', task: '', dueDate: '', stageId: '', priority: '' });
   /** Where the job moves when the task is closed (the pair's second half). */
   const [addTo, setAddTo] = useState('');
+  // The set model: every picked stage (stageId is the first of them).
+  const [addIds, setAddIds] = useState<string[]>([]);
+  const tipusStagesTP = useStore(st => st.boardSettings[st.currentProjectId]?.tipusStages);
   const [addSplit, setAddSplit] = useState<TaskSplit | null>(null);
   /**
    * A GENERAL JOB (owner, 2026-09-03): "General job" ticked swaps the
@@ -282,6 +285,7 @@ export function TasksPage() {
       taskDescription: editFields.taskDescription,
       dueDate: editFields.dueDate || null,
       stageId: editFields.stageId || null,
+      stageIds: editFields.stageId ? [editFields.stageId] : undefined,
       completedAt: editFields.completedAt,
       priority: (editFields.priority as TaskPriority) || undefined,
       attachments: editAttachments.length > 0 ? editAttachments : undefined,
@@ -310,6 +314,7 @@ export function TasksPage() {
         priority: (addForm.priority as TaskPriority) || undefined,
       });
       setAddForm({ contractorId: '', aptId: '', task: '', dueDate: '', stageId: '', priority: '' });
+    setAddIds([]);
       setAddGeneral(false); setAddGeneralBld('');
       setAddDays([]);
       setAddDaysEpoch(e => e + 1);
@@ -324,7 +329,7 @@ export function TasksPage() {
     // One record, or two when the second stretch carries different stages and
     // the office said "two" (locked answer 9). The FROM stage never moves the
     // job — a task on a future stage is a task, not a stage change.
-    for (const w of taskWrites(addForm.dueDate, addDays, { from: addForm.stageId, to: addTo }, addSplit)) {
+    for (const w of taskWrites(addForm.dueDate, addDays, { from: addForm.stageId, to: addTo, ids: addIds }, addSplit)) {
       addContractorAssignment({
         contractorId: addForm.contractorId,
         apartmentId: addForm.aptId,
@@ -340,6 +345,7 @@ export function TasksPage() {
     }
     setAddTo(''); setAddSplit(null);
     setAddForm({ contractorId: '', aptId: '', task: '', dueDate: '', stageId: '', priority: '' });
+    setAddIds([]);
     setAddDays([]);
     setAddDaysEpoch(e => e + 1);
     setAddAttachments([]);
@@ -675,6 +681,7 @@ export function TasksPage() {
                 onChange={e => {
                   const apt = apartments.find(a => a.id === e.target.value);
                   setAddForm(f => ({ ...f, aptId: e.target.value, stageId: apt?.currentStageId ?? '' }));
+                  setAddIds(apt?.currentStageId ? [apt.currentStageId] : []);
                 }}
                 className="col-span-2 border border-blue-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30 bg-white"
               >
@@ -702,8 +709,9 @@ export function TasksPage() {
                 <div className="col-span-2">
                   <StagePairPicker stages={sortedStages}
                     currentStageId={apartments.find(a => a.id === addForm.aptId)?.currentStageId}
-                    value={{ from: addForm.stageId, to: addTo }}
-                    onChange={v => { setAddForm(f => ({ ...f, stageId: v.from })); setAddTo(v.to); }}
+                    value={{ from: addForm.stageId, to: addTo, ids: addIds }}
+                    apartment={apartments.find(a => a.id === addForm.aptId) ?? null} ctx={{ tipusStages: tipusStagesTP }}
+                    onChange={v => { setAddForm(f => ({ ...f, stageId: v.from })); setAddTo(v.to); setAddIds(v.ids ?? []); }}
                     strings={stagePairStrings(s)} isRtl={s.isRtl}
                     box="w-full border border-blue-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30 bg-white" />
                 </div>
@@ -731,7 +739,7 @@ export function TasksPage() {
               <TaskDaysPicker key={addDaysEpoch} start={addForm.dueDate} onDaysChange={setAddDays}
                 stages={addGeneral ? undefined : sortedStages}
                 currentStageId={apartments.find(a => a.id === addForm.aptId)?.currentStageId}
-                pair={{ from: addForm.stageId, to: addTo }} onSplitChange={setAddSplit}
+                pair={{ from: addForm.stageId, to: addTo, ids: addIds }} onSplitChange={setAddSplit}
                 pairStrings={stagePairStrings(s)} splitStrings={splitStringsOf(s)} isRtl={s.isRtl} />
             </div>
             <MessageBox

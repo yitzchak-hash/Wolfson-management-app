@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect, useLayoutEffect, useMemo, useCallback } from 'react';
 import { problemStates } from '../data/problems';
+import { progressOf } from '../data/stageMarks';
 import {
   Plus, Briefcase, MapPin, ExternalLink, Trash2, ClipboardList, FolderOpen,
   Copy, Scissors, Maximize, Minimize, StickyNote, Square, Palette, Pencil, X, AlertTriangle,
@@ -2143,6 +2144,8 @@ export function GeneralJobsPage() {
 
   const stages = allStages.filter(st => st.projectId === 'general');
   const stageMap = new Map(stages.map(st => [st.id, st]));
+  // The set model: the Job Board has no tipus, so the set is the whole list.
+  const stagesSorted = [...stages].sort((a, b) => a.order - b.order);
   const problemMap = useMemo(() => problemStates(contractorAssignments), [contractorAssignments]);
   // Jobs in a bin (Done / Ready / Archive / Trash) live in their own window,
   // not on the main board. Nothing is deleted — they are only moved.
@@ -7377,6 +7380,7 @@ function isPointerNode(el: CanvasElement | undefined): boolean {
                   job={job} index={gi} ghostIndex={gi}
                   x={p.x} y={p.y} w={tileSize(job).w} h={tileSize(job).h}
                   stage={job.currentStageId ? stageMap.get(job.currentStageId) ?? null : null}
+                  progress={progressOf(job, stagesSorted)}
                   problem={problemMap.get(job.id) ?? null}
                   pendingTasks={pendingByJob.get(job.id) ?? 0}
                   isSelected={false}
@@ -7402,6 +7406,7 @@ function isPointerNode(el: CanvasElement | undefined): boolean {
                   w={jobResize?.id === job.id ? jobResize.startW + jobResize.dw : tileSize(job).w}
                   h={jobResize?.id === job.id ? jobResize.startH + jobResize.dh : tileSize(job).h}
                   stage={job.currentStageId ? stageMap.get(job.currentStageId) ?? null : null}
+                  progress={progressOf(job, stagesSorted)}
                   problem={problemMap.get(job.id) ?? null}
                   pendingTasks={pendingByJob.get(job.id) ?? 0}
                   isSelected={selectedJobIds.has(job.id)}

@@ -115,8 +115,11 @@ async function openDrawer(page) {
   await page.locator('[data-stage-picker]').first().click();
   await page.waitForTimeout(600);
   check(await page.locator('[data-stage-panel]').count() === 1, 'the stage list opens');
-  // The box beside the CURRENT stage's row — a left press crosses it off.
-  await page.locator('[data-stage-row="S2"] [data-stage-box]').first().click();
+  // The set model (2026-09-22): a tap walks the stage on — to do → happening
+  // now → done — so two taps cross the current stage off.
+  await page.locator('[data-stage-bubble="S2"]').first().click();
+  await page.waitForTimeout(700);
+  await page.locator('[data-stage-bubble="S2"]').first().click();
   await page.waitForTimeout(1200);
   const d = await store(page);
   const apt = (d.apartments || []).find(a => a.id === 'A1-7');
@@ -139,7 +142,10 @@ async function openDrawer(page) {
     await page.locator('[data-map-square="wolfson"]').click(); await page.waitForTimeout(1200);
   }
   await page.locator('[data-apt-id="A1-7"]').first().click(); await page.waitForTimeout(800);
-  await page.locator('[data-work-here]').click(); await page.waitForTimeout(1400);
+  await page.locator('[data-work-here]').click(); await page.waitForTimeout(800);
+  // The set model (2026-09-22): pick what he is doing, then Start.
+  if (await page.locator('[data-work-stage]').count()) await page.locator('[data-work-stage]').first().click();
+  await page.locator('[data-work-start]').click(); await page.waitForTimeout(1400);
   const d = await store(page);
   const made = (d.contractorAssignments || []).find(a => a.stageReport);
   check(!!made, 'the worker started a task');

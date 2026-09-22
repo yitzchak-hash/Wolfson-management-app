@@ -18,7 +18,7 @@ import { StageNotesSection } from './StageNotesSection';
 import { ActivitySection } from './ActivitySection';
 import { MediaViewer } from '../ui/MediaViewer';
 import { useThreadFold } from '../../data/threadFold';
-import { advanceOnDone } from '../../data/stageMarks';
+import type { CustomWhere } from './StagePicker';
 import { mediaKindOf, isMediaFile } from '../../data/mediaKind';
 import { extractFileId, drivePreviewUrl, driveDownloadUrl, findPlansPdfViaBackend, findAllPlansPdfsViaBackend, findPlanSetViaBackend, PlanEntry, isUploadBackendConfigured, findOrCreateFolderViaBackend, uploadFileViaResumableSession, shareFileToDrive, ensureDriveShared, extractFolderId, driveThumbUrl, listAllPhotosViaBackend, getFolderNameViaBackend, familyNameFromFolderName, DrivePhotoItem, DriveFile, FolderHealth, checkFolderHealthViaBackend } from '../../data/driveApi';
 import { Tooltip } from '../ui/Tooltip';
@@ -29,6 +29,7 @@ import { LinkField } from '../ui/LinkField';
 import { printSheet, printEsc } from '../../data/printing';
 import { PlanAddressSuggest } from './PlanAddressSuggest';
 import { StagePicker } from './StagePicker';
+import { isWorkStage, progressOf } from '../../data/stageMarks';
 import { ProblemForm } from './ProblemForm';
 import { ProblemBand } from './ProblemBand';
 import { problemState } from '../../data/problems';
@@ -357,8 +358,6 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
     measurePlanAspect(fid).then(r => { if (!stale && r !== null) setPlanRatio(r); });
     return () => { stale = true; };
   }, [shownPlanId, availablePdfs, selectedPdfIdx]);
-  const [stageChangeModal, setStageChangeModal] = useState<{ newStageId: string; newStageName: string } | null>(null);
-  const [prevStageId, setPrevStageId] = useState<string>('');
   const [drawerEditingTaskId, setDrawerEditingTaskId] = useState<string | null>(null);
   const [drawerEditFields, setDrawerEditFields] = useState<{ taskDescription: string; dueDate: string; stageId: string; priority: string }>({ taskDescription: '', dueDate: '', stageId: '', priority: '' });
   /**
@@ -443,7 +442,6 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
     setOfficeNoteAtts(d => ({ ...d, [a.id]: [] }));
   }
   const [drawerEditProgress, setDrawerEditProgress] = useState<number | null>(null);
-  const [keepHistoryModal, setKeepHistoryModal] = useState(false);
   const [problemFormOpen, setProblemFormOpen] = useState(false);
 
   useEffect(() => {
@@ -457,7 +455,6 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
       };
       setFamilyName(apartment.displayName || '');
       setCurrentStageId(apartment.currentStageId ?? '');
-      setPrevStageId(apartment.currentStageId ?? '');
       setClassification(apartment.classification);
       setNoteDraft('');
       setDriveLink(apartment.driveLink ?? '');
@@ -652,6 +649,35 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
   const setPlanPaneOn = setPlanWanted;
   const planVersionCount = planVersions.length ? planVersions[0].version : 0;
 
+  const tipusStagesCtx = useStore(st => st.boardSettings[st.currentProjectId]?.tipusStages);
+  const setCtx = { tipusStages: tipusStagesCtx };
+  const setApartmentMarks = useStore(st => st.setApartmentMarks);
+  const addStageToList = useStore(st => st.addStage);
+  /**
+   * A CUSTOM stage from this window (locked answer 16): it joins the
+   * workspace's list flagged custom, carrying where it applies — this
+   * apartment alone by default — so it has a colour, three names, an order
+   * and a place in reports, yet never appears on another apartment's picker
+   * until widened. "The whole workspace" makes it an ordinary stage outright.
+   */
+  function addCustomStage(name: string, color: string, where: CustomWhere) {
+    const maxOrder = stages.filter(st => isGeneralProject ? st.projectId === 'general' : !st.projectId)
+      .filter(isWorkStage).reduce((m, st) => Math.max(m, st.order), 0);
+    const now = new Date().toISOString();
+    addStageToList({
+      id: 's' + Math.random().toString(36).slice(2, 8),
+      name, color, order: maxOrder + 1, active: true, kind: 'work',
+      projectId: isGeneralProject ? 'general' : undefined,
+      ...(where === 'workspace' ? {} : {
+        custom: true,
+        ...(where === 'apartment' ? { onApartments: [apartment!.id] } : {}),
+        ...(where === 'tipus' && apartment!.tipus ? { onTipus: [apartment!.tipus] } : {}),
+        ...(where === 'building' ? { onBuildings: [apartment!.buildingId] } : {}),
+      }),
+      createdAt: now, updatedAt: now,
+    });
+    onToast(`${ui.setNewCustom}: ${name}`);
+  }
   const sortedStages = [...stages]
     // EXCLUSIVE per project. The old filter was
     //   (!s.projectId || (isGeneral && s.projectId === 'general'))
@@ -696,6 +722,18 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
         ${row("Latest markup", latestPlanVersion?.driveUrl
           ? `Version ${latestPlanVersion.version} — ${latestPlanVersion.driveUrl}` : "")}
       </table>
+      ${(() => {
+        // The set model: the apartment's own stages as a tick list — what a
+        // crew carries anyway.
+        const p = progressOf(apartment!, sortedStages, setCtx, contractorAssignments);
+        if (!p.total) return "";
+        const mark = (st: string) => st === "done" ? "☑" : st === "pending" || st === "doing" ? "◐" : "☐";
+        return `<h2 style="font-size:13px;margin:0 0 6px;color:#1e3a5f">Stages · ${p.done}/${p.total}</h2>
+          <ul style="list-style:none;padding:0;margin:0 0 14px;columns:2;font-size:11.5px">
+            ${p.rows.map(r => `<li style="margin:2px 0"><span style="display:inline-block;width:14px">${mark(r.state)}</span>
+              <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${r.stage.color};margin:0 6px 0 2px"></span>${e(getStageName(r.stage, !!ui.isRtl))}${r.state === "pending" ? " <i style=\"color:#c2410c\">(half done)</i>" : r.state === "doing" ? " <i>(now)</i>" : ""}</li>`).join("")}
+          </ul>`;
+      })()}
 
       <h2 style="font-size:13px;margin:14px 0 6px;color:#1e3a5f">Tasks (${tasks.length})</h2>
       ${tasks.length ? `<table><thead><tr>
@@ -794,6 +832,8 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
       // The whole run, not just the last day — the model's standing rule.
       ...daysFields(drawerEditFields.dueDate, drawerEditDays),
       stageId: drawerEditFields.stageId || null,
+      ...(drawerEditFields.stageId !== (aptTasks.find(t => t.id === drawerEditingTaskId)?.stageId ?? '')
+        ? { stageIds: drawerEditFields.stageId ? [drawerEditFields.stageId] : undefined } : {}),
       priority: (drawerEditFields.priority as TaskPriority) || undefined,
       attachments: drawerEditAttachments.length > 0 ? drawerEditAttachments : undefined,
     });
@@ -848,48 +888,27 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
   }
 
   function handleSaveBasic() {
-    if (!currentStageId && prevStageId) {
-      setKeepHistoryModal(true);
-      return;
-    }
-    doSaveBasic(false);
+    doSaveBasic();
   }
 
-  // `explicitStageId` is needed when called straight from the stage <select>'s
-  // onChange — React hasn't flushed setCurrentStageId yet at that point.
-  function doSaveBasic(clearHistory: boolean, explicitStageId?: string) {
-    setKeepHistoryModal(false);
-    const stageId = explicitStageId !== undefined ? explicitStageId : currentStageId;
-    const stageChanged = stageId !== prevStageId;
+  /**
+   * The basics, written together. The STAGE is deliberately NOT here any
+   * more (the set model, 2026-09-22): the headline is derived by the store
+   * from the apartment's marks, and a stale local copy written back would
+   * be read as "the job is at X" and tick stages off behind the office's
+   * back. The stage board writes through `setApartmentMarks` on the spot.
+   */
+  function doSaveBasic() {
     updateApartment(apartment!.id, {
       displayName: familyName || apartment!.apartmentNumber,
-      currentStageId: stageId || null,
       classification,
       driveLink: driveLink.trim() || undefined,
       plansPdfLink: plansPdfLink.trim() || undefined,
       zohoLink: zohoLinkLocal.trim() || undefined,
       address: addressLocal.trim() || undefined,
       phone: phoneLocal.trim() || undefined,
-      ...(clearHistory ? { stageDates: {} } : {}),
     }, currentUser);
-    setPrevStageId(stageId);
-    if (stageChanged && stageId && onRequestAddTask) {
-      const newStageName = stages.find(s => s.id === stageId)?.name ?? '';
-      setStageChangeModal({ newStageId: stageId, newStageName });
-    } else {
-      onToast(ui.apartmentSaved);
-    }
-  }
-
-  // Stage picker saves the moment it changes. Clearing the stage still has to ask
-  // whether to keep the stage-date history, so that modal now fires on change.
-  function handleStageChange(newStageId: string) {
-    setCurrentStageId(newStageId);
-    if (!newStageId && prevStageId) {
-      setKeepHistoryModal(true);
-      return;
-    }
-    doSaveBasic(false, newStageId);
+    onToast(ui.apartmentSaved);
   }
 
   // Classification is a single targeted write — no other field is touched.
@@ -907,7 +926,6 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
     const wasDirty = basicDirty();
     updateApartment(apartment!.id, {
       displayName: familyName || apartment!.apartmentNumber,
-      currentStageId: currentStageId || null,
       classification,
       driveLink: driveLink.trim() || undefined,
       plansPdfLink: plansPdfLink.trim() || undefined,
@@ -915,7 +933,6 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
       address: addressLocal.trim() || undefined,
       phone: phoneLocal.trim() || undefined,
     }, currentUser);
-    setPrevStageId(currentStageId);
     basicSnapshot.current = {
       familyName, address: addressLocal, phone: phoneLocal,
       zoho: zohoLinkLocal, drive: driveLink,
@@ -1373,72 +1390,6 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
   return (
     <>
       {/* Stage-change → assign task modal */}
-      {stageChangeModal && (
-        <>
-          <div className="fixed inset-0 bg-black/50 z-[130]" />
-          <div className="fixed z-[140] bg-white rounded-2xl shadow-2xl p-6" style={{ left: '50%', top: '50%', transform: 'translate(-50%, -50%)', width: 'min(380px, 90vw)' }}>
-            <div className="flex items-center gap-2 mb-2">
-              <ClipboardList size={18} className="text-[#1e3a5f]" />
-              <h3 className="font-bold text-gray-900 text-base">{ui.stageChangedModal}</h3>
-            </div>
-            <p className="text-sm text-gray-600 mb-4">
-              Stage set to <strong className="text-[#1e3a5f]">{stageChangeModal.newStageName}</strong>. {ui.assignTaskQuestion}
-            </p>
-            <div className="flex gap-2">
-              <button
-                onClick={() => { setStageChangeModal(null); onToast(ui.apartmentSaved); }}
-                className="flex-1 py-2.5 rounded-xl text-sm font-medium border border-gray-200 text-gray-600 hover:bg-gray-50"
-              >
-                {ui.noJustSave}
-              </button>
-              <button
-                onClick={() => {
-                  setStageChangeModal(null);
-                  onToast(ui.apartmentSaved);
-                  onClose();
-                  const liveApt = apartments.find(a => a.id === apartment!.id) ?? apartment!;
-                  onRequestAddTask?.(liveApt);
-                }}
-                className="flex-1 py-2.5 rounded-xl text-sm font-bold text-white flex items-center justify-center gap-1.5"
-                style={{ backgroundColor: '#1e3a5f' }}
-              >
-                <ClipboardList size={14} /> {ui.assignTaskBtn}
-              </button>
-            </div>
-          </div>
-        </>
-      )}
-
-      {/* Keep stage history modal (shown when resetting apartment to Not Started) */}
-      {keepHistoryModal && (
-        <>
-          <div className="fixed inset-0 bg-black/50 z-[130]" />
-          <div className="fixed z-[140] bg-white rounded-2xl shadow-2xl p-6" style={{ left: '50%', top: '50%', transform: 'translate(-50%, -50%)', width: 'min(380px, 90vw)' }}>
-            <div className="flex items-center gap-2 mb-2">
-              <Clock size={18} className="text-amber-500" />
-              <h3 className="font-bold text-gray-900 text-base">Reset to Not Started</h3>
-            </div>
-            <p className="text-sm text-gray-600 mb-4">
-              Keep the stage completion history (dates when each stage was reached)?
-            </p>
-            <div className="flex gap-2">
-              <button
-                onClick={() => doSaveBasic(true)}
-                className="flex-1 py-2.5 rounded-xl text-sm font-medium border border-gray-200 text-gray-600 hover:bg-gray-50"
-              >
-                No, clear history
-              </button>
-              <button
-                onClick={() => doSaveBasic(false)}
-                className="flex-1 py-2.5 rounded-xl text-sm font-bold text-white flex items-center justify-center gap-1.5 bg-[#1e3a5f]"
-              >
-                Yes, keep history
-              </button>
-            </div>
-          </div>
-        </>
-      )}
-
       {/* Unmerge modal */}
       {showUnmergeModal && unmergeTarget && (
         <>
@@ -1809,30 +1760,27 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                 </div>
                 )}
 
-                {/* Current stage — with the per-stage done / half-done boxes.
-                    Marks save on the spot (the drawer's autosave manner);
-                    picking a row runs the same handleStageChange the old
-                    select ran, questions and all. */}
+                {/* The apartment's STAGE BOARD (the set model): the field reads
+                    the headline and the fraction; the panel is the set, grouped
+                    by state. Marks write on the spot through the store's one
+                    writer, which re-derives the headline. */}
                 <div className="flex-1 min-w-[150px]">
                   <label className="block text-[10px] font-medium text-gray-500 mb-1">{ui.currentStage}</label>
                   <StagePicker
+                    apartment={apartments.find(a => a.id === apartment.id) ?? apartment}
                     stages={sortedStages}
-                    currentStageId={currentStageId}
-                    stageMarks={(apartments.find(a => a.id === apartment.id) ?? apartment).stageMarks}
-                    onPickStage={handleStageChange}
-                    onMarks={next => {
-                      // Crossing the CURRENT stage off moves the job on.
-                      const moveTo = advanceOnDone(apartment.currentStageId, apartment.stageMarks, next, sortedStages);
-                      updateApartment(apartment.id,
-                        moveTo ? { stageMarks: next, currentStageId: moveTo } : { stageMarks: next },
-                        currentUser);
-                      if (moveTo) {
-                        setCurrentStageId(moveTo);
-                        onToast(`${ui.stageMovedOn} ${getStageName(sortedStages.find(x => x.id === moveTo)!, !!ui.isRtl)}`);
-                      }
+                    tasks={contractorAssignments}
+                    ctx={setCtx}
+                    workers={contractors}
+                    photos={contractorPhotos}
+                    onMarks={next => setApartmentMarks(apartment.id, next, currentUser)}
+                    onMarker={id => {
+                      updateApartment(apartment.id, { currentStageId: id }, currentUser);
+                      setCurrentStageId(id);
                     }}
+                    onAddCustom={({ name, color, where }) => addCustomStage(name, color, where)}
                     ui={ui}
-                                      onReportProblem={isGeneralProject ? undefined : () => setProblemFormOpen(true)}
+                    onReportProblem={isGeneralProject ? undefined : () => setProblemFormOpen(true)}
                     problem={problemState(apartment.id, contractorAssignments)}
                   />
                 </div>

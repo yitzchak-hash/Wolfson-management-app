@@ -1,6 +1,7 @@
 import React, { useMemo } from 'react';
 import { useStore } from '../data/store';
 import { isCountableApartment } from '../types';
+import { progressOf } from '../data/stageMarks';
 import { format, subWeeks, startOfWeek, endOfWeek } from 'date-fns';
 import { Building2, TrendingUp, CheckCircle2, Clock, Users, Wrench } from 'lucide-react';
 
@@ -89,6 +90,7 @@ export function AnalyticsDashboard() {
     : allApartments;
 
   const sortedStages = useMemo(() => [...stages].filter(st => st.active && (currentProjectId === 'general' ? st.projectId === 'general' : !st.projectId)).sort((a, b) => a.order - b.order), [stages, currentProjectId]);
+  const tipusStagesAn = useStore(st => st.boardSettings[st.currentProjectId]?.tipusStages);
 
   const stats = useMemo(() => {
     /**
@@ -110,14 +112,25 @@ export function AnalyticsDashboard() {
       if (a.currentStageId) byStage.set(a.currentStageId, (byStage.get(a.currentStageId) ?? 0) + 1);
     });
 
+    // The set model: how much of each KIND of work is finished — every
+    // apartment's set, counted per stage (done, and how many carry it).
+    const doneByStage = new Map<string, { done: number; carry: number }>();
+    sortedStages.forEach(st => doneByStage.set(st.id, { done: 0, carry: 0 }));
+    residentialApts.forEach(a => {
+      for (const r of progressOf(a, sortedStages, { tipusStages: tipusStagesAn }).rows) {
+        const cell = doneByStage.get(r.stage.id); if (!cell) continue;
+        cell.carry += 1; if (r.state === 'done') cell.done += 1;
+      }
+    });
+
     const byBuilding = buildings.map(b => {
       const bApts = residentialApts.filter(a => a.buildingId === b.id);
       const bStarted = bApts.filter(a => a.currentStageId).length;
       return { building: b.id, total: bApts.length, started: bStarted };
     });
 
-    return { total, started, byStage, byBuilding };
-  }, [apartments, sortedStages, buildings]);
+    return { total, started, byStage, byBuilding, doneByStage };
+  }, [apartments, sortedStages, buildings, tipusStagesAn]);
 
   /**
    * Tasks whose job still counts.
@@ -232,6 +245,28 @@ export function AnalyticsDashboard() {
                 <ProgressBar value={started} max={total} color="#4aa8d8" />
               </div>
             ))}
+          </div>
+        </div>
+
+        {/* Work finished per stage — the set model */}
+        <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm" style={{ backgroundColor: bgCard, borderColor }} data-done-per-stage>
+          <h2 className="font-semibold mb-4" style={{ color: textPrimary }}>{s.setDonePerStage}</h2>
+          <div className="space-y-3">
+            {sortedStages.filter(st => st.kind !== 'marker').map(st => {
+              const cell = stats.doneByStage.get(st.id) ?? { done: 0, carry: 0 };
+              return (
+                <div key={st.id}>
+                  <div className="flex items-center justify-between mb-1">
+                    <div className="flex items-center gap-2">
+                      <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: st.color }} />
+                      <span className="text-xs font-medium truncate" style={{ color: textPrimary }}>{st.name}</span>
+                    </div>
+                    <span className="text-xs font-bold ml-2 tabular-nums" style={{ color: textSub }}>{cell.done}/{cell.carry}</span>
+                  </div>
+                  <ProgressBar value={cell.done} max={Math.max(cell.carry, 1)} color={st.color} />
+                </div>
+              );
+            })}
           </div>
         </div>
 

@@ -43,8 +43,33 @@ with starred recommendations is published first; the owner says "approved" /
 "all yes" / answers by number; then it is built. Never build a redesign
 unasked.
 
-## Where things stand (2026-09-17 — the buildings layout, and notes that reach the site)
+## Where things stand (2026-09-22 — THE SET MODEL is built)
 Last commits, newest first (see `git log`):
+- **2026-09-22 — "Bubbles, Not Stages", BUILT** ("all the stars on 15 and 16,
+  build it"). An apartment carries a SET of work stages with a state each
+  (to do · booked · happening now · half done · problem · done · not needed);
+  on screen the word stays STAGE. `src/data/stageMarks.ts` is the model
+  (`stageSetOf` / `stageStateOf` / `liveStateOf` / `headlineStageId` /
+  `applyMarks` the one writer / `progressOf` / `migrateToBubbles` /
+  `seedStageKinds`); `currentStageId` survives as the DERIVED headline so
+  every old reader keeps working; `updateApartment` translates a hand-set
+  headline into marks (`normaliseStageWrite`). Built: the apartment
+  window's stage board (StagePicker rewritten: groups, tap / right-click /
+  × / put back / + add a stage incl. a CUSTOM one for this apartment
+  alone), the cell's and the tile's strip + fraction, Settings → Stages
+  work/marker + on-every-apartment + custom badge/widen, tipus sets on the
+  Tipusim card, ONE multi-stage task picker on every form (`stageIds`),
+  closing ticks them all, the worker's "What are you doing here? select one
+  or multiple" start (marks doing) and the did-you-finish → which-didn't
+  → three-pictures-per-finished-stage close (`ContractorPhoto.stageId`;
+  unfinished → half done, office clears), the bulk bar's add/remove a stage,
+  report fields, analytics' work-finished-per-stage, search `needs:`/`doing:`
+  /`done:`, the printed tick list, and the one-time migration from
+  AppLayout. Probe `bubbles-probe.mjs` 44/44; `stagereport.mjs` retired.
+  tsc, build, four audits green. See CLAUDE.md "THE SET MODEL".
+  **NEXT: his first look at production** — watch the migration land on the
+  live workspaces (every cell should keep its colour; fractions appear), the
+  worker's new start/close on a real phone, and the regressions noted below.
 - **2026-09-17, fourth pass — his six asks about the buildings layout, plus
   the notes.** (1) A FLOOR can be renamed from its right-click menu, and the
   four POSITIONS across a building can be named — both show on the buildings
@@ -596,6 +621,12 @@ Last commits, newest first (see `git log`):
   `npx vite --port 5173` and `VITE_DRIVE_API_KEY=test npx vite --port 5174`.
 
 ## The last reply the owner saw (so the next one continues it)
+**Newest (2026-09-22, the build)**: the reply reported the whole set model
+built in one round per the page's five-round order — what each screen does
+now, that the word stays "stage", that the migration is automatic and keeps
+every cell's colour, the four doors, the worker's new start and close, and
+what to check first on production. Bottom line + bullets (KEEP THAT FORMAT).
+
 **Newest (2026-09-17, the stages session, Version 3)**: the reply said the
 page was updated with every one of his second-round answers — the phone
 says "select one or multiple" and "Something else" is gone (it meant work

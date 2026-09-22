@@ -488,6 +488,27 @@ function TipusSettings({ onToast }: { onToast: (msg: string) => void }) {
   const setBoardSetting = useStore(st => st.setBoardSetting);
   const [draft, setDraft] = useState('');
   const write = (next: string[]) => setBoardSetting('tipusim', next.length ? next : undefined);
+  /**
+   * Door 1 of the set model (locked answers 4 + 15): the stages a tipus
+   * carries. No entry = the whole list; ticking every stage removes the
+   * entry again, so "all" is never stored as a list that rots when a stage
+   * is added later.
+   */
+  const tipusStages = useStore(st => st.boardSettings[st.currentProjectId]?.tipusStages);
+  const currentProjectId = useStore(st => st.currentProjectId);
+  const workStages = useStore(st => st.stages)
+    .filter(st => (currentProjectId === 'general' ? st.projectId === 'general' : !st.projectId) && st.active && st.kind !== 'marker' && !st.custom)
+    .sort((a, b) => a.order - b.order);
+  const writeSets = (next: Record<string, string[]>) =>
+    setBoardSetting('tipusStages', Object.keys(next).length ? next : undefined);
+  const toggleTipusStage = (t: string, stageId: string) => {
+    const cur = tipusStages?.[t] ?? workStages.map(st => st.id);
+    const nextList = cur.includes(stageId) ? cur.filter(x => x !== stageId) : [...cur, stageId];
+    const all = workStages.every(st => nextList.includes(st.id));
+    const next = { ...(tipusStages ?? {}) };
+    if (all) delete next[t]; else next[t] = workStages.filter(st => nextList.includes(st.id)).map(st => st.id);
+    writeSets(next);
+  };
   const add = () => {
     const v = draft.trim();
     if (!v) return;
@@ -521,6 +542,37 @@ function TipusSettings({ onToast }: { onToast: (msg: string) => void }) {
         <button data-tipus-add onClick={add} disabled={!draft.trim()}
           className="px-3 py-1.5 rounded-lg text-sm font-medium bg-[#1e3a5f] text-white disabled:opacity-40">+ {s.add}</button>
       </div>
+      {tipusim.length > 0 && workStages.length > 0 && (
+        <div className="mt-4 border-t border-gray-100 pt-3">
+          <h3 className="text-sm font-semibold text-gray-800 mb-0.5">{s.setTipusSetsTitle}</h3>
+          <p className="text-xs text-gray-500 mb-2">{s.setTipusSetsHint}</p>
+          <div className="space-y-2">
+            {tipusim.map(t => {
+              const list = tipusStages?.[t];
+              return (
+                <div key={t} data-tipus-set={t} className="flex flex-wrap items-center gap-1.5">
+                  <span className="text-sm font-bold text-[#1e3a5f] w-12">{t}</span>
+                  {workStages.map(st => {
+                    const on = !list || list.includes(st.id);
+                    return (
+                      <button key={st.id} data-tipus-set-stage={st.id} data-on={on ? '1' : undefined}
+                        onClick={() => toggleTipusStage(t, st.id)}
+                        className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full border"
+                        style={on
+                          ? { borderColor: st.color, backgroundColor: `${st.color}1f`, color: '#0f172a' }
+                          : { borderColor: '#e5e7eb', color: '#9ca3af', backgroundColor: '#fff', textDecoration: 'line-through' }}>
+                        <span className="w-2 h-2 rounded-full" style={{ backgroundColor: on ? st.color : '#d1d5db' }} />
+                        {st.name}
+                      </button>
+                    );
+                  })}
+                  {!list && <span className="text-[10px] text-gray-400">· {s.setAllStages}</span>}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -673,6 +725,43 @@ function StageSettings({ stages, updateStage, addStage, deleteStage, onToast, cu
                     {active ? s.activeLabel : s.hiddenLabel}
                   </button>
                 </Tooltip>
+                {/* The set model: WORK (somebody does it, it counts) or a
+                    MARKER (a state of the whole flat); "on every apartment"
+                    for a work stage; and a custom stage's reach, with widen. */}
+                {(() => {
+                  const kind = (edit.kind ?? stage.kind ?? 'work') as 'work' | 'marker';
+                  const reach = (stage.onApartments?.length ?? 0) + (stage.onTipus?.length ?? 0) + (stage.onBuildings?.length ?? 0);
+                  return (
+                    <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                      <button data-stage-kind={stage.id} data-kind={kind}
+                        onClick={() => setEdit(stage.id, { kind: kind === 'work' ? 'marker' : 'work' })}
+                        className="text-[10px] px-2 py-1 rounded-lg border font-bold uppercase tracking-wide whitespace-nowrap"
+                        style={kind === 'marker'
+                          ? { backgroundColor: '#f1f5f9', borderColor: '#cbd5e1', color: '#475569' }
+                          : { backgroundColor: '#eff6ff', borderColor: '#bfdbfe', color: '#1d4ed8' }}>
+                        {kind === 'marker' ? s.setKindMarker : s.setKindWork}
+                      </button>
+                      {kind === 'work' && !stage.custom && (
+                        <label className="flex items-center gap-1 text-[10px] text-gray-500 whitespace-nowrap cursor-pointer">
+                          <input type="checkbox" data-stage-everywhere={stage.id}
+                            checked={!!(edit.everywhere ?? stage.everywhere)}
+                            onChange={e => setEdit(stage.id, { everywhere: e.target.checked || undefined })} />
+                          {s.setEverywhere}
+                        </label>
+                      )}
+                      {stage.custom && (
+                        <span data-stage-custom-badge={stage.id}
+                          className="flex items-center gap-1.5 text-[10px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap"
+                          style={{ backgroundColor: '#fff1f2', color: '#e11d48', border: '1px solid #fecdd3' }}>
+                          {s.setCustomBadge.replace('{n}', String(reach))}
+                          <button data-stage-widen={stage.id}
+                            onClick={() => updateStage(stage.id, { custom: undefined, onApartments: undefined, onTipus: undefined, onBuildings: undefined })}
+                            className="underline text-[#1e3a5f]">{s.setWiden}</button>
+                        </span>
+                      )}
+                    </div>
+                  );
+                })()}
                 <Tooltip text={s.saveChanges}>
                   <button data-stage-save onClick={() => saveStage(stage)} className="p-2 text-[#1e3a5f] hover:bg-[#1e3a5f]/5 rounded-lg"><Save size={16} /></button>
                 </Tooltip>

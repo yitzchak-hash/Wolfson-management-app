@@ -5,6 +5,7 @@ import {
   Pencil, Highlighter, Eraser,
 } from 'lucide-react';
 import { useStore } from '../../data/store';
+import { progressOf } from '../../data/stageMarks';
 import { useBoardTrack } from '../../data/useBoardUndo';
 import {
   Apartment, CanvasElement, binLabelOf, binKeyOf, BIN_META, relativeTime,
@@ -1167,6 +1168,7 @@ export function BinBoard({ bin, onClose, onOpenJob, highlightJobId, onRestored }
     || (!!drag && drag.ids.includes(id));
 
   const stageOf = (a: Apartment) => stages.find(s => s.id === a.currentStageId) ?? null;
+  const stagesSortedBin = [...stages].sort((x, y) => x.order - y.order);
   const taskCount = (a: Apartment) => contractorAssignments.filter(x => x.apartmentId === a.id).length;
 
   // A job arriving from a search gets scrolled to and pulsed. The selector is
@@ -1707,6 +1709,7 @@ export function BinBoard({ bin, onClose, onOpenJob, highlightJobId, onRestored }
                     index={i}
                     x={p.x} y={p.y} w={sz.w} h={sz.h}
                     stage={stageOf(a) ?? null}
+                    progress={progressOf(a, stagesSortedBin)}
                     pendingTasks={taskCount(a)}
                     isSelected={selected.has(a.id)}
                     isDragging={!!drag && drag.kind === 'job' && drag.ids.includes(a.id) && drag.moved}

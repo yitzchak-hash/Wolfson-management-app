@@ -8487,3 +8487,129 @@ floor 14, and a refusal that never came reads as the product's fault. And
 `persist()` is debounced 250ms — read localStorage after a wait, never in the
 same tick as the write.
 Re-encoded: `builder2-probe` (the merge now asks; the change list is folded).
+
+---
+
+# v2 — THE SET MODEL ("Bubbles, Not Stages"), built 2026-09-22
+
+The plan is the "Bubbles, Not Stages" artifact (v3 copy in `docs/artifacts/`);
+sixteen answers locked, then "all the stars on 15 and 16, build it". Built in
+one round as its five-round order. **On screen the word is STAGE — "bubble"
+is only the code's word for how a stage now behaves.**
+
+## The model (`src/data/stageMarks.ts` — rewritten, every export new)
+An apartment carries a SET of work stages with a state each instead of
+standing at one point on a line. Three sources, all riding existing keys
+(no new store key; the backup audit is unchanged):
+- **the workspace list**: `Stage.kind` (`work` | `marker`, absent = work;
+  `seedStageKinds` writes it once per workspace by name — Ready to start /
+  Job completed / Not started / Completed are markers), `Stage.custom` +
+  `onApartments` / `onTipus` / `onBuildings` (a custom stage's reach),
+  `Stage.everywhere` (door 4);
+- **the tipus sets**: `BoardSetting.tipusStages[tipus]` (door 1; no entry =
+  the whole list; ticking every stage removes the entry so "all" never rots);
+- **the apartment's marks**: `Apartment.stageMarks: Record<id, StageMark>`
+  with `todo | doing | pending | done | off`, and `Apartment.bubbles` (the
+  record has been migrated). BOOKED and PROBLEM are never stored — they come
+  off the open tasks (`liveStateOf`).
+
+`stageSetOf` · `stageStateOf` (stored; the legacy before-current-is-done
+derivation survives ONLY for a record without `bubbles`) · `liveStateOf` ·
+`headlineStageId` · **`applyMarks` — the ONE writer**: marks in, `{stageMarks,
+currentStageId, bubbles}` out · `marksForCurrent` ("the job is at X" as
+marks) · `progressOf` (the fraction + rows a strip draws) · `cycleMark`
+(tap: todo → doing → done → todo; pending → done; right: pending ↔ todo) ·
+`setMark` · `migrateToBubbles` · `pendingStages` (unchanged).
+
+**`currentStageId` survives as the HEADLINE** — the one word a cell prints:
+happening now, else half done, else the next to do in order; with everything
+done the CLOSING marker (a marker ordered after the last work stage — never
+"Ready to start", the probe found it) else the last stage done; and before
+any work is recorded it is left exactly as it stood, so the migration turns
+no building into a wall of the first stage's colour. It is DERIVED and
+re-written on every mark change, which is what let the fifty readers written
+for one stage keep working unchanged.
+
+## The store
+- `normaliseStageWrite` in `updateApartment` AND `bulkUpdateApartments`: a
+  write naming a headline but no marks is the old "the job is at X" and is
+  translated into marks (before X done, X to do — a marker stands as asked);
+  a write naming marks but no headline gets its headline derived. Every old
+  caller — the bulk bar, the settings move-jobs flow, the import — is
+  therefore correct without knowing the model changed.
+- `setApartmentMarks(id, marks, user)` — the public door through applyMarks.
+- `migrateStageSets()` — seeds kinds, then writes every un-migrated record
+  (passed → done, the stage it stood on → **to do**, not doing: nobody is
+  there) with `bubbles: true`, one set + one chunked fsBatchSet. Run by
+  AppLayout on a 1.6s settle after the apartments land (the seeded-bins
+  idiom); idempotent, so a Firestore echo of an old record is migrated again.
+- **The completion rule** is one block now: closing a task marks every stage
+  in `stagesWorked ?? taskStageIds(task)` DONE except `stagesUnfinished`
+  (→ pending), through applyMarks; a problem's close ticks nothing; a task
+  with `stageWhenDone` and no stages of its own still moves the headline.
+- `bubbles` syncs to a merged partner beside `stageMarks`.
+
+## The screens
+- **`StagePicker.tsx`** (rewritten): the field reads the headline + the
+  fraction (`[data-stage-fraction]`); the portalled panel is the board —
+  a strip, then `[data-stage-group=doing|problem|booked|pending|todo|done|off]`
+  of `[data-stage-bubble=<id>]`; tap / right-click / `[data-stage-off]` /
+  `[data-stage-putback]`; `[data-stage-add]` → `[data-stage-add-panel]`
+  (`[data-stage-add-pick]` for a listed stage, `[data-stage-custom-start]`
+  → name / colour / where → `[data-stage-custom-add]`); the markers as
+  `[data-stage-marker=<id>]` ("The whole flat is"). The drawer writes marks
+  through `setApartmentMarks`, a marker through `updateApartment({currentStageId})`,
+  a custom stage through `addStage` (`custom`, reach by `CustomWhere`).
+  **The drawer no longer writes `currentStageId` from its basics** — a stale
+  local copy would be read as "the job is at X" and tick stages off behind
+  the office's back. `handleStageChange`, the stage-changed modal and the
+  keep-history modal are gone.
+- **BuildingDiagram**: `BuildingColumn` computes one `progressMap`
+  (`progressOf`, tipus sets from the store); `AptCell` draws
+  `[data-cell-fraction]` (top-left) and `[data-cell-strip]` (bottom). **JobTile**
+  takes `progress` and draws `[data-tile-strip]` + `[data-tile-fraction]`
+  (GeneralJobsPage's two sites and BinBoard pass it).
+- **Settings → Stages**: `[data-stage-kind]` work/marker toggle,
+  `[data-stage-everywhere]`, a custom stage's `[data-stage-custom-badge]`
+  with `[data-stage-widen]` (clears custom + reach → an ordinary stage).
+  **Tipusim card**: `[data-tipus-set=<t>]` rows of `[data-tipus-set-stage]`.
+- **Tasks**: `StagePairPicker` KEEPS ITS NAME and its value shape
+  (`StagePairValue {from, to, ids?}` — `from` = the first pick, `ids` = all;
+  `to` is only ever READ off old tasks) but draws the multi-bubble picker of
+  the apartment's set (`apartment` + `ctx` props; without an apartment — the
+  bulk modal — every work stage). `taskWrites` writes `stageId` + `stageIds`.
+  `StagePairPill` draws every stage. Hooks: `[data-stage-pick=<id>][data-on]`.
+- **The portal**: `workHere.step === 'pick'` → `[data-work-pick]` with
+  "select one or multiple", `[data-work-stage=<id>]` (the apartment's OPEN
+  set, filtered by `Contractor.reportStages` when set), `[data-work-start]`;
+  `startWork(partOf, ids)` marks them DOING through `setApartmentMarks` (the
+  worker as a pseudo-User) and writes `stageIds` + `stagesWorked`. The
+  closing screen for a report (`isReportClose`): `[data-close-finished-pick=yes|no]`
+  → `[data-close-unfinished-pick=<id>]` + `[data-close-carry-on]` →
+  `[data-close-photo-step=<id>]` with its own `[data-close-count]`,
+  `[data-close-photo-next|prev]`; `closeStageRef` tags every photo taken on a
+  step with `ContractorPhoto.stageId`; `canComplete` = answered AND every
+  finished stage has MIN_CLOSE_MEDIA of its own; nothing finished → no
+  picture step. `handleConfirmComplete` writes `stagesWorked` +
+  `stagesUnfinished` + `stagesFinished`.
+- **The bulk bar**: `[data-bulk-set]` → `[data-bulk-set-add|remove=<id>]`,
+  applied through setApartmentMarks per apartment.
+- **Reports**: `progress` / `doneCount` / `stagesDone` / `stagesLeft` job
+  fields (`ReportData.tipusStages`). **Analytics**: `[data-done-per-stage]`.
+  **Search**: `needs:` / `doing:` / `done:` filter words (Hebrew twins) over
+  `sneed` / `sdoing` / `sdone` job-doc fields (`WorkspaceSources.tipusStages`).
+  **The printed job sheet**: a two-column tick list of the set.
+
+## Rules paid for
+- **A zustand selector must not return a fresh object** — the first drawer
+  wiring did `useStore(st => ({ tipusStages: … }))`; select the primitive
+  and build the context object outside.
+- The migration writes the current stage as TO DO, not DOING (the plan page
+  said doing): "happening now" means somebody is there, and 168 apartments
+  saying so at once would have been a lie the wall repeats.
+- Harness: `scratchpad/bubbles-probe.mjs` (44 checks — migration, kinds,
+  the board's every gesture, the custom stage's reach, the cell, the
+  worker's pick and per-stage close with tagged photos, the office clearing
+  half done). `stagereport.mjs` was RETIRED — its hooks (`data-stage-row`,
+  `data-stage-box`, `data-close-stage-pick`) no longer exist; the new probe
+  covers the same ground and more.

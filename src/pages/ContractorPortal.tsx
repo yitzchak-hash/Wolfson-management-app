@@ -25,6 +25,8 @@ import { VoiceRecorderButton, VoiceMemoPlayer } from '../components/ui/VoiceMemo
 import { MessageBox } from '../components/ui/MessageBox';
 import { PushBanner, ArrivalWatcher } from '../components/portal/PortalAlerts';
 import { problemStates, isLiveProblem, problemDaysLate, problemStateOf } from '../data/problems';
+import { stageSetOf, liveStateOf, taskStageIds, setMark } from '../data/stageMarks';
+import type { User, StageMark } from '../types';
 import { WazeIcon, wazeUrl } from '../components/ui/BrandIcons';
 import { RecordedMemo } from '../data/voiceMemo';
 import {
@@ -601,7 +603,7 @@ export function ContractorPortal() {
     apartments, stages, stageNotes, buildings,
     addContractorNote, addContractorPhoto, deleteContractorPhoto,
     updateContractorAssignment, addContractorAssignment, addActivityLog,
-    updateApartment,
+    updateApartment, setApartmentMarks,
     contractorUiStrings, planAnnotations,
     workerLevels, updateContractor, canvasElements, users,
     projects, currentProjectId, setCurrentProject,
@@ -795,7 +797,9 @@ export function ContractorPortal() {
    * it is at now. Nothing is decided about the finish at the start.
    */
   const [workHere, setWorkHere] = useState<null | {
-    aptId: string; step: 'view' | 'part'; stageId?: string;
+    aptId: string; step: 'view' | 'part' | 'pick'; stageId?: string;
+    /** "What are you doing here?" — the stages he ticked (one or several). */
+    picks?: string[];
     /** The general job this report is filed under, once he has said so. */
     partOf?: string | null;
   }>(null);
@@ -807,6 +811,25 @@ export function ContractorPortal() {
    */
   const [closeStages, setCloseStages] = useState<string[]>([]);
   const [closeFinished, setCloseFinished] = useState<'yes' | 'no'>('yes');
+  /**
+   * The set model's close (locked answers 11 + 14, 2026-09-22): "Did you
+   * finish everything you started?" → which not → three pictures for EACH
+   * finished stage, one screen at a time. `closeAsked` is the yes/no given;
+   * `closeUnfinished` the stages he tapped on "Which didn't you finish?";
+   * `closePhotoIdx` which finished stage's pictures are being taken now.
+   * Pictures taken on a stage's step are tagged with that stage
+   * (`ContractorPhoto.stageId`) through `closeStageRef`.
+   */
+  const [closeAsked, setCloseAsked] = useState(false);
+  const [closeUnfinished, setCloseUnfinished] = useState<string[]>([]);
+  const [closePhotoIdx, setClosePhotoIdx] = useState(0);
+  const closeStageRef = useRef<string | null>(null);
+  const tipusStagesPortal = useStore(st => st.boardSettings[st.currentProjectId]?.tipusStages);
+  /** The worker as a User, for writes the store attributes to a person. */
+  const workerUser = (): User => ({
+    id: contractorId, name: contractor?.name ?? 'Worker', code: '', role: 'viewer', active: true,
+    createdAt: contractor?.createdAt ?? new Date().toISOString(),
+  } as User);
   /** How many pictures a closing needs. photosOptional workers skip it. */
   const MIN_CLOSE_MEDIA = 3;
   /** Weekly is what a worker plans his van by; the month grid is one press away. */
@@ -1201,6 +1224,7 @@ export function ContractorPortal() {
               fileSizeBytes: file.size,
               driveFileId: fileId,
               driveUrl: webViewLink,
+              ...(closeStageRef.current ? { stageId: closeStageRef.current } : {}),
             });
           } catch (err) {
             setUploadError(`"${file.name}" failed: ${(err as Error).message}`);
@@ -1224,6 +1248,7 @@ export function ContractorPortal() {
             filename: file.name,
             fileType: fType,
             mimeType: file.type,
+            ...(closeStageRef.current ? { stageId: closeStageRef.current } : {}),
           });
         }
 
@@ -1386,9 +1411,15 @@ export function ContractorPortal() {
       setClosingComment('');
       setFinishAsk(null);
       const liveA = contractorAssignments.find(x => x.id === selectedAssignment.id) ?? selectedAssignment;
-      const seed = liveA.stageId ?? getApt(liveA.apartmentId)?.currentStageId ?? null;
-      setCloseStages(seed ? [seed] : []);
+      // Everything he STARTED (the set model) — else the task's own stages.
+      const worked = liveA.stagesWorked?.length ? liveA.stagesWorked : taskStageIds(liveA);
+      const seed = worked.length ? worked : (getApt(liveA.apartmentId)?.currentStageId ? [getApt(liveA.apartmentId)!.currentStageId!] : []);
+      setCloseStages(seed);
       setCloseFinished('yes');
+      setCloseAsked(false);
+      setCloseUnfinished([]);
+      setClosePhotoIdx(0);
+      closeStageRef.current = null;
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [closing]);
@@ -1402,7 +1433,10 @@ export function ContractorPortal() {
     // the unit in the same motion. An ordinary task goes to its stageWhenDone.
     const liveA = contractorAssignments.find(x => x.id === selectedAssignment.id) ?? selectedAssignment;
     if (liveA.stageReport && !liveA.problem && closeStages.length) {
-      updateContractorAssignment(selectedAssignment.id, { stagesWorked: closeStages, stagesFinished: closeFinished === 'yes' });
+      const unfinished = closeStages.filter(id => closeUnfinished.includes(id));
+      updateContractorAssignment(selectedAssignment.id, {
+        stagesWorked: closeStages, stagesUnfinished: unfinished, stagesFinished: unfinished.length === 0,
+      });
     }
     updateContractorAssignment(selectedAssignment.id, { completedAt });
     addActivityLog({
@@ -1593,7 +1627,18 @@ export function ContractorPortal() {
    */
   const selProblem = selectedAssignment?.problem && isLiveProblem(selectedAssignment) ? selectedAssignment.problem : null;
   const photosNeeded = selProblem ? selProblem.photosRequired : !contractor?.photosOptional;
-  const canComplete = (selMedia.length >= MIN_CLOSE_MEDIA || !photosNeeded)
+  /**
+   * A STAGE REPORT's close (the set model): the yes/no must be answered, and
+   * every FINISHED stage needs its own MIN_CLOSE_MEDIA pictures. A report on
+   * which nothing was finished needs no picture at all — the half-done
+   * stages go up with his words.
+   */
+  const liveSel = selectedAssignment ? (contractorAssignments.find(x => x.id === selectedAssignment.id) ?? selectedAssignment) : null;
+  const isReportClose = !!liveSel && !!liveSel.stageReport && !selProblem && !liveSel.general && closeStages.length > 0;
+  const closeFinishedIds = closeStages.filter(id => !closeUnfinished.includes(id));
+  const closeCountFor = (sid: string) => selMedia.filter(m => m.stageId === sid).length;
+  const reportOk = !isReportClose || (closeAsked && (!photosNeeded || closeFinishedIds.every(sid => closeCountFor(sid) >= MIN_CLOSE_MEDIA)));
+  const canComplete = (isReportClose ? reportOk : (selMedia.length >= MIN_CLOSE_MEDIA || !photosNeeded))
     && !selectedAssignment?.completedAt && selProblem?.status !== 'waiting';
   /** This workspace's stages, in order — the closing screen's "what stage now" row. */
   const wsStageList = stages
@@ -3145,60 +3190,121 @@ export function ContractorPortal() {
                           he did — several — and whether he finished them all.
                           Yes → done; no → half done. An ordinary task is not
                           asked: it moves to the stage chosen when it was made. */}
-                      {!selProblem && !a.general && a.stageReport && wsStageList.length > 0 && (
-                        <div data-close-stage>
-                          <p className="text-center font-extrabold text-gray-800 mb-2" style={{ fontSize: 16, lineHeight: 1.35 }}>
-                            {w('What stages did you do?', 'על אילו שלבים עבדת?', 'Какие этапы вы делали?')}
-                          </p>
-                          <div className="flex flex-wrap justify-center gap-1.5">
-                            {wsStageList.map(st => {
-                              const on = closeStages.includes(st.id);
-                              return (
-                                <button key={st.id} data-close-stage-pick={st.id} data-on={on ? '1' : undefined}
-                                  onClick={() => setCloseStages(prev => prev.includes(st.id) ? prev.filter(x => x !== st.id) : [...prev, st.id])}
-                                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[13px] font-bold border active:scale-[0.98]"
-                                  style={on
-                                    ? { backgroundColor: st.color, borderColor: st.color, color: '#fff' }
-                                    : { borderColor: '#e5e7eb', color: '#374151', backgroundColor: '#fff' }}>
-                                  <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: on ? '#fff' : st.color }} />
-                                  {stageNameIn(st, readLang)}
-                                </button>
-                              );
-                            })}
-                          </div>
-                          {closeStages.length > 0 && (
-                            <div data-close-finished className="mt-3">
-                              <p className="text-center font-extrabold text-gray-800 mb-2" style={{ fontSize: 15, lineHeight: 1.35 }}>
-                                {closeStages.length > 1
-                                  ? w('Did you finish all of them?', 'סיימת את כולם?', 'Вы закончили все?')
-                                  : w('Did you finish it?', 'סיימת אותו?', 'Вы закончили?')}
+                      {isReportClose && (() => {
+                        const nm = (id: string) => { const st = wsStageList.find(x => x.id === id); return st ? stageNameIn(st, readLang) : ''; };
+                        const stepStage = closeFinishedIds[closePhotoIdx] ? wsStageList.find(x => x.id === closeFinishedIds[closePhotoIdx]) : null;
+                        closeStageRef.current = closeAsked && photosNeeded && stepStage ? stepStage.id : null;
+                        return (
+                          <div data-close-stage className="space-y-4">
+                            {/* 1 · Did you finish everything you started? */}
+                            <div data-close-finished>
+                              <p className="text-center font-extrabold text-gray-800 mb-1" style={{ fontSize: 17, lineHeight: 1.3 }}>
+                                {w('Did you finish everything you started?', 'סיימת את כל מה שהתחלת?', 'Вы закончили всё, что начали?')}
+                              </p>
+                              <p className="text-center text-gray-500 mb-3" style={{ fontSize: 13 }}>
+                                {closeStages.map(nm).join(' · ')}
                               </p>
                               <div className="grid grid-cols-2 gap-2">
-                                <button data-close-finished-pick="yes" data-on={closeFinished === 'yes' ? '1' : undefined}
-                                  onClick={() => setCloseFinished('yes')}
-                                  className="py-2.5 rounded-xl text-sm font-bold border active:scale-[0.98]"
-                                  style={closeFinished === 'yes'
+                                <button data-close-finished-pick="yes" data-on={closeAsked && closeFinished === 'yes' ? '1' : undefined}
+                                  onClick={() => { setCloseFinished('yes'); setCloseUnfinished([]); setCloseAsked(true); setClosePhotoIdx(0); }}
+                                  className="py-3.5 rounded-xl text-base font-extrabold border active:scale-[0.98]"
+                                  style={closeAsked && closeFinished === 'yes'
                                     ? { backgroundColor: '#16a34a', borderColor: '#16a34a', color: '#fff' }
                                     : { borderColor: '#e5e7eb', color: '#374151', backgroundColor: '#fff' }}>
-                                  {w('Yes — finished', 'כן — סיימתי', 'Да — закончил')}
+                                  {w('Yes', 'כן', 'Да')}
                                 </button>
                                 <button data-close-finished-pick="no" data-on={closeFinished === 'no' ? '1' : undefined}
-                                  onClick={() => setCloseFinished('no')}
-                                  className="py-2.5 rounded-xl text-sm font-bold border active:scale-[0.98]"
+                                  onClick={() => { setCloseFinished('no'); setCloseAsked(false); setClosePhotoIdx(0); }}
+                                  className="py-3.5 rounded-xl text-base font-extrabold border active:scale-[0.98]"
                                   style={closeFinished === 'no'
                                     ? { backgroundColor: '#f97316', borderColor: '#f97316', color: '#fff' }
                                     : { borderColor: '#e5e7eb', color: '#374151', backgroundColor: '#fff' }}>
-                                  {w('Not yet — half done', 'עוד לא — חצי גמור', 'Ещё нет — наполовину')}
+                                  {w('No', 'לא', 'Нет')}
                                 </button>
                               </div>
                             </div>
-                          )}
-                        </div>
-                      )}
+                            {/* 2 · Which didn't you finish? — only the ones he started. */}
+                            {closeFinished === 'no' && (
+                              <div data-close-unfinished>
+                                <p className="text-center font-extrabold text-gray-800 mb-2" style={{ fontSize: 16, lineHeight: 1.35 }}>
+                                  {w("Which didn't you finish?", 'מה לא סיימת?', 'Что вы не закончили?')}
+                                </p>
+                                <div className="flex flex-wrap justify-center gap-1.5">
+                                  {closeStages.map(id => {
+                                    const st = wsStageList.find(x => x.id === id);
+                                    if (!st) return null;
+                                    const on = closeUnfinished.includes(id);
+                                    return (
+                                      <button key={id} data-close-unfinished-pick={id} data-on={on ? '1' : undefined}
+                                        onClick={() => { setCloseUnfinished(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]); setCloseAsked(false); setClosePhotoIdx(0); }}
+                                        className="flex items-center gap-1.5 px-3 py-2 rounded-full text-[14px] font-bold border active:scale-[0.98]"
+                                        style={on
+                                          ? { backgroundColor: st.color, borderColor: st.color, color: '#fff' }
+                                          : { borderColor: '#e5e7eb', color: '#374151', backgroundColor: '#fff' }}>
+                                        <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: on ? '#fff' : st.color }} />
+                                        {stageNameIn(st, readLang)}
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                                <p className="text-center text-gray-400 mt-1.5" style={{ fontSize: 12 }}>
+                                  {w('only the ones you started', 'רק מה שהתחלת', 'только то, что вы начали')}
+                                </p>
+                                {!closeAsked && (
+                                  <button data-close-carry-on disabled={!closeUnfinished.length}
+                                    onClick={() => { setCloseAsked(true); setClosePhotoIdx(0); }}
+                                    className="mt-3 w-full py-3 rounded-xl text-base font-bold text-white disabled:opacity-40"
+                                    style={{ background: 'linear-gradient(135deg, #1e3a5f, #2c4f78)' }}>
+                                    {w('Carry on', 'המשך', 'Дальше')}
+                                  </button>
+                                )}
+                              </div>
+                            )}
+                            {/* 3 · Three pictures for EACH finished stage, one screen at a time. */}
+                            {closeAsked && photosNeeded && closeFinishedIds.length > 0 && stepStage && (
+                              <div data-close-photo-step={stepStage.id} className="rounded-2xl border-2 p-3" style={{ borderColor: stepStage.color }}>
+                                <p className="text-center font-extrabold text-gray-800" style={{ fontSize: 17, lineHeight: 1.3 }}>
+                                  {w('Pictures of', 'תמונות של', 'Фотографии')} <span style={{ color: stepStage.color }}>{stageNameIn(stepStage, readLang)}</span>
+                                </p>
+                                <p className="text-center text-gray-500 mb-2" style={{ fontSize: 12.5 }}>
+                                  {w('stage', 'שלב', 'этап')} {closePhotoIdx + 1} {w('of', 'מתוך', 'из')} {closeFinishedIds.length} {w('you finished', 'שסיימת', 'что вы закончили')}
+                                </p>
+                                <div className="flex items-center justify-center gap-2 mb-1">
+                                  <span data-close-count className="px-3 py-1 rounded-full text-sm font-black tabular-nums"
+                                    style={closeCountFor(stepStage.id) >= MIN_CLOSE_MEDIA
+                                      ? { backgroundColor: '#dcfce7', color: '#15803d' }
+                                      : { backgroundColor: '#fef3c7', color: '#92400e' }}>
+                                    {closeCountFor(stepStage.id)}/{MIN_CLOSE_MEDIA}
+                                  </span>
+                                </div>
+                                <div className="flex gap-2 mt-2">
+                                  {closePhotoIdx > 0 && (
+                                    <button data-close-photo-prev onClick={() => setClosePhotoIdx(i => i - 1)}
+                                      className="px-3 py-2 rounded-xl text-sm font-bold text-gray-600 border border-gray-200">‹</button>
+                                  )}
+                                  {closePhotoIdx < closeFinishedIds.length - 1 && (
+                                    <button data-close-photo-next disabled={closeCountFor(stepStage.id) < MIN_CLOSE_MEDIA}
+                                      onClick={() => setClosePhotoIdx(i => i + 1)}
+                                      className="flex-1 py-2 rounded-xl text-sm font-bold text-white disabled:opacity-40"
+                                      style={{ backgroundColor: '#1e3a5f' }}>
+                                      {w('Next stage →', 'לשלב הבא ←', 'Следующий этап →')}
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
+                            )}
+                            {closeAsked && closeFinishedIds.length === 0 && (
+                              <p data-close-nothing-finished className="text-center text-gray-500" style={{ fontSize: 13 }}>
+                                {w('Nothing finished — no pictures needed. Write what is left below.', 'לא סיימת כלום — אין צורך בתמונות. כתוב למטה מה נשאר.', 'Ничего не закончено — фото не нужны. Напишите ниже, что осталось.')}
+                              </p>
+                            )}
+                          </div>
+                        );
+                      })()}
                       {/* 1 · the pictures — the rule names MIN_CLOSE_MEDIA, so
                           changing the constant changes the sentence. */}
                       <div>
-                        {photosNeeded && (
+                        {photosNeeded && !isReportClose && (
                           <p className="text-center font-extrabold text-gray-800 mb-3"
                             style={{ fontSize: 16, lineHeight: 1.35 }}>
                             {(s.addPicturesRule || (s.isRtl
@@ -3216,7 +3322,7 @@ export function ContractorPortal() {
                             <Camera size={17} />
                             {uploading ? s.uploading : s.tapToAddMedia}
                           </button>
-                          {photosNeeded && (
+                          {photosNeeded && !isReportClose && (
                             <span data-close-count
                               className="flex-shrink-0 px-3 py-2 rounded-xl text-sm font-black tabular-nums"
                               style={selMedia.length >= MIN_CLOSE_MEDIA
@@ -3374,9 +3480,28 @@ export function ContractorPortal() {
          * is at the stage it is set at. The close asks what stages were done
          * and whether they were finished.
          */
-        const startWork = (partOf: string | null) => {
+        /**
+         * The set model (2026-09-22): the start ASKS "What are you doing
+         * here? select one or multiple" — this apartment's OPEN stages — and
+         * marks them HAPPENING NOW on the apartment; the close ticks them
+         * off, stage by stage, with pictures of each.
+         */
+        const wsSortedAll = stages
+          .filter(x => (currentProjectId === 'general' ? x.projectId === 'general' : !x.projectId))
+          .sort((x, y) => x.order - y.order);
+        const openSet = stageSetOf(apt, wsSortedAll, { tipusStages: tipusStagesPortal })
+          .filter(x => { const st = liveStateOf(apt, x.id, wsSortedAll, assignments); return st !== 'done' && st !== 'off'; })
+          .filter(x => { const allowed = contractor?.reportStages?.[currentProjectId]; return !allowed?.length || allowed.includes(x.id); });
+        const goPick = (partOf: string | null) => setWorkHere({ ...workHere, step: 'pick', partOf, picks: workHere.picks ?? [] });
+        const startWork = (partOf: string | null, pickedIds: string[] = []) => {
           const rid = mintId();
-          const st = curStage ?? null;
+          const pickedStages = pickedIds.map(id => wsSortedAll.find(x => x.id === id)).filter((x): x is Stage => !!x);
+          const st = pickedStages[0] ?? curStage ?? null;
+          if (pickedStages.length) {
+            let marks: Record<string, StageMark> | undefined = apt.stageMarks;
+            for (const ps of pickedStages) if (marks?.[ps.id] !== 'done') marks = setMark(marks, ps.id, 'doing');
+            setApartmentMarks(apt.id, marks, workerUser());
+          }
           addContractorAssignment({
             id: rid,
             contractorId,
@@ -3391,9 +3516,10 @@ export function ContractorPortal() {
              * language. Write a record in the writer's language and it is
              * wrong for everybody else, for ever.
              */
-            taskDescription: `${st ? `${st.name} — ` : ''}working here today`,
+            taskDescription: `${pickedStages.length ? `${pickedStages.map(x => x.name).join(' + ')} — ` : st ? `${st.name} — ` : ''}working here today`,
             dueDate: todayIso,
             stageId: st?.id ?? null,
+            ...(pickedStages.length ? { stageIds: pickedStages.map(x => x.id), stagesWorked: pickedStages.map(x => x.id) } : {}),
             priority: 'normal',
             completedAt: null,
             stageReport: true,
@@ -3469,7 +3595,7 @@ export function ContractorPortal() {
                     )}
                     {perms.workHere && (
                     <button data-work-here
-                      onClick={() => { if (generalHunt) { const gid = generalHunt; setGeneralHunt(null); startWork(gid); } else if (generalJobs.length) setWorkHere({ ...workHere, step: 'part' }); else startWork(null); }}
+                      onClick={() => { if (generalHunt) { const gid = generalHunt; setGeneralHunt(null); goPick(gid); } else if (generalJobs.length) setWorkHere({ ...workHere, step: 'part' }); else goPick(null); }}
                       className="w-full py-4 rounded-xl text-base font-bold text-white flex items-center justify-center gap-2 active:scale-[0.98]"
                       style={{ background: 'linear-gradient(135deg, #1e3a5f, #2c4f78)' }}>
                       <Hammer size={19} />
@@ -3485,7 +3611,7 @@ export function ContractorPortal() {
                     </p>
                     {generalJobs.map((g, i) => (
                       <button key={g.id} data-work-part-yes={g.id}
-                        onClick={() => startWork(g.id)}
+                        onClick={() => goPick(g.id)}
                         className="w-full text-left rtl:text-right rounded-xl px-3.5 py-3 border"
                         style={i === 0
                           ? { backgroundColor: '#fffdf5', borderColor: '#b8860b' }
@@ -3497,12 +3623,59 @@ export function ContractorPortal() {
                       </button>
                     ))}
                     <button data-work-part-no
-                      onClick={() => startWork(null)}
+                      onClick={() => goPick(null)}
                       className="w-full py-3 rounded-xl font-bold text-sm text-gray-600 border border-gray-200">
                       {s.partNo || 'No, separate work'}
                     </button>
                   </div>
                 )}
+                {workHere.step === 'pick' && (() => {
+                  const picks = workHere.picks ?? [];
+                  const list = openSet.length ? openSet : stageSetOf(apt, wsSortedAll, { tipusStages: tipusStagesPortal });
+                  const toggle = (id: string) => setWorkHere({ ...workHere, picks: picks.includes(id) ? picks.filter(x => x !== id) : [...picks, id] });
+                  return (
+                    <div data-work-pick className="space-y-2">
+                      <p className="text-center font-extrabold text-gray-800" style={{ fontSize: 18, lineHeight: 1.3 }}>
+                        {w('What are you doing here?', 'מה אתה עושה כאן?', 'Что вы здесь делаете?')}
+                      </p>
+                      <p className="text-center text-gray-500 mb-1" style={{ fontSize: 13 }}>
+                        {w('select one or multiple', 'בחר אחד או כמה', 'выберите один или несколько')}
+                      </p>
+                      {list.map(st => {
+                        const on = picks.includes(st.id);
+                        const state = liveStateOf(apt, st.id, wsSortedAll, assignments);
+                        return (
+                          <button key={st.id} data-work-stage={st.id} data-on={on ? '1' : undefined}
+                            onClick={() => toggle(st.id)}
+                            className="w-full flex items-center gap-3 rounded-xl px-3.5 py-3 border-2 text-left rtl:text-right active:scale-[0.99]"
+                            style={on
+                              ? { borderColor: st.color, backgroundColor: `${st.color}1a` }
+                              : { borderColor: '#e5e7eb', backgroundColor: '#fff' }}>
+                            <span className="w-5 h-5 rounded-full flex-shrink-0 flex items-center justify-center"
+                              style={{ border: `2.5px solid ${st.color}`, backgroundColor: on ? st.color : '#fff' }}>
+                              {on && <span className="w-2 h-2 rounded-full bg-white" />}
+                            </span>
+                            <span className="flex-1 text-[15px] font-bold text-gray-800">{stageNameIn(st, readLang)}</span>
+                            {state === 'pending' && <span className="text-[10px] font-bold uppercase" style={{ color: '#f97316' }}>{w('half done', 'חצי גמור', 'наполовину')}</span>}
+                            {state === 'doing' && <span className="text-[10px] font-bold uppercase" style={{ color: st.color }}>{w('started', 'התחיל', 'начато')}</span>}
+                          </button>
+                        );
+                      })}
+                      {!list.length && (
+                        <p className="text-center text-gray-400" style={{ fontSize: 13 }}>
+                          {w('Nothing is left to do here.', 'לא נשאר כאן מה לעשות.', 'Здесь больше нечего делать.')}
+                        </p>
+                      )}
+                      <button data-work-start disabled={!picks.length && list.length > 0}
+                        onClick={() => startWork(workHere.partOf ?? null, picks)}
+                        className="w-full py-4 rounded-xl text-base font-bold text-white flex items-center justify-center gap-2 active:scale-[0.98] disabled:opacity-40 mt-1"
+                        style={{ background: 'linear-gradient(135deg, #1e3a5f, #2c4f78)' }}>
+                        <Hammer size={19} />
+                        {w('Start', 'התחל', 'Начать')}
+                      </button>
+                    </div>
+                  );
+                })()}
               </div>
             </div>
           </>

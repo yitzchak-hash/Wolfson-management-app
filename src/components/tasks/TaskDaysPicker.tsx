@@ -3,7 +3,7 @@ import {
   DayStretch, workingRun, stretchDays, nextWorkingDay, stretchesFromDays,
 } from '../../data/taskDays';
 import type { Stage } from '../../types';
-import { StagePairPicker, StagePairValue, StagePairStrings } from './StagePair';
+import { StagePairPicker, StagePairValue, StagePairStrings, pairIds, samePair } from './StagePair';
 
 /**
  * "How many days" — the multi-day block, shared by every task form.
@@ -101,9 +101,8 @@ export function TaskDaysPicker({
   );
   const canStage = !!stages && !!pair && !!pairStrings;
   const effSecond: StagePairValue = different && canStage ? secondPair : (pair ?? { from: '', to: '' });
-  const differs = canStage && different
-    && (effSecond.from !== (pair?.from ?? '') || effSecond.to !== (pair?.to ?? ''));
-  const splitKey = `${secondDays.join('|')}|${effSecond.from}|${effSecond.to}|${differs ? mode : 'one'}`;
+  const differs = canStage && different && !samePair(effSecond, pair);
+  const splitKey = `${secondDays.join('|')}|${pairIds(effSecond).join(',')}|${differs ? mode : 'one'}`;
   useEffect(() => {
     if (!onSplitChange) return;
     if (!noncon || !secondDays.length) { onSplitChange(null); return; }
@@ -137,8 +136,8 @@ export function TaskDaysPicker({
     if (canStage && differs && stages && pair) {
       const nm = (id: string) => stages.find(st => st.id === id)?.name ?? '';
       const firstDays = allDays.filter(d => !secondDays.includes(d));
-      const tag1 = pair.from ? ` (${nm(pair.from)})` : '';
-      const tag2 = effSecond.from ? ` (${nm(effSecond.from)})` : '';
+      const tag1 = pairIds(pair).length ? ` (${pairIds(pair).map(nm).join(' + ')})` : '';
+      const tag2 = pairIds(effSecond).length ? ` (${pairIds(effSecond).map(nm).join(' + ')})` : '';
       return `→ ${firstDays.map(fmtDay).join(', ')}${tag1} · ${secondDays.map(fmtDay).join(', ')}${tag2} — ${allDays.length} days`;
     }
     return `→ ${allDays.map(fmtDay).join(', ')} — ${allDays.length} days`;
@@ -262,10 +261,16 @@ export interface TaskWrite {
 export function taskWrites(
   start: string, days: string[], pair?: StagePairValue, split?: TaskSplit | null,
 ): TaskWrite[] {
-  const stageOf = (p?: StagePairValue) => ({
-    stageId: p?.from || null,
-    ...(p?.to ? { stageWhenDone: p.to } : {}),
-  });
+  // The set model: every picked stage rides `stageIds`; `stageId` stays the
+  // first for the readers written for one. `to` only survives on old tasks.
+  const stageOf = (p?: StagePairValue) => {
+    const ids = pairIds(p);
+    return {
+      stageId: ids[0] ?? null,
+      ...(ids.length ? { stageIds: ids } : {}),
+      ...(p?.to ? { stageWhenDone: p.to } : {}),
+    };
+  };
   if (split && split.mode === 'two' && split.different && split.secondDays.length) {
     const firstDays = days.filter(d => !split.secondDays.includes(d));
     const first = firstDays.length ? firstDays : days;

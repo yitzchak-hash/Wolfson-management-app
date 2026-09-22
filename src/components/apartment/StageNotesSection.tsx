@@ -247,7 +247,7 @@ export function StageNotesSection({ apartmentId, stages, currentUser, onSaved }:
   return (
     <div className="space-y-1.5" data-notes-tab>
       {sortedStages.map(stage => {
-        const state = apt ? stageStateOf(apt, stage.id, sortedStages) : 'open';
+        const state = apt ? stageStateOf(apt, stage.id, sortedStages) : 'todo';
         const done = state === 'done';
         const pendingMark = state === 'pending';
         const cur = isCurrent(stage.id);

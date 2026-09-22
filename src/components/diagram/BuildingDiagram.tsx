@@ -3,6 +3,7 @@ import { Link2, Lock, LockOpen } from 'lucide-react';
 import { Apartment, BuildingId, Stage } from '../../types';
 import { useStore } from '../../data/store';
 import { PROBLEM_FILL } from '../../data/problems';
+import { progressOf, StageProgress } from '../../data/stageMarks';
 import {
   FloorRow, RowMode, aptCol, aptSpan, buildFloorRows, colNameOf, positionMap, roofHeightPx, rowCells,
   rowHeightPx, rowLabelText, rowPillLabel,
@@ -196,13 +197,15 @@ interface AptCellProps {
   onHover?: (id: string | null) => void;
   /** The apartment wears a PROBLEM: red + '!' while open, rose while waiting. */
   problem?: 'open' | 'waiting';
+  /** The set model: the apartment's stages with their states, and the fraction — drawn as a strip. */
+  progress?: StageProgress | null;
 }
 
 function AptCell({
   apt, stage, isHighlighted, isDimmed, showShinuiBadge, onClick,
   isDuplex, rowFloorType, isMerged, mergedLabel, isBulkSelected, isContractorHighlighted,
   aptSubLabel, taskInfo, nextStageName, onAddTask, allTasksDone, compact, phone, cellTextW, onNameUnnamed,
-  mergeLink, extraStyle, isHoverGroup, onHover, problem,
+  mergeLink, extraStyle, isHoverGroup, onHover, problem, progress,
 }: AptCellProps) {
   const ui = useStore(state => state.mainUiStrings);
   const hasStage = !!stage;
@@ -293,6 +296,36 @@ function AptCell({
             fontSize: compact || phone ? 8 : 10, color: PROBLEM_FILL[problem], boxShadow: '0 1px 2px rgba(0,0,0,.3)' }}>
           !
         </span>
+      )}
+      {/* THE SET MODEL's picture (locked answer 2): a segmented strip along
+          the bottom — one segment per stage in this apartment's set, in the
+          order, coloured by state — and the fraction in the corner. The cell
+          keeps exactly the size it has today; the colour bar already there
+          is simply divided. */}
+      {progress && progress.total > 0 && displayLabel && !isDimmed && (
+        <>
+          {!compact && (
+            <span data-cell-fraction
+              className="absolute font-black tabular-nums leading-none rounded"
+              style={{ top: 1, left: 2, fontSize: phone ? 7 : 8, padding: '1px 3px',
+                backgroundColor: 'rgba(255,255,255,.82)', color: '#334155' }}>
+              {progress.done}/{progress.total}
+            </span>
+          )}
+          <span data-cell-strip className="absolute flex" style={{ left: 2, right: 2, bottom: 1, height: compact ? 2 : 3, gap: 1 }}>
+            {progress.rows.map(r => (
+              <span key={r.stage.id} className="flex-1 rounded-sm" style={{
+                backgroundColor: r.state === 'done' ? r.stage.color
+                  : r.state === 'doing' ? r.stage.color
+                  : r.state === 'pending' ? '#f97316'
+                  : r.state === 'problem' ? '#dc2626'
+                  : hasStage || problem ? 'rgba(255,255,255,.6)' : '#d1d5db',
+                opacity: r.state === 'doing' ? 0.6 : 1,
+                outline: r.state === 'done' && hasStage ? '1px solid rgba(255,255,255,.55)' : undefined,
+              }} />
+            ))}
+          </span>
+        </>
       )}
       {displayLabel ? (
         <>
@@ -669,6 +702,13 @@ function BuildingColumn({
   const heights = useStore(state => state.boardSettings[state.currentProjectId]?.floorHeights?.[buildingId]);
   const layout = useStore(state => state.boardSettings[state.currentProjectId]?.buildingLayout?.[buildingId]);
   const stageMap = useMemo(() => new Map(stages.map(s => [s.id, s])), [stages]);
+  // The set model: one fraction + strip per apartment, from the stages, the
+  // tipus sets and the marks — computed once per column, not per cell.
+  const tipusStages = useStore(state => state.boardSettings[state.currentProjectId]?.tipusStages);
+  const sortedAll = useMemo(() => [...stages].sort((a, b) => a.order - b.order), [stages]);
+  const progressMap = useMemo(
+    () => new Map(apartments.map(a => [a.id, progressOf(a, sortedAll, { tipusStages })])),
+    [apartments, sortedAll, tipusStages]);
   const pos = useMemo(() => positionMap(buildingId, apartments), [buildingId, apartments]);
   const rows: FloorRow[] = useMemo(
     () => buildFloorRows(buildingId, apartments, heights, layout),
@@ -814,6 +854,7 @@ function BuildingColumn({
             return (
               <AptCell key={cell.col}
                 problem={apt ? problemStates?.get(apt.id) : undefined}
+                progress={apt ? progressMap.get(apt.id) : undefined}
                 mergeLink={getMergeLink(apt)}
                 isHoverGroup={!!apt && !!hoverGroup?.has(apt.id)}
                 onHover={onHoverApt}

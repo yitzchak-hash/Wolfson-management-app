@@ -60,12 +60,13 @@ export function ReportsPage() {
   const stages = currentProjectId === 'general'
     ? allStages.filter(st => st.projectId === 'general')
     : allStages.filter(st => !st.projectId);
+  const tipusStagesRep = useStore(st => st.boardSettings[st.currentProjectId]?.tipusStages);
 
   const data: ReportData = useMemo(() => ({
     apartments, assignments: contractorAssignments, contractors, stages, buildings,
-    stageNotes, activity: activityLogs, photos: contractorPhotos, isRtl: !!s.isRtl, today: asOf,
+    stageNotes, activity: activityLogs, photos: contractorPhotos, isRtl: !!s.isRtl, today: asOf, tipusStages: tipusStagesRep,
   }), [apartments, contractorAssignments, contractors, stages, buildings,
-    stageNotes, activityLogs, contractorPhotos, s.isRtl, asOf, refreshedAt]);
+    stageNotes, activityLogs, contractorPhotos, s.isRtl, asOf, refreshedAt, tipusStagesRep]);
   /**
    * PROBLEMS print with the pictures the worker sent when this is on (owner,
    * 2026-09-06): thumbnails in the row on paper, the picture links in Excel

@@ -430,10 +430,10 @@ const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromi
   await page.waitForTimeout(400);
   const line = await page.locator('[data-dialog-current-stage]').innerText().catch(() => '');
   check(/Piping/.test(line), "the dialog says the job's CURRENT stage by name", line);
-  const fromOpts = await page.locator('[data-stage-from] option').allInnerTexts();
-  check(fromOpts.some(o => /Piping/.test(o)) && !fromOpts.some(o => /Concealed units · not reached/.test(o)) === false, 'the from-list is the Job Board\'s own stages, later ones marked not reached', fromOpts.join(' | '));
-  check(await page.locator('[data-stage-pair] span:has-text("Stage it is at now")').count() === 1
-    && await page.locator('[data-stage-pair] span:has-text("When done")').count() === 1, 'the two selects wear their labels (Stage it is at now · When done → move it to)');
+  // The set model (2026-09-22): one bubble picker of the Job Board's own stages.
+  const picks = await page.locator('[data-stage-pick]').allInnerTexts();
+  check(picks.some(o => /Piping/.test(o)), 'the picker offers the Job Board\'s own stages', picks.join(' | '));
+  check(await page.locator('[data-stage-pair] span:has-text("Which stages is this task for?")').count() === 1, 'the picker wears its label (Which stages is this task for?)');
   await ctx.close();
 }
 

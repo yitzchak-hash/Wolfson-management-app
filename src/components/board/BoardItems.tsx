@@ -38,6 +38,7 @@ import { CountdownNode, StopwatchNode, ClipArtNode, VoiceMemoNode, StrokeNode, N
 import { VoiceMemoPlayer } from '../ui/VoiceMemo';
 import { useStore } from '../../data/store';
 import { PROBLEM_FILL } from '../../data/problems';
+import type { StageProgress } from '../../data/stageMarks';
 import { renderWidget, WidgetCtx, WIDGET_BY_ID } from '../../data/widgets';
 
 /**
@@ -161,6 +162,8 @@ export interface JobTileProps {
   H: BoardHandlers;
   /** A live PROBLEM on the job: red border + '!' while open, rose while waiting (problems.ts). */
   problem?: 'open' | 'waiting' | null;
+  /** The set model: the job's stages with their states — a strip under the stage badge, and the fraction. */
+  progress?: StageProgress | null;
   /**
    * A ghost is the SAME job drawn a second time, so it is the same tile.
    *
@@ -177,7 +180,7 @@ export interface JobTileProps {
 }
 
 export const JobTile = React.memo(function JobTile({
-  job, index, x, y, w, h, stage, pendingTasks, isSelected, isDragging,
+  job, index, x, y, w, h, stage, pendingTasks, isSelected, isDragging, progress,
   justChanged, searchLit, fallbackBorder, lastEdited, labels, H, ghostIndex, translucent, faded, fresh, problem,
 }: JobTileProps) {
   const isGhost = ghostIndex !== undefined;
@@ -345,6 +348,23 @@ export const JobTile = React.memo(function JobTile({
           }}>
           {stage.name}
         </span>
+      )}
+
+      {/* The set model's strip: one segment per stage in the job's set, in
+          order, coloured by state, with the fraction at its end. */}
+      {progress && progress.total > 0 && !problem && (
+        <div data-tile-strip className="flex items-center gap-1.5 mb-1.5">
+          <div className="flex-1 flex gap-[2px] h-[4px]">
+            {progress.rows.map(r => (
+              <span key={r.stage.id} className="flex-1 rounded-sm" style={{
+                backgroundColor: r.state === 'done' || r.state === 'doing' ? r.stage.color
+                  : r.state === 'pending' ? '#f97316' : r.state === 'problem' ? '#dc2626' : '#e5e7eb',
+                opacity: r.state === 'doing' ? 0.55 : 1,
+              }} />
+            ))}
+          </div>
+          <span data-tile-fraction className="text-[9px] font-black tabular-nums text-gray-500 leading-none">{progress.done}/{progress.total}</span>
+        </div>
       )}
 
       {job.address && (

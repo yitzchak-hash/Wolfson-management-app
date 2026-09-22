@@ -76,12 +76,13 @@ const dialog = page.locator('[data-task-dialog]');
 check(await dialog.count() === 1, 'the add-a-job dialog opens on the drop');
 const dlgHead = await page.locator('.fixed.z-\\[171\\]').innerText();
 check(/Cohen/.test(dlgHead) && /Joseph/.test(dlgHead), 'it names the job and the row it landed on', dlgHead.slice(0, 80));
-check(await page.locator('[data-task-dialog] [data-stage-from]').count() === 1
-  && await page.locator('[data-task-dialog] [data-stage-to]').count() === 1,
-  'it asks which stage the task is ON and where the job moves when done');
+// The set model (2026-09-22): ONE picker of the job's own stages, one or several.
+check(await page.locator('[data-task-dialog] [data-stage-pair]').count() === 1
+  && await page.locator('[data-task-dialog] [data-stage-pick="S-done"]').count() === 1,
+  'it asks which stages the task is for (one picker, the job\'s own stages)');
 
 // ── 2 · fill it: when-done stage, the one text box, three days ──────────────
-await page.locator('[data-task-dialog] [data-stage-to]').selectOption('S-done');
+await page.locator('[data-task-dialog] [data-stage-pick="S-done"]').click();
 await page.fill('[data-task-dialog] textarea', 'Close the ceiling in both bedrooms');
 await page.locator('[data-task-dialog] button[aria-label="One day more"]').first().click();
 await page.locator('[data-task-dialog] button[aria-label="One day more"]').first().click();
@@ -99,9 +100,9 @@ await page.waitForTimeout(900);
 let d = await data();
 let task = d.contractorAssignments[0];
 check(!!task && JSON.stringify(task.days) === JSON.stringify(['2026-08-26', '2026-08-27', '2026-08-30'])
-  && task.dueDate === '2026-08-30' && task.stageWhenDone === 'S-done',
+  && task.dueDate === '2026-08-30' && (task.stageIds ?? []).includes('S-done'),
   'the task carries ALL its days, due on the last, with the when-done stage',
-  JSON.stringify({ days: task?.days, due: task?.dueDate, when: task?.stageWhenDone }));
+  JSON.stringify({ days: task?.days, due: task?.dueDate, ids: task?.stageIds }));
 const cells1 = d.canvasElements.find(e => e.id === 'CE-rota').data.cells ?? {};
 check(Object.values(cells1).flat().length === 0, 'and NO card was written into the notebook — the task draws itself',
   JSON.stringify(cells1));

@@ -2,7 +2,7 @@ import {
   UndoState, UndoEntry, emptyUndo, remember, popUndo, popRedo,
 } from './undo';
 import { create } from 'zustand';
-import { Apartment, CanvasElement, ActivityLog, Project, Stage, StageNote, StageNoteEntry, StageNoteAttachment, StageNoteVersion, GeneralNoteVersion, User, Building, Contractor, ContractorAssignment, ContractorNote, ContractorPhoto, BackupSnapshot, DataSummary, OfficeNoteFile, BackupFrequency, DriveExportFrequency, BackupLogEntry, ContractorUiStrings, DEFAULT_CONTRACTOR_UI_STRINGS, MainUiStrings, DEFAULT_MAIN_UI_STRINGS, HEBREW_MAIN_UI_STRINGS, BoardSetting, BoardSettingKey, BoardLayout, PlanPin, PlanAnnotation, BoardView, Employee, TimePunch, TimeClockSettings, WorkerLevel, FocusIntent } from '../types';
+import { Apartment, CanvasElement, ActivityLog, Project, Stage, StageNote, StageNoteEntry, StageNoteAttachment, StageNoteVersion, GeneralNoteVersion, User, Building, Contractor, ContractorAssignment, ContractorNote, ContractorPhoto, BackupSnapshot, DataSummary, OfficeNoteFile, BackupFrequency, DriveExportFrequency, BackupLogEntry, ContractorUiStrings, DEFAULT_CONTRACTOR_UI_STRINGS, MainUiStrings, DEFAULT_MAIN_UI_STRINGS, HEBREW_MAIN_UI_STRINGS, BoardSetting, BoardSettingKey, BoardLayout, PlanPin, PlanAnnotation, BoardView, Employee, TimePunch, TimeClockSettings, WorkerLevel, FocusIntent, StageMark } from '../types';
 import { ReportDef } from './reportModel';
 
 // Always merge stored mainUiStrings ON TOP of the fresh preset so code-added keys
@@ -24,6 +24,8 @@ import { DEFAULT_TIME_CLOCK, resolvePunch } from './timeClock';
 import { purgeJobsFromPlanner, isPlannerElement } from './plannerPurge';
 import { DEFAULT_WORKER_LEVELS } from './workerLevels';
 import { daysOf } from './taskDays';
+import { applyMarks, marksForCurrent, migrateToBubbles, seedStageKinds, taskStageIds, isWorkStage } from './stageMarks';
+import type { SetContext } from './stageMarks';
 import { notifyWorker } from './pushNotify';
 import { aptLabel } from '../types';
 
@@ -560,6 +562,20 @@ interface AppState {
 
   updateApartment: (id: string, changes: Partial<Apartment>, user: User) => void;
   bulkUpdateApartments: (ids: string[], changes: Partial<Apartment>, user: User) => void;
+  /**
+   * The set model (2026-09-22): write an apartment's stage marks through the
+   * ONE writer — the headline (`currentStageId`) is re-derived in the same
+   * motion, so the fifty screens that print one word per apartment stay in
+   * step with the marks.
+   */
+  setApartmentMarks: (id: string, marks: Record<string, StageMark> | undefined, user: User) => void;
+  /**
+   * Moves every record in the open workspace onto the set model — explicit
+   * marks, `bubbles: true` — and gives the workspace's stages a kind (work
+   * or marker) if none has one yet. Idempotent; returns how many records
+   * were written. Run by AppLayout once the workspace has landed.
+   */
+  migrateStageSets: () => number;
   addApartment: (apt: Apartment) => void;
   /** Bulk add — one state set, one persist, one (chunked) Firestore batch. */
   importJobs: (jobs: Apartment[]) => void;
@@ -851,6 +867,41 @@ interface AppState {
   savePlanAnnotation: (ann: PlanAnnotation) => void;
   updatePlanAnnotation: (id: string, changes: Partial<PlanAnnotation>) => void;
   deletePlanAnnotation: (id: string) => void;
+}
+
+/** The workspace's own stages, in order — what the set rules read. */
+function stagesOfProject(pid: string, stages: Stage[]): Stage[] {
+  return stages
+    .filter(st => (pid === 'general' ? st.projectId === 'general' : !st.projectId))
+    .sort((a, b) => a.order - b.order);
+}
+function setContextOf(pid: string, boardSettings: Record<string, BoardSetting>): SetContext {
+  return { tipusStages: boardSettings[pid]?.tipusStages };
+}
+/**
+ * A write that names a headline but no marks is the OLD statement "the job
+ * is at X" — translated into marks (everything before X done, X to do) so
+ * the two never disagree; a write that names marks but no headline gets its
+ * headline derived. Both go through `applyMarks`, the one writer.
+ */
+function normaliseStageWrite(existing: Apartment, changes: Partial<Apartment>, stages: Stage[], boardSettings: Record<string, BoardSetting>, pid: string): Partial<Apartment> {
+  const hasCur = 'currentStageId' in changes;
+  const hasMarks = 'stageMarks' in changes;
+  if (!hasCur && !hasMarks) return changes;
+  if (hasCur && hasMarks) return changes;
+  const sorted = stagesOfProject(pid, stages);
+  const ctx = setContextOf(pid, boardSettings);
+  if (hasCur) {
+    const want = changes.currentStageId ?? null;
+    if (want === (existing.currentStageId ?? null) && existing.bubbles) return changes;
+    const marks = marksForCurrent(existing, want, sorted, ctx);
+    const applied = applyMarks({ ...existing, currentStageId: want }, marks, sorted, ctx);
+    // A marker asked for by hand is the flat's state and stands as asked.
+    const target = want ? sorted.find(st => st.id === want) : null;
+    if (target && !isWorkStage(target)) applied.currentStageId = want;
+    return { ...changes, ...applied };
+  }
+  return { ...changes, ...applyMarks(existing, changes.stageMarks, sorted, ctx) };
 }
 
 export const useStore = create<AppState>((set, get) => ({
@@ -1228,6 +1279,7 @@ export const useStore = create<AppState>((set, get) => ({
     const existing = get().apartments.find(a => a.id === id);
     if (!existing) return;
     const now = new Date().toISOString();
+    changes = normaliseStageWrite(existing, changes, get().stages, get().boardSettings, get().currentProjectId);
 
     // Record the date the first time each stage is set
     let stageDates = existing.stageDates ?? {};
@@ -1258,7 +1310,7 @@ export const useStore = create<AppState>((set, get) => ({
     // one family name. Each cell still shows its own apartment number.
     // stageMarks syncs like currentStageId — a merged pair is one home, and
     // its stage bookkeeping (done / pending per stage) is one record too.
-    const syncedFields = ['currentStageId', 'classification', 'driveLink', 'plansPdfLink', 'displayName', 'stageMarks'] as const;
+    const syncedFields = ['currentStageId', 'classification', 'driveLink', 'plansPdfLink', 'displayName', 'stageMarks', 'bubbles'] as const;
     const changesHaveSync = syncedFields.some(f => f in changes);
     if (changesHaveSync && updated.mergedWith) {
       const partner = get().apartments.find(a => a.id === updated.mergedWith);
@@ -1269,6 +1321,7 @@ export const useStore = create<AppState>((set, get) => ({
         if ('driveLink' in changes) partnerPatch.driveLink = updated.driveLink;
         if ('plansPdfLink' in changes) partnerPatch.plansPdfLink = updated.plansPdfLink;
         if ('stageMarks' in changes) partnerPatch.stageMarks = updated.stageMarks;
+        if ('bubbles' in changes) partnerPatch.bubbles = updated.bubbles;
         // Never copy a name that is just the source apartment's own number
         if ('displayName' in changes && updated.displayName?.trim()
             && updated.displayName.trim() !== updated.apartmentNumber?.trim()) {
@@ -1356,15 +1409,46 @@ export const useStore = create<AppState>((set, get) => ({
     const now = new Date().toISOString();
     const updated = get().apartments.map(a => {
       if (!ids.includes(a.id)) return a;
+      const own = normaliseStageWrite(a, changes, get().stages, get().boardSettings, get().currentProjectId);
       let stageDates = a.stageDates ?? {};
-      if (changes.currentStageId && changes.currentStageId !== a.currentStageId && !stageDates[changes.currentStageId]) {
-        stageDates = { ...stageDates, [changes.currentStageId]: now };
+      if (own.currentStageId && own.currentStageId !== a.currentStageId && !stageDates[own.currentStageId]) {
+        stageDates = { ...stageDates, [own.currentStageId]: now };
       }
-      return { ...a, ...changes, stageDates, updatedAt: now, updatedBy: user.id, updatedByName: user.name };
+      return { ...a, ...own, stageDates, updatedAt: now, updatedBy: user.id, updatedByName: user.name };
     });
     set({ apartments: updated });
     persist(get);
     updated.filter(a => ids.includes(a.id)).forEach(a => fsSet(projectCollection(get().currentProjectId, 'apartments'), a.id, a));
+  },
+
+  setApartmentMarks: (id, marks, user) => {
+    const existing = get().apartments.find(a => a.id === id);
+    if (!existing) return;
+    const pid = get().currentProjectId;
+    const sorted = stagesOfProject(pid, get().stages);
+    get().updateApartment(id, applyMarks(existing, marks, sorted, setContextOf(pid, get().boardSettings)), user);
+  },
+
+  migrateStageSets: () => {
+    const pid = get().currentProjectId;
+    const sorted = stagesOfProject(pid, get().stages);
+    // Kinds first: the seed is by name, once, and only while no line has one.
+    for (const k of seedStageKinds(sorted)) get().updateStage(k.id, { kind: k.kind });
+    const sortedNow = stagesOfProject(pid, get().stages);
+    const now = new Date().toISOString();
+    const changed: Apartment[] = [];
+    const apartments = get().apartments.map(a => {
+      const patch = migrateToBubbles(a, sortedNow);
+      if (!patch) return a;
+      const next = { ...a, ...patch, updatedAt: now };
+      changed.push(next);
+      return next;
+    });
+    if (!changed.length) return 0;
+    set({ apartments });
+    persist(get);
+    fsBatchSet(projectCollection(pid, 'apartments'), changed.map(a => ({ id: a.id, data: { stageMarks: a.stageMarks, bubbles: true, updatedAt: now } })));
+    return changed.length;
   },
 
   addApartment: (apt) => {
@@ -2289,39 +2373,23 @@ export const useStore = create<AppState>((set, get) => ({
       fsSet(projectCollection(get().currentProjectId, 'contractorAssignments'), id, updForFs);
     }
     /**
-     * Closing a task MOVES THE JOB to the stage picked at creation.
+     * Closing a task TICKS ITS STAGES OFF (the set model, locked answer 7):
+     * every stage the task is for becomes DONE on the apartment — except the
+     * ones the worker said he did not finish at the close, which become HALF
+     * DONE (the orange clock, cleared by the office only) — and the headline
+     * walks to the next stage in the order by itself, through `applyMarks`.
      *
-     * Here, at the one write every screen goes through — the planner made the
+     * Here, at the one write every screen goes through: the planner made the
      * task, the portal or the Tasks page may close it, and nobody has to
      * remember the stage. The worker's portal has no signed-in user, so the
-     * stage write is attributed to the worker by name; re-opening the task
-     * does NOT move the stage back (the job may have moved on for other
-     * reasons — an automatic revert would be a guess).
+     * write is attributed to the worker by name. Re-opening a task does NOT
+     * un-tick anything (the office may have confirmed it by hand meanwhile).
+     * A PROBLEM's close is "waiting for approval" — it ticks nothing.
+     * `stageWhenDone` — the old pair's second half — is still honoured on a
+     * task that carries it and names no stages of its own.
      */
     if (before && updated && 'completedAt' in changes
-        && !before.completedAt && updated.completedAt && updated.stageWhenDone) {
-      const apt = get().apartments.find(ap => ap.id === updated.apartmentId);
-      if (apt && apt.currentStageId !== updated.stageWhenDone) {
-        const who = get().currentUser
-          ?? {
-            id: updated.contractorId,
-            name: get().contractors.find(c => c.id === updated.contractorId)?.name ?? 'Worker',
-            code: '', role: 'viewer', active: true, createdAt: updated.createdAt,
-          } as User;
-        get().updateApartment(updated.apartmentId, { currentStageId: updated.stageWhenDone }, who);
-      }
-    }
-    /**
-     * Closing a STAGE REPORT marks its stage done on the apartment — the
-     * worker said "I did work here, and I finished", proved it with the
-     * pictures, and closed. Here for the same reason stageWhenDone is here:
-     * this is the one write every closing screen goes through. A pending
-     * mark on that stage is superseded; re-opening the task does not unmark
-     * (the office may have confirmed it by hand in the meantime).
-     */
-    if (before && updated && 'completedAt' in changes
-        && !before.completedAt && updated.completedAt
-        && updated.stageReport && (updated.stageId || updated.stagesWorked?.length)) {
+        && !before.completedAt && updated.completedAt && !updated.problem) {
       const apt = get().apartments.find(ap => ap.id === updated.apartmentId);
       if (apt) {
         const who = get().currentUser
@@ -2330,40 +2398,20 @@ export const useStore = create<AppState>((set, get) => ({
             name: get().contractors.find(c => c.id === updated.contractorId)?.name ?? 'Worker',
             code: '', role: 'viewer', active: true, createdAt: updated.createdAt,
           } as User;
-        const changesToApt: Partial<Apartment> = {};
-        /**
-         * What he said at the close (owner, 2026-09-16): the stages he WORKED
-         * on, and whether he finished them all. Finished → each is 'done';
-         * not finished → each is 'pending' (half done) — the orange clock on
-         * the picker and the office's bell. With no answer recorded (older
-         * tasks) the report's own stage counts as finished, as before.
-         */
-        const worked = (updated.stagesWorked?.length ? updated.stagesWorked : [updated.stageId])
-          .filter((x): x is string => !!x);
-        const finished = updated.stagesFinished !== false;
-        const marks = { ...(apt.stageMarks ?? {}) };
-        let marksChanged = false;
-        for (const sid of worked) {
-          const want = finished ? 'done' : 'pending';
-          if (marks[sid] !== want) { marks[sid] = want; marksChanged = true; }
+        const pid = get().currentProjectId;
+        const sorted = stagesOfProject(pid, get().stages);
+        const ctx = setContextOf(pid, get().boardSettings);
+        const worked = (updated.stagesWorked?.length ? updated.stagesWorked : taskStageIds(updated))
+          .filter((x): x is string => !!x && sorted.some(st => st.id === x && isWorkStage(st)));
+        const unfinished = new Set(updated.stagesUnfinished
+          ?? (updated.stagesFinished === false ? worked : []));
+        if (worked.length) {
+          const marks = { ...(apt.stageMarks ?? {}) };
+          for (const sid of worked) marks[sid] = unfinished.has(sid) ? 'pending' : 'done';
+          get().updateApartment(updated.apartmentId, applyMarks(apt, marks, sorted, ctx), who);
+        } else if (updated.stageWhenDone && apt.currentStageId !== updated.stageWhenDone) {
+          get().updateApartment(updated.apartmentId, { currentStageId: updated.stageWhenDone }, who);
         }
-        if (marksChanged) changesToApt.stageMarks = marks;
-        /**
-         * The finished stage is where the apartment IS now (owner's rule,
-         * 2026-09-03): a report on a stage ordered AFTER the current one moves
-         * the apartment forward to it — the earlier stages cross off as
-         * "behind" the way the picker already derives them. A report on a
-         * stage the apartment is already past is a record and never moves
-         * it backwards.
-         */
-        const order = (id: string | null) => get().stages.find(st => st.id === id)?.order ?? -1;
-        // Only FINISHED work moves the apartment forward — to the furthest
-        // stage he finished. Half-done stays where it stood, wearing the clock.
-        if (finished) {
-          const furthest = worked.reduce<string | null>((best, sid) => (order(sid) > order(best) ? sid : best), null);
-          if (furthest && order(furthest) > order(apt.currentStageId)) changesToApt.currentStageId = furthest;
-        }
-        if (Object.keys(changesToApt).length) get().updateApartment(updated.apartmentId, changesToApt, who);
       }
     }
     // Log completion / undo-completion

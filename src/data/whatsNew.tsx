@@ -30,6 +30,56 @@ export interface WhatsNewEntry {
 
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    date: '2027-01-12',
+    title: 'An apartment carries a SET of stages now — tick them off in any order',
+    items: [
+      {
+        title: 'The apartment window is a board of work, not a ladder',
+        body: 'Open an apartment and its stages are grouped: Happening now · Booked · Half done · '
+          + 'Still to do · Done · Not needed. Tap a stage and it moves on (to do → happening now '
+          + '→ done); right-click marks it half done; the × takes it off this apartment so it stops '
+          + 'counting; “+ add a stage” puts one on — from the list, or a brand-new one for this '
+          + 'apartment alone. Nothing has to be “current” any more: the one word the cell prints '
+          + 'is whatever is happening now, else the next thing to do, and it walks forward by itself.',
+        demo: 'tap',
+      },
+      {
+        title: 'The buildings page and the board show the fraction',
+        body: 'Every cell and every job tile carries a small strip — one segment per stage the '
+          + 'apartment needs, coloured as it is done — and a fraction like 4/8. Ready to start and Job '
+          + 'completed are MARKERS of the whole flat (Settings → Stages), so they never count as work.',
+      },
+      {
+        title: 'A task can be for several stages, and closing it ticks them all off',
+        body: 'Every task form has one picker showing that apartment’s own stages in order — pick '
+          + 'one or several. Closing the task finishes every one of them and the apartment moves on.',
+      },
+      {
+        title: 'The worker picks what he is doing, and photographs each stage he finished',
+        body: '“I’m going to work here” now asks “What are you doing here? — select one or '
+          + 'multiple”, offering only that apartment’s open stages. At the close: did you finish '
+          + 'everything you started? Which didn’t you finish? Then three pictures for each finished '
+          + 'stage, one screen at a time, filed on that stage. What he did not finish turns half done, '
+          + 'and only the office can clear it.',
+        demo: 'tap',
+      },
+      {
+        title: 'Where a stage comes from: the tipus, the window, the bulk bar, a switch',
+        body: 'Project settings → Tipusim lists which stages an A2 flat starts with. The bulk bar on '
+          + 'the buildings page adds or removes a stage across every picked apartment. A line in Settings '
+          + '→ Stages can be switched “on every apartment”. And a custom stage added from one '
+          + 'apartment stays hidden from every other until you widen it.',
+      },
+      {
+        title: 'Reports, analytics and search count the work',
+        body: 'Reports gain “Stages done of”, “Done stages” and “Stages still to do”; '
+          + 'Analytics shows work finished per stage; the header search takes needs:piping, doing:piping '
+          + 'and done:piping; the printed job sheet carries a tick list of the apartment’s stages.',
+        demo: 'list',
+      },
+    ],
+  },
+  {
     date: '2027-01-04',
     title: 'Floors get names, a whole row merges in one press, and a note reaches the worker on site',
     items: [

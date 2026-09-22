@@ -35,6 +35,7 @@ import {
 import { normalizeText, tokenize, soundKeys, digitsOf } from './hebrewNormalize';
 import { layoutSwap } from './translit';
 import { isLiveProblem } from './problems';
+import { progressOf } from './stageMarks';
 import { readPicks, pickKey, pickWeight, pickedForQuery, type PickMemory } from './searchMemory';
 
 // ───────────────────────────── public shapes ─────────────────────────────
@@ -75,6 +76,10 @@ export interface SearchFilters {
   worker?: string;
   problem?: boolean;
   pending?: boolean;
+  /** The set model: `needs:` / `doing:` / `done:` a stage. */
+  needs?: string;
+  doing?: string;
+  done?: string;
 }
 
 export interface WorkspaceSources {
@@ -88,6 +93,8 @@ export interface WorkspaceSources {
   officeNoteFiles?: OfficeNoteFile[];
   contractors?: Contractor[];
   stages?: Stage[];
+  /** The set model's tipus sets — what each apartment's set is. */
+  tipusStages?: Record<string, string[]>;
   /** Widget id → the name people know it by. Passed in: widgets.tsx must not be imported here. */
   widgetNameOf?: (id: string) => string | undefined;
   /** A group window searching its OWN list wants its trashed jobs too. */
@@ -162,6 +169,10 @@ interface Doc {
   workers?: string;
   problem?: boolean;
   pending?: boolean;
+  /** The set model, normalised stage names: still to do / happening now / done. */
+  sneed?: string;
+  sdoing?: string;
+  sdone?: string;
   when?: number;
   /** Content hash — `sync` replaces a doc only when this moved. */
   h: number;
@@ -241,6 +252,7 @@ function buildDocs(src: WorkspaceSources): Doc[] {
   const workersById = new Map((src.contractors ?? []).map(c => [c.id, c]));
   const bins = (src.canvasElements ?? []).filter(el => el.type === 'bin');
   const binLabel = new Map(bins.map(b => [binKeyOf(b), binLabelOf(b)]));
+  const sortedStagesAll = [...(src.stages ?? [])].sort((a, b) => a.order - b.order);
   const stageText = (id?: string | null): string => {
     const st = id ? stagesById.get(id) : undefined;
     return st ? normalizeText(`${st.name} ${st.nameHe ?? ''}`) : '';
@@ -272,7 +284,7 @@ function buildDocs(src: WorkspaceSources): Doc[] {
     filesByJob.get(f.apartmentId)!.push(f);
   }
 
-  const jobSide = new Map<string, Pick<Doc, 'bin' | 'binLabel' | 'stage' | 'workers' | 'problem' | 'pending'>>();
+  const jobSide = new Map<string, Pick<Doc, 'bin' | 'binLabel' | 'stage' | 'workers' | 'problem' | 'pending' | 'sneed' | 'sdoing' | 'sdone'>>();
 
   for (const a of jobs.values()) {
     const d = blank('job', a.id, a);
@@ -312,8 +324,15 @@ function buildDocs(src: WorkspaceSources): Doc[] {
     d.workers = normalizeText([...(openWorkers.get(a.id) ?? [])].join(' '));
     d.problem = redJobs.has(a.id);
     d.pending = !!a.stageMarks && Object.values(a.stageMarks).includes('pending');
+    {
+      const p = progressOf(a, sortedStagesAll, { tipusStages: src.tipusStages }, src.assignments ?? []);
+      const nm = (st: Stage) => normalizeText(`${st.name} ${st.nameHe ?? ''}`);
+      d.sneed = p.rows.filter(r => r.state === 'todo' || r.state === 'booked' || r.state === 'pending').map(r => nm(r.stage)).join(' ');
+      d.sdoing = p.rows.filter(r => r.state === 'doing').map(r => nm(r.stage)).join(' ');
+      d.sdone = p.rows.filter(r => r.state === 'done').map(r => nm(r.stage)).join(' ');
+    }
     d.when = stamp(a.contentUpdatedAt) ?? stamp(a.updatedAt) ?? stamp(a.createdAt);
-    jobSide.set(a.id, { bin: d.bin, binLabel: d.binLabel, stage: d.stage, workers: d.workers, problem: d.problem, pending: d.pending });
+    jobSide.set(a.id, { bin: d.bin, binLabel: d.binLabel, stage: d.stage, workers: d.workers, problem: d.problem, pending: d.pending, sneed: d.sneed, sdoing: d.sdoing, sdone: d.sdone });
     out.push(finish(d));
   }
 
@@ -322,6 +341,7 @@ function buildDocs(src: WorkspaceSources): Doc[] {
     if (!s) return;
     d.bin = s.bin; d.binLabel = s.binLabel; d.stage = s.stage;
     d.workers = s.workers; d.problem = s.problem; d.pending = s.pending;
+    d.sneed = s.sneed; d.sdoing = s.sdoing; d.sdone = s.sdone;
   };
   const liveApt = (id?: string) => !id || (!trashed.has(id) && (jobs.has(id) || !src.apartments.some(a => a.id === id)));
 
@@ -558,8 +578,11 @@ export function globalIndex(contractors: Contractor[], stages: Stage[]): Index {
 
 export interface ParsedQuery { text: string; filters: SearchFilters }
 
-const FILTER_WORDS: Record<string, 'stage' | 'group' | 'worker' | 'ws'> = {
+const FILTER_WORDS: Record<string, 'stage' | 'group' | 'worker' | 'ws' | 'needs' | 'doing' | 'done'> = {
   stage: 'stage', 'שלב': 'stage',
+  needs: 'needs', need: 'needs', todo: 'needs', 'צריך': 'needs',
+  doing: 'doing', now: 'doing', 'עושה': 'doing',
+  done: 'done', finished: 'done', 'גמור': 'done',
   group: 'group', in: 'group', 'קבוצה': 'group',
   worker: 'worker', who: 'worker', 'עובד': 'worker',
   ws: 'ws', workspace: 'ws', 'סביבה': 'ws',
@@ -594,7 +617,7 @@ export function parseQuery(raw: string): ParsedQuery {
 }
 
 export function hasFilters(f: SearchFilters): boolean {
-  return !!(f.ws || f.stage || f.group || f.worker || f.problem || f.pending);
+  return !!(f.ws || f.stage || f.group || f.worker || f.problem || f.pending || f.needs || f.doing || f.done);
 }
 
 /** Does a `ws:` filter name this workspace? By id or by a prefix of its name. */
@@ -617,6 +640,10 @@ function passes(d: Doc, f: SearchFilters, opts: SearchOpts, kinds?: Set<SearchKi
   if (kinds && !kinds.has(d.kind)) return false;
   if (opts.bin !== undefined && d.bin !== opts.bin) return false;
   if (f.stage && !(d.stage ?? '').split(/\s+/).some(t => t.startsWith(f.stage!))) return false;
+  const has = (v: string | undefined, q: string) => (v ?? '').split(/\s+/).some(t => t.startsWith(q));
+  if (f.needs && !has(d.sneed, f.needs)) return false;
+  if (f.doing && !has(d.sdoing, f.doing)) return false;
+  if (f.done && !has(d.sdone, f.done)) return false;
   if (f.group) {
     // "group:done" means the JOBS in Done, never the Done group itself.
     if (d.kind === 'group') return false;

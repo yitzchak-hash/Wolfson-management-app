@@ -5,6 +5,7 @@ import { redeemReturn } from '../data/unitTravel';
 import { Tooltip } from '../components/ui/Tooltip';
 import { useStore } from '../data/store';
 import { Apartment, BuildingId, isCountableApartment } from '../types';
+import { setMark, isWorkStage } from '../data/stageMarks';
 import { problemStates } from '../data/problems';
 import { BuildingDiagram } from '../components/diagram/BuildingDiagram';
 import { StageLegend } from '../components/diagram/StageLegend';
@@ -54,7 +55,7 @@ function useNarrow(): boolean {
 const EMPTY_LIST: string[] = [];
 
 export function ProjectDiagramPage() {
-  const { apartments, stages, buildings, currentUser, bulkUpdateApartments, updateApartment, contractorAssignments, contractors, mainUiStrings: s, pendingOpenAptId, setPendingOpenAptId, pendingFocus, setPendingFocus, currentProjectId, projects, setCurrentProject } = useStore();
+  const { apartments, stages, buildings, currentUser, bulkUpdateApartments, updateApartment, setApartmentMarks, contractorAssignments, contractors, mainUiStrings: s, pendingOpenAptId, setPendingOpenAptId, pendingFocus, setPendingFocus, currentProjectId, projects, setCurrentProject } = useStore();
   const tipusim = useStore(st => st.boardSettings[st.currentProjectId]?.tipusim ?? EMPTY_LIST);
   const [tipusFilter, setTipusFilter] = useState('');
   const problemMap = useMemo(() => problemStates(contractorAssignments), [contractorAssignments]);
@@ -179,6 +180,9 @@ export function ProjectDiagramPage() {
   const [bulkStageSet, setBulkStageSet] = useState(false);
   const [bulkTipus, setBulkTipus] = useState('');
   const [bulkTipusOpen, setBulkTipusOpen] = useState(false);
+  /** Door 3 of the set model (locked answer 15): add or remove ONE stage across every picked apartment. */
+  const [bulkSetOp, setBulkSetOp] = useState<{ op: 'add' | 'remove'; stageId: string } | null>(null);
+  const [bulkSetOpen, setBulkSetOpen] = useState(false);
   const [bulkProblemOpen, setBulkProblemOpen] = useState(false);
   const [bulkDropdownOpen, setBulkDropdownOpen] = useState(false);
 
@@ -300,9 +304,18 @@ export function ProjectDiagramPage() {
     const changes: Partial<Apartment> = {};
     if (bulkStageSet) changes.currentStageId = bulkStageId || null;
     if (bulkTipus) changes.tipus = bulkTipus === '__none' ? undefined : bulkTipus;
-    if (!Object.keys(changes).length) return;
-    bulkUpdateApartments(ids, changes, currentUser);
+    if (!Object.keys(changes).length && !bulkSetOp) return;
+    if (Object.keys(changes).length) bulkUpdateApartments(ids, changes, currentUser);
+    // Add / remove a stage: one mark per apartment, through the one writer.
+    if (bulkSetOp) {
+      for (const id of ids) {
+        const apt = apartments.find(a => a.id === id);
+        if (!apt) continue;
+        setApartmentMarks(id, setMark(apt.stageMarks, bulkSetOp.stageId, bulkSetOp.op === 'add' ? 'todo' : 'off'), currentUser);
+      }
+    }
     const parts: string[] = [];
+    if (bulkSetOp) parts.push(`${bulkSetOp.op === 'add' ? s.setBulkAddStage : s.setBulkRemoveStage}: ${sortedStages.find(x => x.id === bulkSetOp.stageId)?.name ?? ''}`);
     if (bulkStageSet) parts.push(sortedStages.find(s => s.id === bulkStageId)?.name ?? 'Not Started');
     if (bulkTipus) parts.push(`${s.tipusLabel}: ${bulkTipus === '__none' ? s.tipusNone : bulkTipus}`);
     showToast(`${ids.length} apartment${ids.length !== 1 ? 's' : ''} updated → ${parts.join(' · ')}`);
@@ -749,6 +762,34 @@ export function ProjectDiagramPage() {
               </div>
             )}
 
+            {/* Add or remove a STAGE on every picked apartment (the set model). */}
+            <div className="relative">
+              <button
+                data-bulk-set
+                onClick={() => setBulkSetOpen(v => !v)}
+                className="flex items-center gap-2 px-3 py-2 bg-white/15 rounded-lg text-sm font-medium hover:bg-white/25 transition-all"
+              >
+                {bulkSetOp
+                  ? <span>{bulkSetOp.op === 'add' ? '+' : '×'} {sortedStages.find(x => x.id === bulkSetOp.stageId)?.name}</span>
+                  : <span className="text-white/70">{s.setBulkAddStage} / {s.setBulkRemoveStage}</span>}
+                <ChevronDown size={14} className="ml-auto" />
+              </button>
+              {bulkSetOpen && (
+                <div className="absolute bottom-full mb-1 left-0 bg-white rounded-xl shadow-xl border border-gray-200 py-1 min-w-56 z-50 max-h-[60vh] overflow-y-auto">
+                  {sortedStages.filter(isWorkStage).map(st => (
+                    <div key={st.id} className="flex items-center gap-2 px-3 py-1.5 text-sm text-gray-800">
+                      <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: st.color }} />
+                      <span className="flex-1 truncate">{st.name}</span>
+                      <button data-bulk-set-add={st.id} onClick={() => { setBulkSetOp({ op: 'add', stageId: st.id }); setBulkSetOpen(false); }}
+                        className="text-[11px] font-bold px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 hover:bg-emerald-100">+ {s.add}</button>
+                      <button data-bulk-set-remove={st.id} onClick={() => { setBulkSetOp({ op: 'remove', stageId: st.id }); setBulkSetOpen(false); }}
+                        className="text-[11px] font-bold px-2 py-0.5 rounded-md bg-gray-100 text-gray-600 hover:bg-red-50 hover:text-red-600">× {s.setNotNeededAct}</button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
             {/* Report a problem on every picked apartment — the single form, then one line per unit. */}
             <button
               data-bulk-problem
@@ -763,7 +804,7 @@ export function ProjectDiagramPage() {
             <button
               data-bulk-apply
               onClick={handleBulkApply}
-              disabled={bulkSelected.size === 0 || (!bulkStageSet && !bulkTipus)}
+              disabled={bulkSelected.size === 0 || (!bulkStageSet && !bulkTipus && !bulkSetOp)}
               className="px-4 py-2 bg-[#4aa8d8] rounded-lg text-sm font-semibold disabled:opacity-40 hover:bg-[#3897c7] transition-colors"
             >
               {s.applyTo} {bulkSelected.size > 0 ? bulkSelected.size : '…'}

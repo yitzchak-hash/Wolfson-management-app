@@ -111,8 +111,12 @@ const seed = (ctx, w) => ctx.addInitScript(([user, stages, worker, apts, tasks])
   await page.waitForTimeout(700);
   check(await page.locator('[data-work-here]').count() === 1, 'tapping an apartment offers "I\'m going to work here"');
   await page.locator('[data-work-here]').click();
-  await page.waitForTimeout(1000);
+  await page.waitForTimeout(700);
   check(await page.locator('[data-work-part]').count() === 0, 'no "is this part of…?" ask — the hunt already says which job');
+  // The set model (2026-09-22): the start asks what he is doing here first.
+  if (await page.locator('[data-work-stage]').count()) await page.locator('[data-work-stage]').first().click();
+  await page.locator('[data-work-start]').click();
+  await page.waitForTimeout(1000);
   const d = await page.evaluate(() => JSON.parse(localStorage.getItem('wolfson_app_data')));
   const gen = d.contractorAssignments.find(a => a.id === 'T-gen');
   const rep = d.contractorAssignments.find(a => a.stageReport && a.apartmentId === 'A2-3');

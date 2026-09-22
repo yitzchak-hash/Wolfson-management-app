@@ -90,8 +90,8 @@ const dialogTitle = () => page.evaluate(() => {
   const d = document.querySelector('[data-task-dialog]');
   return d?.closest('.fixed')?.querySelector('h3')?.textContent ?? '';
 });
-const stageOptions = async () => page.locator('[data-task-dialog] [data-stage-from]')
-  .evaluate(s => [...s.options].map(o => o.textContent).join(' | '));
+// The set model (2026-09-22): the picker is bubbles, not a select.
+const stageOptions = async () => (await page.locator('[data-task-dialog] [data-stage-pick]').allInnerTexts()).join(' | ');
 
 // ── 1 · a Building Progress square → the task dialog, in Wolfson ────────────
 {

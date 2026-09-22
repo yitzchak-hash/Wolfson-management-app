@@ -122,10 +122,9 @@ const drag = async (from, to) => {
   await page.locator('[data-who-pick="C-mo"]').click();
   check(await page.locator('[data-who-pick="C-mo"][data-on]').count() === 1, '3 · a second worker, not on the sheet, is picked too');
   await page.locator('[data-task-dialog] textarea').fill('Concealed units in the bedrooms');
-  const from = page.locator('[data-task-dialog] [data-stage-from]');
-  check(await from.inputValue() === 'S-pipe', "3 · the FROM stage defaults to the job's stage", await from.inputValue());
-  const fromText = await from.evaluate(s => [...s.options].map(o => o.textContent).join(' | '));
-  check(/not reached yet/.test(fromText), '3 · a future stage wears "not reached yet"', fromText);
+  // The set model (2026-09-22): one bubble picker; the job's headline stage is picked by default.
+  check(await page.locator('[data-task-dialog] [data-stage-pick="S-pipe"][data-on]').count() === 1, "3 · the job's own stage is picked by default");
+  check(await page.locator('[data-task-dialog] [data-stage-pick]').count() >= 2, '3 · the picker offers the job\'s other stages too');
   await from.selectOption('S-conc');
   await page.locator('[data-task-dialog] [data-task-days] button[aria-label="One day more"]').first().click();
   await page.waitForTimeout(200);

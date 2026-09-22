@@ -161,6 +161,24 @@ export function AppLayout() {
   }, [currentProjectId]);
 
   /**
+   * THE SET MODEL's one-time migration (2026-09-22): once the workspace has
+   * LANDED, every record still on the old line derivation gets its marks
+   * written out in full and `bubbles: true`. Settle-first (the seeded-bins
+   * idiom): "no records" and "not loaded yet" look identical for the first
+   * second, and the Firestore merge can land a moment after arrival — so
+   * the timer restarts on every change to the apartments list and only runs
+   * once it has been still for 1.6s. Idempotent, so a record echoed back by
+   * another device without the flag is simply migrated again.
+   */
+  const aptCount = useStore(s => s.apartments.length);
+  const stageCount = useStore(s => s.stages.length);
+  useEffect(() => {
+    if (!aptCount) return;
+    const t = setTimeout(() => { useStore.getState().migrateStageSets(); }, 1600);
+    return () => clearTimeout(t);
+  }, [currentProjectId, aptCount, stageCount]);
+
+  /**
    * THE DRIVE SWEEP's clock (owner, 2026-09-07: "every two hours a little
    * sift through"). There is no server to keep time, so the office's open app
    * is the clock: a look shortly after arriving, then every ten minutes the

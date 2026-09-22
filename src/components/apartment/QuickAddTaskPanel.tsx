@@ -62,7 +62,8 @@ export function QuickAddTaskPanel({ apartment, onClose, currentUser, onToast }: 
   // The stage the task is ON (defaults to the job's stage; any stage allowed,
   // even one not reached — locked answer 10) and where the job goes when it
   // is closed. Picking a FROM stage never moves the job.
-  const [pair, setPair] = useState<StagePairValue>({ from: apartment.currentStageId ?? '', to: '' });
+  const [pair, setPair] = useState<StagePairValue>({ from: apartment.currentStageId ?? '', to: '', ids: apartment.currentStageId ? [apartment.currentStageId] : [] });
+  const tipusStagesQA = useStore(st => st.boardSettings[st.currentProjectId]?.tipusStages);
   const [split, setSplit] = useState<TaskSplit | null>(null);
   const [priority, setPriority] = useState('');
   const [showForm, setShowForm] = useState(true);
@@ -620,6 +621,7 @@ export function QuickAddTaskPanel({ apartment, onClose, currentUser, onToast }: 
                   <div className="grid grid-cols-2 gap-2">
                     <div className="col-span-2">
                       <StagePairPicker stages={sortedStages} currentStageId={apartment.currentStageId} value={pair}
+                        apartment={apartment} ctx={{ tipusStages: tipusStagesQA }}
                         onChange={setPair} strings={stagePairStrings(s)} isRtl={s.isRtl}
                         box="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30" />
                     </div>

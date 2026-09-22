@@ -2,6 +2,7 @@ import {
   Apartment, Building, Contractor, ContractorAssignment, Stage, StageNote, ActivityLog, ContractorPhoto,
   aptLabel, isCountableApartment, getStageName,
 } from '../types';
+import { progressOf } from './stageMarks';
 
 /**
  * Reports, as a thing you BUILD rather than a table somebody wrote once.
@@ -41,6 +42,8 @@ export interface ReportData {
   activity: ActivityLog[];
   /** The pictures workers sent — the Problems subject counts and prints them. */
   photos?: ContractorPhoto[];
+  /** The set model's tipus sets, so a job's fraction counts the stages IT carries. */
+  tipusStages?: Record<string, string[]>;
   isRtl: boolean;
   /**
    * Today, as yyyy-MM-dd. Passed in, never read from a clock in here — a report
@@ -173,6 +176,11 @@ const stageChoices = (d: ReportData) =>
  * against it. Two copies drift, and a report is where that shows up as two
  * different answers to the same question.
  */
+function progressFor(j: Apartment, d: ReportData) {
+  const sorted = [...d.stages].sort((a, b) => a.order - b.order);
+  return progressOf(j, sorted, { tipusStages: d.tipusStages }, d.assignments);
+}
+
 function jobFields(prefix: string, group: string, pick: (row: any, d: ReportData) => Apartment | undefined): ReportField[] {
   const f = (key: string, label: string, type: FieldType,
     get: (j: Apartment, d: ReportData) => Cell,
@@ -190,6 +198,11 @@ function jobFields(prefix: string, group: string, pick: (row: any, d: ReportData
     f('floor', 'Floor', 'number', j => j.floor),
     f('stage', 'Stage', 'text', (j, d) => stageText(d, j.currentStageId),
       d => stageChoices(d)),
+    // The set model: the fraction, and the stages done / still to do by name.
+    f('progress', 'Stages done of', 'text', (j, d) => { const p = progressFor(j, d); return p.total ? `${p.done}/${p.total}` : ''; }),
+    f('doneCount', 'Stages done', 'number', (j, d) => progressFor(j, d).done),
+    f('stagesDone', 'Done stages', 'text', (j, d) => progressFor(j, d).rows.filter(r => r.state === 'done').map(r => r.stage.name).join(', ')),
+    f('stagesLeft', 'Stages still to do', 'text', (j, d) => progressFor(j, d).rows.filter(r => r.state !== 'done').map(r => r.stage.name).join(', ')),
     f('class', 'Type', 'text', j => (j.classification === 'shinui' ? 'Changes' : 'Standard'),
       () => [{ value: 'Standard', label: 'Standard' }, { value: 'Changes', label: 'Changes' }]),
     f('address', 'Address', 'text', j => j.address ?? ''),

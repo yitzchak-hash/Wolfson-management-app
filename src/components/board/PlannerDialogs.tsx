@@ -146,8 +146,9 @@ export function PlannerTaskDialog({
   }, [whoQ, active]);
 
   // ── The stage pair, what, days ────────────────────────────────────────
-  const [pair, setPair] = useState<StagePairValue>({ from: jobStage, to: '' });
-  useEffect(() => { setPair(pv => ({ ...pv, from: jobStage })); }, [jobStage]);
+  const [pair, setPair] = useState<StagePairValue>({ from: jobStage, to: '', ids: jobStage ? [jobStage] : [] });
+  useEffect(() => { setPair({ from: jobStage, to: '', ids: jobStage ? [jobStage] : [] }); }, [jobStage]);
+  const dialogBoardSettings = useStore(st => st.boardSettings);
   const [task, setTask] = useState('');
   const [files, setFiles] = useState<File[]>([]);
   const [busy, setBusy] = useState(false);
@@ -427,6 +428,7 @@ export function PlannerTaskDialog({
                 ) : <span className="text-gray-400">{t('Not started', 'לא התחיל')}</span>}
               </div>
               <StagePairPicker stages={stageList} currentStageId={jobStage || null} value={pair} onChange={setPair}
+                apartment={picked?.job ?? job ?? null} ctx={{ tipusStages: dialogBoardSettings[picked?.projectId ?? currentProjectId]?.tipusStages }}
                 strings={stagePairStrings(s)} isRtl={isRtl} box={box} />
             </div>
           );

@@ -94,6 +94,13 @@ export interface BoardSetting {
   autoJobs?: AutoJobsSetting;
   /** The workspace's list of apartment types — see Apartment.tipus. */
   tipusim?: string[];
+  /**
+   * Door 1 of the set model (locked answer 4): the stages a TIPUS carries.
+   * `tipusStages['A2']` is the work stages every A2 flat starts with; a
+   * tipus with no entry — and an apartment with no tipus — carries the whole
+   * list. Rides `boardSettings`, so persist / sync / export need no new key.
+   */
+  tipusStages?: Record<string, string[]>;
   themeId?: string;
   snapToGrid?: boolean;
   /**
@@ -478,6 +485,32 @@ export interface Stage {
   active: boolean;
   description?: string; // kept for data compat; no longer shown in UI
   projectId?: string;   // if set, stage only appears in this project (e.g. 'general')
+  /**
+   * THE SET MODEL (owner's "bubbles" plan, built 2026-09-22 — on screen the
+   * word stays STAGE). A stage is either WORK — somebody does it, it counts
+   * in an apartment's fraction — or a MARKER: a state of the whole flat
+   * ("Ready to start", "Job completed") that no crew ever performs. Absent
+   * means work; `seedStageKinds` writes it explicitly once per workspace.
+   */
+  kind?: 'work' | 'marker';
+  /**
+   * A CUSTOM stage — added from one apartment's window for that apartment
+   * alone (locked answer 16: it lives in the workspace list, flagged, hidden
+   * from every other apartment's picker until widened). Where it applies is
+   * the union of `onApartments`, `onTipus` and `onBuildings`; clearing
+   * `custom` is the widest widening — an ordinary stage, on everything.
+   */
+  custom?: boolean;
+  onApartments?: string[];
+  onTipus?: string[];
+  onBuildings?: string[];
+  /**
+   * Door 4 (locked answer 15): "on every apartment" — this stage joins every
+   * apartment's set whatever its tipus set says. Only meaningful once a
+   * tipus carries a set of its own; a workspace without tipus sets already
+   * puts every ordinary stage everywhere.
+   */
+  everywhere?: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -493,6 +526,18 @@ export function getStageName(stage: Stage, isRtl: boolean): string {
  * one word on that screen he has to understand (owner, 2026-09-17).
  * Falls back to the English name, which is what the office typed.
  */
+/**
+ * A stage's STORED state on one apartment (the set model):
+ *   'todo'    — in the set, explicitly (added by hand or widened onto it), not started;
+ *   'doing'   — somebody is on it now (the worker's "What are you doing here?", or the office);
+ *   'pending' — half done: the orange clock, cleared by the office only (locked answer 14);
+ *   'done'    — finished;
+ *   'off'     — not needed in this apartment; it leaves the fraction (locked answers 6 + 13).
+ * Absent = derived: in the set by the tipus / everywhere rules, and to do.
+ * BOOKED and PROBLEM are never stored — they come from the apartment's open tasks.
+ */
+export type StageMark = 'todo' | 'doing' | 'pending' | 'done' | 'off';
+
 export function stageNameIn(stage: Stage, lang: 'en' | 'he' | 'ru'): string {
   if (lang === 'he') return stage.nameHe || stage.name;
   if (lang === 'ru') return stage.nameRu || stage.name;
@@ -790,7 +835,16 @@ export interface Apartment {
    * after are open. A manual mark always wins over the derived state. Rides
    * in `apartments`, so persist/export/import/Firestore need no new key.
    */
-  stageMarks?: Record<string, 'done' | 'pending'>;
+  stageMarks?: Record<string, StageMark>;
+  /**
+   * The apartment has been moved onto the SET model: its marks are written
+   * out in full (passed stages 'done', the stage it stood on 'doing'), so
+   * `stageStateOf` reads them as the truth instead of deriving "before the
+   * current stage means done". Written once by `migrateStageSets`; an old
+   * record from another device or a backup arrives without it and is
+   * migrated again on arrival — the migration is idempotent.
+   */
+  bubbles?: boolean;
   driveLink?: string; // Google Drive folder URL for this apartment's files
   /**
    * The Drive folder's own TITLE ("Cohen, David - 5555 - Ramat Gan"), kept
@@ -1338,6 +1392,20 @@ export interface ContractorAssignment {
   stagesWorked?: string[];
   stagesFinished?: boolean;
   /**
+   * The stages he said he did NOT finish at the close (the set model's
+   * "Which didn't you finish?"): these become half done, the rest of
+   * `stagesWorked` become done. Beside `stagesFinished`, which older tasks
+   * carry as a single yes/no.
+   */
+  stagesUnfinished?: string[];
+  /**
+   * EVERY stage this task is for (locked answer 7: one picker, several
+   * stages at once). `stageId` stays the FIRST of them so every reader
+   * written for one stage — the notebook bar's colour, sorting, the
+   * activity log — keeps working; closing the task ticks all of them done.
+   */
+  stageIds?: string[];
+  /**
    * A GENERAL JOB (owner, 2026-09-03): a task for a workspace — "Work at
    * Wolfson" — rather than for one apartment; which apartments the worker
    * ends up in is decided on site. `apartmentId` is '' on such a task and
@@ -1467,6 +1535,13 @@ export interface ContractorPhoto {
   dataUrl: string;       // base64 fallback — empty when storageUrl or driveUrl is set
   filename: string;
   fileType?: 'image' | 'video' | 'file'; // default: 'image' (for backward compat)
+  /**
+   * The stage this picture is evidence OF — set by the closing screen's
+   * per-stage picture steps (locked answer 11: three pictures for each
+   * finished stage, separately). The office opens a stage and finds its
+   * own pictures.
+   */
+  stageId?: string;
   mimeType?: string;
   uploadedAt: string;
   fileSizeBytes?: number;  // original file size for quota tracking
@@ -2026,6 +2101,7 @@ export interface MainUiStrings {
   changes: string;
   withNotes: string;
   progressByStage: string;
+  setDonePerStage: string;
   progressByBuilding: string;
   recentActivity: string;
   customizeDashboard: string;
@@ -2065,6 +2141,7 @@ export interface MainUiStrings {
   selectApartment: string;
   stageOptional: string;
   stageOnLabel: string;
+  setPickSeveral: string;
   stageToLabel: string;
   stageJobsStage: string;
   stageNotReached: string;
@@ -2156,6 +2233,38 @@ export interface MainUiStrings {
   stageMarkHint: string;
   stagePendingListTitle: string;
   stagePendingEmpty: string;
+  // The set model (2026-09-22): the apartment window's stage board
+  setHappeningNow: string;
+  setBooked: string;
+  setHalfDone: string;
+  setStillToDo: string;
+  setDone: string;
+  setNotNeeded: string;
+  setAddStage: string;
+  setAddExisting: string;
+  setNewCustom: string;
+  setCustomName: string;
+  setCustomWhere: string;
+  setOnlyThisApt: string;
+  setEveryTipus: string;
+  setWholeBuilding: string;
+  setWholeWorkspace: string;
+  setNotNeededAct: string;
+  setPutBack: string;
+  setFlatIs: string;
+  setKindWork: string;
+  setKindMarker: string;
+  setEverywhere: string;
+  setCustomBadge: string;
+  setWiden: string;
+  setTipusSetsTitle: string;
+  setTipusSetsHint: string;
+  setAllStages: string;
+  setTapHint: string;
+  setBulkAddStage: string;
+  setBulkRemoveStage: string;
+  setProgressLabel: string;
+  setNothingToPick: string;
   openedJob: string;
   // Layout builder (Buildings, full screen)
   lbTitle: string;
@@ -2811,6 +2920,7 @@ export const DEFAULT_MAIN_UI_STRINGS: MainUiStrings = {
   changes: 'Changes',
   withNotes: 'With Notes',
   progressByStage: 'Progress by Stage',
+  setDonePerStage: 'Work finished, per stage',
   progressByBuilding: 'Progress by Building',
   recentActivity: 'Recent Activity',
   customizeDashboard: 'Customize',
@@ -2845,7 +2955,8 @@ export const DEFAULT_MAIN_UI_STRINGS: MainUiStrings = {
   selectContractor: 'Select worker *',
   selectApartment: 'Select apartment *',
   stageOptional: 'Stage (optional)',
-  stageOnLabel: 'Stage it is at now',
+  stageOnLabel: 'Which stages is this task for?',
+  setPickSeveral: 'one or several',
   stageToLabel: 'When done → move it to',
   stageJobsStage: 'Current stage',
   stageNotReached: 'not reached yet',
@@ -2927,6 +3038,37 @@ export const DEFAULT_MAIN_UI_STRINGS: MainUiStrings = {
   stageMarkHint: 'Tap a box to cross a stage off · right-click marks it half done',
   stagePendingListTitle: 'Half-done stages',
   stagePendingEmpty: 'Nothing is waiting — no half-done stages.',
+  setHappeningNow: 'Happening now',
+  setBooked: 'Booked',
+  setHalfDone: 'Half done',
+  setStillToDo: 'Still to do',
+  setDone: 'Done',
+  setNotNeeded: 'Not needed in this apartment',
+  setAddStage: '+ add a stage',
+  setAddExisting: 'From the workspace list',
+  setNewCustom: 'A new stage',
+  setCustomName: 'Name',
+  setCustomWhere: 'Where',
+  setOnlyThisApt: 'only this apartment',
+  setEveryTipus: 'every {t} flat',
+  setWholeBuilding: 'the whole building',
+  setWholeWorkspace: 'the whole workspace',
+  setNotNeededAct: 'Not needed here',
+  setPutBack: 'put back',
+  setFlatIs: 'The whole flat is',
+  setKindWork: 'work',
+  setKindMarker: 'marker',
+  setEverywhere: 'on every apartment',
+  setCustomBadge: 'custom · used on {n}',
+  setWiden: 'widen to all',
+  setTipusSetsTitle: 'Stages per tipus',
+  setTipusSetsHint: 'Which stages a flat of this type starts with. A tipus with nothing ticked carries the whole list.',
+  setAllStages: 'all stages',
+  setTapHint: 'Tap a stage: to do → happening now → done · right-click: half done · × takes it off this apartment',
+  setBulkAddStage: 'Add a stage',
+  setBulkRemoveStage: 'Remove a stage',
+  setProgressLabel: '{d} of {t} done',
+  setNothingToPick: 'Every stage in the list is already on this apartment.',
   openedJob: 'opened',
   // Layout builder
   lbTitle: 'Buildings layout',
@@ -3468,7 +3610,7 @@ export const DEFAULT_MAIN_UI_STRINGS: MainUiStrings = {
   searchClear: 'Clear',
   searchClearPicks: 'Forget what I picked before',
   searchFooter: 'Searching every workspace. The ones that are not open show what this machine last saw of them.',
-  searchHint: 'Narrow it: stage:piping · group:done · worker:moshe · ws:netiv · is:problem · is:pending',
+  searchHint: 'Narrow it: stage:piping · needs:piping · doing:piping · done:piping · group:done · worker:moshe · ws:netiv · is:problem · is:pending',
   // Reports — column headers
   colBuilding: 'Building',
   colApartment: 'Apartment',
@@ -3577,6 +3719,7 @@ export const HEBREW_MAIN_UI_STRINGS: MainUiStrings = {
   changes: 'שינויים',
   withNotes: 'עם הערות',
   progressByStage: 'התקדמות לפי שלב',
+  setDonePerStage: 'עבודה שהושלמה, לפי שלב',
   progressByBuilding: 'התקדמות לפי בניין',
   recentActivity: 'פעילות אחרונה',
   customizeDashboard: 'התאם',
@@ -3611,7 +3754,8 @@ export const HEBREW_MAIN_UI_STRINGS: MainUiStrings = {
   selectContractor: 'בחר קבלן *',
   selectApartment: 'בחר דירה *',
   stageOptional: 'שלב (אופציונלי)',
-  stageOnLabel: 'השלב שבו זה נמצא עכשיו',
+  stageOnLabel: 'לאילו שלבים המשימה?',
+  setPickSeveral: 'אחד או כמה',
   stageToLabel: 'כשמסיימים → לעבור ל',
   stageJobsStage: 'השלב הנוכחי',
   stageNotReached: 'טרם הגיעו',
@@ -3693,6 +3837,37 @@ export const HEBREW_MAIN_UI_STRINGS: MainUiStrings = {
   stageMarkHint: 'לחיצה על התיבה מסמנת שלב כגמור · קליק ימני מסמן חצי גמור',
   stagePendingListTitle: 'שלבים חצי גמורים',
   stagePendingEmpty: 'אין שלבים חצי גמורים.',
+  setHappeningNow: 'קורה עכשיו',
+  setBooked: 'מתוכנן',
+  setHalfDone: 'חצי גמור',
+  setStillToDo: 'עוד לא נעשה',
+  setDone: 'גמור',
+  setNotNeeded: 'לא נדרש בדירה הזו',
+  setAddStage: '+ הוספת שלב',
+  setAddExisting: 'מרשימת סביבת העבודה',
+  setNewCustom: 'שלב חדש',
+  setCustomName: 'שם',
+  setCustomWhere: 'איפה',
+  setOnlyThisApt: 'רק בדירה הזו',
+  setEveryTipus: 'בכל דירת {t}',
+  setWholeBuilding: 'בכל הבניין',
+  setWholeWorkspace: 'בכל סביבת העבודה',
+  setNotNeededAct: 'לא נדרש כאן',
+  setPutBack: 'להחזיר',
+  setFlatIs: 'הדירה כולה',
+  setKindWork: 'עבודה',
+  setKindMarker: 'סימון',
+  setEverywhere: 'בכל דירה',
+  setCustomBadge: 'מותאם · בשימוש ב-{n}',
+  setWiden: 'להרחיב לכולם',
+  setTipusSetsTitle: 'שלבים לפי טיפוס',
+  setTipusSetsHint: 'עם אילו שלבים דירה מסוג זה מתחילה. טיפוס ללא סימון מקבל את כל הרשימה.',
+  setAllStages: 'כל השלבים',
+  setTapHint: 'לחיצה על שלב: לא נעשה ← קורה עכשיו ← גמור · קליק ימני: חצי גמור · × מוריד אותו מהדירה',
+  setBulkAddStage: 'הוספת שלב',
+  setBulkRemoveStage: 'הסרת שלב',
+  setProgressLabel: '{d} מתוך {t} גמורים',
+  setNothingToPick: 'כל השלבים ברשימה כבר על הדירה הזו.',
   openedJob: 'פתח/ה את',
   // Layout builder
   lbTitle: 'פריסת הבניינים',
@@ -4234,7 +4409,7 @@ export const HEBREW_MAIN_UI_STRINGS: MainUiStrings = {
   searchClear: 'לנקות',
   searchClearPicks: 'לשכוח מה בחרתי בעבר',
   searchFooter: 'מחפש בכל סביבות העבודה. סביבה שלא נפתחה במחשב הזה מוצגת לפי מה שנשמר כאן לאחרונה.',
-  searchHint: 'לצמצם: stage:piping · group:done · worker:moshe · ws:netiv · is:problem · is:pending',
+  searchHint: 'לצמצם: stage:piping · needs:piping · doing:piping · done:piping · group:done · worker:moshe · ws:netiv · is:problem · is:pending',
   // Reports — column headers
   colBuilding: 'בניין',
   colApartment: 'דירה',
