@@ -2802,7 +2802,6 @@ function PlanEditor({
 
   /** The stage's own mouse handlers — see mousePan. */
   function onStageDown(e: React.PointerEvent<HTMLDivElement>) {
-    if (e.pointerType !== 'mouse') return;               // a finger/pen scrolls natively
     if (!(locked || tool === 'pan')) return;             // the canvas owns the press
     if (e.button !== 0 && e.button !== 1) return;
     const t = e.target as HTMLElement;
@@ -2817,13 +2816,25 @@ function PlanEditor({
       x: e.clientX, y: e.clientY, sl: stage.scrollLeft, st: stage.scrollTop,
       moved: false, onSheet: !!t.closest('canvas'),
     };
-    try { stage.setPointerCapture(e.pointerId); } catch { /* fine */ }
-    e.preventDefault();
+    // A finger or a pen scrolls the sheet NATIVELY (touch-action pan-x pan-y),
+    // which the browser does the moment it decides the press is a drag — and
+    // it says so with a pointercancel, which stands this press down. So a
+    // touch press is only WATCHED: no capture, no preventDefault (either would
+    // take the native scroll away), and a lift that never moved is the tap.
+    if (e.pointerType === 'mouse') {
+      try { stage.setPointerCapture(e.pointerId); } catch { /* fine */ }
+      e.preventDefault();
+    }
   }
   function onStageMove(e: React.PointerEvent<HTMLDivElement>) {
     const mp = mousePan.current;
     const stage = stageRef.current;
     if (!mp || !stage) return;
+    if (e.pointerType !== 'mouse') {
+      // Watched only: the browser scrolls; past the slop this is no tap.
+      if (Math.hypot(e.clientX - mp.x, e.clientY - mp.y) >= 8) mp.moved = true;
+      return;
+    }
     if (e.buttons === 0) { onStageUp(e); return; }       // the lift was missed
     const dx = e.clientX - mp.x, dy = e.clientY - mp.y;
     if (!mp.moved && Math.hypot(dx, dy) < 4) return;
@@ -2836,6 +2847,9 @@ function PlanEditor({
     const mp = mousePan.current;
     if (!mp) return;
     mousePan.current = null;
+    // A pointercancel is the browser taking a touch press for its own scroll
+    // (or a second finger arriving to pinch) — never a tap.
+    const cancelled = e.type === 'pointercancel';
     const stage = stageRef.current;
     if (stage) {
       // Back to the open hand — the style prop is not re-applied until the
@@ -2845,7 +2859,7 @@ function PlanEditor({
     }
     // The drawer's pane (owner, 2026-09-06): a plain click on the sheet opens
     // the same full screen the corner button does. A drag is not a click.
-    if (!mp.moved && mp.onSheet && locked && embedded && !isFull) toggleFull();
+    if (!cancelled && !mp.moved && mp.onSheet && locked && embedded && !isFull) toggleFull();
   }
 
   function onUp(e: React.PointerEvent<HTMLCanvasElement>) {

@@ -165,6 +165,69 @@ if (full) {
   }
 }
 
+// ── 5 · a FINGER drags the pane too (the browser's own scroll, touch-action) ─
+{
+  // Back to the pane: close the studio if it is open.
+  if (await page.locator('[data-plan-surface="studio"]').count()) {
+    await page.keyboard.press('Escape'); await page.waitForTimeout(600);
+  }
+  // The studio's Escape can take the drawer with it in a harness — reopen.
+  if (!(await page.locator('[data-plan-surface="pane"] canvas').count())) {
+    await page.locator('[data-apt-id="A1-53"]').click();
+    await page.waitForSelector('[data-plan-surface="pane"] canvas', { timeout: 20000 });
+    await page.waitForTimeout(2500);
+  }
+  const cdp = await ctx.newCDPSession(page);
+  await cdp.send('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 2 });
+  const r = await sheetRect();
+  const m = { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+  await page.mouse.move(m.x, m.y);
+  for (let i = 0; i < 3; i++) { await page.mouse.wheel(0, -120); await page.waitForTimeout(120); }
+  await page.waitForTimeout(400);
+  const t0 = await stageScroll();
+  const from = { x: m.x + 40, y: m.y + 40 };
+  const fingerDrag = async (sx, sy) => {
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: from.x, y: from.y }] });
+    for (let i = 1; i <= 10; i++) {
+      await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: from.x + sx * i, y: from.y + sy * i }] });
+      await page.waitForTimeout(16);
+    }
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+    await page.waitForTimeout(500);
+  };
+  await fingerDrag(-12, -3);
+  const t1 = await stageScroll();
+  console.log('       finger →:', JSON.stringify({ before: t0, after: t1 }));
+  check(!!t0 && !!t1 && (t1.sl - t0.sl) > 60, '5 · a finger drag scrolls the pane sideways (native touch scroll)', `dx ${t1.sl - t0.sl}`);
+  await fingerDrag(-3, -12);
+  const t1b = await stageScroll();
+  console.log('       finger ↓:', JSON.stringify({ before: t1, after: t1b }));
+  check((t1b.st - t1.st) > 60, '5 · a finger drag scrolls the pane up and down', `dy ${t1b.st - t1.st}`);
+  check(await page.evaluate(() => !document.fullscreenElement), '5 · a finger drag does not open full screen');
+  // A finger TAP still opens full screen.
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: m.x, y: m.y }] });
+  await page.waitForTimeout(60);
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+  await page.waitForTimeout(700);
+  check(await page.evaluate(() => !!document.fullscreenElement), '5 · a finger TAP on the sheet opens full screen');
+  if (await page.evaluate(() => !!document.fullscreenElement)) {
+    await page.locator('[data-plan-surface="pane"] [data-plan-fullscreen]').first().evaluate(b => b.click());
+    await page.waitForTimeout(600);
+  }
+  // Two fingers still pinch.
+  const r2 = await sheetRect();
+  const c = { x: r2.left + r2.width / 2, y: r2.top + r2.height / 2 };
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: c.x - 40, y: c.y }, { x: c.x + 40, y: c.y }] });
+  for (let i = 1; i <= 10; i++) {
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: c.x - 40 - 8 * i, y: c.y }, { x: c.x + 40 + 8 * i, y: c.y }] });
+    await page.waitForTimeout(16);
+  }
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+  await page.waitForTimeout(600);
+  const r3 = await sheetRect();
+  check(r3.width > r2.width * 1.2, '5 · two fingers still pinch-zoom the pane', `${Math.round(r2.width)} → ${Math.round(r3.width)}`);
+}
+
 await browser.close();
 console.log(fails ? `\n${fails} FAILED` : '\nALL PASS');
 process.exit(fails ? 1 : 0);

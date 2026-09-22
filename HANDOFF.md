@@ -49,7 +49,9 @@ Last commits, newest first (see `git log`):
   work".** `mousePan` on the plan STAGE in PlanAnnotator: a mouse drag pans
   the drawer's pane, its full screen and the studio's Pan tool; a motionless
   click on the sheet still opens full screen; a pin/overlay press is never
-  captured. `panepan-probe.mjs` (14) green; planzoom, planviewer, planjump,
+  captured; a finger keeps the native scroll and a finger TAP still opens
+  full screen (his "what about on a touch screen?"). `panepan-probe.mjs`
+  (19, incl. CDP touch) green; planzoom, planviewer, planjump,
   videoplan, pinvoice, round41, markup2 green; tsc, build, four audits
   green. planphone's red is pre-existing (stale locator).
 - **2026-09-22, latest — the notebook screenshot.** Two Wolfson bars on one
@@ -703,11 +705,12 @@ Last commits, newest first (see `git log`):
   `npx vite --port 5173` and `VITE_DRIVE_API_KEY=test npx vite --port 5174`.
 
 ## The last reply the owner saw (so the next one continues it)
-**Newest (2026-09-22, the pane drag)**: the reply said why a mouse drag did
-nothing (the pane only knew a finger's native scroll and a click), that the
-sheet now follows a held left button exactly, in the pane, in full screen
-and with the studio's Pan tool, that a plain click still opens full screen
-and pins still place. Bottom line + bullets (KEEP THAT FORMAT).
+**Newest (2026-09-22, the pane drag, then "what about on a touch screen?")**:
+the reply said why a mouse drag did nothing, that the sheet now follows a
+held left button exactly (pane, full screen, studio Pan tool); then that a
+finger already scrolled the sheet natively, that the first cut had broken
+the finger TAP into full screen and it is restored and probed under real
+touch events (drag both axes, tap, pinch). Bottom line + bullets.
 
 **Newest (2026-09-22, the notebook)**: the reply explained why both bars
 read "Wolfson …" (the workspace tag stood in front of the unit and the
