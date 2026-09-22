@@ -180,4 +180,8 @@ Legend: ☑ shipped · ☐ decided, not built · ◐ built in part · ✎ needs 
 - ☑ Tasks page: the apartment name and the words on a task row open the apartment window on that task (`data-open-task`, the taskFocus hand-over) (2026-09-22)
 - ☑ A task closed AFTER its last day gains the closing day (`closeDayFields` in taskDays.ts, on both close paths) — drawn crossed off on the day it happened (2026-09-22)
 - ☑ Cloud reads are capped: activity log and note versions load the newest 500 (`fsGetAllRecent`/`fsListenRecent`); a refused listener shows "Cloud not answering" in the header (2026-09-22)
-- ✎ Wolfson stages split into separate bubbles on a grey→yellow→orange→green ramp — previewed inline, awaiting the owner's go and the four live names (2026-09-22)
+- ✎ Wolfson stages split into separate bubbles on a grey→yellow→orange→green ramp — previewed inline; the live names are known now; awaiting the owner's go (2026-09-22)
+- ☑ The read diet: one listener per collection is also the load (`fsAttach`); the other workspaces' units arrive as a delta on `updatedAt` (`fsListenSince`) after a one-time snapshot pull; the worker's phone loads lean; logs/versions capped at the 200 kept; a read meter per collection (`window.__fsReadsBy`, DEV) (2026-09-22)
+- ☑ A workspace switch cancels the sync in flight (`_syncRun`) and writers push only their own records (`ownsRecord`); an offline first answer merges and seeds nothing (2026-09-22)
+- ☑ `scratchpad/cloudclean.mjs`: the 4,095 records found sitting in the wrong workspace's collection, backed up and removed on the owner's go (2026-09-22)
+- ☑ The Firebase project is on Blaze (owner, 2026-09-22); the four live Wolfson stage names read: Sold/Start · Piping, Concealed Units & Fans · Wall Units & Outdoor Units · Registers, Access Panels & Thermostats

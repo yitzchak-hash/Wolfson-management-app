@@ -27,7 +27,7 @@ exactly there.
 3. `npx tsc --noEmit -p .` and `npx vite build`. 4. The audits:
    `node scratchpad/loopaudit.mjs`, `backupaudit.mjs`, `navaudit.mjs`, `apilimit.mjs`.
 5. A What's New entry (`src/data/whatsNew.tsx`, dates run AHEAD of the clock;
-   newest is `2027-01-14` — the next entry must be a later date (an older
+   newest is `2027-01-15` — the next entry must be a later date (an older
    entry lower down also wears `2026-12-20`; the marker compares only the TOP
    entry's date, so never reuse a date that appears anywhere in the file)). 6. A CLAUDE.md
    round record. 7. A line in `docs/CRM-CHECKLIST.md`. 8. Rewrite THIS file.
@@ -43,8 +43,30 @@ with starred recommendations is published first; the owner says "approved" /
 "all yes" / answers by number; then it is built. Never build a redesign
 unasked.
 
-## Where things stand (2026-09-22, evening — three asks built, the cloud quota found, the stage split AWAITING HIS GO)
+## Where things stand (2026-09-22, night — Blaze on, the read diet built, TWO DECISIONS AWAITING HIS WORD)
 Last commits, newest first (see `git log`):
+- **2026-09-22, night — the read diet + the cross-workspace copies.** He
+  linked the Firebase project to billing (Blaze; the first try had failed —
+  the Cloud console's "Change billing" on the wolfson row did it) and reads
+  answered again at 11:07 UTC. Counting the live collections (REST, names
+  only) found THE bill: Wolfson's `apartments` held all 3,520 Job Board jobs,
+  `general_apartments` 244 Wolfson units, `netiv_apartments` 245 + 86 N1/N2
+  orphans — invisible on screen, read by every device on every open; plus
+  every collection read twice per open (getDocs + listener), plus the foreign
+  sync reading every other workspace whole. Cause of the copies: a workspace
+  switch racing an in-flight sync (see the CLAUDE.md record). BUILT:
+  `fsAttach` (one listener is the load), `_syncRun`/`stale()` + `ownsRecord`
+  (the race guard + own-records-only writers), the foreign sync as a delta
+  on `updatedAt` (+ tombstones), the phone's lean load, caps 200, the read
+  meter (`window.__fsReadsBy`), the offline no-seed rule. Measured on the
+  emulator (`readdiet-probe.mjs`, 16 checks): 4,146 reads per first open
+  (was ~8,300), 535 per reload. `cloudclean.mjs` DRY RUN done: 4,095
+  misplaced records planned, backed up to the session scratchpad, every one
+  with a home copy at least as new; **NOT DELETED — awaiting his go**
+  (`node scratchpad/cloudclean.mjs --delete`). The four live Wolfson stage
+  names are read (see CLAUDE.md); **the stage split still awaits his go**.
+  Reply ended asking for both. tsc, build, four audits, round47-probe,
+  portalswitch, foreigndrop-probe, notebookbars-probe (repaired) green.
 - **2026-09-22, evening — his four asks.** (1) BUILT: on the Tasks page the
   apartment name / the task's words open the apartment window on that task
   (`openInWindow`, the taskFocus hand-over). (2) His "the worker's own tasks

@@ -30,6 +30,33 @@ export interface WhatsNewEntry {
 
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    date: '2027-01-15',
+    title: 'The app reads the cloud once, and a workspace keeps only its own records',
+    items: [
+      {
+        title: 'One read per record, on every open',
+        body: 'Opening the app used to read every collection twice — once to load it and once again '
+          + 'when the live listener attached. It reads once now, and the other workspaces arrive as '
+          + 'changes only instead of the whole list on every open. The worker’s phone loads even less.',
+        demo: 'sparkle',
+      },
+      {
+        title: 'Records can no longer slip into another workspace',
+        body: 'Switching workspace while the previous one was still loading could copy its records into '
+          + 'the new one’s cloud collection — invisible on screen, but read and billed on every open by '
+          + 'every device. The switch now cancels the load that was in flight, and a workspace only ever '
+          + 'pushes up records that are its own.',
+        demo: 'tap',
+      },
+      {
+        title: 'Offline never overwrites the cloud',
+        body: 'A tab that opened with no connection used to read the silence as an empty cloud and push '
+          + 'its own copy up. It now waits for the line to come back.',
+        demo: 'tap',
+      },
+    ],
+  },
+  {
     date: '2027-01-14',
     title: 'A task’s name opens its apartment, and a late close lands on the day it happened',
     items: [

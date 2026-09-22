@@ -125,7 +125,9 @@ const drag = async (from, to) => {
   // The set model (2026-09-22): one bubble picker; the job's headline stage is picked by default.
   check(await page.locator('[data-task-dialog] [data-stage-pick="S-pipe"][data-on]').count() === 1, "3 · the job's own stage is picked by default");
   check(await page.locator('[data-task-dialog] [data-stage-pick]').count() >= 2, '3 · the picker offers the job\'s other stages too');
-  await from.selectOption('S-conc');
+  // the set model: the job's own stage is picked by default — put it down, then pick the future one
+  await page.locator('[data-task-dialog] [data-stage-pick="S-pipe"]').click();
+  await page.locator('[data-task-dialog] [data-stage-pick="S-conc"]').click();
   await page.locator('[data-task-dialog] [data-task-days] button[aria-label="One day more"]').first().click();
   await page.waitForTimeout(200);
   const readout = await page.locator('[data-task-dialog] [data-day-readout]').innerText();

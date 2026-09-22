@@ -16,7 +16,8 @@ import {
   buildDefaultApartments, buildNetivApartments, buildGroundFirstFloorSlots, migrateNetivApartments, DATA_VERSION,
 } from './initialData';
 import {
-  fsSet, fsDelete, fsBatchSet, fsGetAll, fsListen, fsGetAllRecent, fsListenRecent, isFirebaseConfigured, db, projectCollection,
+  fsSet, fsDelete, fsBatchSet, fsGetAll, fsListen, fsListenSince, fsAttach, isFirebaseConfigured, db, projectCollection,
+  type Attached,
   fsTombstone,
   fsUntombstone, fsGetTombstones, fsListenTombstones,
 } from './firebase';
@@ -114,10 +115,17 @@ export function loadProjectSnapshot(projectId: string): {
  * the live sync, so this can never fight the real thing.
  */
 const _snapFetched = new Set<string>();
-export async function ensureProjectSnapshot(projectId: string): Promise<void> {
-  if (!isFirebaseConfigured || !db || !projectId) return;
-  if (_snapFetched.has(projectId)) return;
+/** The pull in flight per workspace — a second caller AWAITS it rather than reading nothing. */
+const _snapInflight = new Map<string, Promise<void>>();
+export function ensureProjectSnapshot(projectId: string): Promise<void> {
+  if (!isFirebaseConfigured || !db || !projectId) return Promise.resolve();
+  if (_snapFetched.has(projectId)) return _snapInflight.get(projectId) ?? Promise.resolve();
   _snapFetched.add(projectId);
+  const p = ensureProjectSnapshotNow(projectId).finally(() => { _snapInflight.delete(projectId); });
+  _snapInflight.set(projectId, p);
+  return p;
+}
+async function ensureProjectSnapshotNow(projectId: string): Promise<void> {
   const key = getProjectStorageKey(projectId);
   const existing = loadFromStorage(key, null) as Record<string, unknown> | null;
   // A snapshot with rooms in it is this machine's own memory — leave it be.
@@ -187,10 +195,13 @@ export async function ensureProjectSnapshot(projectId: string): Promise<void> {
  */
 let _foreignUnsubs: Array<() => void> = [];
 let _foreignFor: string | null = null;
+/** Bumped by every stop: an attach still awaiting its snapshot pull must not attach for a run that was stopped. */
+let _foreignRun = 0;
 export function stopForeignSync(): void {
   _foreignUnsubs.forEach(u => { try { u(); } catch { /* already gone */ } });
   _foreignUnsubs = [];
   _foreignFor = null;
+  _foreignRun++;
 }
 export function startForeignSync(currentProjectId: string): void {
   if (!isFirebaseConfigured || !db || !currentProjectId) return;
@@ -200,47 +211,101 @@ export function startForeignSync(currentProjectId: string): void {
   const { projects } = useStore.getState();
   for (const p of projects) {
     if (p.id === currentProjectId) continue;
-    const pid = p.id;
-    const key = getProjectStorageKey(pid);
-    let pending: Record<string, unknown> = {};
-    let timer: ReturnType<typeof setTimeout> | null = null;
-    let first = true;
-    const flush = () => {
-      timer = null;
-      const patch = pending; pending = {};
-      // A guard against a listener answering after the sync was re-pointed.
-      if (_foreignFor !== currentProjectId) return;
-      const existing = (loadFromStorage(key, null) as Record<string, unknown> | null) ?? {};
-      if (!Array.isArray(existing.buildings) || !(existing.buildings as unknown[]).length) {
-        existing.buildings = getDefaultBuildings(pid);
-      }
-      if (patch.apartments) {
-        patch.apartments = scopeApartmentsToProject(
-          pid, patch.apartments as Apartment[], existing.buildings as Building[]);
-      }
-      saveToStorage(key, { ...existing, ...patch });
-      useStore.setState(st => ({ snapshotTick: st.snapshotTick + 1 }));
-    };
-    const queue = (k: string, v: unknown) => {
-      pending[k] = v;
-      if (timer) clearTimeout(timer);
-      // The attach answer comes fast and whole; a later change is one record.
-      timer = setTimeout(flush, first ? 120 : 400);
-      first = false;
-    };
-    const col = (base: string) => projectCollection(pid, base);
-    _foreignUnsubs.push(
-      fsListen(col('apartments'), docs => queue('apartments', docs)),
-      fsListen(col('contractorAssignments'), docs => queue('contractorAssignments', docs)),
-      fsListen(col('contractorNotes'), docs => queue('contractorNotes', docs)),
-      () => { if (timer) clearTimeout(timer); timer = null; },
-    );
+    void attachForeign(p.id, currentProjectId);
   }
+}
+
+/**
+ * One foreign workspace's listeners. The UNITS are the big collection (the
+ * Job Board alone is thousands of records), so they arrive as a DELTA: only
+ * records stamped at or after the newest `updatedAt` this machine's snapshot
+ * already holds, less a two-hour margin for a slow clock. The snapshot is
+ * pulled once by `ensureProjectSnapshot` when the machine has none, so the
+ * full read happens once per machine rather than on every open — the read
+ * bill was every device re-reading every workspace on every load. Tasks and
+ * task threads stay whole listeners: they carry no reliable stamp, and they
+ * are the collections this exists for. Deletions reach the snapshot through
+ * the workspace's tombstone document (one read).
+ */
+const FOREIGN_MARGIN_MS = 2 * 60 * 60 * 1000;
+async function attachForeign(pid: string, currentProjectId: string): Promise<void> {
+  const key = getProjectStorageKey(pid);
+  const run = _foreignRun;
+  await ensureProjectSnapshot(pid);
+  if (_foreignFor !== currentProjectId || run !== _foreignRun) return;
+  const existing0 = (loadFromStorage(key, null) as Record<string, unknown> | null) ?? {};
+  const known = Array.isArray(existing0.apartments) ? existing0.apartments as Apartment[] : [];
+  let newest = '';
+  for (const a of known) if (a.updatedAt && a.updatedAt > newest) newest = a.updatedAt;
+  const sinceMs = newest ? new Date(newest).getTime() - FOREIGN_MARGIN_MS : 0;
+  const since = known.length && Number.isFinite(sinceMs) && sinceMs > 0 ? new Date(sinceMs).toISOString() : '';
+
+  let pending: Record<string, unknown> = {};
+  let dead = new Set<string>();
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  let first = true;
+  const flush = () => {
+    timer = null;
+    const patch = pending; pending = {};
+    // A guard against a listener answering after the sync was re-pointed.
+    if (_foreignFor !== currentProjectId) return;
+    const existing = (loadFromStorage(key, null) as Record<string, unknown> | null) ?? {};
+    if (!Array.isArray(existing.buildings) || !(existing.buildings as unknown[]).length) {
+      existing.buildings = getDefaultBuildings(pid);
+    }
+    if (patch.apartments || patch.tombstones) {
+      // Changed units are laid over the snapshot's own; buried ones leave.
+      const have = new Map((Array.isArray(existing.apartments) ? existing.apartments as Apartment[] : []).map(a => [a.id, a]));
+      for (const a of (patch.apartments as Apartment[] | undefined) ?? []) have.set(a.id, a);
+      for (const id of dead) have.delete(id);
+      delete patch.tombstones;
+      patch.apartments = scopeApartmentsToProject(pid, Array.from(have.values()), existing.buildings as Building[]);
+    }
+    saveToStorage(key, { ...existing, ...patch });
+    useStore.setState(st => ({ snapshotTick: st.snapshotTick + 1 }));
+  };
+  const queue = (k: string, v: unknown) => {
+    pending[k] = v;
+    if (timer) clearTimeout(timer);
+    // The attach answer comes fast and whole; a later change is one record.
+    timer = setTimeout(flush, first ? 120 : 400);
+    first = false;
+  };
+  const col = (base: string) => projectCollection(pid, base);
+  _foreignUnsubs.push(
+    fsListenSince(col('apartments'), 'updatedAt', since, docs => queue('apartments', docs)),
+    fsListenTombstones(pid, ids => { dead = ids; queue('tombstones', true); }),
+    fsListen(col('contractorAssignments'), docs => queue('contractorAssignments', docs)),
+    fsListen(col('contractorNotes'), docs => queue('contractorNotes', docs)),
+    () => { if (timer) clearTimeout(timer); timer = null; },
+  );
 }
 
 // Holds unsubscribe functions for all active Firestore real-time listeners.
 // Stored outside the Zustand state (not serializable) so they survive re-renders.
 let _firebaseUnsubscribers: Array<() => void> = [];
+/** The running sync left the office-only collections out (the worker's phone). */
+let _syncLean = false;
+/**
+ * Which startFirebaseSync run is the live one. A run that is still awaiting
+ * its first answers when the workspace switches used to finish anyway —
+ * merging workspace A's units into workspace B's state (its `pid` was
+ * captured before the switch, so the scoping kept A's records), persisting
+ * them there, and then B's own run pushed them up as "missing" into B's
+ * collection. That is how 3,520 Job Board jobs came to live in Wolfson's
+ * apartments collection and 244 Wolfson units in the Job Board's (found
+ * 2026-09-22: every load read four workspaces' worth of records). Every
+ * await and every listener callback now checks it is still the live run
+ * for the open workspace, and a stale run detaches itself.
+ */
+let _syncRun = 0;
+/** Does this apartment record belong in `pid`'s own collection? The writer-side twin of scopeApartmentsToProject. */
+function ownsRecord(pid: string, a: Apartment, buildings: Building[]): boolean {
+  if (pid === 'general') return a.buildingId === 'G';
+  if (a.buildingId === 'G') return false;
+  const ids = new Set(buildings.map(b => b.id));
+  return ids.size === 0 || ids.has(a.buildingId);
+}
 
 /**
  * Ids this workspace has deleted on purpose — see fsTombstone in firebase.ts.
@@ -748,7 +813,7 @@ interface AppState {
   importData: (json: string) => { ok: boolean; error?: string; summary?: DataSummary };
 
   // Firebase sync
-  startFirebaseSync: () => void;
+  startFirebaseSync: (opts?: { lean?: boolean }) => void;
   forcePushToFirestore: () => Promise<void>;
   applyFirebaseData: (data: Partial<AppState>) => void;
 
@@ -1627,7 +1692,7 @@ export const useStore = create<AppState>((set, get) => ({
     const pid = get().currentProjectId;
     set(state => ({
       apartments: state.apartments.map(a => a.id === id
-        ? { ...a, boardBin: bin ?? undefined, binnedAt: bin ? new Date().toISOString() : undefined }
+        ? { ...a, boardBin: bin ?? undefined, binnedAt: bin ? new Date().toISOString() : undefined, updatedAt: new Date().toISOString() }
         : a),
     }));
     persist(get);
@@ -2964,7 +3029,7 @@ export const useStore = create<AppState>((set, get) => ({
     const fpid = state.currentProjectId;
     const pc = (base: string) => projectCollection(fpid, base);
     await Promise.all([
-      fsBatchSet(pc('apartments'), state.apartments.map(a => ({ id: a.id, data: a }))),
+      fsBatchSet(pc('apartments'), state.apartments.filter(a => ownsRecord(state.currentProjectId, a, state.buildings)).map(a => ({ id: a.id, data: a }))),
       fsBatchSet('stages',        state.stages.map(s => ({ id: s.id, data: s }))),
       fsBatchSet('users',         state.users.map(u => ({ id: u.id, data: u }))),
       state.stageNotes.length > 0
@@ -3007,8 +3072,14 @@ export const useStore = create<AppState>((set, get) => ({
     ]);
   },
 
-  startFirebaseSync: async () => {
-    if (get().firebaseListening) return;
+  startFirebaseSync: async (opts) => {
+    if (get().firebaseListening) {
+      // A lean (portal) sync is upgraded to the full one when the office app
+      // starts in the same tab; anything else is already running.
+      if (!(_syncLean && !opts?.lean)) return;
+      _firebaseUnsubscribers.forEach(u => u());
+      _firebaseUnsubscribers = [];
+    }
     set({ firebaseListening: true });
     try {
 
@@ -3021,46 +3092,172 @@ export const useStore = create<AppState>((set, get) => ({
       return;
     }
 
-    // Load all collections from Firestore in parallel.
-    // Per-project collections use the project-scoped name via col(); the GLOBAL
-    // collections (stages / users / contractors / settings) always use the bare
-    // name, because every mutation action writes them bare. Reading them through
-    // col() made adds in Netiv/General silently disappear on the next load.
+    // The collections. Per-project ones use the project-scoped name via col();
+    // the GLOBAL collections (stages / users / contractors / settings) always
+    // use the bare name, because every mutation action writes them bare.
+    // Reading them through col() made adds in Netiv/General silently disappear.
     const pid = get().currentProjectId;
     const col = (base: string) => projectCollection(pid, base);
+    const run = ++_syncRun;
+    const stale = () => run !== _syncRun || get().currentProjectId !== pid;
+    // The worker's phone never reads the activity log, the note versions, the
+    // time clock or the office files — `lean` leaves those out of its load.
+    const lean = !!opts?.lean;
+    _syncLean = lean;
+    // ── ONE listener per collection is also the load (fsAttach) ──────────────
+    // The callbacks are the live path; they are held back (`release`) until the
+    // merge-or-seed decision below has run on each collection's first answer.
+    const none = (): Attached => ({ first: Promise.resolve([]), offline: () => false, release: () => {}, unsub: () => {} });
+    const G = (name: string, cb: (docs: Record<string, unknown>[]) => void, recent?: { field: string; n: number }): Attached =>
+      fsAttach(name, docs => { if (stale()) return; cb(docs); }, recent);
+    const attached: Attached[] = [
+      G(col('apartments'), (docs) => {
+        if (docs.length === 0) return;
+        const fbMap = new Map((docs as unknown as Apartment[]).map(a => [a.id, a]));
+        set(state => {
+          // A record the snapshot does not carry is KEPT — it may simply not be
+          // uploaded yet. Unless it is tombstoned, in which case it is missing
+          // because somebody deleted it, and keeping it is the resurrection bug.
+          const updated = state.apartments
+            .filter(a => !_tombstones.has(a.id))
+            .map(a => (fbMap.get(a.id) as Apartment | undefined) ?? a);
+          const localIds = new Set(state.apartments.map(a => a.id));
+          (docs as unknown as Apartment[]).forEach(r => { if (!localIds.has(r.id)) updated.push(r as Apartment); });
+          // Orphans from a past building rename must not stream back in
+          return { apartments: scopeApartmentsToProject(pid, updated, state.buildings) };
+        });
+        persist(get);
+      }),
+      G(col('stageNotes'), (docs) => {
+        if (docs.length > 0) { set({ stageNotes: docs as unknown as StageNote[] }); persist(get); }
+      }),
+      lean ? none() : G(col('stageNoteVersions'), (docs) => {
+        if (docs.length > 0) { set({ stageNoteVersions: docs as unknown as StageNoteVersion[] }); persist(get); }
+      }, { field: 'savedAt', n: 200 }),
+      lean ? none() : G(col('generalNoteVersions'), (docs) => {
+        if (docs.length > 0) { set({ generalNoteVersions: docs as unknown as GeneralNoteVersion[] }); persist(get); }
+      }, { field: 'savedAt', n: 200 }),
+      lean ? none() : G(col('activityLogs'), (docs) => {
+        if (docs.length > 0) {
+          const sorted = (docs as unknown as ActivityLog[])
+            .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).slice(0, 200);
+          set({ activityLogs: sorted }); persist(get);
+        }
+      }, { field: 'createdAt', n: 200 }),
+      G('contractors', (docs) => {
+        if (docs.length > 0) { set({ contractors: docs as unknown as Contractor[] }); persist(get); }
+      }),
+      // Bare, like every other global collection. A tap on the wall panel has
+      // to show up on the office machine within the second, which is the whole
+      // reason the board is worth having.
+      lean ? none() : G('employees', (docs) => {
+        if (docs.length > 0) { set({ employees: docs as unknown as Employee[] }); persist(get); }
+      }),
+      lean ? none() : G('timePunches', (docs) => {
+        if (docs.length > 0) { set({ timePunches: docs as unknown as TimePunch[] }); persist(get); }
+      }),
+      G('workerLevels', (docs) => {
+        if (docs.length > 0) { set({ workerLevels: docs as unknown as WorkerLevel[] }); persist(get); }
+      }),
+      G(col('contractorAssignments'), (docs) => {
+        const localA = get().contractorAssignments;
+        const merged = (docs as unknown as ContractorAssignment[]).map(fbA => {
+          const local = localA.find(a => a.id === fbA.id);
+          return {
+            ...fbA,
+            attachments: fbA.attachments?.map((att, i) => ({
+              ...att,
+              dataUrl: local?.attachments?.[i]?.dataUrl ?? '',
+            })),
+          };
+        });
+        set({ contractorAssignments: merged }); persist(get);
+      }),
+      G(col('contractorNotes'), (docs) => {
+        if (docs.length > 0) { set({ contractorNotes: docs as unknown as ContractorNote[] }); persist(get); }
+      }),
+      G(col('contractorPhotos'), (docs) => {
+        const localP = get().contractorPhotos;
+        const merged = (docs as unknown as ContractorPhoto[]).map(fbP => {
+          const local = localP.find(p => p.id === fbP.id);
+          return { ...fbP, dataUrl: fbP.driveUrl ? '' : (local?.dataUrl ?? '') };
+        });
+        set({ contractorPhotos: merged }); persist(get);
+      }),
+      lean ? none() : G(col('officeNoteFiles'), (docs) => {
+        const localF = get().officeNoteFiles;
+        const merged = (docs as unknown as OfficeNoteFile[]).map(fbF => {
+          const local = localF.find(f => f.id === fbF.id);
+          return { ...fbF, dataUrl: local?.dataUrl ?? '' };
+        });
+        set({ officeNoteFiles: merged }); persist(get);
+      }),
+      G(col('canvasElements'), (docs) => {
+        set({ canvasElements: (docs as unknown as CanvasElement[]).filter(e => !_tombstones.has(e.id)) });
+        persist(get);
+      }),
+      G(col('planPins'), (docs) => {
+        set({ planPins: docs as unknown as PlanPin[] });
+        persist(get);
+      }),
+      G(col('planAnnotations'), (docs) => {
+        set({ planAnnotations: docs as unknown as PlanAnnotation[] });
+        persist(get);
+      }),
+      G('stages', (docs) => {
+        if (docs.length > 0) { set({ stages: docs as unknown as Stage[] }); persist(get); }
+      }),
+      G('users', (docs) => {
+        if (docs.length > 0) { set({ users: docs as unknown as User[] }); persist(get); }
+      }),
+      G('settings', (docs) => {
+        const appS = (docs.find(d => (d as Record<string,unknown>).id === 'app') ?? {}) as Record<string, unknown>;
+        set(state => ({
+          ...(appS.backupFrequency      ? { backupFrequency:      appS.backupFrequency as BackupFrequency }      : {}),
+          ...(appS.backupDriveFolderLink !== undefined ? { backupDriveFolderLink: appS.backupDriveFolderLink as string } : {}),
+          ...(appS.contractorUiStrings  ? { contractorUiStrings:  appS.contractorUiStrings as ContractorUiStrings } : {}),
+          ...(appS.autoBackup           !== undefined ? { autoBackup: appS.autoBackup as boolean } : {}),
+          ...(appS.mainUiStrings        ? { mainUiStrings: mergeFreshMainUi(appS.mainUiStrings as Partial<MainUiStrings>) } : {}),
+          ...(appS.contractorSheetLinks ? { contractorSheetLinks: appS.contractorSheetLinks as Record<string, string> } : {}),
+          ...(appS.boardSettings ? { boardSettings: appS.boardSettings as Record<string, BoardSetting> } : {}),
+          ...(appS.timeClock ? { timeClock: { ...DEFAULT_TIME_CLOCK, ...(appS.timeClock as Partial<TimeClockSettings>) } } : {}),
+          ...(appS.boardViews ? { boardViews: appS.boardViews as BoardView[] } : {}),
+          ...(appS.savedReports ? { savedReports: appS.savedReports as Record<string, ReportDef[]> } : {}),
+          ...(appS.projectOrder ? { projectOrder: appS.projectOrder as string[] } : {}),
+          ...(appS.customProjects ? {
+            customProjects: appS.customProjects as Project[],
+            projects: [...DEFAULT_PROJECTS, ...(appS.customProjects as Project[])],
+          } : {}),
+          ...(appS.projectColors ? {
+            projectColors: appS.projectColors as Record<string, string>,
+            projects: get().projects.map(p => ({
+              ...p, color: (appS.projectColors as Record<string, string>)[p.id] ?? p.color })),
+          } : {}),
+          ...(appS.driveExportFrequency ? { driveExportFrequency: appS.driveExportFrequency as DriveExportFrequency } : {}),
+        }));
+        persist(get);
+      }),
+    ];
     const [
-      fbApts, fbStageNotes, fbStages, fbUsers, fbLogs,
-      fbContractors, fbAssignments, fbNotes, fbPhotos, fbOfficeFiles, fbSettings,
-      fbStageNoteVersions, fbGeneralNoteVersions, fbCanvasElements, fbPlanPins, fbPlanAnnotations,
-      fbEmployees, fbPunches, fbLevels,
-    ] = await Promise.all([
-      fsGetAll(col('apartments')),
-      fsGetAll(col('stageNotes')),
-      fsGetAll('stages'),
-      fsGetAll('users'),
-      fsGetAllRecent(col('activityLogs'), 'createdAt', 500),
-      fsGetAll('contractors'),
-      fsGetAll(col('contractorAssignments')),
-      fsGetAll(col('contractorNotes')),
-      fsGetAll(col('contractorPhotos')),
-      fsGetAll(col('officeNoteFiles')),
-      fsGetAll('settings'),
-      fsGetAllRecent(col('stageNoteVersions'), 'savedAt', 500),
-      fsGetAllRecent(col('generalNoteVersions'), 'savedAt', 500),
-      fsGetAll(col('canvasElements')),
-      fsGetAll(col('planPins')),
-      fsGetAll(col('planAnnotations')),
-      // Bare, in every workspace: the payroll is company-wide.
-      fsGetAll('employees'),
-      fsGetAll('timePunches'),
-      fsGetAll('workerLevels'),
-    ]);
+      fbApts, fbStageNotes, fbStageNoteVersions, fbGeneralNoteVersions, fbLogs,
+      fbContractors, fbEmployees, fbPunches, fbLevels,
+      fbAssignments, fbNotes, fbPhotos, fbOfficeFiles, fbCanvasElements,
+      fbPlanPins, fbPlanAnnotations, fbStages, fbUsers, fbSettings,
+    ] = await Promise.all(attached.map(a => a.first));
+    const bail = () => { attached.forEach(a => a.unsub()); };
+    if (stale()) { bail(); return; }
+    // No word from the server on the collections that decide seeding: an
+    // offline tab used to read an empty answer as an EMPTY CLOUD and push its
+    // localStorage up as the first-run seed. It merges nothing and seeds
+    // nothing now; the listeners stay attached and deliver when the line is back.
+    const offline = attached[0].offline() || attached[9].offline() || attached[1].offline();
 
     // What this workspace has deleted on purpose. Read BEFORE anything is
     // pushed up: a record this device still holds locally but the cloud has
     // buried must be dropped here, or the "seed anything missing" step below
     // resurrects it — the reason a removed import kept reappearing.
     _tombstones = await fsGetTombstones(pid);
+    if (stale()) { bail(); return; }
     if (_tombstones.size > 0) {
       const before = get();
       const apts = before.apartments.filter(a => !_tombstones.has(a.id));
@@ -3076,7 +3273,9 @@ export const useStore = create<AppState>((set, get) => ({
     // non-empty as soon as any project has synced and would mask a brand-new project.
     const hasFirebaseData = fbApts.length > 0 || fbAssignments.length > 0 || fbStageNotes.length > 0;
 
-    if (hasFirebaseData) {
+    if (offline) {
+      console.warn('[Firebase] no answer from the server on load — nothing merged, nothing seeded');
+    } else if (hasFirebaseData) {
       const localPhotos = get().contractorPhotos;
       const localFiles = get().officeNoteFiles;
       const localAssignments = get().contractorAssignments;
@@ -3170,7 +3369,7 @@ export const useStore = create<AppState>((set, get) => ({
       // Seed any apartments that are missing from Firestore (in case the first-run seed was partial).
       // Anything tombstoned is missing BECAUSE it was deleted, and must stay gone.
       const fbAptIds = new Set((fbApts as unknown as Apartment[]).map(a => a.id));
-      const missingApts = get().apartments.filter(a => !fbAptIds.has(a.id) && !_tombstones.has(a.id));
+      const missingApts = get().apartments.filter(a => !fbAptIds.has(a.id) && !_tombstones.has(a.id) && ownsRecord(pid, a, get().buildings));
       if (missingApts.length > 0) {
         fsBatchSet(col('apartments'), missingApts.map(a => ({ id: a.id, data: a })));
       }
@@ -3186,7 +3385,7 @@ export const useStore = create<AppState>((set, get) => ({
       // First run — push everything from localStorage to Firestore
       const state = get();
       await Promise.all([
-        fsBatchSet(col('apartments'),  state.apartments.map(a => ({ id: a.id, data: a }))),
+        fsBatchSet(col('apartments'),  state.apartments.filter(a => ownsRecord(pid, a, state.buildings)).map(a => ({ id: a.id, data: a }))),
         fsBatchSet('stages',           state.stages.map(s => ({ id: s.id, data: s }))),
         fsBatchSet('users',            state.users.map(u => ({ id: u.id, data: u }))),
         state.stageNotes.length > 0
@@ -3237,94 +3436,13 @@ export const useStore = create<AppState>((set, get) => ({
       ]);
     }
 
-    // ── Real-time listeners for all collections ──────────────────────────────
-    // Store every unsubscribe fn so logout() can cancel them cleanly.
+    // The live path takes over: every unsubscribe kept so logout() and a
+    // workspace switch can cancel it, then each collection's latest answer
+    // is replayed once through its callback (what the old listener's first
+    // answer used to do).
+    if (stale()) { bail(); return; }
     _firebaseUnsubscribers = [
-      fsListen(col('apartments'), (docs) => {
-        if (docs.length === 0) return;
-        const fbMap = new Map((docs as unknown as Apartment[]).map(a => [a.id, a]));
-        set(state => {
-          // A record the snapshot does not carry is KEPT — it may simply not be
-          // uploaded yet. Unless it is tombstoned, in which case it is missing
-          // because somebody deleted it, and keeping it is the resurrection bug.
-          const updated = state.apartments
-            .filter(a => !_tombstones.has(a.id))
-            .map(a => (fbMap.get(a.id) as Apartment | undefined) ?? a);
-          const localIds = new Set(state.apartments.map(a => a.id));
-          (docs as unknown as Apartment[]).forEach(r => { if (!localIds.has(r.id)) updated.push(r as Apartment); });
-          // Orphans from a past building rename must not stream back in
-          return { apartments: scopeApartmentsToProject(pid, updated, state.buildings) };
-        });
-        persist(get);
-      }),
-      fsListen(col('stageNotes'), (docs) => {
-        if (docs.length > 0) { set({ stageNotes: docs as unknown as StageNote[] }); persist(get); }
-      }),
-      fsListenRecent(col('stageNoteVersions'), 'savedAt', 500, (docs) => {
-        if (docs.length > 0) { set({ stageNoteVersions: docs as unknown as StageNoteVersion[] }); persist(get); }
-      }),
-      fsListenRecent(col('generalNoteVersions'), 'savedAt', 500, (docs) => {
-        if (docs.length > 0) { set({ generalNoteVersions: docs as unknown as GeneralNoteVersion[] }); persist(get); }
-      }),
-      fsListenRecent(col('activityLogs'), 'createdAt', 500, (docs) => {
-        if (docs.length > 0) {
-          const sorted = (docs as unknown as ActivityLog[])
-            .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).slice(0, 500);
-          set({ activityLogs: sorted }); persist(get);
-        }
-      }),
-      fsListen('contractors', (docs) => {
-        if (docs.length > 0) { set({ contractors: docs as unknown as Contractor[] }); persist(get); }
-      }),
-      // Bare, like every other global collection. A tap on the wall panel has
-      // to show up on the office machine within the second, which is the whole
-      // reason the board is worth having.
-      fsListen('employees', (docs) => {
-        if (docs.length > 0) { set({ employees: docs as unknown as Employee[] }); persist(get); }
-      }),
-      fsListen('timePunches', (docs) => {
-        if (docs.length > 0) { set({ timePunches: docs as unknown as TimePunch[] }); persist(get); }
-      }),
-      fsListen('workerLevels', (docs) => {
-        if (docs.length > 0) { set({ workerLevels: docs as unknown as WorkerLevel[] }); persist(get); }
-      }),
-      fsListen(col('contractorAssignments'), (docs) => {
-        const localA = get().contractorAssignments;
-        const merged = (docs as unknown as ContractorAssignment[]).map(fbA => {
-          const local = localA.find(a => a.id === fbA.id);
-          return {
-            ...fbA,
-            attachments: fbA.attachments?.map((att, i) => ({
-              ...att,
-              dataUrl: local?.attachments?.[i]?.dataUrl ?? '',
-            })),
-          };
-        });
-        set({ contractorAssignments: merged }); persist(get);
-      }),
-      fsListen(col('contractorNotes'), (docs) => {
-        if (docs.length > 0) { set({ contractorNotes: docs as unknown as ContractorNote[] }); persist(get); }
-      }),
-      fsListen(col('contractorPhotos'), (docs) => {
-        const localP = get().contractorPhotos;
-        const merged = (docs as unknown as ContractorPhoto[]).map(fbP => {
-          const local = localP.find(p => p.id === fbP.id);
-          return { ...fbP, dataUrl: fbP.driveUrl ? '' : (local?.dataUrl ?? '') };
-        });
-        set({ contractorPhotos: merged }); persist(get);
-      }),
-      fsListen(col('officeNoteFiles'), (docs) => {
-        const localF = get().officeNoteFiles;
-        const merged = (docs as unknown as OfficeNoteFile[]).map(fbF => {
-          const local = localF.find(f => f.id === fbF.id);
-          return { ...fbF, dataUrl: local?.dataUrl ?? '' };
-        });
-        set({ officeNoteFiles: merged }); persist(get);
-      }),
-      fsListen(col('canvasElements'), (docs) => {
-        set({ canvasElements: (docs as unknown as CanvasElement[]).filter(e => !_tombstones.has(e.id)) });
-        persist(get);
-      }),
+      ...attached.map(a => a.unsub),
       // A delete on one device reaches the others through here. Without it the
       // TV and the phones would each keep showing what the office removed until
       // their next reload.
@@ -3339,48 +3457,8 @@ export const useStore = create<AppState>((set, get) => ({
           persist(get);
         }
       }),
-      fsListen(col('planPins'), (docs) => {
-        set({ planPins: docs as unknown as PlanPin[] });
-        persist(get);
-      }),
-      fsListen(col('planAnnotations'), (docs) => {
-        set({ planAnnotations: docs as unknown as PlanAnnotation[] });
-        persist(get);
-      }),
-      fsListen('stages', (docs) => {
-        if (docs.length > 0) { set({ stages: docs as unknown as Stage[] }); persist(get); }
-      }),
-      fsListen('users', (docs) => {
-        if (docs.length > 0) { set({ users: docs as unknown as User[] }); persist(get); }
-      }),
-      fsListen('settings', (docs) => {
-        const appS = (docs.find(d => (d as Record<string,unknown>).id === 'app') ?? {}) as Record<string, unknown>;
-        set(state => ({
-          ...(appS.backupFrequency      ? { backupFrequency:      appS.backupFrequency as BackupFrequency }      : {}),
-          ...(appS.backupDriveFolderLink !== undefined ? { backupDriveFolderLink: appS.backupDriveFolderLink as string } : {}),
-          ...(appS.contractorUiStrings  ? { contractorUiStrings:  appS.contractorUiStrings as ContractorUiStrings } : {}),
-          ...(appS.autoBackup           !== undefined ? { autoBackup: appS.autoBackup as boolean } : {}),
-          ...(appS.mainUiStrings        ? { mainUiStrings: mergeFreshMainUi(appS.mainUiStrings as Partial<MainUiStrings>) } : {}),
-          ...(appS.contractorSheetLinks ? { contractorSheetLinks: appS.contractorSheetLinks as Record<string, string> } : {}),
-          ...(appS.boardSettings ? { boardSettings: appS.boardSettings as Record<string, BoardSetting> } : {}),
-          ...(appS.timeClock ? { timeClock: { ...DEFAULT_TIME_CLOCK, ...(appS.timeClock as Partial<TimeClockSettings>) } } : {}),
-          ...(appS.boardViews ? { boardViews: appS.boardViews as BoardView[] } : {}),
-          ...(appS.savedReports ? { savedReports: appS.savedReports as Record<string, ReportDef[]> } : {}),
-          ...(appS.projectOrder ? { projectOrder: appS.projectOrder as string[] } : {}),
-          ...(appS.customProjects ? {
-            customProjects: appS.customProjects as Project[],
-            projects: [...DEFAULT_PROJECTS, ...(appS.customProjects as Project[])],
-          } : {}),
-          ...(appS.projectColors ? {
-            projectColors: appS.projectColors as Record<string, string>,
-            projects: get().projects.map(p => ({
-              ...p, color: (appS.projectColors as Record<string, string>)[p.id] ?? p.color })),
-          } : {}),
-          ...(appS.driveExportFrequency ? { driveExportFrequency: appS.driveExportFrequency as DriveExportFrequency } : {}),
-        }));
-        persist(get);
-      }),
     ];
+    attached.forEach(a => a.release());
     set({ firebaseSyncError: null });
 
     // Drive auto-export scheduler — checks every 5 minutes, runs immediately on login

@@ -618,7 +618,9 @@ export function ContractorPortal() {
    * nothing at all, and reads as "your link is broken".
    */
   useEffect(() => {
-    if (!firebaseListening) startFirebaseSync();
+    // Lean: the phone never reads the activity log, the note versions, the
+    // time clock or the office files, so its load leaves them out.
+    if (!firebaseListening) startFirebaseSync({ lean: true });
   }, [firebaseListening, startFirebaseSync]);
 
   /**

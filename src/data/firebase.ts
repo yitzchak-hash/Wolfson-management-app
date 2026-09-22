@@ -25,6 +25,8 @@ import {
   query,
   orderBy,
   limit,
+  where,
+  connectFirestoreEmulator,
   writeBatch,
   serverTimestamp,
   deleteField,
@@ -66,6 +68,13 @@ if (isFirebaseConfigured) {
     db = initializeFirestore(app, {
       ignoreUndefinedProperties: true,
     });
+    // A harness points the app at the local emulator (host:port). Never set
+    // in production; the read-diet probe is what it exists for.
+    const emu = import.meta.env.VITE_FIRESTORE_EMULATOR as string | undefined;
+    if (emu) {
+      const [host, port] = emu.split(':');
+      connectFirestoreEmulator(db, host, Number(port));
+    }
   } catch (e) {
     console.warn('Firebase init failed, using localStorage only:', e);
   }
@@ -194,6 +203,7 @@ export async function fsGetAll(collectionName: string): Promise<Record<string, u
   if (!db) return [];
   try {
     const snap = await getDocs(collection(db, collectionName));
+    _countReads(snap.size, collectionName);
     return snap.docs.map(d => ({ id: d.id, ...d.data() }));
   } catch (e) {
     console.warn(`Firestore read failed for ${collectionName}:`, e);
@@ -214,6 +224,7 @@ export async function fsGetAllRecent(collectionName: string, field: string, n: n
   if (!db) return [];
   try {
     const snap = await getDocs(query(collection(db, collectionName), orderBy(field, 'desc'), limit(n)));
+    _countReads(snap.size, collectionName);
     return snap.docs.map(d => ({ id: d.id, ...d.data() }));
   } catch (e) {
     console.warn(`Firestore read failed for ${collectionName}:`, e);
@@ -229,6 +240,7 @@ export function fsListenRecent(
   if (!db) return () => {};
   try {
     return onSnapshot(query(collection(db, collectionName), orderBy(field, 'desc'), limit(n)), snap => {
+      _countReads(_billed(snap), collectionName);
       callback(snap.docs.map(d => ({ id: d.id, ...d.data() })));
     }, e => _notifyReadError(collectionName, e));
   } catch (e) {
@@ -245,10 +257,120 @@ export function fsListen(
   if (!db) return () => {};
   try {
     return onSnapshot(collection(db, collectionName), snap => {
+      _countReads(_billed(snap), collectionName);
       callback(snap.docs.map(d => ({ id: d.id, ...d.data() })));
     }, e => _notifyReadError(collectionName, e));
   } catch (e) {
     console.warn(`Firestore listener failed for ${collectionName}:`, e);
+    return () => {};
+  }
+}
+
+// ── The read meter ──────────────────────────────────────────────────────────
+/**
+ * Documents the server has handed this tab, counted where they arrive. A
+ * listener's first answer is every document in it and every later answer is
+ * only what changed — which is exactly what Firestore bills — so this number
+ * tracks the bill closely enough to catch a load that reads a collection
+ * twice. The read-diet harness reads it through window.__fsReads (DEV only).
+ */
+let _reads = 0;
+/** Changes the SERVER sent — this tab's own pending writes echo through a listener and are not billed. */
+function _billed(snap: { docChanges: () => Array<{ doc: { metadata: { hasPendingWrites: boolean } } }> }): number {
+  return snap.docChanges().filter(c => !c.doc.metadata.hasPendingWrites).length;
+}
+const _readsBy: Record<string, number> = {};
+function _countReads(n: number, name = '?') { _reads += n; _readsBy[name] = (_readsBy[name] ?? 0) + n; }
+export function fsReadCount(): number { return _reads; }
+/** Per collection — the answer to "which collection is eating the bill". */
+export function fsReadsByCollection(): Record<string, number> { return { ..._readsBy }; }
+if (import.meta.env.DEV && typeof window !== 'undefined') {
+  Object.defineProperty(window, '__fsReads', { get: () => _reads, configurable: true });
+  Object.defineProperty(window, '__fsReadsBy', { get: () => ({ ..._readsBy }), configurable: true });
+}
+
+/**
+ * ONE listener that is also the load.
+ *
+ * `startFirebaseSync` used to read every collection with getDocs and then
+ * attach a listener to each — and a listener's first answer is the whole
+ * collection again, billed again. Every open of the app read the entire
+ * workspace TWICE (2026-09-22: 146,000 reads by lunchtime on a free tier of
+ * 50,000). The first answer is the load now; the callback is held back
+ * until `release()` so the merge-or-seed decision runs on the answer before
+ * the live path takes over, then the latest answer is replayed once, which
+ * is exactly what the listener used to deliver first.
+ *
+ * `offline()` is true when the first answer came from this tab's own cache
+ * with no word from the server — the store must not treat that as "the cloud
+ * is empty" and seed local data over it.
+ */
+export interface Attached {
+  first: Promise<Record<string, unknown>[]>;
+  offline: () => boolean;
+  release: () => void;
+  unsub: Unsubscribe;
+}
+export function fsAttach(
+  collectionName: string,
+  callback: (items: Record<string, unknown>[]) => void,
+  recent?: { field: string; n: number },
+): Attached {
+  if (!db) return { first: Promise.resolve([]), offline: () => false, release: () => {}, unsub: () => {} };
+  let resolve!: (d: Record<string, unknown>[]) => void;
+  const first = new Promise<Record<string, unknown>[]>(r => { resolve = r; });
+  let resolved = false, released = false, wasOffline = false;
+  let latest: Record<string, unknown>[] | null = null;
+  let unsub: Unsubscribe = () => {};
+  const settle = (docs: Record<string, unknown>[], offline: boolean) => {
+    if (resolved) return;
+    resolved = true; wasOffline = offline; resolve(docs);
+  };
+  try {
+    const q = recent
+      ? query(collection(db, collectionName), orderBy(recent.field, 'desc'), limit(recent.n))
+      : collection(db, collectionName);
+    unsub = onSnapshot(q, snap => {
+      _countReads(_billed(snap), collectionName);
+      const docs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      settle(docs, snap.metadata.fromCache);
+      if (released) callback(docs); else latest = docs;
+    }, e => {
+      _notifyReadError(collectionName, e);
+      settle([], true);
+    });
+  } catch (e) {
+    console.warn(`Firestore attach failed for ${collectionName}:`, e);
+    settle([], true);
+  }
+  return {
+    first,
+    offline: () => wasOffline,
+    release: () => {
+      released = true;
+      if (latest) { const d = latest; latest = null; callback(d); }
+    },
+    unsub: () => unsub(),
+  };
+}
+
+/**
+ * Only the documents whose `field` is at or past `since` — the delta
+ * listener for another workspace's units. A single-field range query needs
+ * no index. A document without the field never matches, by Firestore's rule.
+ */
+export function fsListenSince(
+  collectionName: string, field: string, since: string,
+  callback: (items: Record<string, unknown>[]) => void
+): Unsubscribe {
+  if (!db) return () => {};
+  try {
+    return onSnapshot(query(collection(db, collectionName), where(field, '>=', since)), snap => {
+      _countReads(_billed(snap), collectionName);
+      callback(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    }, e => _notifyReadError(collectionName, e));
+  } catch (e) {
+    console.warn(`Firestore delta listener failed for ${collectionName}:`, e);
     return () => {};
   }
 }
@@ -334,6 +456,7 @@ export async function fsGetTombstones(projectId: string): Promise<Set<string>> {
   if (!db) return new Set();
   try {
     const snap = await getDoc(doc(db, tombstoneCollection(projectId), TOMB_DOC));
+    _countReads(1, 'tombstones');
     const ids = tombIds(snap.data());
     const keys = Object.keys(ids);
     if (keys.length > TOMB_MAX) {
@@ -356,6 +479,7 @@ export function fsListenTombstones(projectId: string, callback: (ids: Set<string
   if (!db) return () => {};
   try {
     return onSnapshot(doc(db, tombstoneCollection(projectId), TOMB_DOC), snap => {
+      _countReads(1, 'tombstones');
       callback(new Set(Object.keys(tombIds(snap.data()))));
     });
   } catch (e) {

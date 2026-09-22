@@ -8678,3 +8678,105 @@ Job Board's ~1,650 jobs are re-read by every device on every reload.
 
 Harness: `scratchpad/round47-probe.mjs` (14 checks, two contexts).
 
+
+---
+
+# v2 — the read diet, and the records that had crossed workspaces (2026-09-22)
+
+## The bill, in numbers
+Production read 146,000 documents by lunchtime on a free tier of 50,000 —
+the "Quota exceeded" that made the notebook look broken. Three causes, all
+measured against the real records (REST, the tvhis idiom, names only):
+- **Every collection was read twice per open**: `getDocs` to load it, then a
+  listener whose first answer is the whole collection again, billed again.
+- **Every OTHER workspace's whole unit list was read on every open** by the
+  foreign sync (2026-09-16), and the Job Board is 3,764 records.
+- **The collections held copies of each other's records**: Wolfson's bare
+  `apartments` carried all 3,520 Job Board jobs, `general_apartments` 244
+  Wolfson units, `netiv_apartments` 245 Wolfson units + 86 N1/N2 orphans
+  of the old rename. Invisible on every screen (`scopeApartmentsToProject`
+  drops them at load) and read by every device on every open. So a Wolfson
+  machine read ~3,800 + ~4,200 foreign, twice: ~12,000 per open.
+  **Cause: a workspace switch racing an in-flight sync.** `startFirebaseSync`
+  captured `pid` before its awaits; when the switch landed first, the stale
+  run merged workspace A's units into workspace B's state (its scoping kept
+  A's records), persisted them there, and B's own run pushed them up as
+  "missing" into B's collection.
+
+## What ships
+- **`fsAttach`** (firebase.ts): ONE listener is also the load. Its first
+  answer resolves the load; the callback is held back until `release()` so
+  the merge-or-seed decision runs first, then the latest answer is replayed
+  once (what the old listener delivered first). `offline()` says the first
+  answer came from this tab's cache with no server contact — the store then
+  merges nothing and SEEDS nothing (an offline tab used to read the silence
+  as an empty cloud and push its localStorage up).
+- **`_syncRun` + `stale()`** in `startFirebaseSync`: every await and every
+  listener callback (`G(...)` wrapper) checks it is still the live run for
+  the open workspace; a stale run detaches its own listeners and returns.
+  **`ownsRecord(pid, a, buildings)`** is the writer-side twin of the scoping
+  rule: the missing-seed, the first-run seed and Force Push push only the
+  workspace's own records.
+- **The foreign sync is a DELTA** (`attachForeign`): `ensureProjectSnapshot`
+  pulls a missing snapshot once (now an awaitable in-flight promise —
+  `_snapInflight` — a second caller used to return before the first finished
+  and the listener then read everything from an empty snapshot); then
+  `fsListenSince(col('apartments'), 'updatedAt', newest − 2h)` reads only
+  units stamped since the snapshot's newest, laid over the snapshot by id;
+  the workspace's tombstone doc (one read) drops deletions; tasks and task
+  threads stay whole listeners (no reliable stamp; small; the reason the
+  sync exists). `moveToBin` now stamps `updatedAt` (the sync stamp) so a
+  filing reaches foreign readers' counts. A writer that forgets `updatedAt`
+  keeps its change local to the workspace until it is opened — accepted.
+  `_foreignRun` guards an attach still awaiting its pull after a stop
+  (StrictMode's mount/cleanup/mount attached the listeners twice).
+- **The phone loads lean**: `startFirebaseSync({ lean: true })` leaves out
+  the activity log, the note versions, the time clock and the office files,
+  which the portal never reads; a lean sync is upgraded to the full one if
+  the office app starts in the same tab.
+- **Caps match what is kept**: logs and versions load 200 (persist keeps 200;
+  500 was 300 wasted per collection per open).
+- **The read meter**: `fsReadCount()` / `fsReadsByCollection()`, and in DEV
+  `window.__fsReads` / `window.__fsReadsBy` — server-sent changes only
+  (`_billed` skips this tab's own pending-write echoes). When the bill
+  climbs, the per-collection map is the first thing to read.
+- **`VITE_FIRESTORE_EMULATOR=host:port`** connects the app to the local
+  emulator; never set in production.
+
+## The cleanup (`scratchpad/cloudclean.mjs`)
+Dry run by default: lists the three unit collections by REST, plans every
+record whose `buildingId` is not the collection's own, writes EVERY planned
+document whole to a backup in the session scratchpad (real records — never
+the repo), copies home a record that has no copy at home (A1-66), and only
+`--delete` commits the deletes (chunks of 400 through `documents:commit`).
+Verified before deleting: every misplaced record has a home copy at least
+as new. Run only on the owner's word; the guard above is what keeps the junk
+from coming back.
+
+## Measured (`scratchpad/readdiet-probe.mjs`, against the emulator)
+Seed: Wolfson 250 · Job Board 3,500 · Netiv 100 · 50 tasks · 800 logs.
+First open standing in Wolfson: **4,146 reads** (one per document, the old
+path ~8,300); **reload: 535** (the foreign 3,600 stay home); a change on the
+Job Board reaches the Wolfson machine's snapshot live for 2 reads; the
+switch race (Listen channel slowed 1.2s, switch mid-load) carries nothing
+across; the phone reads no logs; an offline open seeds nothing. Its own
+traps: the emulator's clear-all endpoint between runs (a tombstone doc from
+the last run otherwise drops a seeded job); a fresh workspace pushes its
+default slots up (the designed missing-seed) — budgets are derived from the
+live counts, not fixed; the Job Board seed's `updatedAt` must be SPREAD over
+days or the 2h delta margin re-reads the whole board. Emulator: firebase-tools
+`--no-save` (reinstall playwright / pdf-lib / @pdf-lib/fontkit in the same
+command — the prune trap), `firebase emulators:start --only firestore
+--project demo-diet` from a dir holding a firebase.json + open rules; a dev
+server on 5176 with the six VITE_FIREBASE_* fakes + VITE_FIRESTORE_EMULATOR.
+Java is present; the jar downloads on first run.
+
+## The plan and the stages
+The project is on **Blaze** (owner, 2026-09-22; a budget alert + a capped
+virtual card were advised in place of a kill switch). Reads answered again
+at 11:07 UTC, ~15 minutes after the link. The four live Wolfson stages,
+read for the pending split: `skhtatb` Sold/Start · `s1` Piping, Concealed
+Units & Fans (#f0cf6a) · `s4` Wall Units & Outdoor Units (#f59e0b) · `s7`
+Registers,Access Panels & Thermostats (#84cc16); the Job Board has its own
+six. `notebookbars-probe.mjs` had rotted on the removed stage `<select>`
+(`from.selectOption`) — repaired to the bubble picker.
