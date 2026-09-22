@@ -30,6 +30,25 @@ export interface WhatsNewEntry {
 
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    date: '2027-01-20',
+    title: 'Add Task works on a job opened from the notebook',
+    items: [
+      {
+        title: 'The task panel opens where the job is',
+        body: 'Open a Wolfson or Netiv unit from the Job Board’s notebook or a unit card, press Add '
+          + 'Task, and the task panel now opens right there. It used to close the window and send '
+          + 'you straight back to the Job Board with nothing added.',
+        demo: 'tap',
+      },
+      {
+        title: 'You still come home afterwards',
+        body: 'Close the task panel and you are taken back to the Job Board, where you started — '
+          + 'after the task, not before it.',
+        demo: 'list',
+      },
+    ],
+  },
+  {
     date: '2027-01-19',
     title: 'Editing a task shows the stage bubbles',
     items: [

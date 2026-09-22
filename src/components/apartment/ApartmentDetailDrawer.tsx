@@ -2257,7 +2257,17 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
               {/* Add Task button */}
               {onRequestAddTask && (
                 <button
-                  onClick={() => { onClose(); onRequestAddTask(apartment); }}
+                  data-drawer-add-task
+                  /**
+                   * NOT through onClose. Every host dismisses the drawer inside
+                   * its own onRequestAddTask, and the host's onClose is also
+                   * where a RETURN TICKET is redeemed — so calling it here sent
+                   * a Wolfson unit opened from the Job Board's notebook straight
+                   * back to the board before the task panel could mount (the
+                   * owner's "add task just exits the window and takes me back
+                   * to the job board"). Edits are still flushed first.
+                   */
+                  onClick={() => { if (apartment && currentUser && basicDirty()) autoSave(); onRequestAddTask(apartment); }}
                   className="w-full flex items-center justify-center gap-2 py-2 bg-[#1e3a5f]/5 border border-dashed border-[#1e3a5f]/20 rounded-lg text-sm text-[#1e3a5f] hover:bg-[#1e3a5f]/10 transition-colors font-medium"
                 >
                   <Plus size={14} /> {ui.addTask}

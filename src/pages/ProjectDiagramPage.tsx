@@ -681,7 +681,18 @@ export function ProjectDiagramPage() {
         {!bulkMode && addTaskApt && currentUser && (
           <QuickAddTaskPanel
             apartment={addTaskApt}
-            onClose={() => setAddTaskApt(null)}
+            onClose={() => {
+              const id = addTaskApt.id;
+              setAddTaskApt(null);
+              // The drawer's Add Task hands over WITHOUT redeeming a return
+              // ticket, so a unit reached from another workspace goes home
+              // when the task panel closes — after the task, not before it.
+              const back = redeemReturn(id);
+              if (back && back.projectId !== currentProjectId) {
+                setCurrentProject(back.projectId);
+                navigate(back.path);
+              }
+            }}
             currentUser={currentUser}
             onToast={msg => showToast(msg)}
           />

@@ -8884,3 +8884,24 @@ an unpick saved to localStorage). Its trap: the seed stores NO stage list
 (the app fills its defaults on load) and the Wolfson split retires s1/s4/s7
 on arrival — seed a task on `s2`, a default stage that stays as it is.
 
+## Add Task on a travelled-to unit went straight home (2026-09-22)
+The owner: "press add task on a job that's on the calendar, it just exits
+the apartment window and takes me back to the job board without doing
+anything". A unit reached from the Job Board (a notebook card, a unit card,
+a Building Progress cell) carries a RETURN TICKET, redeemed by the host
+page's `onClose` — and the drawer's Add Task button called `onClose()`
+BEFORE `onRequestAddTask`, so the diagram page redeemed the ticket, switched
+back to the Job Board and unmounted, and the task panel it had just been
+asked to open never mounted. Two rules now:
+- **The drawer's Add Task never closes through the host.** Every host
+  dismisses the drawer inside its own `onRequestAddTask`; the button flushes
+  edits (`basicDirty() → autoSave()`, the closeDrawer half without the
+  onClose) and hands over. Hook: `[data-drawer-add-task]`.
+- **The ticket is redeemed when the TASK PANEL closes** — `QuickAddTaskPanel`'s
+  `onClose` on both travel targets (ProjectDiagramPage, GeneralJobsPage)
+  runs `redeemReturn(id)` for the panel's apartment, so the journey home
+  happens after the task, not before it. A plain visit (no ticket) stays put.
+Harness: `scratchpad/addtaskticket-probe.mjs` (9 checks). Its traps: the
+quick-add panel wears `.drawer-panel` too (read the drawer by its own
+hook), and it closes by its backdrop, not Escape.
+

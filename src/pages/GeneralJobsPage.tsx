@@ -8576,7 +8576,18 @@ function isPointerNode(el: CanvasElement | undefined): boolean {
       {addTaskJob && currentUser && (
         <QuickAddTaskPanel
           apartment={addTaskJob}
-          onClose={() => setAddTaskJob(null)}
+          onClose={() => {
+            const id = addTaskJob.id;
+            setAddTaskJob(null);
+            // The drawer's Add Task hands over WITHOUT redeeming a return
+            // ticket, so a job reached from another workspace goes home when
+            // the task panel closes — after the task, not before it.
+            const back = redeemReturn(id);
+            if (back && back.projectId !== currentProjectId) {
+              setCurrentProject(back.projectId);
+              navigate(back.path);
+            }
+          }}
           currentUser={currentUser}
           onToast={msg => setToast(msg)}
         />

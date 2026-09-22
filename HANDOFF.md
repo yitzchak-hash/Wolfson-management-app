@@ -27,7 +27,7 @@ exactly there.
 3. `npx tsc --noEmit -p .` and `npx vite build`. 4. The audits:
    `node scratchpad/loopaudit.mjs`, `backupaudit.mjs`, `navaudit.mjs`, `apilimit.mjs`.
 5. A What's New entry (`src/data/whatsNew.tsx`, dates run AHEAD of the clock;
-   newest is `2027-01-19` — the next entry must be a later date (an older
+   newest is `2027-01-20` — the next entry must be a later date (an older
    entry lower down also wears `2026-12-20`; the marker compares only the TOP
    entry's date, so never reuse a date that appears anywhere in the file)). 6. A CLAUDE.md
    round record. 7. A line in `docs/CRM-CHECKLIST.md`. 8. Rewrite THIS file.
@@ -43,8 +43,17 @@ with starred recommendations is published first; the owner says "approved" /
 "all yes" / answers by number; then it is built. Never build a redesign
 unasked.
 
-## Where things stand (2026-09-22, latest — every task editor wears the bubbles; NOTHING PENDING HIS WORD)
+## Where things stand (2026-09-22, latest — Add Task on a travelled-to unit; NOTHING PENDING HIS WORD)
 Last commits, newest first (see `git log`):
+- **2026-09-22, latest — "add task on a job on the calendar exits the window
+  and takes me back to the job board".** The drawer's Add Task closed the
+  drawer through the host's onClose, which redeems the RETURN TICKET a unit
+  opened from the Job Board carries — so the page switched home before the
+  task panel could mount. Add Task now hands over without the host close
+  (edits still flushed), and the ticket is redeemed when the task PANEL
+  closes (diagram + board hosts). `addtaskticket-probe.mjs` (9) green;
+  round21, round29, round31, drawerround, taskbubbles, tsc, build, four
+  audits green.
 - **2026-09-22, latest — his screenshot of a plain stage dropdown on Igor's
   task ("we didn't do the stage fix with the bubbles… across the whole
   app").** The set model had reached every ADD form and stopped there.
@@ -714,6 +723,13 @@ Last commits, newest first (see `git log`):
   `npx vite --port 5173` and `VITE_DRIVE_API_KEY=test npx vite --port 5174`.
 
 ## The last reply the owner saw (so the next one continues it)
+**Newest (2026-09-22, Add Task from the notebook)**: the reply said the
+Add Task button was closing the window through the door that also carries
+you home after a cross-workspace visit, so the page left before the task
+panel could open; that Add Task now opens the panel where the job is, and
+the trip home happens when the panel closes. Bottom line + bullets (KEEP
+THAT FORMAT).
+
 **Newest (2026-09-22, the stage dropdown screenshot)**: the reply said the
 bubble picker had only been wired into the ADD forms and the three EDIT
 forms were missed, that all three now show the apartment's stages as
