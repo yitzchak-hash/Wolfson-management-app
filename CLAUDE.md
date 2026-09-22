@@ -8811,3 +8811,22 @@ copied home first, all backed up in the session scratchpad. Wolfson 259 ·
 Job Board 3,520 · Netiv 90. **`documents:commit` names a document by its
 RESOURCE path** (`projects/…/documents/apartments/X`), never the full
 address — the first run failed on that before touching anything.
+
+## The notebook names the unit, and wears the strip (2026-09-22)
+The owner's screenshot: two Wolfson bars on one day, both "Wolfson …" with
+the apartment number cut off. `TaskBar` printed the workspace tag IN FRONT
+of the unit's name, on the one line a bar has for it, and the truncation ate
+the unit. Now the bar leads with `aptLabel` (`[data-bar-label]`) and the
+workspace is a small purple tag (`[data-bar-workspace]`) at the START of the
+second line, before the stage pair — the parked card's idiom. In STRIPS
+mode (one line) the tag trails the name with `flex: 0 20 auto`, so it gives
+way to nothing before the unit loses a letter. The tag is the workspace's
+SHORT name (`projectShortName`) — "Wolfson Residence" left no room on a
+160px cell. And every bar and card carries the set model's strip
+(`[data-bar-strip]` / `[data-card-strip]`, one `[data-*-strip-seg=<state>]`
+per stage, `[data-*-fraction]` — dropped on a strip): `progressOf` from the
+job's OWN workspace's list (`stagesFor(pid)`, sorted) and tipus sets
+(`boardSettings[pid].tipusStages` — global, so a foreign apartment reads its
+own). `barHeight` reserves the band in tile mode. Harness:
+`scratchpad/notebooklabel-probe.mjs` (15 checks).
+

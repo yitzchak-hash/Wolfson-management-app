@@ -43,8 +43,16 @@ with starred recommendations is published first; the owner says "approved" /
 "all yes" / answers by number; then it is built. Never build a redesign
 unasked.
 
-## Where things stand (2026-09-22, late — the copies removed, the Wolfson stages split, NOTHING PENDING HIS WORD)
+## Where things stand (2026-09-22, latest — the notebook names the unit and wears the strip; NOTHING PENDING HIS WORD)
 Last commits, newest first (see `git log`):
+- **2026-09-22, latest — the notebook screenshot.** Two Wolfson bars on one
+  day read "Wolfson …" twice with the number cut off: the workspace tag was
+  printed IN FRONT of the unit. `TaskBar` now leads with `aptLabel`, the
+  workspace (SHORT name) is a small purple tag at the start of the second
+  line (trailing, give-way-first, in strips mode), and every bar and parked
+  card wears the set model's strip + fraction (`progressOf` from the job's
+  own workspace's list and tipus sets). `notebooklabel-probe.mjs` (15) green;
+  notebookbars / multiday / foreigndrop, tsc, build, four audits green.
 - **2026-09-22, late — "remove them and go on the split".** DONE both.
   `cloudclean.mjs --delete` removed the 4,095 misplaced records from the
   wrong workspace collections (A1-66 copied home first; backup in the session
@@ -688,6 +696,13 @@ Last commits, newest first (see `git log`):
   `npx vite --port 5173` and `VITE_DRIVE_API_KEY=test npx vite --port 5174`.
 
 ## The last reply the owner saw (so the next one continues it)
+**Newest (2026-09-22, the notebook)**: the reply explained why both bars
+read "Wolfson …" (the workspace tag stood in front of the unit and the
+truncation ate the number), that the bar now leads with "9 — Aharonov" with
+the workspace on the line beneath, and that the stage lines with the
+done-of-total count are drawn along the bottom of every bar and card, read
+from the apartment's own workspace. Bottom line + bullets (KEEP THAT FORMAT).
+
 **Newest (2026-09-22, the build)**: the reply reported the whole set model
 built in one round per the page's five-round order — what each screen does
 now, that the word stays "stage", that the migration is automatic and keeps

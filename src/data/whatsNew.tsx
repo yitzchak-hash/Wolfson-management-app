@@ -30,6 +30,26 @@ export interface WhatsNewEntry {
 
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    date: '2027-01-17',
+    title: 'The notebook names the apartment, and wears the stage lines',
+    items: [
+      {
+        title: 'The apartment comes first',
+        body: 'A bar on the weekly notebook leads with the unit — "9 — Aharonov" — and the workspace '
+          + 'is a small tag on the line beneath, beside the stage. Two Wolfson jobs on one day used to '
+          + 'both read "Wolfson …" with the number cut off.',
+        demo: 'tap',
+      },
+      {
+        title: 'The little lines, inside the notebook too',
+        body: 'Every bar and every parked card carries the same strip a tile and a building cell wear: '
+          + 'one line per stage in the apartment’s set, coloured by where it stands, with the done-of-total '
+          + 'count at its end.',
+        demo: 'sparkle',
+      },
+    ],
+  },
+  {
     date: '2027-01-16',
     title: 'The Wolfson stages are split into their own steps',
     items: [

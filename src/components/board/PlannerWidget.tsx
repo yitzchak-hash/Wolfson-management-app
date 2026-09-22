@@ -4,12 +4,13 @@ import { PlannerDropDialog, PlannerTaskDialog, PlannerRemoveDialog, TaskDialogRe
 import { ChevronUp, ChevronDown, Plus, X, CalendarDays, Maximize2, Eye, EyeOff, ClipboardList } from 'lucide-react';
 import {
   Apartment, CanvasElement, Contractor, User, ContractorAssignment, Stage, personColor,
-  aptLabel, getStageName, generalBuildingsText } from '../../types';
+  aptLabel, getStageName, generalBuildingsText, projectShortName } from '../../types';
 import {
   registerRota, onRotaHover, rotaCellAt, setRotaHover, RotaHit,
   announceNotebookDrag, quickBoxHover, quickBoxTake,
 } from '../../data/rotaDrop';
 import { daysOf, dayNumberOf, workingRun } from '../../data/taskDays';
+import { progressOf, StageProgress } from '../../data/stageMarks';
 import { useStore, loadProjectSnapshot } from '../../data/store';
 import { useBoardTrack } from '../../data/useBoardUndo';
 import { holidaysOn, hebrewLabel, Holiday } from '../../data/hebrewDates';
@@ -821,7 +822,8 @@ export function PlannerWidget({
     const out = new Map<string, { job: Apartment; workspace: string }>();
     for (const [pid, ids] of want) {
       const snap = loadProjectSnapshot(pid);
-      const name = projects.find(p => p.id === pid)?.name ?? pid;
+      const proj = projects.find(p => p.id === pid);
+      const name = proj ? projectShortName(proj, LT === 'he-IL', proj.name) : pid;
       for (const j of snap.apartments) {
         if (ids.has(j.id)) out.set(`${pid}:${j.id}`, { job: j, workspace: name });
       }
@@ -853,6 +855,9 @@ export function PlannerWidget({
    */
   const tasksOn = flag(d.showTasks, true);
   const allStages = useStore(st => st.stages);
+  // The tipus sets are global (settings/app, keyed by workspace), so a foreign
+  // apartment's strip reads its OWN workspace's sets from the live store.
+  const boardSettingsAll = useStore(st => st.boardSettings);
   const stagesFor = (pid: string) => pid === currentProjectId ? stages
     : allStages.filter(st => pid === 'general' ? st.projectId === 'general' : !st.projectId);
 
@@ -891,6 +896,11 @@ export function PlannerWidget({
         : null;
       const label = generalName ?? (apt ? (aptLabel(apt) || apt.address?.trim() || 'Job') : 'Job');
       const stl = stagesFor(pid);
+      // The set model's strip, from the apartment's OWN workspace's list and
+      // tipus sets — the same arithmetic a tile and a diagram cell draw.
+      const progress = apt
+        ? progressOf(apt, [...stl].sort((x, y) => x.order - y.order), { tipusStages: boardSettingsAll[pid]?.tipusStages })
+        : null;
       const from = a.stageId ? stl.find(st => st.id === a.stageId) : undefined;
       const to = a.stageWhenDone ? stl.find(st => st.id === a.stageWhenDone) : undefined;
       // Consecutive COLUMNS within a week become one segment.
@@ -906,7 +916,7 @@ export function PlannerWidget({
           // A general job's label already NAMES its workspace — the purple
           // tag would print it twice ("Wolfson · Wolfson · A1, A2").
           projectId: pid === currentProjectId ? undefined : pid, workspace: a.general ? undefined : ws,
-          done: !!a.completedAt, stageFrom: from, stageTo: to,
+          done: !!a.completedAt, stageFrom: from, stageTo: to, progress,
           foreign: pid !== currentProjectId, lane: 0,
         });
         map.set(key, list);
@@ -925,7 +935,9 @@ export function PlannerWidget({
     for (const p of projects) {
       if (p.id === currentProjectId) continue;
       const snap = loadProjectSnapshot(p.id);
-      (snap.assignments ?? []).forEach(a => put(a, snap.apartments, p.id, p.name));
+      // The SHORT name — the tag sits beside the unit's own name on a cell
+      // ~160px wide, and "Wolfson Residence" left no room for it.
+      (snap.assignments ?? []).forEach(a => put(a, snap.apartments, p.id, projectShortName(p, LT === 'he-IL', p.name)));
     }
     // Lanes: earliest start first, longer first; a bar takes the first lane
     // whose last bar ended before it starts.
@@ -941,7 +953,7 @@ export function PlannerWidget({
     }
     return map;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tasksOn, people, assignments, jobs, projects, currentProjectId, snapTick, weeks, span, stages, allStages]);
+  }, [tasksOn, people, assignments, jobs, projects, currentProjectId, snapTick, weeks, span, stages, allStages, boardSettingsAll]);
 
   /**
    * THE FOLD — once per notebook, the old per-day task cards become the
@@ -1772,7 +1784,9 @@ const SLOT_H = 58;
  */
 export function barHeight(z: (n: number) => number, size: number, strips: boolean): number {
   if (strips) return z(22);
-  return Math.max(z(40), Math.round(size * 1.25 + Math.max(z(7), size - z(2)) * 1.25 + z(8)));
+  // + the strip band along the bottom (`BAR_STRIP_H`), which every bar reserves
+  // whether or not its job has a set, so lanes stay one height.
+  return Math.max(z(40), Math.round(size * 1.25 + Math.max(z(7), size - z(2)) * 1.25 + z(8))) + Math.max(4, z(6));
 }
 
 export interface TaskBarSeg {
@@ -1792,6 +1806,8 @@ export interface TaskBarSeg {
   done: boolean;
   stageFrom?: Stage;
   stageTo?: Stage;
+  /** The apartment's set and its states — the strip along the bar's bottom. */
+  progress?: StageProgress | null;
   foreign: boolean;
   lane: number;
 }
@@ -1903,9 +1919,22 @@ function TaskBar({ bar, z, size, strip, readOnly, isRtl, onOpen, onDropTo, onDra
       )}
       <div className="flex items-start gap-1 min-w-0">
         <div className="flex-1 min-w-0">
-          <div className="truncate" style={{ fontSize: size, fontWeight: 800, color: '#1e3a5f', lineHeight: 1.2 }}>
-            {bar.workspace && <span style={{ color: '#7c3aed' }}>{bar.workspace} · </span>}
-            {bar.label}
+          {/* The APARTMENT leads — its number is the first thing on the line
+              (aptLabel), and the workspace is a small tag AFTER it that gives
+              way first. Leading with the workspace put "Wolfson · " in front
+              of every Wolfson job and the truncation ate the unit itself, so
+              two bars on one day read as the same job. */}
+          <div className="flex items-baseline min-w-0" style={{ fontSize: size, fontWeight: 800, color: '#1e3a5f', lineHeight: 1.2 }}>
+            <span data-bar-label className="truncate min-w-0" style={{ flex: '0 1 auto' }}>{bar.label}</span>
+            {bar.workspace && strip && (
+              // A strip is ONE line, so the tag rides it — flexShrink 20: it
+              // gives way (to nothing) before the unit loses a letter. In tile
+              // mode the tag has the second line to itself, beside the stage.
+              <span data-bar-workspace className="truncate" style={{
+                flex: '0 20 auto', minWidth: 0, marginInlineStart: Math.max(3, z(4)),
+                fontSize: Math.max(z(7), size - z(3)), fontWeight: 700, color: '#7c3aed',
+              }}>{bar.workspace}</span>
+            )}
             {bar.done && (
               // The record: a stretch whose days ran PAST the close says so.
               <span data-bar-done style={{ color: '#64748b', fontWeight: 700 }}>
@@ -1913,8 +1942,9 @@ function TaskBar({ bar, z, size, strip, readOnly, isRtl, onOpen, onDropTo, onDra
               </span>
             )}
           </div>
-          {!strip && sub && (
+          {!strip && (sub || bar.workspace) && (
             <div className="truncate" style={{ fontSize: Math.max(z(7), size - z(2)), fontWeight: 600, color: '#64748b' }}>
+              {bar.workspace && <span data-bar-workspace style={{ color: '#7c3aed', fontWeight: 700 }}>{bar.workspace}{sub ? ' · ' : ''}</span>}
               {sub}{n > 1 ? ` · ${n} days` : ''}
             </div>
           )}
@@ -1928,6 +1958,29 @@ function TaskBar({ bar, z, size, strip, readOnly, isRtl, onOpen, onDropTo, onDra
           </button>
         )}
       </div>
+      {/* The set's little lines (the tile / cell strip) along the bottom:
+          one segment per stage in the job's set, coloured by state, with the
+          fraction at its end. Absolute, inside the band barHeight reserves. */}
+      {bar.progress && bar.progress.total > 0 && (
+        <div data-bar-strip aria-hidden="true"
+          className="pointer-events-none absolute flex items-center"
+          style={{ left: Math.max(4, z(6)), right: Math.max(4, z(6)), bottom: Math.max(2, z(2)), gap: Math.max(3, z(4)), height: Math.max(3, z(4)) }}>
+          <div className="flex-1 flex h-full" style={{ gap: Math.max(1, z(2)) }}>
+            {bar.progress.rows.map(r => (
+              <span key={r.stage.id} data-bar-strip-seg={r.state} className="flex-1 rounded-sm h-full" style={{
+                backgroundColor: r.state === 'done' || r.state === 'doing' ? r.stage.color
+                  : r.state === 'pending' ? '#f97316' : r.state === 'problem' ? '#dc2626' : '#e5e7eb',
+                opacity: r.state === 'doing' ? 0.55 : 1,
+              }} />
+            ))}
+          </div>
+          {!strip && (
+            <span data-bar-fraction className="tabular-nums leading-none" style={{ fontSize: Math.max(z(7), size - z(4)), fontWeight: 900, color: '#64748b' }}>
+              {bar.progress.done}/{bar.progress.total}
+            </span>
+          )}
+        </div>
+      )}
       {editable && (
         <span data-bar-edge aria-hidden="true"
           className="absolute top-0 bottom-0 cursor-ew-resize"
@@ -2019,6 +2072,37 @@ function PlannerCard({
    * here. When the card is editable the drag handlers replace these and
    * their pointerup does the opening.
    */
+  // The set's strip on a parked job's card — read from the job's OWN
+  // workspace's list and tipus sets (a foreign card names its workspace in
+  // `entry.projectId`), the same arithmetic the tile and the cell draw.
+  const cardAllStages = useStore(st => st.stages);
+  const cardBoardSettings = useStore(st => st.boardSettings);
+  const cardProject = useStore(st => st.currentProjectId);
+  const progress = useMemo(() => {
+    if (!job) return null;
+    const pid = entry.projectId ?? cardProject;
+    const list = (pid === cardProject ? stages
+      : cardAllStages.filter(st => pid === 'general' ? st.projectId === 'general' : !st.projectId));
+    return progressOf(job, [...list].sort((x, y) => x.order - y.order), { tipusStages: cardBoardSettings[pid]?.tipusStages });
+  }, [job, entry.projectId, cardProject, stages, cardAllStages, cardBoardSettings]);
+  const stripBand = progress && progress.total > 0 ? (
+    <span data-card-strip aria-hidden="true" className="flex items-center mt-0.5" style={{ gap: Math.max(3, z(4)) }}>
+      <span className="flex-1 flex" style={{ gap: Math.max(1, z(2)), height: Math.max(3, z(4)) }}>
+        {progress.rows.map(r => (
+          <span key={r.stage.id} data-card-strip-seg={r.state} className="flex-1 rounded-sm h-full" style={{
+            backgroundColor: r.state === 'done' || r.state === 'doing' ? r.stage.color
+              : r.state === 'pending' ? '#f97316' : r.state === 'problem' ? '#dc2626' : '#e5e7eb',
+            opacity: r.state === 'doing' ? 0.55 : 1,
+          }} />
+        ))}
+      </span>
+      {!strip && (
+        <span data-card-fraction className="tabular-nums leading-none" style={{ fontSize: Math.max(z(7), size - z(4)), fontWeight: 900, color: '#64748b' }}>
+          {progress.done}/{progress.total}
+        </span>
+      )}
+    </span>
+  ) : null;
   const openHandlers = entry.jobId
     ? { onClick: (e: React.MouseEvent) => {
         if (!(e.target as HTMLElement).closest('a,[data-card-action]')) onOpen();
@@ -2156,12 +2240,21 @@ function PlannerCard({
                 backgroundColor: stage?.color ?? '#cbd5e1',
               }}
               title={stage ? stage.name : 'Not started'} />
-            <span className="block truncate min-w-0 flex-1"
+            <span className="flex items-baseline min-w-0 flex-1"
               style={{ fontSize: size, fontWeight: 800, color: '#1e293b', lineHeight: 1.2 }}>
-              {workspace && <span style={{ color: '#7c3aed' }}>{workspace} · </span>}
-              {job
-                ? (aptLabel(job) || job.address?.trim() || 'Job')
-                : entry.projectId ? (lang === 'he' ? 'פתחו את סביבת העבודה ההיא' : lang === 'ru' ? 'Откройте то рабочее пространство' : 'Open that workspace to see this') : (lang === 'he' ? '(העבודה הוסרה)' : lang === 'ru' ? '(работа удалена)' : '(job removed)')}
+              {/* The unit leads; the workspace is a small tag after it that
+                  gives way first — never in front of the number. */}
+              <span className="truncate min-w-0" style={{ flex: '0 1 auto' }}>
+                {job
+                  ? (aptLabel(job) || job.address?.trim() || 'Job')
+                  : entry.projectId ? (lang === 'he' ? 'פתחו את סביבת העבודה ההיא' : lang === 'ru' ? 'Откройте то рабочее пространство' : 'Open that workspace to see this') : (lang === 'he' ? '(העבודה הוסרה)' : lang === 'ru' ? '(работа удалена)' : '(job removed)')}
+              </span>
+              {workspace && (
+                <span data-card-workspace className="truncate" style={{
+                  flex: '0 20 auto', minWidth: 0, marginInlineStart: Math.max(3, z(4)),
+                  fontSize: Math.max(z(7), size - z(3)), fontWeight: 700, color: '#7c3aed',
+                }}>{workspace}</span>
+              )}
             </span>
           </span>
           {taskLine && (
@@ -2173,6 +2266,7 @@ function PlannerCard({
               {taskLine}
             </span>
           )}
+          {stripBand}
         </div>
       );
     }
@@ -2285,6 +2379,8 @@ function PlannerCard({
             +{pending - shownTasks.length} more
           </span>
         )}
+
+        {stripBand}
 
         {/* Counter and links, bottom-right — where the office asked for them. */}
         <span className="flex items-center justify-end gap-1 mt-0.5">
