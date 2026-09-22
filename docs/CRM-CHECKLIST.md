@@ -176,3 +176,4 @@ Legend: ☑ shipped · ☐ decided, not built · ◐ built in part · ✎ needs 
 - ☑ The four doors: tipus sets (`BoardSetting.tipusStages`), the window's + add, the bulk bar's add/remove a stage, a line's "on every apartment" switch (2026-09-22)
 - ☑ Reports: Stages done of / Done stages / Stages still to do; Analytics: work finished per stage; search: needs: doing: done:; the printed job sheet's tick list (2026-09-22)
 - ☑ One-time migration (`migrateStageSets`, settle-first from AppLayout): passed → done, the current stage → to do, `bubbles: true`; idempotent (2026-09-22)
+- ☑ A history entry with no name never crashes a page: every reader of `ActivityLog.userName` falls back to “Someone”, and `addActivityLog` always writes a name (2026-09-22)

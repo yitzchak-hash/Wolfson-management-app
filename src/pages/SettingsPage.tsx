@@ -1334,7 +1334,7 @@ function PersonColor({ name, color, onPick }: {
       style={{ backgroundColor: shown }}
       title={`${name}'s colour on the rota — click to change`}
     >
-      {name.charAt(0).toUpperCase()}
+      {(name || '?').charAt(0).toUpperCase()}
       <Palette size={11}
         className="absolute -bottom-0.5 -right-0.5 bg-white rounded-full p-[1px] text-gray-500
                    opacity-0 group-hover/pc:opacity-100 transition-opacity" />
@@ -2469,7 +2469,7 @@ function AppSettingsTab({ lightTheme, setLightTheme, onToast }: {
           {users.filter(u => u.active).map(u => (
             <div key={u.id} className="flex items-center justify-between py-2 border-b border-gray-100 last:border-0">
               <div className="flex items-center gap-3">
-                <div className="w-7 h-7 rounded-full bg-[#1e3a5f]/10 flex items-center justify-center text-[#1e3a5f] font-bold text-sm">{u.name.charAt(0)}</div>
+                <div className="w-7 h-7 rounded-full bg-[#1e3a5f]/10 flex items-center justify-center text-[#1e3a5f] font-bold text-sm">{(u.name || '?').charAt(0)}</div>
                 <div>
                   <div className="text-sm font-medium text-gray-800">{u.name}</div>
                   <div className="text-xs text-gray-400">{u.role}</div>

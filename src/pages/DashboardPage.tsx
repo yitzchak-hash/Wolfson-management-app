@@ -600,11 +600,11 @@ export function DashboardPage() {
                 {recentLogs.map(log => (
                   <div key={log.id} className="flex items-start gap-2.5 md:gap-3">
                     <div className="w-7 h-7 md:w-8 md:h-8 rounded-full bg-[#1e3a5f]/10 flex items-center justify-center text-[#1e3a5f] font-bold text-xs md:text-sm flex-shrink-0">
-                      {log.userName.charAt(0)}
+                      {(log.userName || s.unknownUser).charAt(0)}
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="text-xs md:text-sm">
-                        <span className="font-medium text-gray-800">{log.userName}</span>
+                        <span className="font-medium text-gray-800">{log.userName || s.unknownUser}</span>
                         {' '}
                         <span className="text-gray-600">
                           {log.fieldChanged === 'currentStageId'

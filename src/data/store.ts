@@ -2739,7 +2739,12 @@ export const useStore = create<AppState>((set, get) => ({
   },
 
   addActivityLog: (log) => {
-    const entry: ActivityLog = { ...log, id: generateId(), createdAt: new Date().toISOString() };
+    // A log line nobody can attribute is not a log line — and a nameless one
+    // comes back from Firestore with the field GONE (fsSet turns undefined
+    // into deleteField), which is one `.charAt` from a white screen on every
+    // page that lists history. The readers guard too; this is the writer's half.
+    const userName = log.userName || get().currentUser?.name || 'Office';
+    const entry: ActivityLog = { ...log, userName, id: generateId(), createdAt: new Date().toISOString() };
     set(state => {
       const newLogs = [entry, ...state.activityLogs].slice(0, 500);
       // Somebody LOOKING at a job changes no data — a snapshot exists to

@@ -27,7 +27,7 @@ exactly there.
 3. `npx tsc --noEmit -p .` and `npx vite build`. 4. The audits:
    `node scratchpad/loopaudit.mjs`, `backupaudit.mjs`, `navaudit.mjs`, `apilimit.mjs`.
 5. A What's New entry (`src/data/whatsNew.tsx`, dates run AHEAD of the clock;
-   newest is `2027-01-04` — the next entry must be a later date (an older
+   newest is `2027-01-13` — the next entry must be a later date (an older
    entry lower down also wears `2026-12-20`; the marker compares only the TOP
    entry's date, so never reuse a date that appears anywhere in the file)). 6. A CLAUDE.md
    round record. 7. A line in `docs/CRM-CHECKLIST.md`. 8. Rewrite THIS file.
@@ -43,8 +43,19 @@ with starred recommendations is published first; the owner says "approved" /
 "all yes" / answers by number; then it is built. Never build a redesign
 unasked.
 
-## Where things stand (2026-09-22 — THE SET MODEL is built)
+## Where things stand (2026-09-22 — THE SET MODEL is built; the crash he saw is fixed)
 Last commits, newest first (see `git log`):
+- **2026-09-22, later — his production crash.** He pasted the CrashScreen
+  text: `Cannot read properties of undefined (reading 'charAt')` in a page's
+  `.map`. Cause: an activity-log entry stored without a `userName` (fsSet
+  drops an undefined field), and the Dashboard's activity card and the
+  Activity log page still read `log.userName.charAt(0)` unguarded (the
+  drawerround had fixed only `ActivitySection`). Fixed at both ends: the
+  readers fall back to "Someone" (`s.unknownUser`), the Settings avatars to
+  '?', and `addActivityLog` always writes a name (current user, else
+  'Office'). tsc, build, four audits green. No probe — the fix is a guard.
+  **NEXT: he reloads production and confirms the Dashboard / Activity log
+  open; then his first look at the set model (below).**
 - **2026-09-22 — "Bubbles, Not Stages", BUILT** ("all the stars on 15 and 16,
   build it"). An apartment carries a SET of work stages with a state each
   (to do · booked · happening now · half done · problem · done · not needed);

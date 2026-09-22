@@ -204,11 +204,11 @@ export function ActivityLogPage() {
           filtered.map(log => (
             <div key={log.id} className="flex gap-4 px-5 py-3.5 hover:bg-gray-50 transition-colors">
               <div className="flex-shrink-0 w-9 h-9 rounded-full bg-[#1e3a5f]/10 flex items-center justify-center text-[#1e3a5f] font-bold text-sm mt-0.5">
-                {log.userName.charAt(0)}
+                {(log.userName || s.unknownUser).charAt(0)}
               </div>
               <div className="flex-1 min-w-0">
                 <div className="text-sm">
-                  <span className="font-semibold text-gray-800">{log.userName}</span>
+                  <span className="font-semibold text-gray-800">{log.userName || s.unknownUser}</span>
                   {' '}
                   <span className="text-gray-600">{actionLabel(log)}</span>
                 </div>

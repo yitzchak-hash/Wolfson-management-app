@@ -30,6 +30,19 @@ export interface WhatsNewEntry {
 
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    date: '2027-01-13',
+    title: 'A history line with no name no longer crashes the page',
+    items: [
+      {
+        title: 'The Dashboard and the Activity log survive an unnamed entry',
+        body: 'A change recorded without a person\u2019s name used to bring the whole page down '
+          + '(the white crash screen you saw). Those lines now read “Someone” and every new '
+          + 'entry is written with a name, so it cannot happen again.',
+        demo: 'tap',
+      },
+    ],
+  },
+  {
     date: '2027-01-12',
     title: 'An apartment carries a SET of stages now — tick them off in any order',
     items: [

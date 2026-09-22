@@ -8613,3 +8613,18 @@ for one stage keep working unchanged.
   half done). `stagereport.mjs` was RETIRED — its hooks (`data-stage-row`,
   `data-stage-box`, `data-close-stage-pick`) no longer exist; the new probe
   covers the same ground and more.
+
+## The nameless-log crash, closed at both ends (2026-09-22)
+The owner's production crash screen: `Cannot read properties of undefined
+(reading 'charAt')` inside a page's `.map` — the Dashboard's recent-activity
+card and the Activity log page still did `log.userName.charAt(0)`, the exact
+fault the drawerround fixed in ONE reader (`ActivitySection`) and left in
+two. A stored optional can always arrive absent (fsSet turns `undefined`
+into `deleteField`), so the rule is now enforced at BOTH ends: every reader
+falls back (`log.userName || s.unknownUser`; the Settings avatars `|| '?'`),
+and `addActivityLog` itself fills `userName` from the current user or
+'Office' before the entry is stored — no caller can mint a nameless line.
+When a crash screen names `charAt`, `toLowerCase`, `slice` or `trim` on a
+stored field, grep every `.charAt(`-style call on that field across `src`,
+not only the one in the stack.
+
