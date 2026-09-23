@@ -20,6 +20,19 @@ exactly there.
 - Three workspaces: Wolfson (buildings), Netiv (buildings), the Job Board
   (`general`, free canvas, ~1,650 jobs after the CRM import and the Drive sweep).
 
+## STANDING ORDERS from Yitzchak (2026-09-23) — this chat is the BUILDER
+Tasks arrive from his Mission Board manager (a Cowork chat that tests in his
+real Chrome). 1) NEVER stop and wait on him here: take the safest reasonable
+choice or skip the item, keep going, and list it under a heading
+"Needs Yitzchak's decision" with the question, 2–3 options and a
+recommendation. 2) Build, deploy, self-check — but never call anything
+"verified"; the manager retests in Chrome. 3) End EVERY report with a
+numbered list, each item done / not done / needs a decision, plus the deploy
+link (https://wolfson-management-app.vercel.app). 4) Never run the
+qa-fix-loop or mission-board skills here. 5) If Yitzchak writes directly,
+just do it; finish a task in flight first. (The bold emoji one-liner rule
+from earlier the same day still stands, after the numbered list.)
+
 ## How a round is run (the ritual)
 1. Implement. 2. Playwright probes in `scratchpad/` (`node scratchpad/<name>.mjs`;
    dev server on 5173, a keyed one on 5174 with `VITE_DRIVE_API_KEY=testkey`;
