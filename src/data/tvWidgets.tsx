@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { photoSrcOf, isPicture } from './photoSrc';
+import { useSitePhotos, SiteShot } from './sitePhotos';
+import { ShotTile, useShotViewer } from '../components/board/ShotTiles';
 import { HardHat, CheckCircle2 } from 'lucide-react';
 import {
   Apartment, CanvasElement, Stage, isCountableApartment, getStageName, personColor,
@@ -327,39 +328,35 @@ export function WorkspaceCard({ el, c }: { el: CanvasElement; c: WidgetCtx }) {
   );
 }
 
-export function LatestPhoto({ c }: { c: WidgetCtx }) {
-  const shots = useMemo(() => [...c.photos]
-    .filter(p => isPicture(p) && photoSrcOf(p))
-    .sort((a, b) => (b.uploadedAt ?? '').localeCompare(a.uploadedAt ?? ''))
-    .slice(0, 12), [c.photos]);
+export function LatestPhoto({ c, sample = false }: { c: WidgetCtx; sample?: boolean }) {
+  // Every workspace's shots, newest first — the wall stands on the Job Board
+  // while the pictures come in on Wolfson and Netiv.
+  const shots = useSitePhotos(c, sample);
+  const reel = useMemo(() => shots.slice(0, 12), [shots]);
   const [at, setAt] = useState(0);
+  const viewer = useShotViewer();
 
   // A wall photo that never changes stops being looked at. Twenty seconds is
   // long enough to take one in and short enough that the wall stays alive.
+  // A NEW arrival jumps the reel to itself — that is the point of a live wall.
+  const newestId = reel[0]?.id;
+  useEffect(() => { setAt(0); }, [newestId]);
   useEffect(() => {
-    if (shots.length < 2) return;
-    const t = setInterval(() => setAt(i => (i + 1) % shots.length), 20_000);
+    if (reel.length < 2) return;
+    const t = setInterval(() => setAt(i => (i + 1) % reel.length), 20_000);
     return () => clearInterval(t);
-  }, [shots.length]);
+  }, [reel.length]);
 
-  const p = shots[Math.min(at, Math.max(0, shots.length - 1))];
-  const src = p ? photoSrcOf(p, 1600) : undefined;
-  const job = p ? c.jobs.find(j =>
-    c.assignments.some(a => a.id === p.assignmentId && a.apartmentId === j.id)) : undefined;
-
+  const i = Math.min(at, Math.max(0, reel.length - 1));
+  const s = reel[i];
   return (
     <div className="w-full h-full relative overflow-hidden bg-slate-100">
-      {src
-        ? <img src={src} alt="" className="absolute inset-0 w-full h-full object-cover" />
+      {s
+        ? <ShotTile shot={s} size={1.6} onOpen={() => viewer.open(reel, i)} className="absolute inset-0 w-full h-full rounded-none" />
         : <span className="absolute inset-0 flex items-center justify-center text-[13px] text-slate-400">
             No photos yet
           </span>}
-      {job && (
-        <span className="absolute left-0 right-0 bottom-0 px-3 py-2 text-[14px] font-bold text-white"
-          style={{ background: 'linear-gradient(0deg, rgba(15,23,42,.75), transparent)' }}>
-          {job.displayName}
-        </span>
-      )}
+      {viewer.node}
     </div>
   );
 }
@@ -370,24 +367,21 @@ export function LatestPhoto({ c }: { c: WidgetCtx }) {
  * A flat grid of nine pictures from five different jobs tells you nothing —
  * you cannot tell which site any of them is. Grouped, each row is a job name
  * and the pictures that came in for it, which is how somebody looking at the
- * wall actually reads them.
+ * wall actually reads them. Every workspace's jobs; a tap opens the viewer.
  */
-export function PhotoWall({ c }: { c: WidgetCtx }) {
+export function PhotoWall({ c, sample = false }: { c: WidgetCtx; sample?: boolean }) {
+  const shots = useSitePhotos(c, sample);
+  const viewer = useShotViewer();
   const groups = useMemo(() => {
-    const byJob = new Map<string, { job: Apartment; shots: typeof c.photos }>();
-    const sorted = [...c.photos]
-      .filter(p => isPicture(p) && photoSrcOf(p))
-      .sort((a, b) => (b.uploadedAt ?? '').localeCompare(a.uploadedAt ?? ''));
-    for (const p of sorted) {
-      const a = c.assignments.find(x => x.id === p.assignmentId);
-      const job = a ? c.jobs.find(j => j.id === a.apartmentId) : undefined;
-      if (!job) continue;
-      if (!byJob.has(job.id)) byJob.set(job.id, { job, shots: [] });
-      const g = byJob.get(job.id)!;
-      if (g.shots.length < 6) g.shots.push(p);
+    const byJob = new Map<string, { key: string; name: string; label: string; color: string; shots: SiteShot[] }>();
+    for (const s of shots) {
+      const key = `${s.projectId}|${s.jobId || s.jobName}`;
+      if (!byJob.has(key)) byJob.set(key, { key, name: s.jobName || s.who || 'Job', label: s.projectLabel, color: s.projectColor, shots: [] });
+      const g = byJob.get(key)!;
+      if (g.shots.length < 6) g.shots.push(s);
     }
     return [...byJob.values()].slice(0, 4);
-  }, [c.photos, c.assignments, c.jobs]);
+  }, [shots]);
 
   return (
     <Card label="From site">
@@ -395,25 +389,24 @@ export function PhotoWall({ c }: { c: WidgetCtx }) {
         <span className="text-[13px] text-slate-400">No photos yet.</span>
       ) : (
         <div className="h-full overflow-hidden grid gap-2.5 content-start">
-          {groups.map(({ job, shots }) => (
-            <div key={job.id}>
-              <div className="text-[13px] font-bold text-slate-600 truncate mb-1">
-                {job.displayName || 'Job'}
-                <span className="ml-2 text-[11px] font-medium text-slate-400">{shots.length}</span>
+          {groups.map(g => (
+            <div key={g.key}>
+              <div className="text-[13px] font-bold text-slate-600 truncate mb-1 flex items-center gap-1.5">
+                <span className="inline-block w-2 h-2 rounded-full flex-shrink-0" style={{ background: g.color }} />
+                <span className="truncate">{g.name}</span>
+                {g.label && <span className="text-[11px] font-medium text-slate-400 flex-shrink-0">{g.label}</span>}
+                <span className="ml-1 text-[11px] font-medium text-slate-400">{g.shots.length}</span>
               </div>
               <div className="grid gap-1.5" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(58px, 1fr))' }}>
-                {shots.map(p => (
-                  <span key={p.id} className="rounded-md overflow-hidden bg-slate-100"
-                    style={{ aspectRatio: '1.3' }}>
-                    <img src={photoSrcOf(p)} alt=""
-                      className="w-full h-full object-cover" />
-                  </span>
+                {g.shots.map((s, i) => (
+                  <ShotTile key={s.id} shot={s} caption={false} onOpen={() => viewer.open(g.shots, i)} style={{ aspectRatio: '1.3' }} />
                 ))}
               </div>
             </div>
           ))}
         </div>
       )}
+      {viewer.node}
     </Card>
   );
 }

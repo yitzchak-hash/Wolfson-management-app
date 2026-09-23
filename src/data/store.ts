@@ -85,6 +85,8 @@ export function loadProjectSnapshot(projectId: string): {
   planAnnotations: PlanAnnotation[];
   planPins: PlanPin[];
   officeNoteFiles: OfficeNoteFile[];
+  /** Site uploads (metadata — the bytes live in Storage or Drive). Kept live by the foreign sync. */
+  photos: ContractorPhoto[];
 } {
   const data = loadFromStorage(getProjectStorageKey(projectId), null) as Record<string, unknown> | null;
   return {
@@ -98,6 +100,7 @@ export function loadProjectSnapshot(projectId: string): {
     planAnnotations: (data?.planAnnotations as PlanAnnotation[] | null) ?? [],
     planPins: (data?.planPins as PlanPin[] | null) ?? [],
     officeNoteFiles: (data?.officeNoteFiles as OfficeNoteFile[] | null) ?? [],
+    photos: (data?.contractorPhotos as ContractorPhoto[] | null) ?? [],
   };
 }
 
@@ -133,7 +136,7 @@ async function ensureProjectSnapshotNow(projectId: string): Promise<void> {
   if (existing && Array.isArray(existing.apartments) && (existing.apartments as unknown[]).length > 0) return;
   try {
     const col = (base: string) => projectCollection(projectId, base);
-    const [apartments, assignments, stageNotes, contractorNotes, canvasElements, planAnnotations, stages] =
+    const [apartments, assignments, stageNotes, contractorNotes, canvasElements, planAnnotations, stages, contractorPhotos] =
       await Promise.all([
         fsGetAll(col('apartments')),
         fsGetAll(col('contractorAssignments')),
@@ -142,6 +145,7 @@ async function ensureProjectSnapshotNow(projectId: string): Promise<void> {
         fsGetAll(col('canvasElements')),
         fsGetAll(col('planAnnotations')),
         fsGetAll('stages'),
+        fsGetAll(col('contractorPhotos')),
       ]);
     if (!apartments.length) return;
     // Buildings are not a Firestore collection — the built-ins are seeded.
@@ -157,6 +161,7 @@ async function ensureProjectSnapshotNow(projectId: string): Promise<void> {
       contractorNotes,
       canvasElements,
       planAnnotations,
+      contractorPhotos,
     });
     useStore.setState(st => ({ snapshotTick: st.snapshotTick + 1 }));
   } catch {
@@ -278,6 +283,11 @@ async function attachForeign(pid: string, currentProjectId: string): Promise<voi
     fsListenTombstones(pid, ids => { dead = ids; queue('tombstones', true); }),
     fsListen(col('contractorAssignments'), docs => queue('contractorAssignments', docs)),
     fsListen(col('contractorNotes'), docs => queue('contractorNotes', docs)),
+    // Site uploads too (metadata only — small): the wall stands on the Job
+    // Board while the workers close tasks on Wolfson and Netiv, and "Live
+    // from site" has to show a picture seconds after it lands wherever it
+    // landed (owner, 2026-09-23).
+    fsListen(col('contractorPhotos'), docs => queue('contractorPhotos', docs)),
     () => { if (timer) clearTimeout(timer); timer = null; },
   );
 }

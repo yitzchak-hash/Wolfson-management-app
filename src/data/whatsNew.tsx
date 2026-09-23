@@ -30,6 +30,32 @@ export interface WhatsNewEntry {
 
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    date: '2027-01-21',
+    title: 'Live from site: every workspace, the second it lands, tap to watch',
+    items: [
+      {
+        title: 'One widget for everything the site sends',
+        body: 'The photo widget (now called Live from site) shows pictures AND films from every '
+          + 'workspace — Wolfson, Netiv and the Job Board — newest first, each with the unit, the '
+          + 'workspace and how long ago. It used to show only the workspace you were standing in, '
+          + 'which on the TV meant the Job Board’s own uploads and nothing from the buildings.',
+        demo: 'list',
+      },
+      {
+        title: 'It arrives within seconds',
+        body: 'The moment a worker sends a picture from the closing screen it lands on the widget, '
+          + 'on the board and on the TV, with a blue “new” ring for ten minutes.',
+        demo: 'sparkle',
+      },
+      {
+        title: 'Tap to see it big',
+        body: 'On the TV or the board, tap a thumbnail: a photo opens full size, a film opens with '
+          + 'play, sound and full screen. Arrows walk to the next one; the X brings the grid back.',
+        demo: 'tap',
+      },
+    ],
+  },
+  {
     date: '2027-01-20',
     title: 'Add Task works on a job opened from the notebook',
     items: [

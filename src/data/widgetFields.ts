@@ -206,10 +206,10 @@ export const WIDGET_FIELDS: Record<string, WidgetField[]> = {
         { value: 'wall', label: 'Grouped under their jobs' },
       ],
     },
-    limit('How many photos'),
+    limit('How many'),
     {
       key: 'jobIds', label: 'Only these jobs', kind: 'jobs',
-      hint: 'Read by the grid look. Leave empty for every job in this workspace.',
+      hint: 'Read by the grid look. Leave empty for every job in every workspace — pictures and films land here the moment a worker sends them, whichever workspace the job is in.',
     },
   ],
   'activity-feed': [title(), limit('How many entries')],

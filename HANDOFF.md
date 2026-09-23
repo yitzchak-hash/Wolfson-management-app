@@ -27,7 +27,7 @@ exactly there.
 3. `npx tsc --noEmit -p .` and `npx vite build`. 4. The audits:
    `node scratchpad/loopaudit.mjs`, `backupaudit.mjs`, `navaudit.mjs`, `apilimit.mjs`.
 5. A What's New entry (`src/data/whatsNew.tsx`, dates run AHEAD of the clock;
-   newest is `2027-01-20` — the next entry must be a later date (an older
+   newest is `2027-01-21` — the next entry must be a later date (an older
    entry lower down also wears `2026-12-20`; the marker compares only the TOP
    entry's date, so never reuse a date that appears anywhere in the file)). 6. A CLAUDE.md
    round record. 7. A line in `docs/CRM-CHECKLIST.md`. 8. Rewrite THIS file.
@@ -36,15 +36,33 @@ exactly there.
    `git merge-base --is-ancestor origin/claude/blissful-cray-spTFY HEAD` and
    push production. Never force-push. Never commit real office data (the CRM
    export, fetched Firestore records) — they live in /tmp.
-10. Reply in plain language: what was found, what was done, what to check.
+10. Reply in plain language: what was found, what was done, what to check —
+    a Bottom line with bullets, and then ONE bold one-liner with emojis saying
+    whether he needs to do anything (owner's rule, 2026-09-23).
 
 Design work is gated: a plan page (an artifact, see `docs/artifacts/INDEX.md`)
 with starred recommendations is published first; the owner says "approved" /
 "all yes" / answers by number; then it is built. Never build a redesign
 unasked.
 
-## Where things stand (2026-09-23, latest — the freeze diagnosis; ONE THING PENDING HIS WORD: the Active-jobs cap)
+## Where things stand (2026-09-23, latest — Live from site; PENDING HIS WORD: the Active-jobs row cap)
 Last commits, newest first (see `git log`):
+- **2026-09-23, latest — "the live photos from site widget… nothing shows
+  up there the second it comes in… from the TV it needs to be touchable".**
+  Root cause: the photo widget read only the OPEN workspace's uploads, and
+  the wall stands on the Job Board while workers close tasks on Wolfson and
+  Netiv. Built: `src/data/sitePhotos.ts` (every workspace's pictures AND
+  films, newest first; the open one live, the rest from snapshots on
+  `snapshotTick`), the foreign sync now carries `contractorPhotos` (and the
+  one-time snapshot pull), `ShotTiles.tsx` (tappable tiles with a play mark,
+  a 10-minute "new" ring, unit · workspace · time; `useShotViewer` opens
+  `MediaViewer` — play/sound/full screen; `Seal` keeps the portal's events
+  off the board node). All three looks of `recent-photos` (renamed "Live
+  from site") use it; the wall needs nothing. `sitephotos-probe.mjs` (25)
+  green incl. a finger tap on /tv; dedupe/storefull unchanged; tsc, build,
+  four audits, tvcrash green. His board carries FOUR photo widgets (one
+  grid, two wall aliases, one rotating) — the extras are his to delete.
+  Also the standing reply rule: a bold emoji one-liner after the Bottom line.
 - **2026-09-23, latest — "Chrome just freezes on the job board, sometimes
   the whole computer. Why?"** A QUESTION; answered with measurements, no
   fix shipped. `scratchpad/boardfreeze-probe.mjs` (a generic big board,
@@ -606,6 +624,15 @@ Last commits, newest first (see `git log`):
   the one-file Hebrew-safe Windows helper.
 
 ## What the owner last asked (his exact wants)
+-2. **(2026-09-23, the photos)** "whenever you give me the bottom line at the
+   end, I also want you to give me a line at the end if this is needed or
+   not… in bold letters, with emojis, a one-liner. … The live photos from
+   site widget, I feel like there's two of them, redundant, duplicates. And
+   nothing shows up there the second it comes in. And from the TV it needs
+   to be touchable and expandable with a normal play, minimize, sound
+   control if it's a video; a photo is a photo. Thumbnails show there, and
+   it should come in live right away, a few seconds later it's on the TV."
+   — built (see the top of Where things stand).
 -1. **(2026-09-23, the freeze)** "A lot of times on the job board, I'm
    scrolling around just working and Chrome just freezes. And sometimes
    even freezes my whole computer. Why is this?" — answered (see the top
@@ -745,6 +772,15 @@ Last commits, newest first (see `git log`):
   `npx vite --port 5173` and `VITE_DRIVE_API_KEY=test npx vite --port 5174`.
 
 ## The last reply the owner saw (so the next one continues it)
+**Newest (2026-09-23, Live from site)**: the reply said the widget had only
+ever shown the workspace you were standing in, which on the TV was the Job
+Board's own uploads while the workers send from Wolfson and Netiv; that it
+now shows every workspace's pictures and films within seconds with a "new"
+ring; that a tap opens the viewer with play, sound and full screen on the
+board and the TV; that the two "From site" cards on his board are one widget
+placed twice and he can delete one; and that the reply rule (a bold emoji
+one-liner at the end) is now standing. Bottom line + bullets + the one-liner.
+
 **Newest (2026-09-23, the freeze question)**: the reply said the freezes
 were measured on a copy of his real board; that the three Active-jobs
 lists draw about 26,000 screen elements each (every one of ~1,200 rows,

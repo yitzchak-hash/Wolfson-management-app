@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { photoSrcOf, isPicture } from './photoSrc';
+import { useSitePhotos } from './sitePhotos';
+import { ShotTile, useShotViewer } from '../components/board/ShotTiles';
 import { createPortal } from 'react-dom';
 import {
   Gauge, ListChecks, Hash, BarChart3, Table2, ShoppingCart, CalendarRange,
@@ -172,6 +173,44 @@ export interface WidgetDef {
 /** The shelf hands widgets the canned jobs; a real board never does. */
 export function isSampleCtx(c: WidgetCtx): boolean {
   return c.jobs.length > 0 && SAMPLE_JOBS.some(sj => sj.id === c.jobs[0].id);
+}
+
+// ─── Live from site ───────────────────────────────────────────────────────────
+/**
+ * The grid look: the newest pictures and films from EVERY workspace, each a
+ * tappable tile that opens the viewer (play, sound, full screen for a film).
+ * A shot younger than ten minutes wears a "new" ring, so a glance at the
+ * wall catches what just came in. Narrowed to chosen jobs when the pencil
+ * says so — job ids from any workspace.
+ */
+function SitePhotosGrid({ el, c, sample }: { el: CanvasElement; c: WidgetCtx; sample: boolean }) {
+  const shots = useSitePhotos(c, sample);
+  const viewer = useShotViewer();
+  // The "new" ring must fall off by itself — one cheap tick.
+  useTick(true, 30_000);
+  const only = (d(el).jobIds ?? []) as string[];
+  const allowed = only.length ? new Set(only) : null;
+  const list = useMemo(() => {
+    const kept = allowed ? shots.filter(s => allowed.has(s.jobId)) : shots;
+    return kept.slice(0, Number(d(el).limit) || 12);
+  }, [shots, allowed, el]); // eslint-disable-line react-hooks/exhaustive-deps
+  const fresh = list.some(s => Date.now() - Date.parse(s.at) < 10 * 60 * 1000);
+  const title = (d(el).title as string) || (only.length ? `From site · ${only.length} jobs` : 'Live from site');
+  return (
+    <Frame title={list.length ? `${title} · ${list.length}` : title} icon={Camera} tone={fresh ? '#4aa8d8' : undefined}>
+      {list.length === 0
+        ? <span className="text-[10px] text-gray-400">No photos yet</span>
+        : (
+          <div data-site-photos className="grid gap-1 h-full content-start"
+            style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(78px, 1fr))', gridAutoRows: 'minmax(62px, 1fr)' }}>
+            {list.map((s, i) => (
+              <ShotTile key={s.id} shot={s} onOpen={() => viewer.open(list, i)} />
+            ))}
+          </div>
+        )}
+      {viewer.node}
+    </Frame>
+  );
 }
 
 // ─── Group totals ─────────────────────────────────────────────────────────────
@@ -466,46 +505,19 @@ export const WIDGETS: WidgetDef[] = [
     },
   },
   {
-    id: 'recent-photos', rank: 8, name: 'Latest photos', category: 'live', icon: Camera, w: 235, h: 150,
-    blurb: 'The newest pictures back from site — a grid, one big rotating picture, or grouped '
-      + 'under their jobs.',
+    id: 'recent-photos', rank: 8, name: 'Live from site', category: 'live', icon: Camera, w: 235, h: 150,
+    blurb: 'Every picture and film back from site, from every workspace, the moment it lands — '
+      + 'tap one to see it big. A grid, one big rotating picture, or grouped under their jobs.',
     data: {},
     render: (el, c) => {
       // The wall's two photo widgets folded in here as looks: `one` is the
-      // single big rotating picture, `wall` groups the pictures by job.
+      // single big rotating picture, `wall` groups the pictures by job. All
+      // three read every workspace and open the viewer on a tap.
       const look = String(d(el).look || 'grid');
-      if (look === 'one') return <LatestPhoto c={c} />;
-      if (look === 'wall') return <PhotoWall c={c} />;
-      // Narrowed to chosen jobs, or left open to everything. "Everything" is
-      // the default because a wall widget with nothing configured should still
-      // be showing you something.
-      const only = (d(el).jobIds ?? []) as string[];
-      const allowed = only.length ? new Set(only) : null;
-      const recent = [...c.photos]
-        .filter(p => isPicture(p) && photoSrcOf(p))
-        .filter(p => {
-          if (!allowed) return true;
-          const a = c.assignments.find(x => x.id === p.assignmentId);
-          return a ? allowed.has(a.apartmentId) : false;
-        })
-        .sort((a, b) => (b.uploadedAt ?? '').localeCompare(a.uploadedAt ?? ''))
-        .slice(0, Number(d(el).limit) || 6);
-      return (
-        <Frame title={(d(el).title as string) || (only.length ? `Photos · ${only.length} jobs` : 'Latest from site')}
-          icon={Camera}>
-          {recent.length === 0
-            ? <span className="text-[10px] text-gray-400">No photos yet</span>
-            : (
-              <div className="grid grid-cols-3 gap-1 h-full">
-                {recent.map(p => (
-                  <div key={p.id} className="rounded-md overflow-hidden bg-slate-100">
-                    <img src={photoSrcOf(p)} alt="" className="w-full h-full object-cover" />
-                  </div>
-                ))}
-              </div>
-            )}
-        </Frame>
-      );
+      const sample = isSampleCtx(c);
+      if (look === 'one') return <LatestPhoto c={c} sample={sample} />;
+      if (look === 'wall') return <PhotoWall c={c} sample={sample} />;
+      return <SitePhotosGrid el={el} c={c} sample={sample} />;
     },
   },
   {

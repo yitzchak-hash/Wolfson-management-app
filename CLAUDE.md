@@ -8905,3 +8905,65 @@ Harness: `scratchpad/addtaskticket-probe.mjs` (9 checks). Its traps: the
 quick-add panel wears `.drawer-panel` too (read the drawer by its own
 hook), and it closes by its backdrop, not Escape.
 
+
+
+---
+
+# v2 — Live from site (2026-09-23), and the reply's last line
+
+## REPLY RULE (owner, 2026-09-23): the last line says whether he must do anything
+After the Bottom line, every reply ends with ONE bold one-liner with emojis
+stating plainly whether anything is needed from him — e.g. **✅ Nothing
+needed from you — it's live on the next deploy.** or **👉 Needs you: delete
+the two extra photo widgets on your board.** One line, bold, emojis, last.
+
+## "Live from site" reads EVERY workspace, live
+The photo widget read `c.photos` — the OPEN workspace's uploads. The wall
+stands on the Job Board while the workers close their tasks on Wolfson and
+Netiv, so a picture that landed seconds ago sat in `wolfson_contractorPhotos`
+and a Job Board widget never saw it: "nothing shows up there the second it
+comes in". Three pieces:
+- **`src/data/sitePhotos.ts`** — `shotKindOf` (image | video | null; the
+  record's `fileType` wins, then the NAME, then a typeless record is an old
+  picture), `collectSiteShots` (pure: photos + assignments + apartments +
+  contractors → `SiteShot` with workspace label/colour, unit name via
+  `aptLabel`, who, when, a thumb and a playable address), `useSitePhotos(c,
+  sample)` — the open workspace from the store, every other from
+  `loadProjectSnapshot(pid).photos` re-read on `snapshotTick` (keyed on the
+  tick ALONE: a snapshot is a JSON.parse of a whole workspace and must not
+  re-run on every live edit), and `viewerItemsOf` (a film whose record has
+  no extension is given `.mp4` — the viewer decides a kind by the NAME first).
+- **The foreign sync carries `contractorPhotos`** (`attachForeign`, a whole
+  listener — metadata only, small) and `ensureProjectSnapshotNow` pulls it,
+  so a fresh TV has the history too; `loadProjectSnapshot` gained `photos`.
+- **`src/components/board/ShotTiles.tsx`** — `ShotTile` (a BUTTON:
+  `data-no-drag data-el-action` + its own stopPropagation, the standing
+  capture trap; a film with a playable address draws its own first frame, a
+  Drive film draws Drive's thumbnail; a play mark; a "new" ring + pill under
+  `FRESH_MS` = 10 min; caption = unit · workspace dot+name · relative time),
+  `useShotViewer` (opens `MediaViewer` — play/sound/full screen/arrows/X)
+  and `Seal` (a `display: contents` wrapper stopping every pointer/mouse/
+  key/wheel event: a portal's React events bubble through the REACT tree
+  into the node hosting it). Hooks: `[data-site-photos]`,
+  `[data-site-shot=<id>][data-shot-kind][data-fresh]`, `[data-shot-play]`,
+  `[data-shot-new]`, `[data-shot-ws]`.
+- All three looks read the shots: the grid (`SitePhotosGrid` in widgets.tsx,
+  auto-fill tiles, title counts, tone turns accent while something is new),
+  `LatestPhoto` (the rotating one — a NEW arrival jumps the reel to itself)
+  and `PhotoWall` (grouped by workspace+job) in tvWidgets, which now import
+  `useSitePhotos`/`ShotTile` (no runtime import of widgets.tsx — the
+  no-cycle rule holds). `isSampleCtx` is decided in the registry render and
+  passed as `sample`; the shelf reads the canned context alone.
+- The wall needs nothing: `renderWidget(el, wallCtx)` draws the same tiles
+  and `readOnly` never gates a look (the tap-in rule).
+- His board carries FOUR photo widgets (one grid, two `tv-photo-wall` aliases,
+  one `tv-photo` alias) — the "two of them, redundant". They are one widget
+  in four coats; the extras are his to delete.
+
+Harness: `scratchpad/sitephotos-probe.mjs` (25 checks: the merged grid,
+newest-first across workspaces, the play mark, the workspace tag, a snapshot
+arrival on the tick landing first with the ring in 14ms, a live upload, a
+mouse tap → controls/full screen/no drawer/no drag, Escape, a picture with
+arrows, and on /tv a CDP finger tap opening and closing the viewer). `dedupe`
+and `storefull` unchanged (dedupe's "1 FAILED" is the sandboxed-frame
+localStorage page error, pre-existing).
