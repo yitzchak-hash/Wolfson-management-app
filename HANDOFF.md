@@ -43,8 +43,26 @@ with starred recommendations is published first; the owner says "approved" /
 "all yes" / answers by number; then it is built. Never build a redesign
 unasked.
 
-## Where things stand (2026-09-22, latest — Add Task on a travelled-to unit; NOTHING PENDING HIS WORD)
+## Where things stand (2026-09-23, latest — the freeze diagnosis; ONE THING PENDING HIS WORD: the Active-jobs cap)
 Last commits, newest first (see `git log`):
+- **2026-09-23, latest — "Chrome just freezes on the job board, sometimes
+  the whole computer. Why?"** A QUESTION; answered with measurements, no
+  fix shipped. `scratchpad/boardfreeze-probe.mjs` (a generic big board,
+  production bundle) is clean: no heap growth, no DOM growth, 13 layers,
+  worst frame ~200ms only at the zoom-out rung. Then his REAL board shape
+  (his 71 elements + his 3,520 jobs' board fields by REST into the session
+  scratchpad — never the repo; only 5 tiles sit on the main board): the
+  page carries ~82,000 DOM elements at rest (170,000 with synthetic
+  everything-edited stamps), of which the THREE `active-jobs` widgets draw
+  ~26,000 EACH — the widget renders every ranked row (`list.map`, no cap,
+  insightWidgets.tsx ~line 338), ~1,222 rows on his 30-day window, and
+  widgets are never culled. Renderer RSS 0.8–1.1 GB; a wheel pan (his
+  `wheelScrolls` setting) and a drag pan hit 667–1,450 ms frames; the
+  1-second stalls are Chrome's own style/paint work over those nodes
+  ("(program)" 74% of the profile), not app JS. The remedy, awaiting his
+  word: cap the drawn rows (the box's height, or ~40 with "show all N" into
+  the list popup) — and he could delete two of the three copies today.
+  Unmeasurable here (no internet): the TikTok player and the photo walls.
 - **2026-09-22, latest — "add task on a job on the calendar exits the window
   and takes me back to the job board".** The drawer's Add Task closed the
   drawer through the host's onClose, which redeems the RETURN TICKET a unit
@@ -588,6 +606,10 @@ Last commits, newest first (see `git log`):
   the one-file Hebrew-safe Windows helper.
 
 ## What the owner last asked (his exact wants)
+-1. **(2026-09-23, the freeze)** "A lot of times on the job board, I'm
+   scrolling around just working and Chrome just freezes. And sometimes
+   even freezes my whole computer. Why is this?" — answered (see the top
+   of Where things stand); the Active-jobs row cap is proposed, not built.
 0. **(2026-09-17, the stages session — PAGE ONLY, awaiting 15/16 + "build
    it")** "under what are you doing here, I want to write select one or
    multiple. You don't need the only three… What does something else do?
@@ -723,6 +745,15 @@ Last commits, newest first (see `git log`):
   `npx vite --port 5173` and `VITE_DRIVE_API_KEY=test npx vite --port 5174`.
 
 ## The last reply the owner saw (so the next one continues it)
+**Newest (2026-09-23, the freeze question)**: the reply said the freezes
+were measured on a copy of his real board; that the three Active-jobs
+lists draw about 26,000 screen elements each (every one of ~1,200 rows,
+uncapped, never unloaded) and push Chrome to a gigabyte and to one-second
+stalls on every scroll; that a tab stall is the app's, a whole-computer
+freeze is that memory plus the TikTok video and photos on a machine under
+load; that deleting two copies helps today and a row cap is the real fix,
+offered for his word. Bottom line + bullets (KEEP THAT FORMAT).
+
 **Newest (2026-09-22, Add Task from the notebook)**: the reply said the
 Add Task button was closing the window through the door that also carries
 you home after a cross-workspace visit, so the page left before the task
