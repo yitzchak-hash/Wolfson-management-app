@@ -30,10 +30,16 @@ recommendation. 2) Build, deploy, self-check — but never call anything
 numbered list, each item done / not done / needs a decision, plus the deploy
 link (https://wolfson-management-app.vercel.app). 4) Never run the
 qa-fix-loop or mission-board skills here. 5) If Yitzchak writes directly,
-just do it; finish a task in flight first. (The bold emoji one-liner rule
-from earlier the same day still stands, after the numbered list.)
+just do it; finish a task in flight first. 6) Keep `docs/BRIEF.md`,
+`docs/ROADMAP.md` and `docs/DECISIONS.md` current — READ THEM BEFORE EVERY
+TASK, update them when something changes (a shipped slice ticks the roadmap;
+a decision gets a dated line). 7) For a BIG slice, first post a short plan
+under "Plan for review" (approach, risks, what you'll skip) and build when
+the manager says go. (The bold emoji one-liner rule from earlier the same
+day still stands, after the numbered list.)
 
 ## How a round is run (the ritual)
+0. Read `docs/BRIEF.md`, `docs/ROADMAP.md`, `docs/DECISIONS.md`.
 1. Implement. 2. Playwright probes in `scratchpad/` (`node scratchpad/<name>.mjs`;
    dev server on 5173, a keyed one on 5174 with `VITE_DRIVE_API_KEY=testkey`;
    Chromium at `/opt/pw-browsers/chromium-1194/chrome-linux/chrome`).
@@ -43,7 +49,7 @@ from earlier the same day still stands, after the numbered list.)
    newest is `2027-01-21` — the next entry must be a later date (an older
    entry lower down also wears `2026-12-20`; the marker compares only the TOP
    entry's date, so never reuse a date that appears anywhere in the file)). 6. A CLAUDE.md
-   round record. 7. A line in `docs/CRM-CHECKLIST.md`. 8. Rewrite THIS file.
+   round record. 7. A line in `docs/CRM-CHECKLIST.md`, tick `docs/ROADMAP.md`, date a line in `docs/DECISIONS.md` when he decided something. 8. Rewrite THIS file.
 9. Commit (footer: the `Co-Authored-By:` + `Claude-Session:` lines given in
    the session's own attribution reminder), push the working branch, then
    `git merge-base --is-ancestor origin/claude/blissful-cray-spTFY HEAD` and
