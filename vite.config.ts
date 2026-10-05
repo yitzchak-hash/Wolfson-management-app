@@ -35,6 +35,9 @@ function routerUrgentNav(): Plugin {
 
 export default defineConfig({
   plugins: [routerUrgentNav(), react()],
+  // Harnesses that run several dev servers over one shared node_modules give
+  // each its own prebundle cache; unset, Vite's default applies.
+  cacheDir: process.env.VITE_CACHE_DIR || undefined,
   optimizeDeps: {
     // Pre-bundled deps resolve their imports at prebundle time, past every
     // plugin — react-router must be served as source or the shim above never
