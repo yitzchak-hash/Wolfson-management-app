@@ -29,12 +29,9 @@ asks for it. ☑ done · ☐ next · ✎ awaiting Yitzchak's word. (Standing ord
   cleanup of cross-workspace records; project on Blaze.
 - ☑ 2026-09-23: "Live from site" — every workspace's photos and films,
   live, tappable on the TV.
+- ☑ 2026-10-05: Active jobs draws 40 rows at a time (the Chrome freeze).
 
 ## Next (in order)
-- ☐ **Cap the Active-jobs widget's drawn rows** (~40 that fit the box +
-  "show all N" into the list popup). Cause of the Chrome freezes: three
-  copies × ~1,200 rows ≈ 77,000 DOM nodes repainted on every scroll
-  (measured 2026-09-23). Awaiting the manager's go.
 - ☐ Set the Vercel keys still missing: `VAPID_PUBLIC_KEY` /
   `VAPID_PRIVATE_KEY` / `VITE_VAPID_PUBLIC_KEY` (push), confirm
   `OPENAI_API_KEY` (transcription, translation, plan reading).

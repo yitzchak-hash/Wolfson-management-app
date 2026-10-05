@@ -40,7 +40,7 @@ next to do (Waiting).
 |---|------|-----|--------|-------|
 | C-1 | 2026-09-22 | Editing a task shows the stage bubbles like the apartment's task editor | Done | 6b41e4c · taskbubbles-probe 16/16 |
 | C-2 | 2026-09-22 | Add Task on a job opened from the calendar exits to the Job Board | Done | c51b630 · addtaskticket-probe 9/9 |
-| C-3 | 2026-09-23 | Chrome (and the computer) freezes while scrolling the Job Board | Partly | e70ef25 diagnosis; the fix (cap the Active-jobs rows) waits for "go" |
+| C-3 | 2026-09-23 | Chrome (and the computer) freezes while scrolling the Job Board | Done | 9472a3e — Active jobs draws 40 rows (+ "Show 40 more"); activecap-probe 4/4, 13,231 → 959 elements |
 | C-4 | 2026-09-23 | End every reply with a bold one-line "needed / not needed" with emojis | Done | standing rule (CLAUDE.md) |
 | C-5 | 2026-09-23 | "Live from site" looks like two duplicate widgets | Partly | one widget in code (1bcb41b); the extra copies on his board are his to delete |
 | C-6 | 2026-09-23 | A worker's upload shows on the TV within seconds | Done | 1bcb41b · sitephotos-probe 25/25 |
