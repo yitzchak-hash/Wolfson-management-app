@@ -288,6 +288,14 @@ const FILTERS: { id: TouchFilter; label: string }[] = [
  * except Trash, the group named on the row. The fold is memoised on its
  * inputs, so it runs when data changes and never per frame.
  */
+/**
+ * How many rows the Active-jobs list DRAWS at a time. It ranks every job with
+ * a folder — on the office's board that is ~1,200 — and drawing them all, in
+ * three copies of the widget, was ~77,000 DOM nodes repainted on every scroll:
+ * the Chrome freezes (measured 2026-09-23). The rest are one press away.
+ */
+const ACTIVE_ROW_CAP = 40;
+
 function ActiveJobs({ c, el }: { c: WidgetCtx; el: CanvasElement }) {
   const storeNotes = useStore(s => s.contractorNotes);
   const storePins = useStore(s => s.planPins);
@@ -336,6 +344,8 @@ function ActiveJobs({ c, el }: { c: WidgetCtx; el: CanvasElement }) {
     return (BIN_META as Record<string, { label: string }>)[j.boardBin as BinKind]?.label ?? 'Group';
   };
   const list = order.map(id => jobById.get(id)).filter((j): j is Apartment => !!j);
+  const [cap, setCap] = React.useState(ACTIVE_ROW_CAP);
+  const shown = list.slice(0, cap);
   const title = `Active · last ${days} days`;
   const setData = (patch: Record<string, unknown>) => c.update({ data: { ...d(el), ...patch } });
   const readOnly = !!c.readOnly || sample;
@@ -382,7 +392,7 @@ function ActiveJobs({ c, el }: { c: WidgetCtx; el: CanvasElement }) {
         </div>
         <Scroll>
           {list.length === 0 && <Empty>Nothing happened on any job in the last {days} days{filter !== 'all' ? ` (${FILTERS.find(f => f.id === filter)?.label.toLowerCase()})` : ''}</Empty>}
-          {list.map(j => {
+          {shown.map(j => {
             const h = fold.get(j.id)!;
             const grp = groupOf(j);
             const bk = booked.get(j.id);
@@ -407,6 +417,13 @@ function ActiveJobs({ c, el }: { c: WidgetCtx; el: CanvasElement }) {
                 } />
             );
           })}
+          {list.length > shown.length && (
+            <button type="button" data-no-drag data-el-action data-active-more
+              onClick={() => setCap(n => n + ACTIVE_ROW_CAP)}
+              className="w-full mt-1 py-1 rounded-md text-[9.5px] font-bold text-[#1e3a5f] bg-slate-100 hover:bg-slate-200">
+              Show {Math.min(ACTIVE_ROW_CAP, list.length - shown.length)} more · {list.length - shown.length} not shown
+            </button>
+          )}
         </Scroll>
       </div>
     </Frame>
