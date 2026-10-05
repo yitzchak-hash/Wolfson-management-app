@@ -8,6 +8,9 @@
   "functions": {
     "api/drive-files.js": {
       "maxDuration": 30
+    },
+    "api/drive-fetch.js": {
+      "maxDuration": 60
     }
   }
 }

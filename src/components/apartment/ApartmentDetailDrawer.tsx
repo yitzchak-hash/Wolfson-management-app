@@ -20,6 +20,7 @@ import { MediaViewer } from '../ui/MediaViewer';
 import { useThreadFold } from '../../data/threadFold';
 import type { CustomWhere } from './StagePicker';
 import { mediaKindOf, isMediaFile } from '../../data/mediaKind';
+import { rowNumOf } from '../../data/floorRows';
 import { extractFileId, drivePreviewUrl, driveDownloadUrl, findPlansPdfViaBackend, findAllPlansPdfsViaBackend, findPlanSetViaBackend, PlanEntry, isUploadBackendConfigured, findOrCreateFolderViaBackend, uploadFileViaResumableSession, shareFileToDrive, ensureDriveShared, extractFolderId, driveThumbUrl, listAllPhotosViaBackend, getFolderNameViaBackend, familyNameFromFolderName, DrivePhotoItem, DriveFile, FolderHealth, checkFolderHealthViaBackend } from '../../data/driveApi';
 import { Tooltip } from '../ui/Tooltip';
 import { DriveStatus, driveStateOf } from '../ui/DriveStatus';
@@ -1226,8 +1227,16 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
               onPreview={(file, folderName) => setBrowsePreview({ file, folderName })}
               onOpenMedia={(file, all) => {
                 // Every openable file in the folder rides along, so the
-                // arrows walk the site's pictures and films in order.
-                const list = all.filter(x => !x.viewable && isMediaFile(x.name, x.mimeType));
+                // arrows walk the site's pictures and films in order. A
+                // picture or film opens with every picture and film beside it;
+                // a memo or other file with the folder's other non-sheets.
+                const pictureKind = (x: { name: string; mimeType?: string }) => {
+                  const k = mediaKindOf(x.name, x.mimeType);
+                  return k === 'image' || k === 'video';
+                };
+                const list = pictureKind(file)
+                  ? all.filter(pictureKind)
+                  : all.filter(x => !x.viewable && isMediaFile(x.name, x.mimeType));
                 const items = (list.length ? list : [file]).map(x => ({
                   fileId: x.id, filename: x.name, mimeType: x.mimeType ?? '',
                   thumbSrc: mediaKindOf(x.name, x.mimeType) === 'image' ? driveThumbUrl(x.id, 1600) : '',
@@ -1528,7 +1537,10 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
               ? <span className="text-[#4aa8d8] font-semibold text-sm flex-shrink-0">{ui.jobLabel}</span>
               : <>
                   <span className="text-[#4aa8d8] font-semibold text-sm flex-shrink-0">{apartment.buildingId}</span>
-                  {apartment.floor > 0 && <span className="text-white/50 text-xs flex-shrink-0">· {ui.floorPrefix} {apartment.floor}</span>}
+                  {/* The floor as the building diagram LABELS it — Wolfson's
+                      towers print one lower than the stored floor, and the
+                      window said "Floor 4" over a unit the diagram shows on 3. */}
+                  {rowNumOf(apartment.buildingId, apartment.floor) && <span data-drawer-floor className="text-white/50 text-xs flex-shrink-0">· {ui.floorPrefix} {rowNumOf(apartment.buildingId, apartment.floor)}</span>}
                   {apartment.tipus && <span data-tipus-chip className="text-white/85 text-xs font-bold flex-shrink-0 px-1.5 rounded bg-white/15">{apartment.apartmentNumber} — {apartment.tipus}</span>}
                 </>
             }

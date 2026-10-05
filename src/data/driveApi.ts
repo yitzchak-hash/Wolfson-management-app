@@ -267,6 +267,25 @@ export function isUploadBackendConfigured(): boolean {
   return !!DRIVE_API_KEY;
 }
 
+/**
+ * A STREAMING address for a Drive film. /api/drive-fetch also answers a GET
+ * with Range support, so a <video> starts after the first chunk instead of
+ * waiting for the whole file to download into a blob — the owner watched a
+ * 51-second site film sit black for nine seconds ("it takes forever",
+ * 2026-10-05). The key rides in the query because a <video> cannot send a
+ * header; it is the same key the public bundle already carries. Null when the
+ * backend is not configured, and callers fall back to fetching the bytes.
+ */
+export function driveStreamUrl(fileId: string): string | null {
+  if (!DRIVE_API_KEY || !fileId) return null;
+  return `/api/drive-fetch?id=${encodeURIComponent(fileId)}&k=${encodeURIComponent(DRIVE_API_KEY)}`;
+}
+
+/** Is this address one of ours (a stream), not a blob we made and must revoke? */
+export function isDriveStreamUrl(url: string | null | undefined): boolean {
+  return !!url && url.startsWith('/api/drive-fetch?');
+}
+
 async function listFolderViaBackend(folderId: string): Promise<DriveFile[]> {
   const resp = await fetch('/api/drive-files', {
     method: 'POST',

@@ -142,15 +142,36 @@ check(await page.locator('[data-folder-tile="F-old"]').count() === 1, 'a folder 
 check(await page.locator('[data-file-tile="IMG1"] [data-tile-star]').count() === 1
   && await page.locator('[data-file-tile="IMG1"] [data-tile-preview]').count() === 1,
   'a picture tile carries the star and the preview arrow');
+// Since 2026-09-17 every file opens in the viewer (a .dwg as a file card with
+// Download), so it may wear the expand arrow — but never the star: it cannot be a plan.
 check(await page.locator('[data-file-tile="DWG1"] [data-tile-badge]').count() === 1
   && (await page.locator('[data-file-tile="DWG1"] [data-tile-badge]').textContent()) === 'DWG'
-  && await page.locator('[data-file-tile="DWG1"] [data-tile-star]').count() === 0
-  && await page.locator('[data-file-tile="DWG1"] [data-tile-preview]').count() === 0,
-  'the .dwg wears a DWG badge and has no star and no preview');
+  && await page.locator('[data-file-tile="DWG1"] [data-tile-star]').count() === 0,
+  'the .dwg wears a DWG badge and has no star');
 check(await page.locator('[data-plan-browser] [data-browser-back]').count() === 0,
   'no "Back to the plan" when there is no plan to go back to');
 const starBox = await page.locator('[data-file-tile="IMG1"] [data-tile-star]').boundingBox();
 check(starBox && starBox.width >= 28 && starBox.height >= 28, 'the star is a ≥28px target', `${starBox?.width}×${starBox?.height}`);
+
+// ── 1b · a PICTURE opens in the swipe viewer, never as a plan ─────────────
+// Owner, 2026-10-05: "pictures should not open up as plan, it should be a
+// picture viewer where I can slide left and right".
+await page.locator('[data-file-tile="IMG1"]').click({ position: { x: 20, y: 20 } });
+await page.waitForTimeout(700);
+check(await page.locator('[data-media-viewer]').count() === 1
+  && await page.locator('[data-plan-preview]').count() === 0,
+  'pressing a picture opens the picture viewer, not the plan preview',
+  `viewer ${await page.locator('[data-media-viewer]').count()} · plan preview ${await page.locator('[data-plan-preview]').count()}`);
+await page.keyboard.press('Escape');
+await page.waitForTimeout(400);
+check(await page.locator('[data-media-viewer]').count() === 0 && await page.locator('[data-plan-browser]').count() === 1,
+  'Escape closes the viewer and leaves the folder standing');
+await page.locator('[data-file-tile="IMG1"] [data-tile-preview]').click();
+await page.waitForTimeout(700);
+check(await page.locator('[data-media-viewer]').count() === 1 && await page.locator('[data-plan-preview]').count() === 0,
+  'the picture\'s expand arrow opens the viewer too');
+await page.keyboard.press('Escape');
+await page.waitForTimeout(400);
 
 // ── 2 · stepping in, and a crumb back up ──────────────────────────────────
 await page.locator('[data-folder-tile="F-old"]').click();

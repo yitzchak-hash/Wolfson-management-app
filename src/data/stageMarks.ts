@@ -39,6 +39,21 @@ export function isWorkStage(s: Stage): boolean {
 }
 
 /**
+ * Is this stage on the apartment's OWN workspace list? A Job Board job
+ * (building `G`) reads the Job Board's stages; every building workspace reads
+ * the shared global list. The set rules decide this rather than the callers,
+ * because the callers hand in whatever list they hold — the diagram and the
+ * board hand in every stage in the store — and a Wolfson flat then counted
+ * the Job Board's four stages too: "4/13" on its square beside "4/9" in its
+ * own window (owner's recording, 2026-10-05). A record with no building id
+ * (a synthetic shelf sample) is left alone.
+ */
+export function ownStage(apt: Partial<Pick<Apartment, 'buildingId'>>, st: Stage): boolean {
+  if (!apt.buildingId) return true;
+  return apt.buildingId === 'G' ? st.projectId === 'general' : !st.projectId;
+}
+
+/**
  * Does this stage belong to the apartment's set BEFORE any mark is read —
  * the tipus door, the everywhere door, and a custom stage's own list of
  * where it applies. Markers are never in a set: they are states of the
@@ -64,7 +79,7 @@ export function inBaseSet(apt: AptLike, stage: Stage, ctx?: SetContext): boolean
 export function stageSetOf(apt: AptLike, sortedStages: Stage[], ctx?: SetContext): Stage[] {
   const marks = apt.stageMarks ?? {};
   return sortedStages.filter(st => {
-    if (!isWorkStage(st) || !st.active) return false;
+    if (!isWorkStage(st) || !st.active || !ownStage(apt, st)) return false;
     const m = marks[st.id];
     if (m) return m !== 'off';
     return inBaseSet(apt, st, ctx);
@@ -157,7 +172,7 @@ export function headlineStageId(apt: AptLike, sortedStages: Stage[], ctx?: SetCo
   // the list has one — a marker ordered after the last work stage, never
   // "Ready to start" at the top — else the last stage done.
   const lastWorkOrder = set.length ? set[set.length - 1].order : -Infinity;
-  const closing = sortedStages.filter(s => !isWorkStage(s) && s.active && s.order > lastWorkOrder);
+  const closing = sortedStages.filter(s => !isWorkStage(s) && s.active && ownStage(apt, s) && s.order > lastWorkOrder);
   if (closing.length) return closing[closing.length - 1].id;
   const lastDone = [...set].reverse().find(st => state(st.id) === 'done');
   return lastDone?.id ?? apt.currentStageId ?? null;
@@ -207,7 +222,7 @@ export function marksForCurrent(
   if (!isWorkStage(target)) {
     // "Job completed": everything in the set is done. "Ready to start": nothing is.
     const set = stageSetOf({ ...apt, stageMarks: marks }, sortedStages, ctx);
-    const last = sortedStages.filter(s => !isWorkStage(s) && s.active).slice(-1)[0];
+    const last = sortedStages.filter(s => !isWorkStage(s) && s.active && ownStage(apt, s)).slice(-1)[0];
     if (last && last.id === target.id && set.length) {
       for (const st of set) marks[st.id] = 'done';
     } else {

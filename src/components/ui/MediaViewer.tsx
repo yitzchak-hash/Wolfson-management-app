@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { X, Download, ChevronLeft, ChevronRight, FileText, Maximize2, Minimize2, Info, ExternalLink } from 'lucide-react';
 import { VoiceMemoPlayer } from './VoiceMemo';
 import { mediaKindOf } from '../../data/mediaKind';
-import { driveThumbUrl, driveDownloadUrl, drivePreviewUrl } from '../../data/driveApi';
+import { driveThumbUrl, driveDownloadUrl, drivePreviewUrl, driveStreamUrl, isDriveStreamUrl } from '../../data/driveApi';
 
 /**
  * One thing to look at. `src` is what the app can DRAW (a Storage url, a data
@@ -69,6 +69,8 @@ export function MediaViewer({
   const [isFull, setIsFull] = React.useState(false);
   const [bytesSrc, setBytesSrc] = React.useState<string | null>(null);
   const [loadFailed, setLoadFailed] = React.useState(false);
+  /** The stream refused (an old deployment, a network fault) — fall back to the bytes. */
+  const [streamFailed, setStreamFailed] = React.useState(false);
   const rootRef = React.useRef<HTMLDivElement>(null);
 
   const item = items[Math.min(idx, items.length - 1)];
@@ -85,7 +87,7 @@ export function MediaViewer({
   const next = React.useCallback(() => setIdx(i => Math.min(items.length - 1, i + 1)), [items.length]);
 
   // A new item is a fresh load: nothing carried over from the last one.
-  React.useEffect(() => { setBytesSrc(null); setLoadFailed(false); }, [idx]);
+  React.useEffect(() => { setBytesSrc(null); setLoadFailed(false); setStreamFailed(false); }, [idx]);
 
   /**
    * A Drive VIDEO (or sheet we mean to draw) has no address a <video> can
@@ -94,6 +96,11 @@ export function MediaViewer({
    */
   React.useEffect(() => {
     if (!item?.fileId || playable || kind !== 'video') return;
+    // STREAM first: the film starts after its first chunk, and seeking asks
+    // for just the part it needs. Only a refused stream downloads the whole
+    // file into a blob, the old way.
+    const stream = streamFailed ? null : driveStreamUrl(item.fileId);
+    if (stream) { setBytesSrc(stream); return; }
     let dead = false; let url = '';
     (async () => {
       try {
@@ -105,7 +112,7 @@ export function MediaViewer({
       } catch { if (!dead) setLoadFailed(true); }
     })();
     return () => { dead = true; if (url) URL.revokeObjectURL(url); };
-  }, [item?.fileId, playable, kind, item?.mimeType]);
+  }, [item?.fileId, playable, kind, item?.mimeType, streamFailed]);
 
   React.useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -202,7 +209,8 @@ export function MediaViewer({
             : <div className="text-gray-500 text-sm">{imageUnavailable}</div>
         ) : kind === 'video' ? (
           (playable || bytesSrc) && !loadFailed
-            ? <video data-viewer-video src={playable || bytesSrc!} controls autoPlay playsInline className="max-w-full max-h-full" />
+            ? <video data-viewer-video src={playable || bytesSrc!} controls autoPlay playsInline className="max-w-full max-h-full"
+                onError={() => { if (!playable && isDriveStreamUrl(bytesSrc)) setStreamFailed(true); }} />
             : loadFailed
               ? <div className="flex flex-col items-center gap-3">
                   <span className="text-gray-400 text-sm">{imageUnavailable}</span>

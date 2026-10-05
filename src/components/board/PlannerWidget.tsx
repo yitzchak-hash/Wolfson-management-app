@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { PlannerDropDialog, PlannerTaskDialog, PlannerRemoveDialog, TaskDialogResult } from './PlannerDialogs';
-import { ChevronUp, ChevronDown, Plus, X, CalendarDays, Maximize2, Eye, EyeOff, ClipboardList } from 'lucide-react';
+import { ChevronUp, ChevronDown, Plus, X, CalendarDays, Maximize2, Eye, EyeOff, ClipboardList, Check } from 'lucide-react';
 import {
   Apartment, CanvasElement, Contractor, User, ContractorAssignment, Stage, personColor,
   aptLabel, getStageName, generalBuildingsText, projectShortName } from '../../types';
@@ -11,6 +11,12 @@ import {
 } from '../../data/rotaDrop';
 import { daysOf, dayNumberOf, workingRun } from '../../data/taskDays';
 import { progressOf, StageProgress } from '../../data/stageMarks';
+import { rowNumOf } from '../../data/floorRows';
+
+/** "Floor 5" in the reader's language — the floor number as the diagram prints it. */
+function floorWord(lang: string | undefined, n: string): string {
+  return lang === 'he' ? `קומה ${n}` : lang === 'ru' ? `этаж ${n}` : `Floor ${n}`;
+}
 import { useStore, loadProjectSnapshot } from '../../data/store';
 import { useBoardTrack } from '../../data/useBoardUndo';
 import { holidaysOn, hebrewLabel, Holiday } from '../../data/hebrewDates';
@@ -895,6 +901,13 @@ export function PlannerWidget({
           + (generalBuildingsText(a.general) ? ` · ${generalBuildingsText(a.general)}` : '')
         : null;
       const label = generalName ?? (apt ? (aptLabel(apt) || apt.address?.trim() || 'Job') : 'Job');
+      // WHERE the job is, on the bar itself (owner, 2026-10-05: "this is all
+      // A3 … but I don't see the addresses, I don't see anything"): the
+      // building leads as a chip, and the floor — printed the way the
+      // building diagram labels its rows — and the address ride the second line.
+      const building = !a.general && apt && apt.buildingId && apt.buildingId !== 'G' ? apt.buildingId : undefined;
+      const floorNo = building && apt ? rowNumOf(apt.buildingId, apt.floor) : '';
+      const where = [floorNo ? floorWord(lang, floorNo) : '', apt?.address?.trim() ?? ''].filter(Boolean).join(' · ');
       const stl = stagesFor(pid);
       // The set model's strip, from the apartment's OWN workspace's list and
       // tipus sets — the same arithmetic a tile and a diagram cell draw.
@@ -912,7 +925,7 @@ export function PlannerWidget({
         list.push({
           id: `${a.id}:${run.days[0]}`, taskId: a.id, task: a, pid: `c:${a.contractorId}`,
           weekKey: run.wk, startIdx: run.start, len: run.days.length, days: run.days,
-          label, desc: (a.taskDescription ?? '').trim(), jobId: a.apartmentId,
+          label, building, where, desc: (a.taskDescription ?? '').trim(), jobId: a.apartmentId,
           // A general job's label already NAMES its workspace — the purple
           // tag would print it twice ("Wolfson · Wolfson · A1, A2").
           projectId: pid === currentProjectId ? undefined : pid, workspace: a.general ? undefined : ws,
@@ -953,7 +966,7 @@ export function PlannerWidget({
     }
     return map;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tasksOn, people, assignments, jobs, projects, currentProjectId, snapTick, weeks, span, stages, allStages, boardSettingsAll]);
+  }, [tasksOn, people, assignments, jobs, projects, currentProjectId, snapTick, weeks, span, stages, allStages, boardSettingsAll, lang]);
 
   /**
    * THE FOLD — once per notebook, the old per-day task cards become the
@@ -1586,7 +1599,7 @@ export function PlannerWidget({
                             if (starts) {
                               return (
                                 <TaskBar key={`bar-${starts.id}`} bar={starts} z={z} size={textSize} strip={strips}
-                                  readOnly={ro || state === 'ending'} isRtl={LT === 'he-IL'}
+                                  readOnly={ro || state === 'ending'} isRtl={LT === 'he-IL'} lang={lang}
                                   onOpen={() => openBar(starts)}
                                   onDropTo={t => dropBarTo(starts, t)}
                                   onDragOff={() => setBarAsk(starts)}
@@ -1799,6 +1812,10 @@ export interface TaskBarSeg {
   len: number;
   days: string[];
   label: string;
+  /** The job's building ("A3") — the chip the bar leads with. Absent on the Job Board. */
+  building?: string;
+  /** Floor (as the diagram prints it) and address, the second line's start. */
+  where?: string;
   desc: string;
   jobId: string;
   projectId?: string;
@@ -1815,20 +1832,21 @@ export interface TaskBarSeg {
 /**
  * A task on the sheet — ONE bar across its days (the Google Calendar manner):
  * the job's name, "on → to" stages and the day count, the ON stage's colour
- * on its left edge; dimmed and struck when the task is closed. Drag it to
+ * on its left edge; a green "done" tag when the task is closed. Drag it to
  * another square to move the whole task; pull its right edge to change how
  * many days; the X takes this stretch off. A foreign task (another
  * workspace's) opens on a click and does nothing else — its record lives
  * elsewhere. Drawn from the FIRST cell of its stretch and laid over the
  * cells to its right, which leave that lane's height free.
  */
-function TaskBar({ bar, z, size, strip, readOnly, isRtl, onOpen, onDropTo, onDragOff, onRemove, onResizeTo }: {
+function TaskBar({ bar, z, size, strip, readOnly, isRtl, lang, onOpen, onDropTo, onDragOff, onRemove, onResizeTo }: {
   bar: TaskBarSeg;
   z: (n: number) => number;
   size: number;
   strip: boolean;
   readOnly: boolean;
   isRtl: boolean;
+  lang?: string;
   onOpen: () => void;
   onDropTo: (target: RotaHit) => void;
   onDragOff: () => void;
@@ -1887,14 +1905,18 @@ function TaskBar({ bar, z, size, strip, readOnly, isRtl, onOpen, onDropTo, onDra
   const pair = bar.stageFrom || bar.stageTo
     ? `${bar.stageFrom ? getStageName(bar.stageFrom, isRtl) : ''}${bar.stageTo ? ` → ${getStageName(bar.stageTo, isRtl)}` : ''}`
     : '';
-  const sub = [pair, bar.desc].filter(Boolean).join(' · ');
+  const sub = [bar.where, pair, bar.desc].filter(Boolean).join(' · ');
+  const early = bar.done && (bar.task.completedAt ?? '').slice(0, 10) < bar.days[bar.days.length - 1];
+  const doneWord = early
+    ? (lang === 'he' ? 'הסתיים מוקדם' : lang === 'ru' ? 'закончено раньше' : 'finished early')
+    : (lang === 'he' ? 'בוצע' : lang === 'ru' ? 'готово' : 'done');
 
   return (
     <div
       {...handlers}
       data-no-drag data-el-action data-task-bar={bar.taskId} data-bar-days={bar.len}
       className="group/bar relative rounded-md min-w-0 flex-shrink-0"
-      title={bar.done ? 'Done — crossed off, never removed'
+      title={bar.done ? 'Done — kept on the sheet as the record'
         : bar.foreign ? `${bar.workspace ?? bar.label} — click to open · drag to move · X takes it off`
         : 'Click to open · drag to move · pull the right edge for more days'}
       style={{
@@ -1903,20 +1925,19 @@ function TaskBar({ bar, z, size, strip, readOnly, isRtl, onOpen, onDropTo, onDra
         // across real cells, so its width is the cells' own.
         width: n > 1 ? `calc(${n * 100}% + ${(n - 1) * 5}px)` : '100%',
         height: h, overflow: 'hidden',
-        backgroundColor: bar.done ? '#f1f5f9' : '#eef4fa',
-        border: `1px solid ${bar.done ? '#e2e8f0' : '#c7d4e0'}`,
+        // DONE is a green tint and a tag — never a line through the words
+        // (owner, 2026-10-05: "why can't we just mark it as done without a
+        // cross that removes all the information"). Everything stays readable.
+        backgroundColor: bar.done ? '#ecfdf5' : '#eef4fa',
+        border: `1px solid ${bar.done ? '#a7f3d0' : '#c7d4e0'}`,
         borderLeft: `${Math.max(3, z(4))}px solid ${color}`,
         padding: `${Math.max(2, z(3))}px ${Math.max(4, z(6))}px`,
-        opacity: held ? 0.45 : bar.done ? 0.6 : undefined,
+        opacity: held ? 0.45 : undefined,
         cursor: editable ? 'grab' : 'pointer',
         touchAction: 'none',
         transition: 'opacity 120ms ease',
       }}
     >
-      {bar.done && (
-        <span aria-hidden="true" className="pointer-events-none absolute"
-          style={{ left: 6, right: 6, top: '50%', borderTop: `${Math.max(2, z(2))}px solid #475569`, transform: 'rotate(-2deg)', opacity: 0.8 }} />
-      )}
       <div className="flex items-start gap-1 min-w-0">
         <div className="flex-1 min-w-0">
           {/* The APARTMENT leads — its number is the first thing on the line
@@ -1924,7 +1945,14 @@ function TaskBar({ bar, z, size, strip, readOnly, isRtl, onOpen, onDropTo, onDra
               way first. Leading with the workspace put "Wolfson · " in front
               of every Wolfson job and the truncation ate the unit itself, so
               two bars on one day read as the same job. */}
-          <div className="flex items-baseline min-w-0" style={{ fontSize: size, fontWeight: 800, color: '#1e3a5f', lineHeight: 1.2 }}>
+          <div className="flex items-center min-w-0" style={{ fontSize: size, fontWeight: 800, color: '#1e3a5f', lineHeight: 1.2 }}>
+            {bar.building && (
+              <span data-bar-building className="flex-shrink-0 rounded tabular-nums" style={{
+                fontSize: Math.max(z(7), size - z(2)), fontWeight: 900, lineHeight: 1.15,
+                backgroundColor: '#1e3a5f', color: '#fff', padding: `0 ${Math.max(2, z(3))}px`,
+                marginInlineEnd: Math.max(3, z(4)),
+              }}>{bar.building}</span>
+            )}
             <span data-bar-label className="truncate min-w-0" style={{ flex: '0 1 auto' }}>{bar.label}</span>
             {bar.workspace && strip && (
               // A strip is ONE line, so the tag rides it — flexShrink 20: it
@@ -1936,9 +1964,14 @@ function TaskBar({ bar, z, size, strip, readOnly, isRtl, onOpen, onDropTo, onDra
               }}>{bar.workspace}</span>
             )}
             {bar.done && (
-              // The record: a stretch whose days ran PAST the close says so.
-              <span data-bar-done style={{ color: '#64748b', fontWeight: 700 }}>
-                {' · '}{(bar.task.completedAt ?? '').slice(0, 10) < bar.days[bar.days.length - 1] ? 'finished early' : 'done'}
+              // The record: a green tag, and a stretch whose days ran PAST the
+              // close says "finished early".
+              <span data-bar-done className="flex-shrink-0 inline-flex items-center rounded-full" style={{
+                marginInlineStart: Math.max(3, z(4)), padding: `0 ${Math.max(3, z(4))}px`, gap: 2,
+                fontSize: Math.max(z(7), size - z(3)), fontWeight: 800, lineHeight: 1.3,
+                backgroundColor: '#16a34a', color: '#fff',
+              }}>
+                <Check size={Math.max(8, Math.round(z(9)))} strokeWidth={3.5} />{doneWord}
               </span>
             )}
           </div>
@@ -2029,7 +2062,7 @@ function PlannerCard({
   /**
    * STRIPS mode (the approved Notebook Strips page): the card is one slim
    * line — the job's name with the task right under it, nothing else. It
-   * still opens, still drags, still wears the line through a closed task.
+   * still opens, still drags, still wears the green done tag of a closed task.
    */
   strip?: boolean;
   onOpen: () => void;
@@ -2182,7 +2215,7 @@ function PlannerCard({
     const pending = open.length;
     /**
      * The task behind THIS card, for the multi-day dress: the "day 2 of 3"
-     * pill, and — once the task is closed — the strike through the card,
+     * pill, and — once the task is closed — the green done tag on the card,
      * which is the record: "done" on days worked, "finished early" on the
      * days ahead the worker said he will not need. Nothing is deleted.
      */
@@ -2202,7 +2235,7 @@ function PlannerCard({
       /**
        * The STRIP: name, and the task right under it — that's it (the
        * owner's approved drawing). Everything behavioural survives: the
-       * same drag handlers, the same click-to-open, the same line through
+       * same drag handlers, the same click-to-open, the same done tag on
        * a closed task. Only the dressing is gone.
        */
       const taskLine = (cardTask?.taskDescription
@@ -2213,24 +2246,17 @@ function PlannerCard({
           data-no-drag data-el-action
           className="group/en relative rounded planner-card min-w-0 flex-1"
           style={{
-            backgroundColor: tint(color, 0.16), border: '1px solid rgba(15,23,42,.07)',
+            backgroundColor: closed ? '#ecfdf5' : tint(color, 0.16),
+            border: closed ? '1px solid #a7f3d0' : '1px solid rgba(15,23,42,.07)',
             padding: `${Math.max(1, Math.round(z(2)))}px ${Math.max(4, Math.round(z(6)))}px`,
             cursor: readOnly && !openOnly ? undefined : 'pointer', touchAction: 'none',
-            opacity: held ? 0.45 : closed ? 0.6 : undefined,
+            opacity: held ? 0.45 : undefined,
             transition: 'opacity 120ms ease',
           }}
           title={closed
-            ? (early ? 'Finished early — this day was crossed off' : 'Done')
+            ? (early ? 'Finished early — this day was not needed' : 'Done')
             : 'Click to open · drag to another day · hold Ctrl to leave a copy'}
         >
-          {closed && (
-            <span aria-hidden="true" className="pointer-events-none absolute"
-              style={{
-                left: 4, right: 4, top: '50%',
-                borderTop: `${Math.max(2, z(2))}px solid #475569`,
-                transform: 'rotate(-3deg)', opacity: 0.8,
-              }} />
-          )}
           <span className="flex items-center gap-1 min-w-0 text-left">
             {/* The stage, as the same dot the tile wears — the one glance
                 that says where the job stands, kept even at strip size. */}
@@ -2280,26 +2306,19 @@ function PlannerCard({
         data-no-drag data-el-action
         className="group/en relative rounded-md px-1.5 py-1 min-w-0 planner-card flex-1 flex flex-col justify-center"
         style={{
-          backgroundColor: tint(color, 0.16), border: '1px solid rgba(15,23,42,.07)',
+          backgroundColor: closed ? '#ecfdf5' : tint(color, 0.16),
+          border: closed ? '1px solid #a7f3d0' : '1px solid rgba(15,23,42,.07)',
           cursor: readOnly && !openOnly ? undefined : 'pointer', touchAction: 'none',
           // See-through while held, so the landing square shows through the
-          // hand — and dimmed for good once the task behind it is closed.
-          opacity: held ? 0.45 : closed ? 0.6 : undefined,
+          // hand. A closed task is a green card with a "done" tag — readable,
+          // never dimmed or struck through.
+          opacity: held ? 0.45 : undefined,
           transition: 'opacity 120ms ease',
         }}
         title={closed
-          ? (early ? 'Finished early — this day was crossed off' : 'Done')
+          ? (early ? 'Finished early — this day was not needed' : 'Done')
           : 'Click to open · drag to another day · hold Ctrl to leave a copy'}
       >
-        {/* The line through a finished day — the record, drawn, not deleted. */}
-        {closed && (
-          <span aria-hidden="true" className="pointer-events-none absolute"
-            style={{
-              left: 4, right: 4, top: '50%',
-              borderTop: `${Math.max(2, z(2.5))}px solid #475569`,
-              transform: 'rotate(-4deg)', opacity: 0.8,
-            }} />
-        )}
         {/* The name, on top and WHOLE. `break-words`, never `truncate` — a
             card whose whole point is saying which job it is must not say
             "Wein…". */}
@@ -2346,7 +2365,7 @@ function PlannerCard({
         )}
 
         {/* "day 2 of 3" — the same task wearing several faces — and, once the
-            task is closed, what this day's line through it means. */}
+            task is closed, the green tag saying what this day means. */}
         {(pill || closed) && (
           <span className="flex items-center justify-center gap-1 mt-0.5">
             {pill && (
@@ -2356,7 +2375,11 @@ function PlannerCard({
               </span>
             )}
             {closed && (
-              <span className="font-semibold" style={{ fontSize: Math.max(z(7), size - z(3)), color: '#64748b' }}>
+              <span data-card-done className="inline-flex items-center rounded-full font-bold" style={{
+                fontSize: Math.max(z(7), size - z(3)), backgroundColor: '#16a34a', color: '#fff',
+                padding: `0 ${Math.max(3, z(4))}px`, gap: 2,
+              }}>
+                <Check size={Math.max(8, Math.round(z(9)))} strokeWidth={3.5} />
                 {early ? (lang === 'he' ? 'הסתיים מוקדם' : lang === 'ru' ? 'закончено раньше' : 'finished early')
                   : (lang === 'he' ? 'בוצע' : lang === 'ru' ? 'готово' : 'done')}
               </span>

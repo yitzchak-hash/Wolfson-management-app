@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Loader2, Maximize2, Play } from 'lucide-react';
-import { driveThumbUrl, fetchPlanBytes } from '../../data/driveApi';
+import { driveThumbUrl, fetchPlanBytes, driveStreamUrl, isDriveStreamUrl } from '../../data/driveApi';
 
 /**
  * A VIDEO as a picture you press (owner, 2026-09-06: "when uploading a video
@@ -14,9 +14,10 @@ import { driveThumbUrl, fetchPlanBytes } from '../../data/driveApi';
  * screen (iPhone Safari has its own door, `webkitEnterFullscreen`).
  *
  * A Drive-only video has no playable address (a web VIEW link is a page,
- * not a stream), so the bytes come down through the app's own
- * /api/drive-fetch on the FIRST press — never before, or opening a thread
- * with six videos in it would download six videos.
+ * not a stream), so it plays from the app's own /api/drive-fetch STREAM on
+ * the FIRST press — never before, or opening a thread with six videos in it
+ * would start six downloads. A stream that is refused falls back to fetching
+ * the whole file once.
  */
 export function VideoTile({ src, driveFileId, filename, mimeType, className = '', maxWidth = 230, onError, onOpen }: {
   /** A playable address — storageUrl, a data URL, a blob URL. */
@@ -42,10 +43,18 @@ export function VideoTile({ src, driveFileId, filename, mimeType, className = ''
   const playable = src || blobUrl || null;
   const poster = !playable && driveFileId ? driveThumbUrl(driveFileId, 800) : null;
 
-  useEffect(() => () => { if (blobUrl) URL.revokeObjectURL(blobUrl); }, [blobUrl]);
+  useEffect(() => () => { if (blobUrl && !isDriveStreamUrl(blobUrl)) URL.revokeObjectURL(blobUrl); }, [blobUrl]);
 
   async function ensureBytes(): Promise<string | null> {
     if (playable) return playable;
+    if (!driveFileId) return null;
+    const stream = driveStreamUrl(driveFileId);
+    if (stream) { setBlobUrl(stream); return stream; }
+    return downloadBytes();
+  }
+
+  /** The whole file into a blob — the fallback when the stream is refused. */
+  async function downloadBytes(): Promise<string | null> {
     if (!driveFileId) return null;
     setLoading(true);
     try {
@@ -104,6 +113,12 @@ export function VideoTile({ src, driveFileId, filename, mimeType, className = ''
           muted={!playing}
           className="absolute inset-0 w-full h-full object-contain"
           onEnded={() => setPlaying(false)}
+          onError={() => {
+            if (!isDriveStreamUrl(blobUrl) || src) return;
+            void downloadBytes().then(url => {
+              if (url && playing) requestAnimationFrame(() => { void videoRef.current?.play().catch(() => undefined); });
+            });
+          }}
         />
       ) : poster ? (
         <img src={poster} alt={filename ?? 'video'} className="absolute inset-0 w-full h-full object-cover opacity-90" />

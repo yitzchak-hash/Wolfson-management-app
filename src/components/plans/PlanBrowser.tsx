@@ -379,11 +379,20 @@ export function PlanBrowser({
               const all: TileFile[] = listing.files.map(x => ({
                 id: x.id, name: x.name, isImage: x.isImage, viewable: x.viewable, mimeType: x.mimeType,
               }));
-              // A markable sheet goes to the pane; everything else opens in
-              // the viewer, so no file in a Drive folder is a dead tile.
-              const open = f.viewable
-                ? () => onPreview(f, folder.name)
-                : onOpenMedia ? () => onOpenMedia(tile, all) : undefined;
+              // A PICTURE or a FILM opens in the swipe viewer with every
+              // picture and film in the folder — never in the plan pane (owner,
+              // 2026-10-05: "pictures should not open up as plan, it should be a
+              // picture viewer where I can slide left and right"). A sheet goes
+              // to the pane; anything else opens in the viewer too, so no file
+              // in a Drive folder is a dead tile. A picture can still be made
+              // the main plan with its star.
+              const kind = mediaKindOf(f.name, f.mimeType);
+              const film = kind === 'image' || kind === 'video';
+              const open = film && onOpenMedia
+                ? () => onOpenMedia(tile, all)
+                : f.viewable
+                  ? () => onPreview(f, folder.name)
+                  : onOpenMedia ? () => onOpenMedia(tile, all) : undefined;
               return (
                 <FileTile
                   key={f.id}

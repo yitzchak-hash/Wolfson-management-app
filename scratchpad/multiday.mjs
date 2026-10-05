@@ -5,7 +5,7 @@
 // (2026-09-15: tasks are drawn from the tasks) → dragging the bar moves the
 // whole task, working-day pattern kept → the worker's portal shows every
 // day, matches Today on any of them, and closing early asks in big words →
-// yes crosses the days off (a struck bar saying "finished early") and moves
+// yes crosses the days off (a green-tagged bar saying "finished early") and moves
 // the job to the when-done stage.
 import { chromium } from 'playwright';
 
@@ -201,18 +201,21 @@ check(!!task.completedAt, 'yes closes the task');
 check(d.apartments.find(a => a.id === 'G-cohen').currentStageId === 'S-done',
   'and the JOB moved itself to the when-done stage');
 
-// ── 5 · the record: the struck bar on the notebook, "finished early" ───────
+// ── 5 · the record: the done bar on the notebook, "finished early" ───────
 await page.goto(`${APP}/jobs`);
 await page.waitForTimeout(3000);
+// Owner, 2026-10-05: done is a green tag on a readable bar — never a line
+// through the words, never dimmed. The record stays; nothing is deleted.
 const struck = await page.evaluate(id => {
   const bar = document.querySelector(`[data-task-bar="${id}"]`);
   const lines = bar ? [...bar.querySelectorAll('span')]
-    .filter(s => (s.getAttribute('style') || '').includes('rotate(-2deg)')).length : 0;
-  return { present: !!bar, lines, opacity: bar ? getComputedStyle(bar).opacity : null,
+    .filter(s => /rotate\(-\d+deg\)/.test(s.getAttribute('style') || '')).length : 0;
+  return { present: !!bar, lines, tag: bar ? bar.querySelectorAll('[data-bar-done]').length : 0,
+    opacity: bar ? getComputedStyle(bar).opacity : null,
     early: bar?.textContent.includes('finished early'), done: bar?.textContent.includes('done') };
 }, task.id);
-check(struck.present && struck.lines === 1 && Number(struck.opacity) < 1,
-  'the bar stays, dimmed and struck — the record, not a deletion', JSON.stringify(struck));
+check(struck.present && struck.lines === 0 && struck.tag === 1 && Number(struck.opacity) === 1,
+  'the bar stays, readable, with a green done tag — the record, not a deletion', JSON.stringify(struck));
 if (futureDays.length) check(struck.early, 'and says "finished early" — its days ran past the close');
 else console.log('SKIP finished-early wording — no days lay ahead of the clock');
 
