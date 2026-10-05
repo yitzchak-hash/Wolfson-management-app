@@ -15,7 +15,7 @@ import {
   Plus, Send, AlertCircle, X, Play, File as FileIcon, MapPin,
   BookOpen, Download, Paperclip, MessageSquare, CloudUpload,
   ChevronLeft, ChevronRight, ChevronDown, History, PenLine, Mic,
-  Settings as SettingsIcon, Bell, Info,
+  Settings as SettingsIcon, Bell, Info, ArrowRightLeft,
 } from 'lucide-react';
 import { BuildingDiagram } from '../components/diagram/BuildingDiagram';
 import { permsOf } from '../data/workerLevels';
@@ -41,6 +41,8 @@ import { Translated, TrText } from '../components/ui/Translated';
 import { installPortalManifest } from '../data/portalManifest';
 import { findPlanSetViaBackend, findAllPlansPdfsViaBackend } from '../data/driveApi';
 import { searchJobs } from '../data/searchIndex';
+import { MoveTaskDialog, workerMoveWords, fill } from '../components/tasks/MoveTaskDialog';
+import { placeLabel } from '../data/taskMove';
 // Lazy — the studio carries pdf.js, and a worker who never opens a plan should
 // not download it (the drawer's precedent).
 const PlanAnnotator = lazy(() =>
@@ -862,6 +864,21 @@ export function ContractorPortal() {
   };
   const [showHistory, setShowHistory] = useState(false);
   /**
+   * "Wrong apartment? Move it" (owner, 2026-10-05) — a worker with the
+   * `moveOwnWork` switch moves HIS OWN task, photos and messages to the
+   * apartment he really worked in. `movedTo` is the short receipt the sheet
+   * shows after, in place of a toast the sheet would cover.
+   */
+  const [movingTask, setMovingTask] = useState(false);
+  const [movedTo, setMovedTo] = useState<string | null>(null);
+  useEffect(() => {
+    if (!movedTo) return;
+    const t = setTimeout(() => setMovedTo(null), 5000);
+    return () => clearTimeout(t);
+  }, [movedTo]);
+  // Another task opened (or the sheet closed): the move belongs to the old one.
+  useEffect(() => { setMovingTask(false); setMovedTo(null); }, [selectedAssignment?.id]);
+  /**
    * The markup studio, for a worker whose level allows it (`markUpPlans`).
    * The Engineered Plans folder is looked up on open so his sketch is filed
    * where the office looks (Annotated Plans INSIDE it); until it answers, the
@@ -1383,9 +1400,11 @@ export function ContractorPortal() {
       userId: contractorId,
       userName: contractor!.name,
       actionType: 'contractor_note',
-      fieldChanged: 'note_added',
+      // A message that is only files records the FILES, so the history can
+      // say "sent a voice memo" or "sent 2 photos" rather than "1 file(s)".
+      fieldChanged: text ? 'note_added' : 'note_files',
       previousValue: '',
-      newValue: text.slice(0, 80) || `${noteAttachments.length} file(s)`,
+      newValue: text.slice(0, 80) || noteAttachments.map(att => att.filename).join(', ').slice(0, 200),
       stageId: selectedAssignment.stageId ?? '',
     });
     setNoteText('');
@@ -1450,7 +1469,8 @@ export function ContractorPortal() {
       actionType: 'contractor_complete',
       fieldChanged: 'completedAt',
       previousValue: '',
-      newValue: completedAt,
+      // The task's own words — the moment is the record's createdAt already.
+      newValue: (liveA.taskDescription ?? '').slice(0, 120),
       stageId: selectedAssignment.stageId ?? '',
     });
     setShowCompleteConfirm(false);
@@ -2756,6 +2776,21 @@ export function ContractorPortal() {
                     )}
                   </div>
                 )}
+                {/* Recorded on the wrong apartment — only HIS OWN work, only
+                    with the switch, never a general job (it has no apartment)
+                    and never a problem (the office's record of a fault). */}
+                {perms.moveOwnWork && a.contractorId === contractorId && !!a.apartmentId && !a.general && !a.problem && apt && (
+                  <button type="button" data-task-move={a.id}
+                    onClick={() => setMovingTask(true)}
+                    className="mt-2.5 inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg border border-[#1e3a5f]/20 bg-[#1e3a5f]/5 text-[#1e3a5f] active:bg-[#1e3a5f]/15">
+                    <ArrowRightLeft size={13} /> {workerMoveWords(s, readLang).mvAction}
+                  </button>
+                )}
+                {movedTo && (
+                  <div data-portal-moved className="mt-2 flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-green-50 border border-green-200 text-green-700">
+                    <CheckCircle2 size={13} /> {fill(workerMoveWords(s, readLang).mvDone, { to: movedTo })}
+                  </div>
+                )}
               </div>
 
               {/* Scrollable content */}
@@ -3425,6 +3460,22 @@ export function ContractorPortal() {
                 )}
               </div>
             )}
+            {movingTask && (
+              <MoveTaskDialog
+                task={a}
+                words={workerMoveWords(s, readLang)}
+                actingUser={workerUser()}
+                onClose={() => setMovingTask(false)}
+                onMoved={to => {
+                  // The sheet keeps the record it was opened with; every
+                  // write it makes after this (a photo, a message, the close)
+                  // must carry the apartment the task is on NOW.
+                  const live = useStore.getState().contractorAssignments.find(x => x.id === a.id);
+                  if (live) setSelectedAssignment(live);
+                  setMovedTo(placeLabel(to));
+                }}
+              />
+            )}
           </>
         );
       })()}
@@ -3502,7 +3553,10 @@ export function ContractorPortal() {
           if (pickedStages.length) {
             let marks: Record<string, StageMark> | undefined = apt.stageMarks;
             for (const ps of pickedStages) if (marks?.[ps.id] !== 'done') marks = setMark(marks, ps.id, 'doing');
-            setApartmentMarks(apt.id, marks, workerUser());
+            // Quiet: the start is ONE line in the history — the task below
+            // logs "started work here — Registers"; a second "started
+            // Registers" beside it would say the same thing twice.
+            setApartmentMarks(apt.id, marks, workerUser(), { quiet: true });
           }
           addContractorAssignment({
             id: rid,

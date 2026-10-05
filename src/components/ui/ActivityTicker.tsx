@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useStore } from '../../data/store';
 import { describeActivity } from '../../data/activityText';
+import { ACTIVITY_UI, foldActivity } from '../../data/activityWords';
 
 /**
  * The live feed, in the top bar.
@@ -20,10 +21,19 @@ import { describeActivity } from '../../data/activityText';
  *
  * Clicking it opens the full log, because the next question after "who did
  * that?" is "what else have they done?".
+ *
+ * It reads the same words and the same consolidation as the log itself
+ * (owner, 2026-10-05: it had been saying "updated the viewed" and "set the
+ * completedAt to 2026-1…"). Five photos in a row are one line, "Igor
+ * uploaded 5 photos", not five turns of the wheel.
  */
 export function ActivityTicker({ light }: { light: boolean }) {
   const activityLogs = useStore(s => s.activityLogs);
   const apartments = useStore(s => s.apartments);
+  const stages = useStore(s => s.stages);
+  const ui = useStore(s => s.mainUiStrings);
+  const lang = ui.isRtl ? 'he' : 'en';
+  const words = ACTIVITY_UI[lang];
   const navigate = useNavigate();
   const [index, setIndex] = useState(0);
   const [pulse, setPulse] = useState(false);
@@ -42,15 +52,17 @@ export function ActivityTicker({ light }: { light: boolean }) {
     return () => clearInterval(t);
   }, []);
 
-  /** Today's changes, newest first — enough to cycle through. */
+  /** Today's changes, newest first and folded — enough to cycle through. */
   const recent = useMemo(() => {
     const cutoff = Date.now() - 12 * 3_600_000;
-    return activityLogs
+    const fresh = activityLogs
       .filter(l => new Date(l.createdAt).getTime() > cutoff)
-      .slice(0, 8);
+      .slice(0, 80);
+    return foldActivity(fresh).slice(0, 8);
   }, [activityLogs]);
 
   // A genuinely new entry flashes once, then the feed settles into cycling.
+  // A run's id is its NEWEST record's, so a sixth photo joining the run is new.
   useEffect(() => {
     const newest = recent[0];
     if (!newest || newest.id === lastSeenId.current) return;
@@ -68,7 +80,7 @@ export function ActivityTicker({ light }: { light: boolean }) {
   }, [recent.length]);
 
   const entry = recent.length ? recent[Math.min(index, recent.length - 1)] : null;
-  const line = entry ? describeActivity(entry, apartments) : null;
+  const line = entry ? describeActivity(entry.logs, apartments, Date.now(), { lang, stages }) : null;
 
   return (
     <button
@@ -76,8 +88,8 @@ export function ActivityTicker({ light }: { light: boolean }) {
       onClick={() => navigate('/activity')}
       className="hidden lg:flex items-center gap-2 min-w-0 max-w-[340px] px-2 py-1 rounded-lg
                  transition-colors hover:bg-white/5"
-      title={line ? `${line.who} ${line.what} · ${line.when} — open the full log`
-                  : 'Nothing has changed today — open the full log'}
+      title={line ? `${line.who} ${line.what} · ${line.when} — ${words.openLog}`
+                  : `${words.nothingToday} — ${words.openLog}`}
     >
       {/* The dot pulses whether or not anything has just landed: a still dot
           says "a label", a beating one says "watching". */}
@@ -92,19 +104,20 @@ export function ActivityTicker({ light }: { light: boolean }) {
 
       <span className="text-[9px] font-extrabold tracking-widest flex-shrink-0"
         style={{ color: light ? '#94a3b8' : '#64748b' }}>
-        LIVE
+        {ui.liveLabel || 'LIVE'}
       </span>
 
       {line ? (
         <span key={(entry?.id ?? '') + index}
-          className="text-[11px] truncate live-ticker-line text-left"
+          data-live-line
+          className="text-[11px] truncate live-ticker-line text-start"
           style={{ color: '#94a3b8' }}>
           <b className="font-semibold">{line.who}</b> {line.what}
           <span style={{ color: light ? '#cbd5e1' : '#475569' }}> · {line.when}</span>
         </span>
       ) : (
         <span className="text-[11px] truncate" style={{ color: light ? '#cbd5e1' : '#475569' }}>
-          nothing yet today
+          {words.nothingToday}
         </span>
       )}
     </button>

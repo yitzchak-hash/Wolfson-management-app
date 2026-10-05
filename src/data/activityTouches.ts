@@ -18,6 +18,7 @@ import type {
   Apartment, ActivityLog, ContractorAssignment, ContractorNote, ContractorPhoto,
   PlanAnnotation, PlanPin, CanvasElement, Contractor,
 } from '../types';
+import { plainSummary } from './activityWords';
 
 export type TouchKind = 'opened' | 'edited' | 'task' | 'message' | 'photo' | 'plan' | 'notebook' | 'drive';
 /** Which chip a touch answers to. */
@@ -84,7 +85,9 @@ export function touchesOf(src: TouchSources, now: number, days: number): Touch[]
   }
   for (const l of src.logs ?? []) {
     if (l.actionType === 'opened') { push(l.apartmentId, l.createdAt, l.userName, 'opened', 'opened the job'); continue; }
-    const what = l.fieldChanged === 'currentStageId' ? `stage → ${l.newValue || 'not started'}`
+    // The set model's stage records say which stages moved, in the log's own words.
+    const what = l.actionType === 'stage_marks' ? plainSummary(l)
+      : l.fieldChanged === 'currentStageId' ? `stage → ${l.newValue || 'not started'}`
       : l.fieldChanged === 'generalNotes' ? 'added a note'
       : l.fieldChanged === 'problem' ? 'raised a problem'
       : l.fieldChanged === 'displayName' ? 'renamed the job'

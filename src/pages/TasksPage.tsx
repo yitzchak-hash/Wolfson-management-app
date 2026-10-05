@@ -7,9 +7,12 @@ import { MessageBox, memoFile } from '../components/ui/MessageBox';
 import { contractorLoad } from '../data/contractorLoad';
 import {
   Plus, Trash2, Save, Edit2, X, CheckCircle2, Clock, Paperclip, ExternalLink, Layers, Filter,
-  List, CalendarDays, Printer, Building2,
+  List, CalendarDays, Printer, Building2, ArrowRightLeft,
 } from 'lucide-react';
 import { BulkAddTaskModal } from '../components/apartment/BulkAddTaskModal';
+import { MoveTaskDialog, officeMoveWords, fill } from '../components/tasks/MoveTaskDialog';
+import { DeleteTaskDialog } from '../components/tasks/DeleteTaskDialog';
+import { placeLabel } from '../data/taskMove';
 import { TaskCalendar, CalendarEvent } from '../components/tasks/TaskCalendar';
 import { TaskDaysPicker, daysFields, taskWrites, splitStringsOf, TaskSplit } from '../components/tasks/TaskDaysPicker';
 import { StagePairPicker, StagePairPill, stagePairStrings } from '../components/tasks/StagePair';
@@ -34,7 +37,7 @@ const CAT_COLORS: Record<ContractorCategory, string> = {
 export function TasksPage() {
   const {
     contractors, contractorAssignments, apartments, stages, buildings,
-    addContractorAssignment, updateContractorAssignment, deleteContractorAssignment,
+    addContractorAssignment, updateContractorAssignment,
     addAssignmentToProject,
     updateApartment, currentUser, mainUiStrings: s, currentProjectId, projects,
     pendingFocus, setPendingFocus,
@@ -75,6 +78,9 @@ export function TasksPage() {
   }
 
   const [view, setView] = useState<'list' | 'calendar'>('list');
+  /** A task on its way to another apartment / about to be deleted (ids; the dialogs re-read the live task). */
+  const [movingTaskId, setMovingTaskId] = useState<string | null>(null);
+  const [deletingTaskId, setDeletingTaskId] = useState<string | null>(null);
   const [filterContractorId, setFilterContractorId] = useState('');
   const [filterBuilding, setFilterBuilding] = useState<string>('all');
   const [filterStage, setFilterStage] = useState('');
@@ -1004,9 +1010,24 @@ export function TasksPage() {
                           <Edit2 size={14} />
                         </button>
                       </Tooltip>
+                      {/* Recorded on the wrong apartment (owner, 2026-10-05) —
+                          a general job has no apartment to move from. */}
+                      {a.apartmentId && !a.general && (
+                        <Tooltip text={currentProjectId === 'general' ? s.mvActionJob : s.mvAction}>
+                          <button
+                            data-task-move={a.id}
+                            onClick={() => setMovingTaskId(a.id)}
+                            aria-label={currentProjectId === 'general' ? s.mvActionJob : s.mvAction}
+                            className="p-2.5 sm:p-1.5 rounded-lg text-gray-400 hover:bg-gray-100 hover:text-[#1e3a5f]"
+                          >
+                            <ArrowRightLeft size={14} />
+                          </button>
+                        </Tooltip>
+                      )}
                       <Tooltip text={s.deleteTask}>
                         <button
-                          onClick={() => { if (confirm(s.deleteTaskConfirm)) { deleteContractorAssignment(a.id); onToast(s.taskDeleted); } }}
+                          data-task-delete={a.id}
+                          onClick={() => setDeletingTaskId(a.id)}
                           className="p-2.5 sm:p-1.5 rounded-lg text-red-400 hover:bg-red-50 hover:text-red-600"
                         >
                           <Trash2 size={14} />
@@ -1128,6 +1149,24 @@ export function TasksPage() {
       </div>
 
       {toast && <Toast message={toast.msg} type={toast.type} onClose={() => setToast(null)} />}
+      {movingTaskId && currentUser && (() => {
+        const t = contractorAssignments.find(x => x.id === movingTaskId);
+        return t ? (
+          <MoveTaskDialog task={t} words={officeMoveWords(s, currentProjectId === 'general')}
+            actingUser={currentUser}
+            onClose={() => setMovingTaskId(null)}
+            onMoved={to => onToast(fill(s.mvDone, { to: placeLabel(to) }))} />
+        ) : null;
+      })()}
+      {deletingTaskId && (() => {
+        const t = contractorAssignments.find(x => x.id === deletingTaskId);
+        return t ? (
+          <DeleteTaskDialog task={t}
+            onClose={() => setDeletingTaskId(null)}
+            onDeleted={() => onToast(s.taskDeleted)}
+            onMoveInstead={currentUser ? () => setMovingTaskId(t.id) : undefined} />
+        ) : null;
+      })()}
       {showBulkAdd && (
         <BulkAddTaskModal
           onClose={() => setShowBulkAdd(false)}

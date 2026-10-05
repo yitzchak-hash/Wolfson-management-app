@@ -16,6 +16,8 @@ import { NodeSettings } from '../components/board/NodeSettings';
 import { WidgetCtx, renderWidget as renderBoardWidget, WIDGET_BY_ID } from '../data/widgets';
 import { printSheet, printEsc } from '../data/printing';
 import { rememberReturn } from '../data/unitTravel';
+import { describeActivity } from '../data/activityText';
+import { foldActivity } from '../data/activityWords';
 import { usePhone } from '../data/usePhone';
 
 type ModalKind = 'changes' | 'notes' | 'total' | 'notStarted' | 'overdue' | 'pending' | 'completedToday' | null;
@@ -61,7 +63,8 @@ export function DashboardPage() {
   const notStarted = apartments.filter(a => isCountableApartment(a) && !a.currentStageId).length;
   const shinuiCount = apartments.filter(a => a.classification === 'shinui' && isCountableApartment(a)).length;
   const withNotes = apartments.filter(a => a.generalNotes.trim() && isCountableApartment(a)).length;
-  const recentLogs = activityLogs.slice(0, 10);
+  // The log's own words and folding: a run of uploads is one line.
+  const recentLogs = useMemo(() => foldActivity(activityLogs.slice(0, 60)).slice(0, 10), [activityLogs]);
 
   const today = new Date().toISOString().split('T')[0];
 
@@ -597,30 +600,26 @@ export function DashboardPage() {
               <p className="text-gray-400 text-sm text-center py-4">{s.noActivity}</p>
             ) : (
               <div className="space-y-2.5 md:space-y-3">
-                {recentLogs.map(log => (
-                  <div key={log.id} className="flex items-start gap-2.5 md:gap-3">
-                    <div className="w-7 h-7 md:w-8 md:h-8 rounded-full bg-[#1e3a5f]/10 flex items-center justify-center text-[#1e3a5f] font-bold text-xs md:text-sm flex-shrink-0">
-                      {(log.userName || s.unknownUser).charAt(0)}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="text-xs md:text-sm">
-                        <span className="font-medium text-gray-800">{log.userName || s.unknownUser}</span>
-                        {' '}
-                        <span className="text-gray-600">
-                          {log.fieldChanged === 'currentStageId'
-                            ? `${s.activityChangedStage} ${s.aptPrefix} ${log.apartmentNumber} (${log.buildingId}): "${log.previousValue}" → "${log.newValue}"`
-                            : log.actionType === 'note'
-                              ? `${s.activityAddedNote} ${s.aptPrefix} ${log.apartmentNumber} (${log.buildingId})`
-                              : `${s.activityUpdatedField} ${log.fieldChanged} ${s.activityOf} ${s.aptPrefix} ${log.apartmentNumber} (${log.buildingId})`
-                          }
-                        </span>
+                {recentLogs.map(g => {
+                  const line = describeActivity(g.logs, allApartments, Date.now(), { lang: s.isRtl ? 'he' : 'en', stages: allStages });
+                  return (
+                    <div key={g.id} className="flex items-start gap-2.5 md:gap-3">
+                      <div className="w-7 h-7 md:w-8 md:h-8 rounded-full bg-[#1e3a5f]/10 flex items-center justify-center text-[#1e3a5f] font-bold text-xs md:text-sm flex-shrink-0">
+                        {(line.who || s.unknownUser).charAt(0)}
                       </div>
-                      <div className="text-[10px] md:text-xs text-gray-400 mt-0.5">
-                        {format(new Date(log.createdAt), 'MMM d, yyyy · HH:mm')}
+                      <div className="flex-1 min-w-0">
+                        <div className="text-xs md:text-sm">
+                          <span className="font-medium text-gray-800">{line.who || s.unknownUser}</span>
+                          {' '}
+                          <span className="text-gray-600">{line.what}</span>
+                        </div>
+                        <div className="text-[10px] md:text-xs text-gray-400 mt-0.5">
+                          {format(new Date(g.newest), 'MMM d, yyyy · HH:mm')}
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>

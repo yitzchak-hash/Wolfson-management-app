@@ -22,7 +22,7 @@ import { BoardRegionPicker } from '../components/board/BoardRegionPicker';
 import { NewWorkspace } from '../components/settings/NewWorkspace';
 import { ToolbarEditor } from '../components/settings/ToolbarEditor';
 import { WorkerLevelsPanel, WorkerLevelPicker, WorkerPermissionOverrides } from '../components/settings/WorkerLevels';
-import { DEFAULT_NEW_WORKER_LEVEL, permsOf, overrideCount, WORKER_PERMISSIONS } from '../data/workerLevels';
+import { DEFAULT_NEW_WORKER_LEVEL, permsOf, overrideCount, WORKER_PERMISSIONS, levelAnswer } from '../data/workerLevels';
 import { getDriveRoot, setDriveRoot, guessRoot } from '../data/drivePath';
 import { useMarkupScale, setMarkupScale } from '../data/markupScale';
 import {
@@ -1118,7 +1118,7 @@ function ContractorsTab({ onToast }: { onToast: (msg: string, type?: 'success' |
                   const toggle = () => {
                     const next = { ...(c.perms ?? {}) };
                     for (const key of ['seeDiagrams', 'seeAllApartments'] as const) {
-                      const fromLevel = !!level?.perms?.[key];
+                      const fromLevel = levelAnswer(level, key);
                       if (!on === fromLevel) delete next[key];
                       else next[key] = !on;
                     }

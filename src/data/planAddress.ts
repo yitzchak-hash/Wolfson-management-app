@@ -7,8 +7,6 @@
  * the line that looks like an address (and the one that looks like a phone
  * number), and renders a CUTOUT image of that part of the sheet big enough to
  * read, so a person confirms against the drawing before anything is written.
- * A scanned plan has no text layer; that is reported honestly rather than
- * guessed at.
  *
  * Hebrew arrives from PDF text layers in every order there is: logical,
  * visual (each run's characters stored right-to-left), and mixtures. Reading
@@ -19,33 +17,67 @@
  * believed; digit and Latin runs are kept forwards when a string is flipped,
  * or "12" becomes "21" in the one field where that matters.
  *
+ * THE HONESTY RULE (owner, 2026-10-05). On A1-12 the drawer offered an
+ * address and a classic sample number that were printed nowhere on the
+ * sheet, and the eye could only show the whole page with no box — "where is
+ * it getting this from? If there's no phone number and there's no address,
+ * it should be empty." So a value is offered ONLY when the app can show
+ * WHERE on the sheet it was read:
+ *  · every value carries a box on the page and a readable cutout of that
+ *    spot, or it is not offered at all;
+ *  · on a sheet WITH a text layer, the vision model's answer must be found in
+ *    that text — the phone digit for digit, the address word for word — and
+ *    the place it was found IS the box; not found means not printed, dropped;
+ *  · on a scan the model must point at the value (a box), and the box must
+ *    hold ink; a value it cannot point at is dropped;
+ *  · sample numbers (054-1234567, 050-0000000 …) and the office's own lines
+ *    are never offered, by either reader.
+ *
  * pdf.js is imported lazily (the planAspect idiom): suggesting an address
  * must never add a megabyte of PDF engine to the main bundle.
  */
 import { fetchPlanBytes } from './driveApi';
-import { aiPlanReadingAvailable, aiReadPlanImage, canvasToJpeg } from './planAi';
+import { aiPlanReadingAvailable, aiReadPlanImage, canvasToJpeg, type Frac } from './planAi';
+import { tokenize } from './hebrewNormalize';
+
+export type { Frac } from './planAi';
 
 export interface PlanAddressResult {
   /** Best-effort text of the address line. The cutout is the ground truth. */
   address?: string;
   /** PNG data URL of the region around it, rendered large enough to read. */
   cutout?: string;
+  /** Where the address sits INSIDE the cutout (fractions of the cutout). */
+  cutoutBox?: Frac;
+  /** Where the address sits on the PAGE (fractions of the first page). */
+  addressBox?: Frac;
+  /** Who read it: the sheet's own text, or the vision model (verified). */
+  addressFrom?: 'text' | 'ai';
   /** Best-effort phone number found on the sheet. */
   phone?: string;
   /** PNG data URL of the region the phone was read from. */
   phoneCutout?: string;
+  /** Where the phone sits INSIDE its cutout. */
+  phoneCutoutBox?: Frac;
+  /** Where the phone sits on the PAGE. */
+  phoneBox?: Frac;
+  phoneFrom?: 'text' | 'ai';
+  /** The whole first page, small — the "where on the sheet" picture. */
+  sheet?: string;
   problem?: 'no-text' | 'no-address' | 'unreachable';
-  /** The family name, when the AI reader found one. */
+  /** The family name — kept only when the model's reading is printed on the sheet. */
   family?: string;
-  /** True when a vision model answered — the address and phone are its reading. */
+  /** True when a vision model answered — whether or not its values survived the check. */
   ai?: boolean;
 }
+
+interface Part { x: number; str: string; w?: number; y?: number; h?: number }
 
 interface Line {
   text: string;
   hebrew: boolean;
   x1: number; y1: number; x2: number; y2: number;
-  parts: { x: number; str: string; w?: number }[];
+  parts: Part[];
 }
 
 const LABEL = /(כתובת|address)/i;
@@ -73,6 +105,64 @@ export function normalizePhoneDigits(s: string): string {
   return d.replace(/[^\d]/g, '');
 }
 
+/**
+ * A SAMPLE number, never a customer's: the run a model (or a template) types
+ * when it has nothing to read — 054-1234567, 123-4567, 050-0000000, 000-0000.
+ * Seven digits climbing or falling by one (a whole subscriber part, 1234567 /
+ * 7654321), or six or more of the same digit; anything too short to be a
+ * phone at all counts too. SEVEN, not six: a real number can hold a run of six
+ * (050-312-3456) and must not be refused for it. The same rule lives in
+ * api/geocode.js — change one, change both.
+ */
+export function isPlaceholderPhone(raw: string): boolean {
+  const d = normalizePhoneDigits(raw);
+  if (d.length < 7) return true;
+  if (/(\d)\1{5,}/.test(d)) return true;
+  let up = 1, down = 1;
+  for (let i = 1; i < d.length; i++) {
+    const a = +d[i - 1], b = +d[i];
+    up = b === a + 1 ? up + 1 : 1;
+    down = b === a - 1 ? down + 1 : 1;
+    if (up >= 7 || down >= 7) return true;
+  }
+  return false;
+}
+
+/**
+ * The office's OWN address lines, never the customer's — every sheet prints
+ * TzviAir's two offices beside the customer block: 9 Nachal Kidron (RBSA) in
+ * Beit Shemesh and the Azrieli Sarona Tower, 121 Derech Menachem Begin, in
+ * Tel Aviv. The same list lives in api/geocode.js — change one, change both.
+ */
+const OFFICE_ADDRESS = [
+  /\bazrieli\b/i, /עזריאלי/,
+  /\bsarona\b/i, /שרונה/,
+  /menachem\s+begin\D{0,8}\b121\b|\b121\b\D{0,16}menachem\s+begin/i,
+  /מנחם\s+בגין\D{0,8}121|121\D{0,16}מנחם\s+בגין/,
+];
+/**
+ * Streets the office SHARES with customers: only the office's own house
+ * number — or no number at all, which is how an office line prints — is the
+ * office. A customer at 14 Nachal Kidron is a customer.
+ */
+const OFFICE_STREETS: { street: RegExp; num: string }[] = [
+  { street: /\bna(?:ch|kh|h)al\s*kidron\b|נחל\s*קדרון/i, num: '9' },
+  { street: /\bderech\s+menachem\s+begin\b|דרך\s+מנחם\s+בגין/i, num: '121' },
+];
+export function isOfficeAddress(s: string): boolean {
+  if (OFFICE_ADDRESS.some(re => re.test(s))) return true;
+  return OFFICE_STREETS.some(({ street, num }) => {
+    if (!street.test(s)) return false;
+    const nums: string[] = s.match(/\d+/g) ?? [];
+    return nums.length === 0 || nums.includes(num);
+  });
+}
+
+/** One of the office's own phone numbers, in any printed form. */
+export function isOfficeNumber(raw: string): boolean {
+  return OWN_NUMBERS.has(normalizePhoneDigits(raw));
+}
+
 /** Strip the label word itself, so "כתובת: הרצל 12" suggests "הרצל 12". */
 /** Whitespace folded, and no stray ':' '+' '-' hanging off either end. */
 export function tidy(s: string): string {
@@ -93,6 +183,8 @@ export function fixVisual(s: string): string {
   return flipped.replace(/[0-9A-Za-z][0-9A-Za-z ./-]*[0-9A-Za-z]|[0-9A-Za-z]/g,
     run => [...run].reverse().join(''));
 }
+
+const flipStr = (s: string) => [...s].reverse().join('');
 
 /**
  * Every plausible reading of a line. A Hebrew line is offered in both run
@@ -115,8 +207,7 @@ function variantsOf(l: Line): string[] {
    * The two recoveries tie on every quality signal, so list order decides,
    * and the pdf.js-shaped one is what the reader actually receives.
    */
-  const flip = (s: string) => [...s].reverse().join('');
-  const out = [rtl, ltr, flip(ltr), fixVisual(ltr), flip(rtl), fixVisual(rtl)];
+  const out = [rtl, ltr, flipStr(ltr), fixVisual(ltr), flipStr(rtl), fixVisual(rtl)];
   return [...new Set(out.filter(Boolean))];
 }
 
@@ -209,6 +300,13 @@ function plausibleAddress(s: string): boolean {
   return s.split(/\s+/).filter(w => w.replace(/[^֐-׿]/g, '').length >= 2).length >= 2;
 }
 
+/** Any printed text that is the office talking about itself — its numbers or its addresses. */
+function officeText(s: string): boolean {
+  if (isOfficeAddress(s)) return true;
+  for (const d of phoneCandidates(s)) if (OWN_NUMBERS.has(d)) return true;
+  return false;
+}
+
 /**
  * Rebuild LINES from positioned glyph runs: group by baseline y (within most
  * of a line height), then keep the runs with their x positions so both
@@ -228,14 +326,15 @@ function buildLines(items: { str: string; transform: number[]; width: number; he
   const lines: Line[] = [];
   for (const r of runs) {
     const line = lines.find(l => Math.abs(l.y1 - r.y) < Math.max(3, r.h * 0.7));
+    const part: Part = { x: r.x, str: r.str, w: r.w, y: r.y, h: r.h };
     if (line) {
       line.x1 = Math.min(line.x1, r.x); line.x2 = Math.max(line.x2, r.x + r.w);
       line.y2 = Math.max(line.y2, r.y + r.h);
-      line.parts.push({ x: r.x, str: r.str, w: r.w });
+      line.parts.push(part);
     } else {
       lines.push({
         text: '', hebrew: false, x1: r.x, y1: r.y, x2: r.x + r.w, y2: r.y + r.h,
-        parts: [{ x: r.x, str: r.str, w: r.w }],
+        parts: [part],
       });
     }
   }
@@ -248,19 +347,308 @@ function buildLines(items: { str: string; transform: number[]; width: number; he
   return lines;
 }
 
+// ── WHERE a value is printed ────────────────────────────────────────────────
+//
+// A line is a y-band across the whole sheet, so it is cut into SEGMENTS at its
+// wide gaps — one phrase each, the title block's value apart from the floor
+// plan's dimension text at the same height. A value is looked for in the
+// segments, and the items that actually hold it are its box.
+
+interface Seg { parts: Part[]; lineH: number; x1: number; x2: number; y1: number; y2: number }
+/** A rectangle in PDF user space (y UP), as pdf.js measures text. */
+interface Rect { x1: number; y1: number; x2: number; y2: number }
+
+function partW(p: Part, lineH: number): number {
+  return p.w && p.w > 0 ? p.w : Math.max(4, p.str.length * lineH * 0.5);
+}
+
+/** One text item's ink, with room for descenders below the baseline. */
+function partRect(p: Part, lineH: number, lineY: number): Rect {
+  const h = p.h ?? lineH;
+  const y = p.y ?? lineY;
+  return { x1: p.x, x2: p.x + partW(p, lineH), y1: y - h * 0.24, y2: y + h };
+}
+
+function unionRect(rs: Rect[]): Rect {
+  return {
+    x1: Math.min(...rs.map(r => r.x1)), x2: Math.max(...rs.map(r => r.x2)),
+    y1: Math.min(...rs.map(r => r.y1)), y2: Math.max(...rs.map(r => r.y2)),
+  };
+}
+
+function segmentsOf(lines: Line[]): Seg[] {
+  const out: Seg[] = [];
+  for (const l of lines) {
+    const lineH = Math.max(4, l.y2 - l.y1);
+    const gapMax = Math.max(24, lineH * 2.2);
+    const ps = [...l.parts].sort((a, b) => a.x - b.x);
+    let cur: Part[] = [];
+    let end = -Infinity;
+    const flush = () => {
+      if (!cur.length) return;
+      const r = unionRect(cur.map(p => partRect(p, lineH, l.y1)));
+      out.push({ parts: cur, lineH, ...r });
+      cur = [];
+    };
+    for (const p of ps) {
+      if (cur.length && p.x - end > gapMax) flush();
+      if (!cur.length) end = -Infinity;
+      cur.push(p);
+      end = Math.max(end, p.x + partW(p, lineH));
+    }
+    flush();
+  }
+  return out;
+}
+
+/**
+ * Every way ONE text item can have come back from pdf.js. Its bidi hands a
+ * Hebrew item back in either character order, and with its digit runs
+ * reversed (a number inside a Hebrew item arrives as "6193-847-250"), so an
+ * item is tried as given, reversed, and with its digit runs turned back both
+ * ways. An item with no Hebrew is exactly what it says.
+ */
+function itemReadings(s: string): string[] {
+  if (!HEB.test(s)) return [s];
+  const f = flipStr(s);
+  return [...new Set([s, f, fixVisual(s), fixVisual(f)])];
+}
+
+/** The readings of a run of items, for numbers that span several of them. */
+function runReadings(parts: Part[]): string[] {
+  const asc = [...parts].sort((a, b) => a.x - b.x);
+  const a = asc.map(p => p.str).join(' ');
+  const b = [...asc].reverse().map(p => p.str).join(' ');
+  const perItem = asc.map(p => (HEB.test(p.str) ? flipStr(p.str) : p.str)).join(' ');
+  const out = new Set([a, b, perItem]);
+  if (HEB.test(a)) for (const s of [a, b]) { out.add(flipStr(s)); out.add(fixVisual(s)); }
+  return [...out];
+}
+
+/**
+ * Every phone-length number a piece of text can hold: each run of digits and
+ * separators, every unbroken stretch of its digit groups, normalised. A
+ * number split across items ("052" "748" "3916"), bracketed ("(052) 748-3916")
+ * or with the next line's digits glued on ("02-628-8282 9 Nachal Kidron") is
+ * still found exactly — and only exactly.
+ */
+export function phoneCandidates(s: string): Set<string> {
+  const out = new Set<string>();
+  for (const m of s.matchAll(/\+?\d[\d\s().\-–]*/g)) {
+    const groups = m[0].match(/\+?\d+/g) ?? [];
+    for (let i = 0; i < groups.length; i++) {
+      let joined = '';
+      for (let j = i; j < groups.length && j < i + 6; j++) {
+        joined += groups[j];
+        const d = normalizePhoneDigits(joined);
+        if (d.length > 13) break;
+        if (d.length >= 7) out.add(d);
+      }
+    }
+  }
+  return out;
+}
+
+/** The smallest run of a segment's items that holds this exact number, or null. */
+function phoneWindow(seg: Seg, digits: string): Part[] | null {
+  const has = (ps: Part[]) => runReadings(ps).some(r => phoneCandidates(r).has(digits));
+  if (!has(seg.parts)) return null;
+  const ps = [...seg.parts].sort((a, b) => a.x - b.x);
+  for (let len = 1; len <= ps.length; len++) {
+    for (let i = 0; i + len <= ps.length; i++) {
+      const w = ps.slice(i, i + len);
+      if (has(w)) return w;
+    }
+  }
+  return ps;
+}
+
+/** Street-type and connector words — they say nothing about WHICH street. */
+const STOP_WORDS = new Set([
+  'רחוב', 'רח', 'שד', 'שדרות', 'דרכ', 'סמטה', 'סמט', 'כתובת', 'address',
+  'st', 'street', 'rd', 'road', 'ave', 'avenue', 'blvd', 'boulevard', 'ln', 'lane',
+]);
+
+/** The words an address must be found by: digits (house numbers) and real words, minus street-type words. */
+function needTokens(value: string): string[] {
+  return [...new Set(tokenize(value))]
+    .filter(t => !STOP_WORDS.has(t) && (/^\d+$/.test(t) || t.length >= 2));
+}
+
+/** Every word on a run of items, in every reading, mapped to the items that carry it. */
+function wordIndex(parts: Part[]): Map<string, Set<Part>> {
+  const m = new Map<string, Set<Part>>();
+  for (const p of parts) {
+    for (const r of itemReadings(p.str)) {
+      for (const t of tokenize(r)) {
+        let s = m.get(t);
+        if (!s) { s = new Set(); m.set(t, s); }
+        s.add(p);
+      }
+    }
+  }
+  return m;
+}
+
+/** One letter added, dropped or changed — a model's "corrected" spelling of a printed word. */
+function oneEditApart(a: string, b: string): boolean {
+  if (a === b) return true;
+  if (Math.abs(a.length - b.length) > 1) return false;
+  let i = 0, j = 0, edits = 0;
+  while (i < a.length && j < b.length) {
+    if (a[i] === b[j]) { i++; j++; continue; }
+    if (++edits > 1) return false;
+    if (a.length > b.length) i++;
+    else if (b.length > a.length) j++;
+    else { i++; j++; }
+  }
+  return edits + (a.length - i) + (b.length - j) <= 1;
+}
+
+/**
+ * How much of a value's words a region carries, by weight (house numbers
+ * count, long words count more than short ones), and which items carry them.
+ * A house number must be found EXACTLY: "נחלת יצחק 12" next to a printed
+ * "דירה 12" shares a number and nothing else.
+ */
+function matchWords(need: string[], idx: Map<string, Set<Part>>) {
+  let total = 0, got = 0, matched = 0;
+  let digitsOk = true;
+  const parts = new Set<Part>();
+  for (const t of need) {
+    const isNum = /^\d+$/.test(t);
+    const w = isNum ? 3 : Math.min(8, t.length);
+    total += w;
+    let hit = idx.get(t);
+    if (!hit && !isNum && t.length >= 4) {
+      for (const [k, ps] of idx) if (!/^\d+$/.test(k) && oneEditApart(k, t)) { hit = ps; break; }
+    }
+    if (hit) { got += w; matched++; hit.forEach(p => parts.add(p)); }
+    else if (isNum) digitsOk = false;
+  }
+  return { score: total ? got / total : 0, parts, digitsOk, matched };
+}
+
+/** Is `b` the line directly under `a`, in the same column? (PDF y grows UP.) */
+function directlyBelow(a: Seg, b: Seg): boolean {
+  const lh = Math.max(a.lineH, b.lineH);
+  const drop = a.y1 - b.y2;
+  if (drop < -lh * 0.3 || drop > lh * 2.4) return false;
+  return Math.min(a.x2, b.x2) - Math.max(a.x1, b.x1) > -12;
+}
+
+interface Found { rect: Rect; lineH: number }
+
+/**
+ * Find a value's WORDS on the sheet — a segment, or a segment and the one
+ * under it (an address that wraps onto a second line) — and box the items
+ * that carry them. Three quarters of its weight, every house number, and at
+ * least `minWords` words must be found; a nearer region wins a tie when a
+ * hint says where to look. A region that is the office's own block never
+ * counts, whatever the words say — answered as 'office' when it was the only
+ * place they were found.
+ */
+function locateWords(
+  value: string, segs: Seg[], hint: { x: number; y: number } | null, minWords: number,
+): Found | 'office' | null {
+  const need = needTokens(value);
+  if (need.length < minWords) return null;
+  const idx = segs.map(s => wordIndex(s.parts));
+  const regions: { ss: Seg[]; ix: Map<string, Set<Part>> }[] = segs.map((s, i) => ({ ss: [s], ix: idx[i] }));
+  // Pairs: each segment with the one directly under it. Sorted top-first, so
+  // the inner walk can stop as soon as it is past the next line's reach.
+  const order = segs.map((_, i) => i).sort((a, b) => segs[b].y2 - segs[a].y2);
+  const tallest = segs.reduce((m, s) => Math.max(m, s.lineH), 4);
+  for (let oi = 0; oi < order.length; oi++) {
+    const a = segs[order[oi]];
+    for (let oj = oi + 1; oj < order.length; oj++) {
+      const b = segs[order[oj]];
+      if (a.y1 - b.y2 > tallest * 2.4) break;
+      if (!directlyBelow(a, b)) continue;
+      const ix = new Map(idx[order[oi]]);
+      for (const [k, ps] of idx[order[oj]]) ix.set(k, new Set([...(ix.get(k) ?? []), ...ps]));
+      regions.push({ ss: [a, b], ix });
+    }
+  }
+  let best = null as null | { parts: Part[]; score: number; d: number; lineH: number };
+  let sawOffice = false;
+  for (const { ss, ix } of regions) {
+    const m = matchWords(need, ix);
+    if (m.score < 0.75 || !m.digitsOk || m.matched < Math.min(need.length, Math.max(minWords, 2))) continue;
+    const parts = [...m.parts];
+    if (parts.some(p => itemReadings(p.str).some(officeText))) { sawOffice = true; continue; }
+    const lineH = Math.max(...ss.map(s => s.lineH));
+    const r = unionRect(parts.map(p => partRect(p, lineH, ss[0].y1)));
+    const d = hint ? Math.hypot((r.x1 + r.x2) / 2 - hint.x, (r.y1 + r.y2) / 2 - hint.y) : 0;
+    const better = !best
+      || m.score > best.score + 1e-9
+      || (Math.abs(m.score - best.score) <= 1e-9 && (parts.length < best.parts.length
+        || (parts.length === best.parts.length && d < best.d)));
+    if (better) best = { parts, score: m.score, d, lineH };
+  }
+  if (!best) return sawOffice ? 'office' : null;
+  const lineH = best.lineH;
+  return { rect: unionRect(best.parts.map(p => partRect(p, lineH, p.y ?? 0))), lineH };
+}
+
+/** Find an exact phone number on the sheet, nearest the hint when it is printed twice. */
+function locatePhone(digits: string, segs: Seg[], hint: { x: number; y: number } | null): Found | null {
+  let best: { rect: Rect; lineH: number; d: number } | null = null;
+  for (const seg of segs) {
+    const win = phoneWindow(seg, digits);
+    if (!win) continue;
+    const rect = unionRect(win.map(p => partRect(p, seg.lineH, seg.y1)));
+    const d = hint ? Math.hypot((rect.x1 + rect.x2) / 2 - hint.x, (rect.y1 + rect.y2) / 2 - hint.y) : 0;
+    if (!best || d < best.d) best = { rect, lineH: seg.lineH, d };
+  }
+  return best ? { rect: best.rect, lineH: best.lineH } : null;
+}
+
+/** A model's box on a scan is a SPOT — small, inside the page, not a sliver. */
+function usableBox(b: Frac | null | undefined): Frac | null {
+  if (!b) return null;
+  const f = {
+    x0: Math.max(0, Math.min(b.x0, b.x1)), y0: Math.max(0, Math.min(b.y0, b.y1)),
+    x1: Math.min(1, Math.max(b.x0, b.x1)), y1: Math.min(1, Math.max(b.y0, b.y1)),
+  };
+  const w = f.x1 - f.x0, h = f.y1 - f.y0;
+  if (w < 0.004 || h < 0.003 || w > 0.6 || h > 0.25) return null;
+  return f;
+}
+
+/** The share of a box on a rendered page that is INK — a box over blank paper points at nothing. */
+function inkShare(canvas: HTMLCanvasElement, b: Frac): number {
+  const g = canvas.getContext('2d');
+  if (!g) return 0;
+  const x = Math.max(0, Math.floor(b.x0 * canvas.width));
+  const y = Math.max(0, Math.floor(b.y0 * canvas.height));
+  const w = Math.max(1, Math.min(canvas.width - x, Math.ceil((b.x1 - b.x0) * canvas.width)));
+  const h = Math.max(1, Math.min(canvas.height - y, Math.ceil((b.y1 - b.y0) * canvas.height)));
+  const data = g.getImageData(x, y, w, h).data;
+  let dark = 0;
+  for (let i = 0; i < data.length; i += 4) {
+    if (0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2] < 150) dark++;
+  }
+  return dark / (w * h);
+}
+const MIN_INK = 0.012;
+
 /**
  * The pick-it-yourself session: the whole first page rendered once, and a
  * `read` that answers "what does the text under THIS box say?" through the
  * same line model and Hebrew-order machinery as the automatic read. Exists
  * because the automatic read is a guess over an arbitrary title block, and
  * when it guesses wrong the fix is a human pointing at the right spot — not
- * a smarter guess.
+ * a smarter guess. On a scan there is no text to read, and only the vision
+ * model can read the box (`hasText: false`).
  */
 export interface RegionReader {
   /** PNG data URL of the whole first page. */
   image: string;
   /** That image's pixel size. */
   w: number; h: number;
+  /** False on a scan: `read` always answers '' and only the AI can read a box. */
+  hasText: boolean;
   /** The text inside a box, corners as FRACTIONS of the image (x across, y down). */
   read(r: { x0: number; y0: number; x1: number; y1: number }): string;
   /** A JPEG of that box, enlarged — what the AI reader is shown. */
@@ -287,8 +675,10 @@ export async function openRegionReader(fileId: string): Promise<RegionReader | n
     const items = (content.items as {
       str: string; transform: number[]; width: number; height: number;
     }[]).filter(it => it.str && it.str.trim());
-    if (items.length < 5) { void doc.destroy().catch(() => {}); return null; }
-    const lines = buildLines(items).sort((a, b) => b.y1 - a.y1);   // top of the sheet first
+    const hasText = items.length >= 5;
+    // A scan is only worth a picker when a model can read the box.
+    if (!hasText && !aiPlanReadingAvailable()) { void doc.destroy().catch(() => {}); return null; }
+    const lines = hasText ? buildLines(items).sort((a, b) => b.y1 - a.y1) : [];   // top of the sheet first
 
     // The whole sheet, as large as a canvas will take (area-capped — a
     // refused canvas is a blank picker, the standing cutout rule).
@@ -308,9 +698,10 @@ export async function openRegionReader(fileId: string): Promise<RegionReader | n
     const w = canvas.width, h = canvas.height;
 
     return {
-      image, w, h,
+      image, w, h, hasText,
       crop(r) { return canvasToJpeg(canvas, r); },
       read(r) {
+        if (!hasText) return '';
         // Image fractions -> PDF user space, through the render viewport (y
         // flips there; convertToPdfPoint owns that arithmetic).
         const a = vp.convertToPdfPoint(r.x0 * w, r.y0 * h);
@@ -343,6 +734,8 @@ export async function openRegionReader(fileId: string): Promise<RegionReader | n
 
 const cache = new Map<string, PlanAddressResult>();
 const inFlight = new Map<string, Promise<PlanAddressResult>>();
+/** Results hold page pictures; a long day of plans must not keep them all. */
+const CACHE_MAX = 40;
 
 export function readPlanAddress(fileId: string): Promise<PlanAddressResult> {
   const hit = cache.get(fileId);
@@ -350,12 +743,19 @@ export function readPlanAddress(fileId: string): Promise<PlanAddressResult> {
   const going = inFlight.get(fileId);
   if (going) return going;
   const p = readNow(fileId)
-    .then(r => { cache.set(fileId, r); return r; })
+    .then(r => {
+      if (cache.size >= CACHE_MAX) cache.delete(cache.keys().next().value as string);
+      cache.set(fileId, r);
+      return r;
+    })
     .catch(() => ({ problem: 'unreachable' as const }))
     .finally(() => inFlight.delete(fileId));
   inFlight.set(fileId, p);
   return p;
 }
+
+/** A value and where it is — page fractions, plus the text height there (page units). */
+interface Spot { value: string; box: Frac; lineH: number; from: 'text' | 'ai' }
 
 async function readNow(fileId: string): Promise<PlanAddressResult> {
   let bytes: ArrayBuffer;
@@ -379,12 +779,30 @@ async function readNow(fileId: string): Promise<PlanAddressResult> {
     }[]).filter(it => it.str && it.str.trim());
 
     // A scan has no text layer — a handful of stray marks is the same thing.
-    if (items.length < 5) return { problem: 'no-text' };
+    // Without a vision model there is nothing to read it with.
+    const hasText = items.length >= 5;
+    if (!hasText && !aiPlanReadingAvailable()) return { problem: 'no-text' };
 
-    const lines = buildLines(items);
+    /** The page at scale 1 — every box is a fraction of THIS (rotation included). */
+    const vp1 = page.getViewport({ scale: 1 });
+    const W1 = vp1.width, H1 = vp1.height;
+    const toFrac = (r: Rect): Frac => {
+      const [ax, ay, bx, by] = vp1.convertToViewportRectangle([r.x1, r.y1, r.x2, r.y2]);
+      return {
+        x0: Math.max(0, Math.min(ax, bx) / W1), y0: Math.max(0, Math.min(ay, by) / H1),
+        x1: Math.min(1, Math.max(ax, bx) / W1), y1: Math.min(1, Math.max(ay, by) / H1),
+      };
+    };
+    /** A page-fraction point back into PDF user space, for "nearest to" hints. */
+    const toPdf = (f: Frac) => {
+      const [x, y] = vp1.convertToPdfPoint(((f.x0 + f.x1) / 2) * W1, ((f.y0 + f.y1) / 2) * H1);
+      return { x, y };
+    };
 
-    const view = page.getViewport({ scale: 1 });
-    const pageH = view.viewBox[3] - view.viewBox[1];
+    const lines = hasText ? buildLines(items) : [];
+    const segs = hasText ? segmentsOf(lines) : [];
+
+    const pageH = vp1.viewBox[3] - vp1.viewBox[1];
     /** Title blocks live low on the sheet; PDF y grows upward. */
     const titleBlockBonus = (l: Line) => (l.y1 < pageH / 3 ? 10 : 0);
 
@@ -428,6 +846,10 @@ async function readNow(fileId: string): Promise<PlanAddressResult> {
       // Mostly digits is a number wearing a street word, not an address —
       // and "בניין 2 דירה 5" is the UNIT, not the street.
       if (digitShare(clean) > 0.55 || PHONE.test(clean) || unitLabelOnly(clean)) return;
+      // Nor is the office describing itself — its address or its number.
+      // Judged on the VALUE, not the band: a band runs the width of the
+      // sheet, and the office block can share a baseline with the customer.
+      if (officeText(clean)) return;
       score += titleBlockBonus(l);
       if (!bestAddr || score > bestAddr.score) bestAddr = { line: l, extra, text: clean, score };
     });
@@ -444,6 +866,9 @@ async function readNow(fileId: string): Promise<PlanAddressResult> {
         let hitAny = false;
         for (const raw of all) {
           if (OWN_NUMBERS.has(normalizePhoneDigits(raw))) continue;   // the office calling itself
+          // A sample number is never the customer's, even printed (a
+          // template left unfilled says 050-1234567 as readily as a model).
+          if (isPlaceholderPhone(raw)) continue;
           hitAny = true;
           let score = 50;
           if (PHONE_LABEL.test(v)) score += 50;
@@ -457,57 +882,116 @@ async function readNow(fileId: string): Promise<PlanAddressResult> {
       }
     });
 
-    /**
-     * The cutout: the found line with generous surroundings, rendered at a
-     * scale that makes the words genuinely readable — never a thumbnail of
-     * the whole sheet.
-     */
-    const cutoutOf = async (line: Line, extra?: Line): Promise<string | undefined> => {
-      let rx1 = Math.min(line.x1, extra?.x1 ?? line.x1);
-      let rx2 = Math.max(line.x2, extra?.x2 ?? line.x2);
-      const ry1 = Math.min(line.y1, extra?.y1 ?? line.y1);
-      const ry2 = Math.max(line.y2, extra?.y2 ?? line.y2);
-      const lineH = Math.max(8, ry2 - ry1);
-      /**
-       * TIGHT, never a strip of the whole sheet. A "line" is a y-band across
-       * the page, so its box can span the full width with scenery in it —
-       * which rendered as "a strip of the whole screen" (the owner). Crop to
-       * the LABEL'S COLUMN when the band carries one (the value lives there),
-       * and failing that cap the width around the band's middle.
-       */
-      const lp = [...line.parts, ...(extra?.parts ?? [])]
-        .find(pt => LABEL.test(pt.str) || PHONE_LABEL.test(pt.str));
-      if (lp) {
-        const cx = lp.x + (lp.w ?? 40) / 2;
-        rx1 = Math.max(rx1, cx - 240);
-        rx2 = Math.min(rx2, cx + 240);
-      }
-      if (rx2 - rx1 > 520) {
-        const mid = (rx1 + rx2) / 2;
-        rx1 = mid - 260; rx2 = mid + 260;
-      }
-      const [px1, py1, px2, py2] = view.viewBox;
-      const cx1 = Math.max(px1, rx1 - 24);
-      const cx2 = Math.min(px2, rx2 + 24);
-      const cy1 = Math.max(py1, ry1 - lineH * 1.4);
-      const cy2 = Math.min(py2, ry2 + lineH * 1.4);
+    /** Where the reader found it, for "the nearest of two printings" — PDF space. */
+    const lineCentre = (l: Line, extra?: Line) => ({
+      x: (Math.min(l.x1, extra?.x1 ?? l.x1) + Math.max(l.x2, extra?.x2 ?? l.x2)) / 2,
+      y: (Math.min(l.y1, extra?.y1 ?? l.y1) + Math.max(l.y2, extra?.y2 ?? l.y2)) / 2,
+    });
 
-      let scale = Math.min(8, Math.max(2, 1000 / Math.max(1, cx2 - cx1)));
+    // The local finds are matched back to the items that carry them — the
+    // same locating the model's answers go through — and that is their box.
+    // A find that cannot be placed is not offered: no location, no suggestion.
+    let addr: Spot | null = null;
+    let phone: Spot | null = null;
+    const ba = bestAddr as { line: Line; extra?: Line; text: string } | null;
+    const bp = bestPhone as { line: Line; text: string } | null;
+    if (ba) {
+      const at = locateWords(ba.text, segs, lineCentre(ba.line, ba.extra), 1);
+      if (at && at !== 'office') addr = { value: ba.text, box: toFrac(at.rect), lineH: at.lineH, from: 'text' };
+    }
+    if (bp) {
+      const at = locatePhone(normalizePhoneDigits(bp.text), segs, lineCentre(bp.line));
+      if (at) phone = { value: bp.text, box: toFrac(at.rect), lineH: at.lineH, from: 'text' };
+    }
+
+    const out: PlanAddressResult = {};
+
+    // THE AI READ (owner, 2026-09-07): when the server has a key, the whole
+    // first page goes to a vision model, and a VERIFIED answer wins — a
+    // heuristic over an arbitrary title block will always lose some of the
+    // time, and the model reads the block the way a person does. Verified is
+    // the 2026-10-05 rule: printed on THIS sheet, found where it is printed.
+    let pageCanvas: HTMLCanvasElement | null = null;
+    if (aiPlanReadingAvailable()) {
+      try {
+        const scale = Math.min(2, 1800 / Math.max(W1, H1));
+        const vp = page.getViewport({ scale });
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.round(vp.width); canvas.height = Math.round(vp.height);
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+          await page.render({ canvasContext: ctx, viewport: vp } as never).promise;
+          pageCanvas = canvas;
+          const ai = await aiReadPlanImage(canvasToJpeg(canvas, undefined, 1800), 'both', false, { scan: !hasText });
+          if (ai) {
+            out.ai = true;
+            const aiAddr = tidy(ai.address);
+            if (aiAddr && plausibleAddress(aiAddr) && !isOfficeAddress(aiAddr) && !unitLabelOnly(aiAddr)) {
+              if (hasText) {
+                const at = locateWords(aiAddr, segs, ai.addressBox ? toPdf(ai.addressBox) : null, 2);
+                if (at && at !== 'office') addr = { value: aiAddr, box: toFrac(at.rect), lineH: at.lineH, from: 'ai' };
+              } else {
+                const b = usableBox(ai.addressBox);
+                if (b && inkShare(canvas, b) >= MIN_INK) addr = { value: aiAddr, box: b, lineH: 0, from: 'ai' };
+              }
+            }
+            const aiPhone = tidy(ai.phone);
+            const digits = normalizePhoneDigits(aiPhone);
+            if (aiPhone && digits.length >= 7 && digits.length <= 13
+                && !OWN_NUMBERS.has(digits) && !isPlaceholderPhone(aiPhone)) {
+              if (hasText) {
+                const at = locatePhone(digits, segs, ai.phoneBox ? toPdf(ai.phoneBox) : null);
+                if (at) phone = { value: aiPhone, box: toFrac(at.rect), lineH: at.lineH, from: 'ai' };
+              } else {
+                const b = usableBox(ai.phoneBox);
+                if (b && inkShare(canvas, b) >= MIN_INK) phone = { value: aiPhone, box: b, lineH: 0, from: 'ai' };
+              }
+            }
+            // The family name is checked the same way, or it is not kept.
+            const fam = tidy(ai.family);
+            const famAt = fam && hasText ? locateWords(fam, segs, null, 1) : null;
+            if (famAt && famAt !== 'office') out.family = fam;
+          }
+        }
+      } catch { /* the local read stands */ }
+    }
+
+    /**
+     * The cutout: the value's box with generous surroundings — the label
+     * beside or above it, the line under it — rendered at a scale that makes
+     * the words genuinely readable; and where the value sits INSIDE that
+     * picture, so the eye can draw the box on it. Never a strip of the whole
+     * sheet: the width is capped around the value.
+     */
+    const cutoutOf = async (spot: Spot): Promise<{ image: string; inner: Frac } | null> => {
+      const bw = (spot.box.x1 - spot.box.x0) * W1;
+      const bh = (spot.box.y1 - spot.box.y0) * H1;
+      const lh = Math.max(6, spot.lineH || bh);
+      const padY = Math.max(lh * 1.6, 10);
+      const padX = Math.max(60, bw * 0.35);
+      let cx0 = spot.box.x0 * W1 - padX, cx1 = spot.box.x1 * W1 + padX;
+      const cap = Math.max(bw + 40, 620);
+      if (cx1 - cx0 > cap) {
+        const mid = ((spot.box.x0 + spot.box.x1) / 2) * W1;
+        cx0 = mid - cap / 2; cx1 = mid + cap / 2;
+      }
+      let cy0 = spot.box.y0 * H1 - padY, cy1 = spot.box.y1 * H1 + padY;
+      cx0 = Math.max(0, cx0); cx1 = Math.min(W1, cx1);
+      cy0 = Math.max(0, cy0); cy1 = Math.min(H1, cy1);
+      const cw = cx1 - cx0, ch = cy1 - cy0;
+      if (cw < 2 || ch < 2) return null;
+
+      let scale = Math.min(8, Math.max(2, 1000 / cw));
       // A refused canvas is a blank cutout — cap the AREA, not just the scale.
       const MAX_AREA = 4_000_000;
-      if ((cx2 - cx1) * (cy2 - cy1) * scale * scale > MAX_AREA) {
-        scale = Math.sqrt(MAX_AREA / ((cx2 - cx1) * (cy2 - cy1)));
-      }
+      if (cw * ch * scale * scale > MAX_AREA) scale = Math.sqrt(MAX_AREA / (cw * ch));
       const vp = page.getViewport({ scale });
-      const [vx1, vy1a, vx2, vy2a] = vp.convertToViewportRectangle([cx1, cy1, cx2, cy2]);
-      const left = Math.min(vx1, vx2), top = Math.min(vy1a, vy2a);
-      const w = Math.abs(vx2 - vx1), h = Math.abs(vy2a - vy1a);
-
       const canvas = document.createElement('canvas');
-      canvas.width = Math.max(1, Math.round(w));
-      canvas.height = Math.max(1, Math.round(h));
+      canvas.width = Math.max(1, Math.round(cw * scale));
+      canvas.height = Math.max(1, Math.round(ch * scale));
       const ctx = canvas.getContext('2d');
-      if (!ctx) return undefined;
+      if (!ctx) return null;
       ctx.fillStyle = '#ffffff';
       ctx.fillRect(0, 0, canvas.width, canvas.height);
       await page.render({
@@ -516,33 +1000,41 @@ async function readNow(fileId: string): Promise<PlanAddressResult> {
         // Device-space shift so the crop lands at the canvas origin — the
         // standard pdf.js crop trick; a full-page render at this scale could be
         // a canvas the browser refuses.
-        transform: [1, 0, 0, 1, -left, -top],
+        transform: [1, 0, 0, 1, -cx0 * scale, -cy0 * scale],
       } as never).promise;
-      return canvas.toDataURL('image/png');
+      const clamp01 = (v: number) => Math.min(1, Math.max(0, v));
+      return {
+        image: canvas.toDataURL('image/png'),
+        inner: {
+          x0: clamp01((spot.box.x0 * W1 - cx0) / cw), y0: clamp01((spot.box.y0 * H1 - cy0) / ch),
+          x1: clamp01((spot.box.x1 * W1 - cx0) / cw), y1: clamp01((spot.box.y1 * H1 - cy0) / ch),
+        },
+      };
     };
 
-    const out: PlanAddressResult = {};
-    const ba = bestAddr as { line: Line; extra?: Line; text: string } | null;
-    const bp = bestPhone as { line: Line; text: string } | null;
-    if (ba) {
-      out.address = ba.text;
-      out.cutout = await cutoutOf(ba.line, ba.extra).catch(() => undefined);
+    // No location, no suggestion: a value whose spot cannot be drawn is not offered.
+    if (addr) {
+      const c = await cutoutOf(addr).catch(() => null);
+      if (c) {
+        out.address = addr.value; out.cutout = c.image; out.cutoutBox = c.inner;
+        out.addressBox = addr.box; out.addressFrom = addr.from;
+      }
     }
-    if (bp) {
-      out.phone = bp.text;
-      out.phoneCutout = await cutoutOf(bp.line).catch(() => undefined);
+    if (phone) {
+      const c = await cutoutOf(phone).catch(() => null);
+      if (c) {
+        out.phone = phone.value; out.phoneCutout = c.image; out.phoneCutoutBox = c.inner;
+        out.phoneBox = phone.box; out.phoneFrom = phone.from;
+      }
     }
 
-    // THE AI READ (owner, 2026-09-07): when the server has a key, the whole
-    // first page goes to a vision model and ITS answer wins — a heuristic
-    // over an arbitrary title block will always lose some of the time, and
-    // the model reads the block the way a person does. The local cutouts
-    // stay as the eye's picture when they agree; the page itself stands in
-    // when the model found something the text layer had not.
-    if (aiPlanReadingAvailable()) {
-      try {
-        const base = page.getViewport({ scale: 1 });
-        const scale = Math.min(2, 1800 / Math.max(base.width, base.height));
+    if (!out.address && !out.phone) return { ...out, problem: hasText ? 'no-address' : 'no-text' };
+
+    // The whole sheet, small — the eye frames WHERE on it the value was read.
+    try {
+      let src = pageCanvas;
+      if (!src) {
+        const scale = Math.min(1.5, 1000 / Math.max(W1, H1));
         const vp = page.getViewport({ scale });
         const canvas = document.createElement('canvas');
         canvas.width = Math.round(vp.width); canvas.height = Math.round(vp.height);
@@ -550,27 +1042,14 @@ async function readNow(fileId: string): Promise<PlanAddressResult> {
         if (ctx) {
           ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, canvas.width, canvas.height);
           await page.render({ canvasContext: ctx, viewport: vp } as never).promise;
-          const ai = await aiReadPlanImage(canvasToJpeg(canvas, undefined, 1800), 'both', false);
-          if (ai) {
-            out.ai = true;
-            if (ai.address) {
-              if (ai.address !== out.address) out.cutout = out.address && tidy(out.address) === tidy(ai.address) ? out.cutout : canvas.toDataURL('image/jpeg', 0.8);
-              out.address = ai.address;
-            }
-            if (ai.phone) {
-              if (ai.phone !== out.phone) out.phoneCutout = out.phone && out.phone.replace(/\D/g, '') === ai.phone.replace(/\D/g, '') ? out.phoneCutout : canvas.toDataURL('image/jpeg', 0.8);
-              out.phone = ai.phone;
-            }
-            if (ai.family) out.family = ai.family;
-          }
+          src = canvas;
         }
-      } catch { /* the local read stands */ }
-    }
+      }
+      if (src) out.sheet = canvasToJpeg(src, undefined, 1000);
+    } catch { /* the cutout alone still frames the spot */ }
 
-    if (!out.address && !out.phone) return { problem: 'no-address' };
     return out;
   } finally {
     void doc.destroy().catch(() => {});
   }
 }
-

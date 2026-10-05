@@ -1,9 +1,18 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Eye, Loader2, Plus, SquareDashedMousePointer, X } from 'lucide-react';
-import { readPlanAddress, openRegionReader, PlanAddressResult, RegionReader, tidy } from '../../data/planAddress';
-import { aiPlanReadingAvailable, aiReadPlanImage } from '../../data/planAi';
+import {
+  readPlanAddress, openRegionReader, PlanAddressResult, RegionReader, tidy,
+  isOfficeAddress, isOfficeNumber, isPlaceholderPhone,
+} from '../../data/planAddress';
+import { aiPlanReadingAvailable, aiReadPlanImage, type Frac } from '../../data/planAi';
 
-type Frac = { x0: number; y0: number; x1: number; y1: number };
+/** A fraction box as CSS percentages, for an overlay laid over the picture it describes. */
+const pctBox = (b: Frac): React.CSSProperties => ({
+  left: `${Math.min(b.x0, b.x1) * 100}%`,
+  top: `${Math.min(b.y0, b.y1) * 100}%`,
+  width: `${Math.abs(b.x1 - b.x0) * 100}%`,
+  height: `${Math.abs(b.y1 - b.y0) * 100}%`,
+});
 
 /**
  * "Pick it on the plan" — the human override for a reader that guessed wrong.
@@ -14,7 +23,8 @@ type Frac = { x0: number; y0: number; x1: number; y1: number };
  * finger lifts — draw again to redraw, drag inside the box to move it, and
  * Use writes it to the field. Exists because an arbitrary title block will
  * always beat a heuristic some of the time, and the fix for a wrong guess is
- * a person pointing, not a smarter guess.
+ * a person pointing, not a smarter guess. On a scan (no text to read) the
+ * vision model reads the box, when the server has one.
  */
 function RegionPicker({ fileId, kind, onUse, onClose }: {
   fileId: string;
@@ -88,6 +98,12 @@ function RegionPicker({ fileId, kind, onUse, onClose }: {
   }
   const [aiBusy, setAiBusy] = useState(false);
   const readSeq = useRef(0);
+  /** The model's reading of a box, minus what is never a customer's: sample numbers, the office's own lines. */
+  const keepAi = (v: string) => {
+    if (!v) return '';
+    if (kind === 'phone') return isPlaceholderPhone(v) || isOfficeNumber(v) ? '' : v;
+    return isOfficeAddress(v) ? '' : v;
+  };
   function onUp() {
     const g = gesture.current;
     gesture.current = null;
@@ -99,15 +115,17 @@ function RegionPicker({ fileId, kind, onUse, onClose }: {
       setReadText(local);
       // With an AI key on the server the CROP goes to the model, which reads
       // exactly what is inside the box — the text layer is the fallback.
+      const seq = ++readSeq.current;
       if (aiPlanReadingAvailable()) {
-        const seq = ++readSeq.current;
         setAiBusy(true);
         void aiReadPlanImage(readerRef.current.crop(b), kind, true).then(ai => {
           if (seq !== readSeq.current) return;
           setAiBusy(false);
-          const v = ai ? tidy(kind === 'address' ? ai.address : ai.phone) : '';
+          const v = ai ? keepAi(tidy(kind === 'address' ? ai.address : ai.phone)) : '';
           if (v) setReadText(v);
         });
+      } else {
+        setAiBusy(false);
       }
     } else {
       setBox(null);   // a stray tap is not a box
@@ -115,12 +133,7 @@ function RegionPicker({ fileId, kind, onUse, onClose }: {
     }
   }
 
-  const bx = box && {
-    left: `${Math.min(box.x0, box.x1) * 100}%`,
-    top: `${Math.min(box.y0, box.y1) * 100}%`,
-    width: `${Math.abs(box.x1 - box.x0) * 100}%`,
-    height: `${Math.abs(box.y1 - box.y0) * 100}%`,
-  };
+  const bx = box && pctBox(box);
 
   return (
     <>
@@ -185,6 +198,10 @@ function RegionPicker({ fileId, kind, onUse, onClose }: {
                 {kind === 'address' ? 'Use this address' : 'Use this number'}
               </button>
             </>
+          ) : aiBusy ? (
+            <span className="text-[11.5px] text-gray-500 flex-1 min-w-0 flex items-center gap-1.5">
+              <Loader2 size={12} className="animate-spin" /> Reading the box…
+            </span>
           ) : (
             <span className="text-[11.5px] text-amber-600 flex-1 min-w-0">
               Nothing readable under the box — draw it a little wider around the words.
@@ -209,9 +226,12 @@ function RegionPicker({ fileId, kind, onUse, onClose }: {
  * `readPlanAddress`, so the address row and the phone row cost one read
  * between them). The suggestion is never written silently: the eye opens the
  * CUTOUT of the sheet — the exact part of the drawing the value was read
- * from, rendered big enough to read — and only the plus writes it. The
- * picture is the ground truth; the text is a convenience an odd title block
- * can get wrong, which is the whole reason the secretary confirms.
+ * from, rendered big enough to read, with a box drawn round the value — and
+ * the whole sheet beside it with the same spot boxed, so it is plain WHERE
+ * on the plan the value is printed. A value the reader cannot place is not
+ * offered at all (owner, 2026-10-05: "where is it getting this from? … If
+ * there's no phone number and there's no address, it should be empty").
+ * Only the plus writes it.
  */
 export function PlanAddressSuggest({ fileId, kind, current, onUse }: {
   fileId: string | null;
@@ -236,14 +256,28 @@ export function PlanAddressSuggest({ fileId, kind, current, onUse }: {
     return () => { dead = true; };
   }, [fileId]);
 
+  // Escape backs out of the popup alone — never the job window behind it.
+  useEffect(() => {
+    if (!peek) return;
+    const key = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      e.stopImmediatePropagation(); e.preventDefault(); setPeek(false);
+    };
+    window.addEventListener('keydown', key, true);
+    return () => window.removeEventListener('keydown', key, true);
+  }, [peek]);
+
   if (!fileId) return null;
 
   const found = kind === 'address' ? result?.address : result?.phone;
   const cutout = kind === 'address' ? result?.cutout : result?.phoneCutout;
+  const cutBox = kind === 'address' ? result?.cutoutBox : result?.phoneCutoutBox;
+  const pageBox = kind === 'address' ? result?.addressBox : result?.phoneBox;
+  const sheet = result?.sheet;
   const isNew = !!found && found.trim() !== current.trim();
 
-  // Nothing found, nothing said — the field was going to be typed anyway.
-  if (status === 'done' && !found) return null;
+  // Nothing found — or nothing the reader can SHOW on the sheet — nothing said.
+  if (status === 'done' && (!found || !cutout)) return null;
 
   return (
     <div className="mt-1" data-plan-address data-plan-read={kind}>
@@ -258,17 +292,15 @@ export function PlanAddressSuggest({ fileId, kind, current, onUse }: {
           <span className="font-semibold" style={{ color: '#15803d' }}>
             On the plan: <span dir="auto">{found}</span>
           </span>
-          {cutout && (
-            <button
-              type="button"
-              data-plan-address-eye
-              onClick={() => setPeek(true)}
-              title="See this part of the plan"
-              className="p-0.5 rounded text-gray-400 hover:text-[#1e3a5f] hover:bg-gray-100"
-            >
-              <Eye size={13} />
-            </button>
-          )}
+          <button
+            type="button"
+            data-plan-address-eye
+            onClick={() => setPeek(true)}
+            title="See where on the plan this was read"
+            className="p-0.5 rounded text-gray-400 hover:text-[#1e3a5f] hover:bg-gray-100"
+          >
+            <Eye size={13} />
+          </button>
           {isNew && (
             <button
               type="button"
@@ -284,12 +316,13 @@ export function PlanAddressSuggest({ fileId, kind, current, onUse }: {
         </span>
       )}
 
-      {/* The cutout, big. Above the drawer (z-120), like everything it opens. */}
+      {/* The cutout, big, with the value boxed — and the whole sheet with the
+          same spot boxed. Above the drawer (z-120), like everything it opens. */}
       {peek && cutout && (
         <>
           <div className="fixed inset-0 z-[139]" style={{ backgroundColor: 'rgba(15,23,42,.55)' }}
             onClick={() => setPeek(false)} />
-          <div className="fixed z-[140] rounded-2xl bg-white overflow-hidden flex flex-col"
+          <div data-plan-source-popup className="fixed z-[140] rounded-2xl bg-white overflow-hidden flex flex-col"
             style={{
               left: '50%', top: '50%', transform: 'translate(-50%,-50%)',
               maxWidth: 'min(760px, 94vw)', maxHeight: '86vh',
@@ -303,9 +336,34 @@ export function PlanAddressSuggest({ fileId, kind, current, onUse }: {
                 <X size={16} />
               </button>
             </div>
-            <div className="overflow-auto p-3 bg-slate-50">
-              <img src={cutout} alt="The part of the plan this was read from"
-                className="max-w-full rounded-lg border border-gray-200 bg-white" />
+            <div className="overflow-auto p-3 bg-slate-50 flex flex-col items-center gap-3">
+              {/* The spot, close up: the wrapper hugs the picture so the box's
+                  fractions are the picture's. */}
+              <div className="relative inline-block max-w-full">
+                <img data-plan-source-cutout src={cutout} alt="The part of the plan this was read from"
+                  className="block max-w-full rounded-lg border border-gray-200 bg-white" />
+                {cutBox && (
+                  <div data-plan-source-box className="absolute rounded-sm pointer-events-none"
+                    style={{ ...pctBox(cutBox), border: '2.5px solid #4aa8d8', backgroundColor: 'rgba(74,168,216,.12)' }} />
+                )}
+              </div>
+              {/* …and where that spot is on the whole sheet. */}
+              {sheet && pageBox && (
+                <div className="relative inline-block max-w-full overflow-hidden rounded-lg border border-gray-200 bg-white">
+                  <img data-plan-sheet src={sheet} alt="The whole sheet, with the spot boxed"
+                    className="block" style={{ maxWidth: '100%', maxHeight: 260, width: 'auto', height: 'auto' }} />
+                  <div data-plan-sheet-box
+                    data-box={[pageBox.x0, pageBox.y0, pageBox.x1, pageBox.y1].map(v => v.toFixed(4)).join(',')}
+                    className="absolute rounded-sm pointer-events-none"
+                    style={{
+                      ...pctBox(pageBox), minWidth: 8, minHeight: 6,
+                      border: '2px solid #4aa8d8',
+                      // A white halo, and everything but the spot dimmed, so
+                      // even a small box on a big sheet is what the eye finds.
+                      boxShadow: '0 0 0 2px rgba(255,255,255,.95), 0 0 0 9999px rgba(15,23,42,.3)',
+                    }} />
+                </div>
+              )}
             </div>
             <div className="flex items-center gap-2 px-4 py-2.5 border-t border-gray-100 flex-wrap">
               <span className="text-[11.5px] text-gray-500 flex-1 min-w-0 truncate" dir="auto">{found}</span>

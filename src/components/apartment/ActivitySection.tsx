@@ -1,8 +1,10 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { ActivityLog, BackupSnapshot } from '../../types';
 import { format } from 'date-fns';
-import { Clock, RotateCcw } from 'lucide-react';
+import { ChevronDown, Clock, RotateCcw } from 'lucide-react';
 import { useStore } from '../../data/store';
+import { ACTIVITY_UI, ActivityLang, describeGroup, describeLog, familyOf, foldActivity, newestFirst } from '../../data/activityWords';
+import { ActivityAvatar, FAMILY_LOOK, clockRange, dateLocale } from '../ui/ActivityBits';
 
 interface ActivitySectionProps {
   logs: ActivityLog[];
@@ -11,22 +13,61 @@ interface ActivitySectionProps {
   onRestore?: (snapshotId: string) => void;
 }
 
+/** The "go back to this moment" control, with its own are-you-sure step. */
+function RestoreControl({ snapshot, onRestore, confirming, setConfirming }: {
+  snapshot: BackupSnapshot;
+  onRestore: (id: string) => void;
+  confirming: boolean;
+  setConfirming: (on: boolean) => void;
+}) {
+  const s = useStore(state => state.mainUiStrings);
+  return confirming ? (
+    <span className="flex items-center gap-1">
+      <span className="text-amber-600 font-medium">{s.revertConfirmMsg}</span>
+      <button
+        onClick={() => { onRestore(snapshot.id); setConfirming(false); }}
+        className="px-1.5 py-0.5 rounded bg-amber-500 text-white font-medium text-[10px]"
+      >{s.yesBtn}</button>
+      <button
+        onClick={() => setConfirming(false)}
+        className="px-1.5 py-0.5 rounded bg-gray-200 text-gray-600 font-medium text-[10px]"
+      >{s.cancel}</button>
+    </span>
+  ) : (
+    <button
+      onClick={() => setConfirming(true)}
+      className="flex items-center gap-0.5 text-[10px] text-gray-400 hover:text-amber-600 transition-colors"
+      title={s.restoreTooltip}
+    >
+      <RotateCcw size={9} /> {s.restoreBtn}
+    </button>
+  );
+}
+
+/**
+ * The apartment window's History tab — in plain words and consolidated.
+ *
+ * The owner's own screenshot of it (2026-10-05): "Igor uploaded file:
+ * 1791204142497409322422886791595.jpg · Apt 9" five times in a row, then
+ * "Igor updated stage note task · Apt Building 1/9" — "This should be
+ * consolidated into 'Igor uploaded 4 photos'", and "what does that even
+ * mean?". Every row is worded by `activityWords` now, neighbouring records of
+ * one kind by one person within half an hour fold into one row that opens up,
+ * and the apartment is never repeated — you are standing in it.
+ *
+ * A record's name comes back from the cloud ABSENT when it was written
+ * undefined (fsSet turns undefined into a delete); the words module fills it
+ * with "Someone", so a nameless record can never take the tab down.
+ */
 export function ActivitySection({ logs, autoBackup, backupSnapshots, onRestore }: ActivitySectionProps) {
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
+  const [open, setOpen] = useState<Set<string>>(() => new Set());
   const s = useStore(state => state.mainUiStrings);
-
-  function actionLabel(log: ActivityLog): string {
-    if (log.actionType === 'opened') return s.openedJob;
-    if (log.actionType === 'note') return s.updatedStageNote;
-    if (log.actionType === 'contractor_upload') return `${s.uploadedFile} ${log.newValue}`;
-    if (log.actionType === 'contractor_note') return s.addedNote;
-    if (log.actionType === 'contractor_complete') return s.markedComplete;
-    if (log.fieldChanged === 'currentStageId') return s.changedStage;
-    if (log.fieldChanged === 'classification') return `${s.changedClassification} ${log.previousValue} → ${log.newValue}`;
-    if (log.fieldChanged === 'generalNotes') return s.updatedGeneralNotes;
-    if (log.fieldChanged === 'displayName') return `${s.renamedApartment}${log.newValue}"`;
-    return `${s.updatedStageNote} ${log.fieldChanged}`;
-  }
+  const stages = useStore(state => state.stages);
+  const lang: ActivityLang = s.isRtl ? 'he' : 'en';
+  const ui = ACTIVITY_UI[lang];
+  const ctx = useMemo(() => ({ lang, stages }), [lang, stages]);
+  const groups = useMemo(() => foldActivity(newestFirst(logs)), [logs]);
 
   if (logs.length === 0) {
     return (
@@ -37,83 +78,89 @@ export function ActivitySection({ logs, autoBackup, backupSnapshots, onRestore }
     );
   }
 
+  const snapshotOf = (id: string) => (autoBackup ? backupSnapshots?.find(b => b.activityLogId === id) : undefined);
+  const toggle = (id: string) => setOpen(prev => {
+    const next = new Set(prev);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    return next;
+  });
+
   return (
-    <div className="space-y-2 pr-1">
-      {logs.map(log => {
-        const snapshot = autoBackup ? backupSnapshots?.find(s => s.activityLogId === log.id) : undefined;
-        const isConfirming = confirmingId === log.id;
-
-        const hasNoteContent = (log.actionType === 'note' || log.actionType === 'contractor_note' || log.fieldChanged === 'generalNotes') && log.newValue;
-        const hasStageChange = log.fieldChanged === 'currentStageId';
-
-        /**
-         * A history entry whose name did not survive the round trip.
-         *
-         * `userName` is REQUIRED by the type and was still undefined on real
-         * records: a task created without a `createdByName` writes the field
-         * as undefined, and `fsSet` turns an undefined into a delete — so the
-         * stored entry has no name at all, and `.charAt(0)` on it took the
-         * whole History tab down with it. The type cannot protect a value
-         * that came back from the cloud; the render has to cope.
-         */
-        const who = log.userName || s.unknownUser;
-
+    <div className="space-y-2.5 pe-1" data-history-list>
+      {groups.map(g => {
+        const words = describeGroup(g.logs, ctx);
+        const fam = familyOf(g.kind);
+        const n = g.logs.length;
+        const expanded = open.has(g.id);
+        const snapshot = snapshotOf(g.logs[0].id);
+        const when = `${format(new Date(g.newest), 'd MMM', { locale: dateLocale(lang) })} · ${clockRange(g.newest, g.oldest)}`;
+        const look = FAMILY_LOOK[fam];
+        const Glyph = look.icon;
         return (
-          <div key={log.id} className="flex gap-3 text-xs">
-            <div className="flex-shrink-0 w-7 h-7 rounded-full bg-[#1e3a5f]/10 flex items-center justify-center text-[#1e3a5f] font-bold">
-              {who.charAt(0)}
-            </div>
+          <div key={g.id} className="flex gap-2.5 text-xs" data-history-row={g.id} data-activity-kind={g.kind} data-activity-count={n}>
+            <ActivityAvatar name={words.who} size={28} />
             <div className="flex-1 min-w-0">
-              <span className="font-medium text-gray-800">{who}</span>
-              {' '}
-              <span className="text-gray-600">{actionLabel(log)}</span>
-              {log.apartmentNumber && (
-                <span className="text-gray-400"> · Apt {log.apartmentNumber}</span>
-              )}
+              <p className={`leading-snug ${g.kind === 'opened' ? 'text-gray-500' : 'text-gray-700'}`} data-activity-sentence>
+                <b className="font-semibold text-gray-800">{words.who}</b>{' '}
+                <span>{words.text}</span>
+              </p>
 
-              {/* Note content block */}
-              {hasNoteContent && (
-                <div className="mt-1 px-2 py-1.5 rounded-md bg-gray-50 border border-gray-100 text-gray-700 leading-snug text-[11px] whitespace-pre-wrap break-words">
-                  {log.newValue}
+              {words.detail && (fam === 'notes' ? (
+                <div className="mt-1 px-2 py-1.5 rounded-md bg-gray-50 border border-gray-100 text-gray-700 leading-snug text-[11px] whitespace-pre-wrap break-words" data-activity-detail>
+                  {words.detail}
                 </div>
-              )}
-
-              {/* Stage change visualization */}
-              {hasStageChange && (
-                <div className="mt-1 flex items-center gap-1.5 text-[11px] flex-wrap">
-                  <span className="px-1.5 py-0.5 rounded bg-gray-100 text-gray-500">{log.previousValue || s.notStartedFallback}</span>
-                  <span className="text-gray-400">→</span>
-                  <span className="px-1.5 py-0.5 rounded bg-[#1e3a5f]/10 text-[#1e3a5f] font-medium">{log.newValue || s.notStartedFallback}</span>
-                </div>
-              )}
+              ) : (
+                <p className="mt-0.5 text-[11px] text-gray-500 line-clamp-2 break-words" data-activity-detail>{words.detail}</p>
+              ))}
 
               <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-                <span className="text-gray-400">{format(new Date(log.createdAt), 'MMM d, yyyy · HH:mm')}</span>
-
-                {snapshot && onRestore && (
-                  isConfirming ? (
-                    <span className="flex items-center gap-1">
-                      <span className="text-amber-600 font-medium">{s.revertConfirmMsg}</span>
-                      <button
-                        onClick={() => { onRestore(snapshot.id); setConfirmingId(null); }}
-                        className="px-1.5 py-0.5 rounded bg-amber-500 text-white font-medium text-[10px]"
-                      >{s.yesBtn}</button>
-                      <button
-                        onClick={() => setConfirmingId(null)}
-                        className="px-1.5 py-0.5 rounded bg-gray-200 text-gray-600 font-medium text-[10px]"
-                      >{s.cancel}</button>
-                    </span>
-                  ) : (
-                    <button
-                      onClick={() => setConfirmingId(log.id)}
-                      className="flex items-center gap-0.5 text-[10px] text-gray-400 hover:text-amber-600 transition-colors"
-                      title={s.restoreTooltip}
-                    >
-                      <RotateCcw size={9} /> {s.restoreBtn}
-                    </button>
-                  )
+                {/* The family's glyph beside the time, not stranded at the far
+                    edge of a 1020px window. */}
+                <span className="inline-flex items-center gap-1 text-gray-400" data-activity-family={fam}>
+                  <Glyph size={11} style={{ color: look.color }} />
+                  <span dir="ltr" className="tabular-nums">{when}</span>
+                </span>
+                {n > 1 && (
+                  <button
+                    type="button"
+                    data-activity-expand
+                    onClick={() => toggle(g.id)}
+                    className="inline-flex items-center gap-0.5 px-1.5 py-px rounded-full border border-gray-200 text-gray-500 hover:text-gray-700 hover:border-gray-300 text-[10.5px] font-medium"
+                  >
+                    <ChevronDown size={11} className={`transition-transform ${expanded ? 'rotate-180' : ''}`} />
+                    {expanded ? ui.hide : ui.showAll(n)}
+                  </button>
+                )}
+                {snapshot && onRestore && !expanded && (
+                  <RestoreControl snapshot={snapshot} onRestore={onRestore}
+                    confirming={confirmingId === g.logs[0].id}
+                    setConfirming={on => setConfirmingId(on ? g.logs[0].id : null)} />
                 )}
               </div>
+
+              {expanded && (
+                <ul className="mt-1.5 border-s-2 border-gray-100 ps-2.5 space-y-1" data-activity-entries>
+                  {g.logs.map(l => {
+                    const one = describeLog(l, ctx);
+                    const snap = snapshotOf(l.id);
+                    return (
+                      <li key={l.id} className="flex items-baseline gap-2 min-w-0 text-[11px] text-gray-600 flex-wrap" data-activity-entry>
+                        <span dir="ltr" className="tabular-nums text-gray-400 flex-shrink-0">{format(new Date(l.createdAt), 'HH:mm')}</span>
+                        <span className="min-w-0">{one.text}</span>
+                        {/* A document's name or a note's words — never a camera's file name. */}
+                        {one.detail && (
+                          <span className="min-w-0 truncate text-gray-400 max-w-[14rem]">{one.detail}</span>
+                        )}
+                        {snap && onRestore && (
+                          <RestoreControl snapshot={snap} onRestore={onRestore}
+                            confirming={confirmingId === l.id}
+                            setConfirming={on => setConfirmingId(on ? l.id : null)} />
+                        )}
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
             </div>
           </div>
         );

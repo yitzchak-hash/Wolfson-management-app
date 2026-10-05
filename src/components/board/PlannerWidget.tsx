@@ -1911,6 +1911,26 @@ function TaskBar({ bar, z, size, strip, readOnly, isRtl, lang, onOpen, onDropTo,
     ? (lang === 'he' ? 'הסתיים מוקדם' : lang === 'ru' ? 'закончено раньше' : 'finished early')
     : (lang === 'he' ? 'בוצע' : lang === 'ru' ? 'готово' : 'done');
 
+  /** The building, as a small navy chip — where the job is, at a glance (owner, 2026-10-05: "this is all A3 … I don't see the addresses"). */
+  const chip = (lead: boolean) => bar.building ? (
+    <span data-bar-building className="flex-shrink-0 rounded tabular-nums" style={{
+      fontSize: Math.max(z(7), size - z(2)), fontWeight: 900, lineHeight: 1.15,
+      backgroundColor: '#1e3a5f', color: '#fff', padding: `0 ${Math.max(2, z(3))}px`,
+      marginInlineEnd: Math.max(3, z(lead ? 4 : 3)),
+    }}>{bar.building}</span>
+  ) : null;
+  /** The record: a green tag, and a stretch whose days ran PAST the close says "finished early". */
+  const doneTag = (side: 'start' | 'end') => bar.done ? (
+    <span data-bar-done className="flex-shrink-0 inline-flex items-center rounded-full" style={{
+      ...(side === 'start' ? { marginInlineStart: Math.max(3, z(4)) } : { marginInlineEnd: Math.max(3, z(4)) }),
+      padding: `0 ${Math.max(3, z(4))}px`, gap: 2,
+      fontSize: Math.max(z(7), size - z(3)), fontWeight: 800, lineHeight: 1.3,
+      backgroundColor: '#16a34a', color: '#fff',
+    }}>
+      <Check size={Math.max(8, Math.round(z(9)))} strokeWidth={3.5} />{doneWord}
+    </span>
+  ) : null;
+
   return (
     <div
       {...handlers}
@@ -1941,44 +1961,34 @@ function TaskBar({ bar, z, size, strip, readOnly, isRtl, lang, onOpen, onDropTo,
       <div className="flex items-start gap-1 min-w-0">
         <div className="flex-1 min-w-0">
           {/* The APARTMENT leads — its number is the first thing on the line
-              (aptLabel), and the workspace is a small tag AFTER it that gives
-              way first. Leading with the workspace put "Wolfson · " in front
-              of every Wolfson job and the truncation ate the unit itself, so
-              two bars on one day read as the same job. */}
+              (aptLabel), and NOTHING sits in front of it or beside it in the
+              two-line bar: every extra word on line one is taken out of the
+              unit's own name the moment the cell is narrow (2026-09-22: the
+              workspace tag in front ate the number; 2026-10-05: a building
+              chip in front cut "12 — Weinstein" to "12 — Wein…"). The
+              building, the done tag and the workspace ride line two. A
+              strip is ONE line, so there they share it and give way first. */}
           <div className="flex items-center min-w-0" style={{ fontSize: size, fontWeight: 800, color: '#1e3a5f', lineHeight: 1.2 }}>
-            {bar.building && (
-              <span data-bar-building className="flex-shrink-0 rounded tabular-nums" style={{
-                fontSize: Math.max(z(7), size - z(2)), fontWeight: 900, lineHeight: 1.15,
-                backgroundColor: '#1e3a5f', color: '#fff', padding: `0 ${Math.max(2, z(3))}px`,
-                marginInlineEnd: Math.max(3, z(4)),
-              }}>{bar.building}</span>
-            )}
+            {strip && chip(true)}
             <span data-bar-label className="truncate min-w-0" style={{ flex: '0 1 auto' }}>{bar.label}</span>
             {bar.workspace && strip && (
-              // A strip is ONE line, so the tag rides it — flexShrink 20: it
-              // gives way (to nothing) before the unit loses a letter. In tile
-              // mode the tag has the second line to itself, beside the stage.
+              // flexShrink 20: the tag gives way (to nothing) before the unit
+              // loses a letter.
               <span data-bar-workspace className="truncate" style={{
                 flex: '0 20 auto', minWidth: 0, marginInlineStart: Math.max(3, z(4)),
                 fontSize: Math.max(z(7), size - z(3)), fontWeight: 700, color: '#7c3aed',
               }}>{bar.workspace}</span>
             )}
-            {bar.done && (
-              // The record: a green tag, and a stretch whose days ran PAST the
-              // close says "finished early".
-              <span data-bar-done className="flex-shrink-0 inline-flex items-center rounded-full" style={{
-                marginInlineStart: Math.max(3, z(4)), padding: `0 ${Math.max(3, z(4))}px`, gap: 2,
-                fontSize: Math.max(z(7), size - z(3)), fontWeight: 800, lineHeight: 1.3,
-                backgroundColor: '#16a34a', color: '#fff',
-              }}>
-                <Check size={Math.max(8, Math.round(z(9)))} strokeWidth={3.5} />{doneWord}
-              </span>
-            )}
+            {strip && doneTag('start')}
           </div>
-          {!strip && (sub || bar.workspace) && (
-            <div className="truncate" style={{ fontSize: Math.max(z(7), size - z(2)), fontWeight: 600, color: '#64748b' }}>
-              {bar.workspace && <span data-bar-workspace style={{ color: '#7c3aed', fontWeight: 700 }}>{bar.workspace}{sub ? ' · ' : ''}</span>}
-              {sub}{n > 1 ? ` · ${n} days` : ''}
+          {!strip && (sub || bar.workspace || bar.building || bar.done) && (
+            <div className="flex items-center min-w-0" style={{ fontSize: Math.max(z(7), size - z(2)), fontWeight: 600, color: '#64748b' }}>
+              {doneTag('end')}
+              {chip(false)}
+              <span className="truncate min-w-0">
+                {bar.workspace && <span data-bar-workspace style={{ color: '#7c3aed', fontWeight: 700 }}>{bar.workspace}{sub ? ' · ' : ''}</span>}
+                {sub}{n > 1 ? ` · ${n} days` : ''}
+              </span>
             </div>
           )}
         </div>

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef, lazy, Suspense } from 'react';
-import { Mic, X, Save, Building2, MessageSquare, AlertTriangle, Link, Unlink, ExternalLink, BookOpen, Download, Eye, EyeOff, Activity, RefreshCw, Paperclip, Trash2, ChevronDown, ChevronRight, ClipboardList, CheckCircle2, CalendarDays, FileText, UserCheck, Plus, Camera, Play, ChevronLeft, FolderOpen, Clock, RotateCcw, Edit2, BarChart3, PenLine, Maximize2, Printer, Phone as PhoneIcon, Loader2, Folder, Star } from 'lucide-react';
+import { Mic, X, Save, Building2, MessageSquare, AlertTriangle, Link, Unlink, ExternalLink, BookOpen, Download, Eye, EyeOff, Activity, RefreshCw, Paperclip, Trash2, ChevronDown, ChevronRight, ClipboardList, CheckCircle2, CalendarDays, FileText, UserCheck, Plus, Camera, Play, ChevronLeft, FolderOpen, Clock, RotateCcw, Edit2, BarChart3, PenLine, Maximize2, Printer, Phone as PhoneIcon, Loader2, Folder, Star, ArrowRightLeft } from 'lucide-react';
 import { Apartment, User, getStageName, TaskAttachment, TaskPriority, aptLabel, ContractorAssignment } from '../../types';
 import { TaskThread } from '../tasks/TaskThread';
 import { Translated } from '../ui/Translated';
@@ -43,6 +43,9 @@ import { cachedPlanAspect, measurePlanAspect } from '../../data/planAspect';
 const PlanAnnotator = lazy(() =>
   import('../plans/PlanAnnotator').then(m => ({ default: m.PlanAnnotator })));
 import { ContractorStatusPanel } from './ContractorStatusPanel';
+import { MoveTaskDialog, officeMoveWords, fill } from '../tasks/MoveTaskDialog';
+import { DeleteTaskDialog } from '../tasks/DeleteTaskDialog';
+import { placeLabel } from '../../data/taskMove';
 
 interface Props {
   apartment: Apartment | null;
@@ -88,7 +91,7 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
     autoBackup, backupSnapshots, restoreFromSnapshot, mainUiStrings: ui,
     officeNoteFiles, addOfficeNoteFile, updateOfficeNoteFile, deleteOfficeNoteFile, addActivityLog,
     appendApartmentNote, removeApartmentNote,
-    contractorAssignments, contractors, updateContractorAssignment, deleteContractorAssignment,
+    contractorAssignments, contractors, updateContractorAssignment,
     deleteApartment, getGeneralNoteVersions, currentProjectId,
     contractorPhotos, updateContractorPhoto, planAnnotations, stageNotes, planPins,
     contractorNotes, addContractorNote } = useStore();
@@ -239,6 +242,15 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
     setCheckingHealth(false);
   }
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  /**
+   * A task on its way to another apartment, and a task about to be deleted
+   * (owner, 2026-10-05). Ids, never the records — the dialogs re-read the
+   * live task, the standing re-resolve rule.
+   */
+  const [movingTaskId, setMovingTaskId] = useState<string | null>(null);
+  const [deletingTaskId, setDeletingTaskId] = useState<string | null>(null);
+  // Another apartment in the same window: a pending move or delete was about the old one.
+  useEffect(() => { setMovingTaskId(null); setDeletingTaskId(null); }, [apartment?.id]);
   const [showContractorStatus, setShowContractorStatus] = useState(false);
   const [unmergeTarget, setUnmergeTarget] = useState<Apartment | null>(null);
   const [showPdfViewer, setShowPdfViewer] = useState(false);
@@ -694,7 +706,9 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
     .filter(s => s.active && (isGeneralProject ? s.projectId === 'general' : !s.projectId))
     .sort((a, b) => a.order - b.order);
   const currentStage = stages.find(s => s.id === currentStageId);
-  const aptLogs = activityLogs.filter(l => l.apartmentId === apartment.id).slice(0, 20);
+  // More records than rows: the History tab folds a run of uploads or opens
+  // into one row, so twenty records could be as few as three rows.
+  const aptLogs = activityLogs.filter(l => l.apartmentId === apartment.id).slice(0, 80);
 
   /**
    * A job sheet somebody can take out of the office.
@@ -1482,6 +1496,34 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
       {showContractorStatus && (
         <ContractorStatusPanel apartment={apartment} onClose={() => setShowContractorStatus(false)} />
       )}
+
+      {/* Move a task to another apartment / delete one, saying what goes
+          with it. Both portal themselves above the panel (z-[130]/[140]). */}
+      {movingTaskId && (() => {
+        const t = contractorAssignments.find(x => x.id === movingTaskId);
+        if (!t) return null;
+        return (
+          <MoveTaskDialog
+            task={t}
+            words={officeMoveWords(ui, isGeneralProject)}
+            actingUser={currentUser}
+            onClose={() => setMovingTaskId(null)}
+            onMoved={to => onToast(fill(ui.mvDone, { to: placeLabel(to) }))}
+          />
+        );
+      })()}
+      {deletingTaskId && (() => {
+        const t = contractorAssignments.find(x => x.id === deletingTaskId);
+        if (!t) return null;
+        return (
+          <DeleteTaskDialog
+            task={t}
+            onClose={() => setDeletingTaskId(null)}
+            onDeleted={() => onToast(ui.taskDeleted)}
+            onMoveInstead={() => setMovingTaskId(t.id)}
+          />
+        );
+      })()}
 
       {/* Centred modal, not a side drawer. Roughly twice the usable width and it
           no longer squeezes the board or diagram behind it. Applies to every
@@ -2436,10 +2478,25 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                             >
                               {isEditing ? <X size={14} /> : <Edit2 size={14} />}
                             </button>
+                            {/* Recorded on the wrong apartment — the task, its
+                                photos and messages go to the right one. */}
                             <button
-                              onClick={() => { if (window.confirm('Delete this task?')) deleteContractorAssignment(a.id); }}
+                              data-task-move={a.id}
+                              onClick={() => setMovingTaskId(a.id)}
+                              className="p-1 rounded-md text-gray-400 hover:text-[#1e3a5f] hover:bg-gray-100 transition-colors"
+                              title={isGeneralProject ? ui.mvActionJob : ui.mvAction}
+                              aria-label={isGeneralProject ? ui.mvActionJob : ui.mvAction}
+                            >
+                              <ArrowRightLeft size={14} />
+                            </button>
+                            {/* The app's own ask, saying what goes with it —
+                                the browser's confirm said nothing and took the
+                                whole conversation and every picture along. */}
+                            <button
+                              data-task-delete={a.id}
+                              onClick={() => setDeletingTaskId(a.id)}
                               className="p-1 rounded-md text-red-400 hover:text-red-600 hover:bg-red-50 transition-colors"
-                              title="Delete task"
+                              title={ui.deleteTask}
                             >
                               <Trash2 size={14} />
                             </button>

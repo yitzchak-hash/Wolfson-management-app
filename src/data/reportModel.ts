@@ -3,6 +3,7 @@ import {
   aptLabel, isCountableApartment, getStageName,
 } from '../types';
 import { progressOf } from './stageMarks';
+import { describeLog } from './activityWords';
 
 /**
  * Reports, as a thing you BUILD rather than a table somebody wrote once.
@@ -487,8 +488,10 @@ const ACTIVITY: ReportSubject = {
     { key: 'when', label: 'When', type: 'date', group: 'The change',
       get: (l: ActivityLog) => dateOnly(l.createdAt) },
     { key: 'who', label: 'Who', type: 'text', group: 'The change', get: (l: ActivityLog) => l.userName },
+    // The log's own words ("uploaded a photo", "marked Registers done"),
+    // never the stored field name ("photo_uploaded", "viewed").
     { key: 'what', label: 'What changed', type: 'text', group: 'The change',
-      get: (l: ActivityLog) => l.fieldChanged },
+      get: (l: ActivityLog, d) => describeLog(l, { lang: d.isRtl ? 'he' : 'en', stages: d.stages }).text },
     { key: 'from', label: 'From', type: 'text', group: 'The change', get: (l: ActivityLog) => l.previousValue },
     { key: 'to', label: 'To', type: 'text', group: 'The change', get: (l: ActivityLog) => l.newValue },
     ...jobFields('job.', 'The job', (l: ActivityLog, d) => jobOf(d, l.apartmentId)),

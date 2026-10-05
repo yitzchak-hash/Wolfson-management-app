@@ -3,7 +3,7 @@ import { Plus, Trash2, Copy, ShieldCheck, ChevronDown, RotateCcw } from 'lucide-
 import { useStore } from '../../data/store';
 import { Contractor, WorkerLevel, WorkerPermission } from '../../types';
 import {
-  WORKER_PERMISSIONS, PermissionDef, permsOf, overrideCount, DEFAULT_NEW_WORKER_LEVEL,
+  WORKER_PERMISSIONS, PermissionDef, permsOf, overrideCount, DEFAULT_NEW_WORKER_LEVEL, levelAnswer,
 } from '../../data/workerLevels';
 
 /**
@@ -46,7 +46,7 @@ export function WorkerLevelsPanel({ onToast }: {
       <div className="space-y-2">
         {levels.map(level => {
           const isOpen = open === level.id;
-          const on = WORKER_PERMISSIONS.filter(p => level.perms[p.key]).length;
+          const on = WORKER_PERMISSIONS.filter(p => levelAnswer(level, p.key)).length;
           return (
             <div key={level.id} className="rounded-xl border border-gray-200 overflow-hidden">
               <button
@@ -95,7 +95,7 @@ export function WorkerLevelsPanel({ onToast }: {
                           <Switch
                             key={p.key}
                             def={p}
-                            on={!!level.perms[p.key]}
+                            on={levelAnswer(level, p.key)}
                             onToggle={v => updateWorkerLevel(level.id, {
                               perms: { ...level.perms, [p.key]: v },
                             })}
@@ -224,7 +224,7 @@ export function WorkerPermissionOverrides({ worker }: { worker: Contractor }) {
                 on={effective[p.key]}
                 inherited={worker.perms?.[p.key] === undefined}
                 onToggle={v => {
-                  const fromLevel = level?.perms?.[p.key] ?? false;
+                  const fromLevel = levelAnswer(level, p.key);
                   const next = { ...(worker.perms ?? {}) };
                   // Setting it back to what the level says REMOVES the override
                   // rather than freezing that value — otherwise a worker slowly

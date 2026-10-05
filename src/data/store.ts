@@ -25,11 +25,14 @@ import { DEFAULT_TIME_CLOCK, resolvePunch } from './timeClock';
 import { purgeJobsFromPlanner, isPlannerElement } from './plannerPurge';
 import { DEFAULT_WORKER_LEVELS } from './workerLevels';
 import { daysOf, closeDayFields } from './taskDays';
-import { applyMarks, marksForCurrent, migrateToBubbles, seedStageKinds, taskStageIds, isWorkStage } from './stageMarks';
+import { applyMarks, marksForCurrent, migrateToBubbles, seedStageKinds, taskStageIds, isWorkStage, stageChangesOf } from './stageMarks';
 import type { SetContext } from './stageMarks';
 import { planStageSplit, splitApartment, splitTask, splitStageNote, splitStageIdList, isSplitParent, firstChildOf } from './stageSplit';
 import { notifyWorker } from './pushNotify';
+import { plainSummary } from './activityWords';
 import { aptLabel } from '../types';
+import { planTaskMove, placeLabel } from './taskMove';
+import type { TaskMovePlan } from './taskMove';
 
 /** How many AUTOMATIC layout snapshots rotate, separate from the 10 manual. */
 const LAYOUTS_AUTO_MAX = 8;
@@ -87,6 +90,12 @@ export function loadProjectSnapshot(projectId: string): {
   officeNoteFiles: OfficeNoteFile[];
   /** Site uploads (metadata — the bytes live in Storage or Drive). Kept live by the foreign sync. */
   photos: ContractorPhoto[];
+  /**
+   * What this machine last saw of the workspace's activity log (persist keeps
+   * the newest 200). NOT kept live — the Job Board's activity centre fetches
+   * the cloud's copy when the page opens and only falls back to this.
+   */
+  activityLogs: ActivityLog[];
 } {
   const data = loadFromStorage(getProjectStorageKey(projectId), null) as Record<string, unknown> | null;
   return {
@@ -101,6 +110,7 @@ export function loadProjectSnapshot(projectId: string): {
     planPins: (data?.planPins as PlanPin[] | null) ?? [],
     officeNoteFiles: (data?.officeNoteFiles as OfficeNoteFile[] | null) ?? [],
     photos: (data?.contractorPhotos as ContractorPhoto[] | null) ?? [],
+    activityLogs: (data?.activityLogs as ActivityLog[] | null) ?? [],
   };
 }
 
@@ -636,7 +646,13 @@ interface AppState {
   authReady: boolean;
   loadUsersForLogin: () => Promise<void>;
 
-  updateApartment: (id: string, changes: Partial<Apartment>, user: User) => void;
+  /**
+   * `quiet` writes without an activity line — only for a write whose story is
+   * told by the line written right beside it (the worker's "I'm going to work
+   * here" is ONE line, "started work here — Registers", not that plus
+   * "started Registers").
+   */
+  updateApartment: (id: string, changes: Partial<Apartment>, user: User, opts?: { quiet?: boolean }) => void;
   bulkUpdateApartments: (ids: string[], changes: Partial<Apartment>, user: User) => void;
   /**
    * The set model (2026-09-22): write an apartment's stage marks through the
@@ -644,7 +660,7 @@ interface AppState {
    * motion, so the fifty screens that print one word per apartment stay in
    * step with the marks.
    */
-  setApartmentMarks: (id: string, marks: Record<string, StageMark> | undefined, user: User) => void;
+  setApartmentMarks: (id: string, marks: Record<string, StageMark> | undefined, user: User, opts?: { quiet?: boolean }) => void;
   /**
    * Moves every record in the open workspace onto the set model — explicit
    * marks, `bubbles: true` — and gives the workspace's stages a kind (work
@@ -757,6 +773,17 @@ interface AppState {
   addContractorAssignment: (a: Omit<ContractorAssignment, 'id' | 'createdAt'>) => void;
   updateContractorAssignment: (id: string, changes: Partial<ContractorAssignment>) => void;
   deleteContractorAssignment: (id: string) => void;
+  /**
+   * Move a task — with its photos and messages — to another apartment in the
+   * SAME workspace (owner, 2026-10-05: a day's work recorded on A1 when it was
+   * done in A3). The stage ticks the task left come off the old apartment and
+   * go onto the new one unless `moveMarks` is false (`planTaskMove` says
+   * exactly which); one history line is written on each apartment. Returns
+   * false when nothing could be moved.
+   */
+  moveTaskToApartment: (taskId: string, toApartmentId: string, user: User, opts?: { moveMarks?: boolean }) => boolean;
+  /** What that move would do to the two apartments' stage ticks — the confirm step reads it. Null when the move cannot be made. */
+  taskMovePlan: (taskId: string, toApartmentId: string) => TaskMovePlan | null;
   addContractorNote: (n: Omit<ContractorNote, 'id' | 'createdAt'>) => void;
   /** A field or two onto a note — the memo's transcript, once it is known. */
   updateContractorNote: (id: string, changes: Partial<ContractorNote>) => void;
@@ -947,6 +974,16 @@ interface AppState {
   deletePlanAnnotation: (id: string) => void;
 }
 
+/** Is this tab the worker's portal? The worker is the one standing there, whoever else is logged in. */
+const onPortalPath = () => typeof location !== 'undefined' && location.pathname.startsWith('/c/');
+/** The task's worker as a User, for writes and log lines the store attributes to a person. */
+function workerAsUser(t: ContractorAssignment, contractors: Contractor[]): User {
+  return {
+    id: t.contractorId,
+    name: contractors.find(c => c.id === t.contractorId)?.name ?? 'Worker',
+    code: '', role: 'viewer', active: true, createdAt: t.createdAt,
+  } as User;
+}
 /** The workspace's own stages, in order — what the set rules read. */
 function stagesOfProject(pid: string, stages: Stage[]): Stage[] {
   return stages
@@ -1353,10 +1390,13 @@ export const useStore = create<AppState>((set, get) => ({
     persist(get);
   },
 
-  updateApartment: (id, changes, user) => {
+  updateApartment: (id, changes, user, opts) => {
     const existing = get().apartments.find(a => a.id === id);
     if (!existing) return;
     const now = new Date().toISOString();
+    // What the CALLER asked for, before the headline is translated into marks:
+    // a write naming a headline and no marks is somebody setting it by hand.
+    const asked = changes;
     changes = normaliseStageWrite(existing, changes, get().stages, get().boardSettings, get().currentProjectId);
 
     // Record the date the first time each stage is set
@@ -1454,30 +1494,89 @@ export const useStore = create<AppState>((set, get) => ({
     extraUpdates.forEach(e => fsSet(projectCollection(_pid, 'apartments'), e.id, e));
 
     // Log changes
-    const loggable: Array<keyof Apartment> = ['currentStageId', 'classification', 'generalNotes', 'displayName'];
+    if (opts?.quiet) return;
+    const logBase = {
+      userId: user.id,
+      userName: user.name,
+      buildingId: existing.buildingId,
+      apartmentId: id,
+      apartmentNumber: existing.displayName || existing.apartmentNumber || '',
+    };
+
+    /**
+     * THE SET MODEL'S LOG LINE (owner, 2026-10-05: "we're not changing
+     * states anymore — we have multiple states that need to get done, each
+     * in their own way and form"). The old line logged the HEADLINE moving,
+     * "Registers → Access Panels" — but the headline is derived by
+     * `applyMarks` on every write; nobody moved it. What somebody DID is
+     * tick stages: so the record names which stages changed state
+     * (`stageChangesOf`, before vs after), one record per write however many
+     * it touched. The headline is never logged. A MARKER the office sets by
+     * hand (Ready to start / Job completed — a write naming a headline and no
+     * marks) is the one headline that IS an act, and is named as such.
+     */
+    if ('stageMarks' in changes || 'currentStageId' in changes) {
+      const pid = get().currentProjectId;
+      const sorted = stagesOfProject(pid, get().stages);
+      const marks = stageChangesOf(existing, updated, sorted, setContextOf(pid, get().boardSettings));
+      const byHand = 'currentStageId' in asked && !('stageMarks' in asked);
+      const target = byHand && updated.currentStageId ? sorted.find(st => st.id === updated.currentStageId) : undefined;
+      const marker = target && !isWorkStage(target) && updated.currentStageId !== existing.currentStageId ? target.name : undefined;
+      if (marks.length || marker) {
+        const entry: Omit<ActivityLog, 'id' | 'createdAt'> = {
+          ...logBase,
+          actionType: 'stage_marks',
+          fieldChanged: 'stageMarks',
+          previousValue: '',
+          newValue: '',
+          stageId: marks[0]?.id ?? target?.id ?? '',
+          ...(marks.length ? { marks } : {}),
+          ...(marker ? { marker } : {}),
+        };
+        // The English sentence rides in newValue for anything that reads the
+        // raw record (an export, an older tab) rather than the words module.
+        entry.newValue = plainSummary({ ...entry, id: '', createdAt: now }, get().stages);
+        get().addActivityLog(entry);
+      }
+    }
+
+    /**
+     * General notes are BULLETS (`noteEntries`): the record carries exactly
+     * the line that was added (newValue) or taken away (previousValue) — never
+     * the whole growing list, which made every row read like a paragraph.
+     */
+    if (JSON.stringify(existing.generalNotes) !== JSON.stringify(updated.generalNotes)) {
+      let prevLabel = String(existing.generalNotes ?? '');
+      let nextLabel = String(updated.generalNotes ?? '');
+      if ('noteEntries' in changes) {
+        const before = existing.noteEntries
+          ?? (prevLabel.trim() ? [{ id: `${id}-note-0`, text: prevLabel }] : []);
+        const after = updated.noteEntries ?? [];
+        const had = new Set(before.map(e => e.id));
+        const has = new Set(after.map(e => e.id));
+        nextLabel = after.filter(e => !had.has(e.id)).map(e => e.text).join('\n');
+        prevLabel = before.filter(e => !has.has(e.id)).map(e => e.text).join('\n');
+      } else if (prevLabel && nextLabel.startsWith(prevLabel)) {
+        nextLabel = nextLabel.slice(prevLabel.length).replace(/^\n/, '');
+        prevLabel = '';
+      }
+      if (prevLabel || nextLabel) {
+        get().addActivityLog({ ...logBase, actionType: 'update', fieldChanged: 'generalNotes', previousValue: prevLabel, newValue: nextLabel, stageId: '' });
+      }
+    }
+
+    const loggable: Array<keyof Apartment> = ['classification', 'displayName'];
     loggable.forEach(field => {
       const prev = existing[field];
       const next = updated[field];
       if (JSON.stringify(prev) !== JSON.stringify(next)) {
-        const stages = get().stages;
-        const prevLabel = field === 'currentStageId' ? (stages.find(s => s.id === String(prev))?.name ?? 'Not started') : String(prev ?? '');
-        let nextLabel = field === 'currentStageId' ? (stages.find(s => s.id === String(next))?.name ?? 'Not started') : String(next ?? '');
-        // General notes are bullets now: an append logs the LINE that was
-        // added, not the whole growing list over again.
-        if (field === 'generalNotes' && typeof next === 'string' && typeof prev === 'string' && prev && next.startsWith(prev)) {
-          nextLabel = next.slice(prev.length).replace(/^\n/, '');
-        }
         get().addActivityLog({
-          userId: user.id,
-          userName: user.name,
-          buildingId: existing.buildingId,
-          apartmentId: id,
-          apartmentNumber: existing.displayName || existing.apartmentNumber || id,
+          ...logBase,
           actionType: 'update',
           fieldChanged: field,
-          previousValue: prevLabel,
-          newValue: nextLabel,
-          stageId: field === 'currentStageId' ? String(next ?? '') : '',
+          previousValue: String(prev ?? ''),
+          newValue: String(next ?? ''),
+          stageId: '',
         });
       }
     });
@@ -1499,12 +1598,12 @@ export const useStore = create<AppState>((set, get) => ({
     updated.filter(a => ids.includes(a.id)).forEach(a => fsSet(projectCollection(get().currentProjectId, 'apartments'), a.id, a));
   },
 
-  setApartmentMarks: (id, marks, user) => {
+  setApartmentMarks: (id, marks, user, opts) => {
     const existing = get().apartments.find(a => a.id === id);
     if (!existing) return;
     const pid = get().currentProjectId;
     const sorted = stagesOfProject(pid, get().stages);
-    get().updateApartment(id, applyMarks(existing, marks, sorted, setContextOf(pid, get().boardSettings)), user);
+    get().updateApartment(id, applyMarks(existing, marks, sorted, setContextOf(pid, get().boardSettings)), user, opts);
   },
 
   migrateStageSets: () => {
@@ -2025,10 +2124,14 @@ export const useStore = create<AppState>((set, get) => ({
     fsSet(projectCollection(get().currentProjectId, 'stageNotes'), note.id, noteForFs);
     const apt = get().apartments.find(a => a.id === apartmentId);
     if (apt) {
+      // A note that is only a memo or a picture records the FILE, and says
+      // so — the reader words it "added a voice memo", never the file name.
+      const fileOnly = !entry.text?.trim() && !!entry.attachments?.length;
       get().addActivityLog({
         userId: user.id, userName: user.name, buildingId: apt.buildingId, apartmentId,
-        apartmentNumber: apt.displayName || apt.apartmentNumber || apartmentId,
-        actionType: 'note', fieldChanged: 'stageNote', previousValue: '', newValue: entry.text || (entry.attachments?.[0]?.filename ?? ''),
+        apartmentNumber: apt.displayName || apt.apartmentNumber || '',
+        actionType: 'note', fieldChanged: fileOnly ? 'stageNoteFile' : 'stageNote', previousValue: '',
+        newValue: fileOnly ? (entry.attachments ?? []).map(x => x.filename).join(', ') : entry.text,
         stageId,
       });
     }
@@ -2098,7 +2201,7 @@ export const useStore = create<AppState>((set, get) => ({
         userName: user.name,
         buildingId: apt.buildingId,
         apartmentId,
-        apartmentNumber: apt.displayName || apt.apartmentNumber || apartmentId,
+        apartmentNumber: apt.displayName || apt.apartmentNumber || '',
         actionType: 'note',
         fieldChanged: 'stageNote',
         previousValue: prevText,
@@ -2472,9 +2575,10 @@ export const useStore = create<AppState>((set, get) => ({
         where: aptFor ? (aptLabel(aptFor) || aptFor.displayName || '') : '',
       });
     }
-    // Activity log
+    // Activity log. A PROBLEM is logged by the form that raises it ("reported
+    // a problem"), so it is not logged twice here as a plain task.
     const apt = get().apartments.find(ap => ap.id === a.apartmentId);
-    if (apt) {
+    if (apt && !a.problem) {
       get().addActivityLog({
         userId: a.createdBy,
         // Never undefined: fsSet turns an undefined into a field DELETE, so a
@@ -2483,9 +2587,11 @@ export const useStore = create<AppState>((set, get) => ({
         userName: a.createdByName || get().currentUser?.name || 'Office',
         buildingId: a.buildingId,
         apartmentId: a.apartmentId,
-        apartmentNumber: apt.displayName || apt.apartmentNumber || a.apartmentId,
+        apartmentNumber: apt.displayName || apt.apartmentNumber || '',
         actionType: 'task_created',
-        fieldChanged: 'task',
+        // The worker's "I'm going to work here" is a start of work, and the
+        // record says so — the reader words it "started work here — Registers".
+        fieldChanged: a.stageReport ? 'work_started' : 'task',
         previousValue: '',
         newValue: a.taskDescription,
         stageId: a.stageId ?? '',
@@ -2541,12 +2647,12 @@ export const useStore = create<AppState>((set, get) => ({
         && !before.completedAt && updated.completedAt && !updated.problem) {
       const apt = get().apartments.find(ap => ap.id === updated.apartmentId);
       if (apt) {
-        const who = get().currentUser
-          ?? {
-            id: updated.contractorId,
-            name: get().contractors.find(c => c.id === updated.contractorId)?.name ?? 'Worker',
-            code: '', role: 'viewer', active: true, createdAt: updated.createdAt,
-          } as User;
+        // On the worker's portal the WORKER closed it — even when an office
+        // login happens to sit in the same browser, which used to credit
+        // the office with the worker's stages ("Yitzchak moved it to
+        // Registers" when Igor had closed his task).
+        const who = (onPortalPath() ? null : get().currentUser)
+          ?? workerAsUser(updated, get().contractors);
         const pid = get().currentProjectId;
         const sorted = stagesOfProject(pid, get().stages);
         const ctx = setContextOf(pid, get().boardSettings);
@@ -2563,20 +2669,27 @@ export const useStore = create<AppState>((set, get) => ({
         }
       }
     }
-    // Log completion / undo-completion
+    /**
+     * Log completion / undo-completion — attributed to whoever is really
+     * standing there. On the portal that is the worker, and the portal writes
+     * its own "closed the task" line, so a close there is not logged twice;
+     * an approval writes its own "approved the fix", likewise.
+     */
     if (before && updated && 'completedAt' in changes) {
       const apt = get().apartments.find(ap => ap.id === updated.apartmentId);
-      const user = get().currentUser;
+      const portal = onPortalPath();
+      const user = portal ? workerAsUser(updated, get().contractors) : get().currentUser;
       if (apt && user) {
         const wasCompleted = !!before.completedAt;
         const isNowCompleted = !!updated.completedAt;
-        if (!wasCompleted && isNowCompleted) {
+        const approval = !!updated.problem && changes.problem?.status === 'solved';
+        if (!wasCompleted && isNowCompleted && !portal && !approval) {
           get().addActivityLog({
             userId: user.id,
             userName: user.name,
             buildingId: updated.buildingId,
             apartmentId: updated.apartmentId,
-            apartmentNumber: apt.displayName || apt.apartmentNumber || updated.apartmentId,
+            apartmentNumber: apt.displayName || apt.apartmentNumber || '',
             actionType: 'task_completed',
             fieldChanged: 'task',
             previousValue: '',
@@ -2589,7 +2702,7 @@ export const useStore = create<AppState>((set, get) => ({
             userName: user.name,
             buildingId: updated.buildingId,
             apartmentId: updated.apartmentId,
-            apartmentNumber: apt.displayName || apt.apartmentNumber || updated.apartmentId,
+            apartmentNumber: apt.displayName || apt.apartmentNumber || '',
             actionType: 'task_uncompleted',
             fieldChanged: 'task',
             previousValue: before.taskDescription,
@@ -2626,7 +2739,7 @@ export const useStore = create<AppState>((set, get) => ({
           userName: user.name,
           buildingId: assignment.buildingId,
           apartmentId: assignment.apartmentId,
-          apartmentNumber: apt.displayName || apt.apartmentNumber || assignment.apartmentId,
+          apartmentNumber: apt.displayName || apt.apartmentNumber || '',
           actionType: 'task_deleted',
           fieldChanged: 'task',
           previousValue: assignment.taskDescription,
@@ -2635,6 +2748,99 @@ export const useStore = create<AppState>((set, get) => ({
         });
       }
     }
+  },
+
+  taskMovePlan: (taskId, toApartmentId) => {
+    const st = get();
+    const task = st.contractorAssignments.find(a => a.id === taskId);
+    if (!task || !task.apartmentId || task.general || task.apartmentId === toApartmentId) return null;
+    const to = st.apartments.find(a => a.id === toApartmentId);
+    if (!to) return null;
+    const pid = st.currentProjectId;
+    // An old apartment that is gone from this workspace has no marks to take
+    // anything off; the task still moves.
+    const from = st.apartments.find(a => a.id === task.apartmentId)
+      ?? ({ id: task.apartmentId, buildingId: task.buildingId, apartmentNumber: '', displayName: '', currentStageId: null, bubbles: true } as unknown as Apartment);
+    return planTaskMove(task, from, to, st.contractorAssignments, stagesOfProject(pid, st.stages), setContextOf(pid, st.boardSettings));
+  },
+
+  moveTaskToApartment: (taskId, toApartmentId, user, opts) => {
+    const st = get();
+    const task = st.contractorAssignments.find(a => a.id === taskId);
+    // A general job has no apartment to move FROM; the same apartment is no move.
+    if (!task || !task.apartmentId || task.general || task.apartmentId === toApartmentId) return false;
+    const to = st.apartments.find(a => a.id === toApartmentId);
+    if (!to) return false;
+    const from = st.apartments.find(a => a.id === task.apartmentId);
+    const pid = st.currentProjectId;
+    const sorted = stagesOfProject(pid, st.stages);
+    const ctx = setContextOf(pid, st.boardSettings);
+    // Read BEFORE anything moves — "another task on the old apartment stands
+    // behind this tick" must not count the task being moved.
+    const plan = get().taskMovePlan(taskId, toApartmentId);
+
+    // ── The records: the task, everything filed under it, and the general
+    //    job's own note of the visit when this report was one. A problem
+    //    remembers the stage of the apartment it is NOW on.
+    const moved: ContractorAssignment = {
+      ...task, apartmentId: to.id, buildingId: to.buildingId,
+      ...(task.problem ? { problem: { ...task.problem, stageBefore: to.currentStageId ?? null } } : {}),
+    };
+    const contractorAssignments = st.contractorAssignments.map(a => {
+      if (a.id === taskId) return moved;
+      if (!a.visits?.some(v => v.reportTaskId === taskId)) return a;
+      return { ...a, visits: a.visits.map(v => (v.reportTaskId === taskId ? { ...v, apartmentId: to.id } : v)) };
+    });
+    const visitHosts = contractorAssignments.filter((a, i) => a.id !== taskId && a !== st.contractorAssignments[i]);
+    const contractorPhotos = st.contractorPhotos.map(p => (p.assignmentId === taskId ? { ...p, apartmentId: to.id } : p));
+    const contractorNotes = st.contractorNotes.map(n => (n.assignmentId === taskId ? { ...n, apartmentId: to.id } : n));
+    set({ contractorAssignments, contractorPhotos, contractorNotes });
+    persist(get);
+    // Whole records, never a lone field: a partial write to a document that
+    // has not reached the cloud yet would CREATE a stub, and the listener
+    // would then hand every device back a photo with no task and no file.
+    const col = (base: string) => projectCollection(pid, base);
+    const lean = (a: ContractorAssignment) => ({ ...a, attachments: a.attachments?.map(att => ({ ...att, dataUrl: '' })) });
+    fsBatchSet(col('contractorAssignments'), [moved, ...visitHosts].map(a => ({ id: a.id, data: lean(a) })));
+    const photos = contractorPhotos.filter(p => p.assignmentId === taskId);
+    if (photos.length) fsBatchSet(col('contractorPhotos'), photos.map(p => ({ id: p.id, data: { ...p, dataUrl: '' } })));
+    const notes = contractorNotes.filter(n => n.assignmentId === taskId);
+    if (notes.length) fsBatchSet(col('contractorNotes'), notes.map(n => ({ id: n.id, data: { ...n, attachmentDataUrl: undefined } })));
+
+    // ── One history line on EACH apartment, in plain words.
+    const fromPlace = placeLabel(from ?? { buildingId: task.buildingId, apartmentNumber: '', displayName: '' });
+    const toPlace = placeLabel(to);
+    const workerName = st.contractors.find(c => c.id === task.contractorId)?.name;
+    const line = (apt: Apartment, actionType: 'task_moved_out' | 'task_moved_in') => get().addActivityLog({
+      userId: user.id,
+      userName: user.name,
+      buildingId: apt.buildingId,
+      apartmentId: apt.id,
+      apartmentNumber: apt.displayName || apt.apartmentNumber || apt.id,
+      actionType,
+      fieldChanged: 'task',
+      previousValue: fromPlace,
+      newValue: toPlace,
+      stageId: task.stageId ?? '',
+      taskText: task.taskDescription,
+      ...(workerName ? { workerName } : {}),
+    });
+    if (from) line(from, 'task_moved_out');
+    line(to, 'task_moved_in');
+
+    // ── The stage ticks, through the set model's one writer, so each
+    //    apartment's headline re-derives from what is left on it.
+    if (opts?.moveMarks !== false && plan) {
+      if (plan.fromChanged && from) {
+        const now = get().apartments.find(a => a.id === from.id);
+        if (now) get().updateApartment(from.id, applyMarks(now, plan.fromMarks, sorted, ctx), user);
+      }
+      if (plan.toChanged) {
+        const now = get().apartments.find(a => a.id === to.id);
+        if (now) get().updateApartment(to.id, applyMarks(now, plan.toMarks, sorted, ctx), user);
+      }
+    }
+    return true;
   },
 
   addContractorNote: (fields) => {
@@ -2922,7 +3128,7 @@ export const useStore = create<AppState>((set, get) => ({
         id: generateId(),
         activityLogId: entry.id,
         createdAt: entry.createdAt,
-        label: `${entry.userName} · ${entry.fieldChanged}${entry.apartmentNumber ? ` · Apt ${entry.apartmentNumber}` : ''}`,
+        label: `${entry.userName} · ${plainSummary(entry, state.stages)}${entry.apartmentNumber ? ` · ${entry.apartmentNumber}` : ''}`,
         apartmentStates: state.apartments.map(a => ({
           id: a.id,
           currentStageId: a.currentStageId,

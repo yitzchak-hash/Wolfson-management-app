@@ -54,7 +54,8 @@ const planBytes = await makePlan();
 const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium', headless: true });
 const page = await browser.newPage();
 await page.route('**/api/drive-fetch', r => r.fulfill({ body: planBytes, contentType: 'application/pdf' }));
-await page.goto('http://localhost:5173/login');
+const APP = process.env.APP ?? 'http://localhost:5173';
+await page.goto(`${APP}/login`);
 const res = await page.evaluate(async () => {
   const m = await import('/src/data/planAddress.ts');
   return await m.readPlanAddress('TEST-MILLER');

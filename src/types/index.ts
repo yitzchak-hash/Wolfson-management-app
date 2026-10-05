@@ -1157,6 +1157,38 @@ export interface ActivityLog {
   newValue: string;
   stageId: string;
   createdAt: string;
+  /**
+   * THE SET MODEL'S LOG LINE (2026-10-05). Which stages changed state in
+   * this write — never the derived headline, which is bookkeeping and not
+   * something anybody did. One entry per write, however many stages it
+   * touched. Absent on every older record (those carry the old
+   * `currentStageId` "X → Y" shape, which the readers word neutrally).
+   */
+  marks?: ActivityMarkChange[];
+  /** A marker (Ready to start / Job completed) set BY HAND in this write — its name. */
+  marker?: string;
+  /**
+   * A MOVED task's own words and whose task it is (2026-10-05) — the two
+   * lines a move writes ('task_moved_out' on the apartment it left,
+   * 'task_moved_in' on the one it reached) carry the two places in
+   * previousValue → newValue, so the sentence still needs the task and the
+   * worker. Optional: every other line leaves them out.
+   */
+  taskText?: string;
+  workerName?: string;
+}
+
+/**
+ * One stage whose state a write changed. `from` / `to` are the set model's
+ * words (`todo` · `doing` · `pending` · `done` · `off`) or `none` — not in the
+ * flat's set at all. `name` is kept so a reader can still say which stage it
+ * was after the stage itself has been renamed or deleted.
+ */
+export interface ActivityMarkChange {
+  id: string;
+  name: string;
+  from: string;
+  to: string;
 }
 
 export interface AppSettings {
@@ -1178,6 +1210,7 @@ export type WorkerPermission =
   | 'ownTasks' | 'completeTasks' | 'uploadPhotos' | 'addNotes' | 'selfAssign'
   | 'workHere'
   | 'assignOthers'
+  | 'moveOwnWork'
   | 'seeDiagrams' | 'seeAllApartments' | 'seePlans' | 'markUpPlans' | 'seeSnags'
   | 'allTasks' | 'seePlanner' | 'seeSchedule' | 'seeContacts' | 'switchProject';
 
@@ -1732,6 +1765,57 @@ export interface ContractorUiStrings {
   showAllDays?: string;
   generalJobLabel?: string;
   saidLabel?: string;
+  /**
+   * "Wrong apartment? Move it" (owner, 2026-10-05) — the worker moving HIS
+   * OWN task, with its photos and messages, to the apartment he really
+   * worked in. Optional with a fallback (the standing rule for this
+   * interface); the dialog reads them through `moveWordsOf`. The `…Few`
+   * forms are Russian's 2–4 plural and read like `…Many` elsewhere.
+   */
+  mvAction?: string;
+  mvTitle?: string;
+  mvPickHint?: string;
+  mvSearch?: string;
+  mvAll?: string;
+  mvSameWorkspace?: string;
+  mvNoMatch?: string;
+  mvFloor?: string;
+  mvNowOn?: string;
+  mvConfirmTitle?: string;
+  mvTheTask?: string;
+  mvPhotoOne?: string;
+  mvPhotoFew?: string;
+  mvPhotoMany?: string;
+  mvFilmOne?: string;
+  mvFilmFew?: string;
+  mvFilmMany?: string;
+  mvFileOne?: string;
+  mvFileFew?: string;
+  mvFileMany?: string;
+  mvMessageOne?: string;
+  mvMessageFew?: string;
+  mvMessageMany?: string;
+  mvAnd?: string;
+  mvMovesOne?: string;
+  mvMovesMany?: string;
+  mvMarkItem?: string;
+  mvMarkDone?: string;
+  mvMarkPending?: string;
+  mvMarkDoing?: string;
+  mvMarksBothOne?: string;
+  mvMarksBothMany?: string;
+  mvMarksOffOne?: string;
+  mvMarksOffMany?: string;
+  mvMarksOnOne?: string;
+  mvMarksOnMany?: string;
+  mvMarksKeptOne?: string;
+  mvMarksKeptMany?: string;
+  mvMarksToggle?: string;
+  mvMarksStay?: string;
+  mvDriveNote?: string;
+  mvBack?: string;
+  mvConfirm?: string;
+  mvDone?: string;
 }
 
 export const DEFAULT_CONTRACTOR_UI_STRINGS: ContractorUiStrings = {
@@ -1842,6 +1926,50 @@ export const DEFAULT_CONTRACTOR_UI_STRINGS: ContractorUiStrings = {
   showAllDays: 'Show every day',
   generalJobLabel: 'General job',
   saidLabel: 'Said',
+  mvAction: 'Wrong apartment? Move it',
+  mvTitle: 'Move to the right apartment',
+  mvPickHint: 'Which apartment did you really work in?',
+  mvSearch: 'Search by number or name…',
+  mvAll: 'All',
+  mvSameWorkspace: 'Only apartments in this project.',
+  mvNoMatch: 'No apartment matches.',
+  mvFloor: 'Floor',
+  mvNowOn: 'Now on {place}',
+  mvConfirmTitle: 'Check before moving',
+  mvTheTask: 'The task {task}',
+  mvPhotoOne: '1 photo',
+  mvPhotoFew: '{n} photos',
+  mvPhotoMany: '{n} photos',
+  mvFilmOne: '1 film',
+  mvFilmFew: '{n} films',
+  mvFilmMany: '{n} films',
+  mvFileOne: '1 file',
+  mvFileFew: '{n} files',
+  mvFileMany: '{n} files',
+  mvMessageOne: '1 message',
+  mvMessageFew: '{n} messages',
+  mvMessageMany: '{n} messages',
+  mvAnd: 'and',
+  mvMovesOne: '{things} moves from {from} to {to}.',
+  mvMovesMany: '{things} move from {from} to {to}.',
+  mvMarkItem: '{stage} {mark}',
+  mvMarkDone: 'done',
+  mvMarkPending: 'half done',
+  mvMarkDoing: 'happening now',
+  mvMarksBothOne: '{marks} comes off {from} and goes onto {to}.',
+  mvMarksBothMany: '{marks} come off {from} and go onto {to}.',
+  mvMarksOffOne: '{marks} comes off {from}.',
+  mvMarksOffMany: '{marks} come off {from}.',
+  mvMarksOnOne: '{marks} goes onto {to}.',
+  mvMarksOnMany: '{marks} go onto {to}.',
+  mvMarksKeptOne: '{marks} stays on {from} — another task there covers it.',
+  mvMarksKeptMany: '{marks} stay on {from} — other tasks there cover them.',
+  mvMarksToggle: 'Move the stage ticks too',
+  mvMarksStay: 'The stage ticks stay as they are on both apartments.',
+  mvDriveNote: 'The files themselves stay where they are in Google Drive.',
+  mvBack: 'Back',
+  mvConfirm: 'Move it',
+  mvDone: 'Moved to {to}',
 };
 
 export const HEBREW_CONTRACTOR_UI_STRINGS: ContractorUiStrings = {
@@ -1952,6 +2080,50 @@ export const HEBREW_CONTRACTOR_UI_STRINGS: ContractorUiStrings = {
   showAllDays: 'הצג את כל הימים',
   generalJobLabel: 'עבודה כללית',
   saidLabel: 'נאמר',
+  mvAction: 'דירה לא נכונה? להעביר',
+  mvTitle: 'העברה לדירה הנכונה',
+  mvPickHint: 'באיזו דירה עבדת באמת?',
+  mvSearch: 'חיפוש לפי מספר או שם…',
+  mvAll: 'הכל',
+  mvSameWorkspace: 'רק דירות בפרויקט הזה.',
+  mvNoMatch: 'אין דירה מתאימה.',
+  mvFloor: 'קומה',
+  mvNowOn: 'עכשיו ב-{place}',
+  mvConfirmTitle: 'בדיקה לפני ההעברה',
+  mvTheTask: 'המשימה {task}',
+  mvPhotoOne: 'תמונה אחת',
+  mvPhotoFew: '{n} תמונות',
+  mvPhotoMany: '{n} תמונות',
+  mvFilmOne: 'סרטון אחד',
+  mvFilmFew: '{n} סרטונים',
+  mvFilmMany: '{n} סרטונים',
+  mvFileOne: 'קובץ אחד',
+  mvFileFew: '{n} קבצים',
+  mvFileMany: '{n} קבצים',
+  mvMessageOne: 'הודעה אחת',
+  mvMessageFew: '{n} הודעות',
+  mvMessageMany: '{n} הודעות',
+  mvAnd: 'ו',
+  mvMovesOne: '{things} עוברת מ-{from} ל-{to}.',
+  mvMovesMany: '{things} עוברים מ-{from} ל-{to}.',
+  mvMarkItem: '{stage} ({mark})',
+  mvMarkDone: 'גמור',
+  mvMarkPending: 'חצי גמור',
+  mvMarkDoing: 'בעבודה עכשיו',
+  mvMarksBothOne: '{marks} יורד מ-{from} ועובר ל-{to}.',
+  mvMarksBothMany: '{marks} יורדים מ-{from} ועוברים ל-{to}.',
+  mvMarksOffOne: '{marks} יורד מ-{from}.',
+  mvMarksOffMany: '{marks} יורדים מ-{from}.',
+  mvMarksOnOne: '{marks} עובר ל-{to}.',
+  mvMarksOnMany: '{marks} עוברים ל-{to}.',
+  mvMarksKeptOne: '{marks} נשאר ב-{from} — משימה אחרת שם מכסה אותו.',
+  mvMarksKeptMany: '{marks} נשארים ב-{from} — משימות אחרות שם מכסות אותם.',
+  mvMarksToggle: 'להעביר גם את סימוני השלבים',
+  mvMarksStay: 'סימוני השלבים נשארים כמו שהם בשתי הדירות.',
+  mvDriveNote: 'הקבצים עצמם נשארים במקומם בגוגל דרייב.',
+  mvBack: 'חזרה',
+  mvConfirm: 'להעביר',
+  mvDone: 'הועבר ל-{to}',
 };
 
 /**
@@ -2067,6 +2239,50 @@ export const RUSSIAN_CONTRACTOR_UI_STRINGS: ContractorUiStrings = {
   showAllDays: 'Показать все дни',
   generalJobLabel: 'Общая работа',
   saidLabel: 'Сказано',
+  mvAction: 'Не та квартира? Перенести',
+  mvTitle: 'Перенести в нужную квартиру',
+  mvPickHint: 'В какой квартире вы на самом деле работали?',
+  mvSearch: 'Поиск по номеру или имени…',
+  mvAll: 'Все',
+  mvSameWorkspace: 'Только квартиры этого проекта.',
+  mvNoMatch: 'Нет подходящей квартиры.',
+  mvFloor: 'Этаж',
+  mvNowOn: 'Сейчас: {place}',
+  mvConfirmTitle: 'Проверьте перед переносом',
+  mvTheTask: 'Задача {task}',
+  mvPhotoOne: '{n} фото',
+  mvPhotoFew: '{n} фото',
+  mvPhotoMany: '{n} фото',
+  mvFilmOne: '{n} видео',
+  mvFilmFew: '{n} видео',
+  mvFilmMany: '{n} видео',
+  mvFileOne: '{n} файл',
+  mvFileFew: '{n} файла',
+  mvFileMany: '{n} файлов',
+  mvMessageOne: '{n} сообщение',
+  mvMessageFew: '{n} сообщения',
+  mvMessageMany: '{n} сообщений',
+  mvAnd: 'и',
+  mvMovesOne: '{things} переносится с {from} на {to}.',
+  mvMovesMany: '{things} переносятся с {from} на {to}.',
+  mvMarkItem: '{stage} ({mark})',
+  mvMarkDone: 'готово',
+  mvMarkPending: 'наполовину',
+  mvMarkDoing: 'идёт сейчас',
+  mvMarksBothOne: '{marks} снимается с {from} и переносится на {to}.',
+  mvMarksBothMany: '{marks} снимаются с {from} и переносятся на {to}.',
+  mvMarksOffOne: '{marks} снимается с {from}.',
+  mvMarksOffMany: '{marks} снимаются с {from}.',
+  mvMarksOnOne: '{marks} переносится на {to}.',
+  mvMarksOnMany: '{marks} переносятся на {to}.',
+  mvMarksKeptOne: '{marks} остаётся на {from} — там это подтверждает другая задача.',
+  mvMarksKeptMany: '{marks} остаются на {from} — там это подтверждают другие задачи.',
+  mvMarksToggle: 'Перенести и отметки этапов',
+  mvMarksStay: 'Отметки этапов остаются как есть в обеих квартирах.',
+  mvDriveNote: 'Сами файлы остаются на своих местах в Google Drive.',
+  mvBack: 'Назад',
+  mvConfirm: 'Перенести',
+  mvDone: 'Перенесено: {to}',
 };
 
 // ─── Main Admin UI Strings ────────────────────────────────────────────────────
@@ -2744,6 +2960,65 @@ export interface MainUiStrings {
   printPlanLabel: string;
   unknownUser: string;
   openInWindow: string;
+  /**
+   * Moving a task to another apartment, and the task delete that says what
+   * goes with it (owner, 2026-10-05). The `mv…` names match the worker's
+   * ContractorUiStrings keys so one dialog reads either; the `…Job` forms
+   * are the Job Board's words for the same thing.
+   */
+  mvAction: string;
+  mvTitle: string;
+  mvPickHint: string;
+  mvSearch: string;
+  mvAll: string;
+  mvSameWorkspace: string;
+  mvNoMatch: string;
+  mvFloor: string;
+  mvNowOn: string;
+  mvConfirmTitle: string;
+  mvTheTask: string;
+  mvPhotoOne: string;
+  mvPhotoFew: string;
+  mvPhotoMany: string;
+  mvFilmOne: string;
+  mvFilmFew: string;
+  mvFilmMany: string;
+  mvFileOne: string;
+  mvFileFew: string;
+  mvFileMany: string;
+  mvMessageOne: string;
+  mvMessageFew: string;
+  mvMessageMany: string;
+  mvAnd: string;
+  mvMovesOne: string;
+  mvMovesMany: string;
+  mvMarkItem: string;
+  mvMarkDone: string;
+  mvMarkPending: string;
+  mvMarkDoing: string;
+  mvMarksBothOne: string;
+  mvMarksBothMany: string;
+  mvMarksOffOne: string;
+  mvMarksOffMany: string;
+  mvMarksOnOne: string;
+  mvMarksOnMany: string;
+  mvMarksKeptOne: string;
+  mvMarksKeptMany: string;
+  mvMarksToggle: string;
+  mvMarksStay: string;
+  mvDriveNote: string;
+  mvBack: string;
+  mvConfirm: string;
+  mvDone: string;
+  mvActionJob: string;
+  mvTitleJob: string;
+  mvPickHintJob: string;
+  delTaskAlso: string;
+  delTaskNothing: string;
+  delTaskDrive: string;
+  delTaskNoUndo: string;
+  delTaskMoveInstead: string;
+  delTaskMoveInsteadJob: string;
   /** Office-side notifications when a worker writes or closes a job. */
   officeNotifMessage: string;
   officeNotifClosed: string;
@@ -3547,6 +3822,59 @@ export const DEFAULT_MAIN_UI_STRINGS: MainUiStrings = {
   printPlanLabel: 'Print',
   unknownUser: 'Someone',
   openInWindow: 'Open in the apartment window',
+  mvAction: 'Move to another apartment…',
+  mvTitle: 'Move this task to another apartment',
+  mvPickHint: 'Which apartment was this work really done in?',
+  mvSearch: 'Search by number, family or building…',
+  mvAll: 'All',
+  mvSameWorkspace: 'Only apartments in this workspace can be picked.',
+  mvNoMatch: 'No apartment matches.',
+  mvFloor: 'Floor',
+  mvNowOn: 'Now on {place}',
+  mvConfirmTitle: 'Check before moving',
+  mvTheTask: 'The task {task}',
+  mvPhotoOne: '1 photo',
+  mvPhotoFew: '{n} photos',
+  mvPhotoMany: '{n} photos',
+  mvFilmOne: '1 film',
+  mvFilmFew: '{n} films',
+  mvFilmMany: '{n} films',
+  mvFileOne: '1 file',
+  mvFileFew: '{n} files',
+  mvFileMany: '{n} files',
+  mvMessageOne: '1 message',
+  mvMessageFew: '{n} messages',
+  mvMessageMany: '{n} messages',
+  mvAnd: 'and',
+  mvMovesOne: '{things} moves from {from} to {to}.',
+  mvMovesMany: '{things} move from {from} to {to}.',
+  mvMarkItem: '{stage} {mark}',
+  mvMarkDone: 'done',
+  mvMarkPending: 'half done',
+  mvMarkDoing: 'happening now',
+  mvMarksBothOne: '{marks} comes off {from} and goes onto {to}.',
+  mvMarksBothMany: '{marks} come off {from} and go onto {to}.',
+  mvMarksOffOne: '{marks} comes off {from}.',
+  mvMarksOffMany: '{marks} come off {from}.',
+  mvMarksOnOne: '{marks} goes onto {to}.',
+  mvMarksOnMany: '{marks} go onto {to}.',
+  mvMarksKeptOne: '{marks} stays on {from} — another task there covers it.',
+  mvMarksKeptMany: '{marks} stay on {from} — other tasks there cover them.',
+  mvMarksToggle: 'Move the stage ticks too',
+  mvMarksStay: 'The stage ticks stay as they are on both apartments.',
+  mvDriveNote: 'The files themselves stay where they are in Google Drive.',
+  mvBack: 'Back',
+  mvConfirm: 'Move it',
+  mvDone: 'Moved to {to}',
+  mvActionJob: 'Move to another job…',
+  mvTitleJob: 'Move this task to another job',
+  mvPickHintJob: 'Which job was this work really for?',
+  delTaskAlso: 'This also removes {things} from the app.',
+  delTaskNothing: 'Nothing else is attached to it.',
+  delTaskDrive: 'The files stay in Google Drive.',
+  delTaskNoUndo: 'This cannot be undone.',
+  delTaskMoveInstead: 'Move it to another apartment instead',
+  delTaskMoveInsteadJob: 'Move it to another job instead',
   officeNotifMessage: 'Message from {who}',
   officeNotifClosed: '{who} closed a job',
   officeNotifAllow: 'Allow desktop alerts',
@@ -4347,6 +4675,59 @@ export const HEBREW_MAIN_UI_STRINGS: MainUiStrings = {
   printPlanLabel: 'הדפסה',
   unknownUser: 'מישהו',
   openInWindow: 'פתיחה בחלון הדירה',
+  mvAction: 'העברה לדירה אחרת…',
+  mvTitle: 'העברת המשימה לדירה אחרת',
+  mvPickHint: 'באיזו דירה העבודה נעשתה באמת?',
+  mvSearch: 'חיפוש לפי מספר, משפחה או בניין…',
+  mvAll: 'הכל',
+  mvSameWorkspace: 'אפשר לבחור רק דירות בסביבת העבודה הזאת.',
+  mvNoMatch: 'אין דירה מתאימה.',
+  mvFloor: 'קומה',
+  mvNowOn: 'עכשיו ב-{place}',
+  mvConfirmTitle: 'בדיקה לפני ההעברה',
+  mvTheTask: 'המשימה {task}',
+  mvPhotoOne: 'תמונה אחת',
+  mvPhotoFew: '{n} תמונות',
+  mvPhotoMany: '{n} תמונות',
+  mvFilmOne: 'סרטון אחד',
+  mvFilmFew: '{n} סרטונים',
+  mvFilmMany: '{n} סרטונים',
+  mvFileOne: 'קובץ אחד',
+  mvFileFew: '{n} קבצים',
+  mvFileMany: '{n} קבצים',
+  mvMessageOne: 'הודעה אחת',
+  mvMessageFew: '{n} הודעות',
+  mvMessageMany: '{n} הודעות',
+  mvAnd: 'ו',
+  mvMovesOne: '{things} עוברת מ-{from} ל-{to}.',
+  mvMovesMany: '{things} עוברים מ-{from} ל-{to}.',
+  mvMarkItem: '{stage} ({mark})',
+  mvMarkDone: 'גמור',
+  mvMarkPending: 'חצי גמור',
+  mvMarkDoing: 'בעבודה עכשיו',
+  mvMarksBothOne: '{marks} יורד מ-{from} ועובר ל-{to}.',
+  mvMarksBothMany: '{marks} יורדים מ-{from} ועוברים ל-{to}.',
+  mvMarksOffOne: '{marks} יורד מ-{from}.',
+  mvMarksOffMany: '{marks} יורדים מ-{from}.',
+  mvMarksOnOne: '{marks} עובר ל-{to}.',
+  mvMarksOnMany: '{marks} עוברים ל-{to}.',
+  mvMarksKeptOne: '{marks} נשאר ב-{from} — משימה אחרת שם מכסה אותו.',
+  mvMarksKeptMany: '{marks} נשארים ב-{from} — משימות אחרות שם מכסות אותם.',
+  mvMarksToggle: 'להעביר גם את סימוני השלבים',
+  mvMarksStay: 'סימוני השלבים נשארים כמו שהם בשתי הדירות.',
+  mvDriveNote: 'הקבצים עצמם נשארים במקומם בגוגל דרייב.',
+  mvBack: 'חזרה',
+  mvConfirm: 'להעביר',
+  mvDone: 'הועבר ל-{to}',
+  mvActionJob: 'העברה לעבודה אחרת…',
+  mvTitleJob: 'העברת המשימה לעבודה אחרת',
+  mvPickHintJob: 'לאיזו עבודה זה היה שייך באמת?',
+  delTaskAlso: 'זה גם מוחק מהאפליקציה {things}.',
+  delTaskNothing: 'שום דבר אחר לא מחובר אליה.',
+  delTaskDrive: 'הקבצים נשארים בגוגל דרייב.',
+  delTaskNoUndo: 'אי אפשר לבטל את זה.',
+  delTaskMoveInstead: 'להעביר אותה לדירה אחרת במקום',
+  delTaskMoveInsteadJob: 'להעביר אותה לעבודה אחרת במקום',
   officeNotifMessage: 'הודעה מ{who}',
   officeNotifClosed: '{who} סגר עבודה',
   officeNotifAllow: 'לאפשר התראות במחשב',

@@ -35,13 +35,15 @@ async function makePlan() {
   t('Address: 8 Weizmann St, Bnei Brak', 532, 104, 11);
   t('TzviAir office Tel: 02-628-8282', 532, 92);
   t('Fax: 03-6161616', 532, 80);
-  t('Tel: 052-123-4567', 532, 64, 11);
+  // A real-shaped mobile: 052-123-4567 is a SAMPLE number and is refused
+  // since 2026-10-05 (planhonest.mjs covers that refusal).
+  t('Tel: 052-748-3916', 532, 64, 11);
   t('Drawn by: R. Levi', 532, 40);
   return Buffer.from(await doc.save());
 }
 const planBytes = await makePlan();
 
-const APP = 'http://localhost:5174';
+const APP = process.env.APP ?? 'http://localhost:5174';
 const b = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' });
 const ctx = await b.newContext({ viewport: { width: 1440, height: 900 } });
 
@@ -97,7 +99,7 @@ await page.waitForSelector('[data-plan-read="phone"] [data-plan-address-use]', {
 const addrRow = await page.locator('[data-plan-read="address"]').innerText();
 check(addrRow.includes('8 Weizmann St, Bnei Brak'), 'address row reads the address', addrRow);
 const phoneRow = await page.locator('[data-plan-read="phone"]').innerText();
-check(phoneRow.includes('052-123-4567'), 'phone row prefers the labelled Tel over the fax', phoneRow);
+check(phoneRow.includes('052-748-3916'), 'phone row prefers the labelled Tel over the fax', phoneRow);
 check(!(await page.locator('text=Read the address from the plan').count()),
   'no standing read button — the rows are quiet and automatic');
 
@@ -105,7 +107,7 @@ check(!(await page.locator('text=Read the address from the plan').count()),
 await page.locator('[data-plan-read="phone"] [data-plan-address-use]').click();
 await page.waitForTimeout(700);
 const d = await page.evaluate(() => JSON.parse(localStorage.getItem('general_app_data')));
-check(d.apartments[0].phone === '052-123-4567', 'the blue plus writes the phone onto the job',
+check(d.apartments[0].phone === '052-748-3916', 'the blue plus writes the phone onto the job',
   d.apartments[0].phone ?? '(none)');
 
 // The eye on the phone row opens its own cutout.
@@ -133,7 +135,7 @@ await page.mouse.move(stage.x + stage.width * 0.86, stage.y + stage.height * 0.8
 await page.mouse.up();
 await page.waitForTimeout(600);
 const boxRead = await page.locator('[data-addr-pick-read]').textContent();
-check((boxRead ?? '').includes('03-6161616') && !(boxRead ?? '').includes('052-123'),
+check((boxRead ?? '').includes('03-6161616') && !(boxRead ?? '').includes('052-748'),
   'the box on the phone row reads the line it covers (the fax, which the reader refused)', boxRead ?? '(none)');
 await page.locator('[data-addr-pick-use]').click();
 await page.waitForTimeout(700);

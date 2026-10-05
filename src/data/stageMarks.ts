@@ -316,6 +316,54 @@ export function cycleMark(
   return Object.keys(next).length ? next : undefined;
 }
 
+/**
+ * A stage's place in the flat's set, as the activity log words it: the
+ * stored state when it is in the set, `off` when it was switched off, and
+ * `none` when it is simply not part of this flat (a custom stage elsewhere,
+ * a tipus that leaves it out). A retired stage is `none` — nothing can
+ * happen to it any more.
+ */
+export type SetStateWord = StageState | 'none';
+export function setStateOf(
+  apt: AptLike,
+  stage: Stage,
+  sortedStages: Stage[],
+  ctx?: SetContext,
+): SetStateWord {
+  if (!isWorkStage(stage) || !stage.active) return 'none';
+  const m = apt.stageMarks?.[stage.id];
+  if (m === 'off') return 'off';
+  if (!m && !inBaseSet(apt, stage, ctx)) return 'none';
+  return stageStateOf(apt, stage.id, sortedStages);
+}
+
+/**
+ * WHAT A WRITE DID TO THE STAGES — the set model's activity line.
+ *
+ * The old log recorded the HEADLINE moving ("Registers → Access Panels"),
+ * which under the set model is bookkeeping the app derives by itself, not a
+ * thing anybody did: the owner read "changed stage" on a flat whose stages
+ * are each done "in their own way and form" and could not tell what had
+ * actually happened. This compares the stored state of every work stage
+ * before and after, and returns only the ones that moved — "Registers: doing
+ * → done" — in the workspace's order. Pure; the store hands it the record
+ * before and after the write.
+ */
+export function stageChangesOf(
+  before: AptLike,
+  after: AptLike,
+  sortedStages: Stage[],
+  ctx?: SetContext,
+): Array<{ id: string; name: string; from: SetStateWord; to: SetStateWord }> {
+  const out: Array<{ id: string; name: string; from: SetStateWord; to: SetStateWord }> = [];
+  for (const st of sortedStages) {
+    const from = setStateOf(before, st, sortedStages, ctx);
+    const to = setStateOf(after, st, sortedStages, ctx);
+    if (from !== to) out.push({ id: st.id, name: st.name, from, to });
+  }
+  return out;
+}
+
 /** Write one mark outright (or remove it with null). */
 export function setMark(
   marks: Record<string, StageMark> | undefined,

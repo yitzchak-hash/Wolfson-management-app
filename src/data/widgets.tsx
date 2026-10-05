@@ -20,6 +20,7 @@ import { portalLink } from './portalLink';
 import { useStore, loadProjectSnapshot } from './store';
 import { searchJobs } from './searchIndex';
 import { describeActivity } from './activityText';
+import { foldActivity } from './activityWords';
 import { ClipArtNode, ART_KINDS, ArtKind } from '../components/board/BoardNodes';
 import { MiniJob } from '../components/board/MiniJob';
 import { ProjectMini, BoardMini, CalendarMini } from '../components/board/DashWidgets';
@@ -526,10 +527,12 @@ export const WIDGETS: WidgetDef[] = [
     render: (_el, c) => (
       <Frame title="What changed" icon={Activity}>
         <div className="flex flex-col gap-1 h-full overflow-y-auto pr-1">
-          {c.logs.slice(0, 8).map(l => {
-            const { who, parts, when } = describeActivity(l, c.jobs);
+          {/* The log's own words and folding: five photos are one line. */}
+          {foldActivity(c.logs.slice(0, 60)).slice(0, 8).map(g => {
+            const { who, parts, when } = describeActivity(g.logs, c.jobs, Date.now(),
+              { lang: c.isRtl ? 'he' : 'en', stages: c.stages });
             return (
-              <div key={l.id} className="text-[10px] leading-tight">
+              <div key={g.id} className="text-[10px] leading-tight">
                 <span className="text-gray-700">
                   <b className="text-gray-900">{who}</b>{' '}
                   {/* Not gated on `readOnly`: opening a job is not editing it,

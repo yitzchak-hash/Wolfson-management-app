@@ -46,6 +46,11 @@ export const WORKER_PERMISSIONS: PermissionDef[] = [
   { key: 'assignOthers', label: 'Give tasks to other workers', group: 'Work',
     hint: 'The worker picker appears in their add-a-task form. Without it a task they add is '
       + 'always their own. A foreman handing out the morning, not a pair of hands.' },
+  // Owner, 2026-10-05: "give a contractor the permission to move something
+  // that he did by mistake" — a day recorded on A1 floor 3 that was done in A3.
+  { key: 'moveOwnWork', label: 'Move their own work to another apartment', group: 'Work',
+    hint: '"Wrong apartment? Move it" on a task of their own — the task, its photos and its '
+      + 'messages go to the apartment they really worked in, inside the same workspace.' },
 
   // ── The site ──────────────────────────────────────────────────────────────
   { key: 'seeDiagrams', label: 'See the building diagrams', group: 'The site',
@@ -123,6 +128,24 @@ export const DEFAULT_NEW_WORKER_LEVEL = 'lvl-contractor';
 export type Perms = Record<WorkerPermission, boolean>;
 
 /**
+ * What a LEVEL says about one switch.
+ *
+ * Its own answer when it has one. A level that ships with the app and was
+ * saved before a switch existed has never answered that switch — every
+ * machine that stored its levels keeps them in the cloud, so a new switch the
+ * owner ruled ON for a shipped level (Manager's `moveOwnWork`) would read OFF
+ * everywhere that mattered. For those, the shipped answer stands until
+ * somebody flips it. A level the office made itself has no shipped answer,
+ * and an unanswered switch there is off.
+ */
+export function levelAnswer(level: WorkerLevel | undefined, key: WorkerPermission): boolean {
+  const own = level?.perms?.[key];
+  if (own !== undefined) return own;
+  const shipped = level ? DEFAULT_WORKER_LEVELS.find(l => l.id === level.id) : undefined;
+  return shipped?.perms[key] ?? false;
+}
+
+/**
  * What THIS worker can do.
  *
  * Level first, then that person's own overrides on top. An override is stored
@@ -136,10 +159,9 @@ export function permsOf(
   const level = levels.find(l => l.id === worker?.levelId)
     ?? levels.find(l => l.id === DEFAULT_NEW_WORKER_LEVEL)
     ?? levels[0];
-  const base = level?.perms ?? {};
   const own = worker?.perms ?? {};
   return Object.fromEntries(
-    WORKER_PERMISSIONS.map(p => [p.key, own[p.key] ?? base[p.key] ?? false]),
+    WORKER_PERMISSIONS.map(p => [p.key, own[p.key] ?? levelAnswer(level, p.key)]),
   ) as Perms;
 }
 

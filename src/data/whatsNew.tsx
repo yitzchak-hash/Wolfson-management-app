@@ -30,6 +30,84 @@ export interface WhatsNewEntry {
 
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    date: '2027-01-23',
+    title: 'The activity log in plain words, moving a task, and a plan reader that shows its source',
+    items: [
+      {
+        title: 'One activity centre',
+        body: 'The Job Board’s Activity page now shows what happened in every workspace, newest first, '
+          + 'each line in its workspace’s colour. Every line is a plain sentence — “Igor uploaded 5 '
+          + 'photos”, “Igor marked Registers done” — and a run of the same thing folds into one line '
+          + 'you can open. Press a line to open that apartment.',
+        demo: 'list',
+      },
+      {
+        title: 'Move a task to the right apartment',
+        body: 'A task recorded on the wrong apartment can be moved — with its photos, messages and stage '
+          + 'ticks — from the apartment window or the Tasks page. The last step says exactly what moves. '
+          + 'Workers you allow can move their own: Settings → Workers, “Move their own work to another '
+          + 'apartment”.',
+        demo: 'drag',
+      },
+      {
+        title: 'Deleting a task says what goes',
+        body: 'Deleting a task now tells you what goes with it — photos, films, messages — and offers to '
+          + 'move it instead. The files themselves stay in Google Drive.',
+        demo: 'tap',
+      },
+      {
+        title: 'The plan only suggests what it can show you',
+        body: 'An address or phone number “On the plan” appears only when the app can point at where it '
+          + 'is printed — the eye draws a box round the exact spot. Nothing made up, no sample numbers, '
+          + 'and never TzviAir’s own office lines.',
+        demo: 'pin',
+      },
+    ],
+  },
+  {
+    date: '2027-01-22',
+    title: 'The notebook says where, pictures slide, films start at once',
+    items: [
+      {
+        title: 'Every bar says where the job is',
+        body: 'A bar on the weekly notebook starts with its building — A1, A2, A3 — and its second line '
+          + 'gives the floor (numbered the way the building diagram numbers it) and the address.',
+        demo: 'list',
+      },
+      {
+        title: 'Done is a green tag, not a cross',
+        body: 'A finished task is a green card with a ✓ done tag. The line through the words is gone, so '
+          + 'you can still read what was done.',
+        demo: 'sparkle',
+      },
+      {
+        title: 'Pictures open in a picture viewer',
+        body: 'In the apartment window’s Drive browser, a photo or a film opens big in the viewer, and the '
+          + 'arrows — or a swipe — walk through every picture in that folder. Only plans open as plans.',
+        demo: 'tap',
+      },
+      {
+        title: 'Films start straight away',
+        body: 'A film from site starts playing after its first seconds arrive instead of waiting for the '
+          + 'whole file to download.',
+        demo: 'sparkle',
+      },
+      {
+        title: 'The squares count the right stages',
+        body: 'A building square read 4/13 while the apartment window said 4/9 — the squares were counting '
+          + 'the Job Board’s stages too. Both say 4/9 now, and the window prints the floor the way the '
+          + 'diagram does.',
+        demo: 'zoom',
+      },
+      {
+        title: 'Active jobs shows forty at a time',
+        body: 'The Active jobs list draws forty jobs and a “Show 40 more” button. Drawing all of them at '
+          + 'once, three copies over, is what made Chrome freeze on the Job Board.',
+        demo: 'list',
+      },
+    ],
+  },
+  {
     date: '2027-01-21',
     title: 'Live from site: every workspace, the second it lands, tap to watch',
     items: [
