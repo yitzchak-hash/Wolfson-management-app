@@ -29,6 +29,9 @@ asks for it. ☑ done · ☐ next · ✎ awaiting Yitzchak's word. (Standing ord
   cleanup of cross-workspace records; project on Blaze.
 - ☑ 2026-09-23: "Live from site" — every workspace's photos and films,
   live, tappable on the TV.
+- ☑ The Vercel keys: push (server pair + the public key in the bundle), the
+  AI key, the service account and the API key all report set (checked on the
+  live site, 2026-10-05).
 - ☑ 2026-10-05 (the first screen recording): notebook bars say where and
   done is a green tag; pictures slide in a viewer; Drive films stream;
   squares count their own stages; the activity log in plain words with the
@@ -36,9 +39,6 @@ asks for it. ☑ done · ☐ next · ✎ awaiting Yitzchak's word. (Standing ord
   reader shows its source; Active jobs draws 40 rows (the Chrome freeze).
 
 ## Next (in order)
-- ☐ Set the Vercel keys still missing: `VAPID_PUBLIC_KEY` /
-  `VAPID_PRIVATE_KEY` / `VITE_VAPID_PUBLIC_KEY` (push), confirm
-  `OPENAI_API_KEY` (transcription, translation, plan reading).
 - ☐ Watch on production: the foreign photo listener (no Firebase in the
   container), the plan pane's Windows scrollbar re-fit, the Leads folder
   discovery, TikTok's player protocol end to end.

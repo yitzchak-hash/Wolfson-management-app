@@ -105,7 +105,8 @@ Last commits, newest first (see `git log`):
   Drilling done on A3 9/10/11?; A1 12's Piping/Concealed/Fans (came from the
   moved report); A3 12's Access Panels (ticked before drywall); a "Next:" cue
   on squares; the A1 floor-10 empty placeholder; the "Skipped a stage"
-  widget. Push keys (VAPID) are still not set in Vercel.
+  widget. Every Vercel key reports set (push pair + public key in the bundle,
+  AI, service account, API key — checked on the live site 2026-10-05).
 - **2026-09-23, latest — "the live photos from site widget… nothing shows
   up there the second it comes in… from the TV it needs to be touchable".**
   Root cause: the photo widget read only the OPEN workspace's uploads, and
