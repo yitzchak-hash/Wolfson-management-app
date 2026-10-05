@@ -29,7 +29,11 @@ asks for it. ☑ done · ☐ next · ✎ awaiting Yitzchak's word. (Standing ord
   cleanup of cross-workspace records; project on Blaze.
 - ☑ 2026-09-23: "Live from site" — every workspace's photos and films,
   live, tappable on the TV.
-- ☑ 2026-10-05: Active jobs draws 40 rows at a time (the Chrome freeze).
+- ☑ 2026-10-05 (the first screen recording): notebook bars say where and
+  done is a green tag; pictures slide in a viewer; Drive films stream;
+  squares count their own stages; the activity log in plain words with the
+  Job Board as the centre; move a task to the right apartment; the plan
+  reader shows its source; Active jobs draws 40 rows (the Chrome freeze).
 
 ## Next (in order)
 - ☐ Set the Vercel keys still missing: `VAPID_PUBLIC_KEY` /
@@ -38,6 +42,11 @@ asks for it. ☑ done · ☐ next · ✎ awaiting Yitzchak's word. (Standing ord
 - ☐ Watch on production: the foreign photo listener (no Firebase in the
   container), the plan pane's Windows scrollbar re-fit, the Leads folder
   discovery, TikTok's player protocol end to end.
+- ✎ **Igor's Monday, Redrawn** (plan page, 2026-10-05): the busy notebook
+  day — A bar per task / B grouped by building ★ / C one summary card — and
+  the activity "day story" with automatic flags. Build on his answers.
+- ✎ The "Skipped a stage" widget reads only the old "X → Y" records — under
+  the set model stages are done in any order; retire or redefine it.
 - ✎ The tablet studio layout (the "Studio on the Tablet" plan page: one
   bar, 56px rail, docked tray) — build on Yitzchak's numbers.
 - ✎ OCR for scanned plans (tesseract) when scans matter.

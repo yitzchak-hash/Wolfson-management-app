@@ -46,7 +46,7 @@ day still stands, after the numbered list.)
 3. `npx tsc --noEmit -p .` and `npx vite build`. 4. The audits:
    `node scratchpad/loopaudit.mjs`, `backupaudit.mjs`, `navaudit.mjs`, `apilimit.mjs`.
 5. A What's New entry (`src/data/whatsNew.tsx`, dates run AHEAD of the clock;
-   newest is `2027-01-21` — the next entry must be a later date (an older
+   newest is `2027-01-23` — the next entry must be a later date (an older
    entry lower down also wears `2026-12-20`; the marker compares only the TOP
    entry's date, so never reuse a date that appears anywhere in the file)). 6. A CLAUDE.md
    round record. 7. A line in `docs/CRM-CHECKLIST.md`, tick `docs/ROADMAP.md`, date a line in `docs/DECISIONS.md` when he decided something. 8. Rewrite THIS file.
@@ -64,8 +64,48 @@ with starred recommendations is published first; the owner says "approved" /
 "all yes" / answers by number; then it is built. Never build a redesign
 unasked.
 
-## Where things stand (2026-09-23, latest — Live from site; PENDING HIS WORD: the Active-jobs row cap)
+## Where things stand (2026-10-05, latest — the first screen recording; PENDING HIS WORD: the "Igor's Monday" plan page + seven small questions)
 Last commits, newest first (see `git log`):
+- **2026-10-05, latest — HIS NEW WAY OF WORKING: screen recordings.** He drops
+  recordings into a Drive folder
+  (https://drive.google.com/drive/folders/1yOIA6bfj97LuTIvvCAd57CGAYYlgho2V);
+  "check the folder" = list it, add new files to `docs/feedback/LEDGER.md`,
+  work them oldest first (two transcriptions merged, the screen read every
+  second, every sentence matched to the pointer), a feedback doc per video in
+  `docs/feedback/`, every single ask in `docs/feedback/MASTER-CHECKLIST.md`
+  (re-read it before every reply), fix everything, list the folder again
+  before finishing. His reply format: (A) the transcript with a heading per
+  minute, (B) the line "## ✅ END RESULT STARTS HERE 🟢", (C) numbered bullets
+  "**N. the problem, his words, video time** — the fix — **Done / Fixed /
+  Waiting for your answer**", (D) a rule, then "What I need from you" as short
+  gentle numbered questions (options + a recommendation), the deploy link,
+  then the bold emoji one-liner. Never ask for keys in chat — say where to
+  click. While watching, look for asks from EARLIER videos still not done.
+  Video 1 (7:57) is done except the plan page's answers. Built: notebook bars
+  say where (building chip, floor, address) and done is a green tag; pictures
+  in the Drive browser open the swipe viewer; Drive films STREAM (GET
+  /api/drive-fetch with Range); squares count only their own workspace's
+  stages (`ownStage`, 4/9 not 4/13); the window's floor matches the diagram;
+  Active jobs draws 40 rows (the freeze). Three helpers in worktrees, merged:
+  the activity log in plain words with the Job Board as the centre
+  (`activityWords.ts`, `activityCenter.ts`); move a task to the right
+  apartment + the `moveOwnWork` permission + a delete dialog that says what
+  goes (`taskMove.ts`); the plan reader offers only what it can box
+  (`planAddress.ts`, both copies of its refusal rules — narrowed so a
+  customer on the office's street and a real number with a run of six pass).
+  Production data, on his word: Igor's 5-Oct reports moved A1 9/10/11/12 →
+  A3 9/10/11/12 with 15 photos and 8 messages, the three 5-Oct reports
+  renamed to Wall Units & Outdoor Units, A1 10/11 Registers un-ticked, A3
+  9/10/11 Wall + Outdoor ticked, a global Drilling stage added after
+  Thermostats, and 13 history lines for the move (Office, 14:00 UTC).
+  Backups in the session scratchpad only. The plan page "Igor's Monday,
+  Redrawn" (https://claude.ai/artifact/H8T7EoSpBWYeLQewseGywQ) asks: busy-day
+  look A / B ★ / C, the day story yes/no, automatic flags yes/no. Small
+  questions in the reply: Drilling's position (Netiv shares the list); tick
+  Drilling done on A3 9/10/11?; A1 12's Piping/Concealed/Fans (came from the
+  moved report); A3 12's Access Panels (ticked before drywall); a "Next:" cue
+  on squares; the A1 floor-10 empty placeholder; the "Skipped a stage"
+  widget. Push keys (VAPID) are still not set in Vercel.
 - **2026-09-23, latest — "the live photos from site widget… nothing shows
   up there the second it comes in… from the TV it needs to be touchable".**
   Root cause: the photo widget read only the OPEN workspace's uploads, and

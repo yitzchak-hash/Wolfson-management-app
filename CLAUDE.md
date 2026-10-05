@@ -8967,3 +8967,206 @@ mouse tap → controls/full screen/no drawer/no drag, Escape, a picture with
 arrows, and on /tv a CDP finger tap opening and closing the viewer). `dedupe`
 and `storefull` unchanged (dedupe's "1 FAILED" is the sandboxed-frame
 localStorage page error, pre-existing).
+
+---
+
+# v2 — the first screen recording (2026-10-05): the folder, the ledger, and what one video asked
+
+## Working from screen recordings (`docs/feedback/`)
+The owner records his screen and drops the files into a Drive folder; "check
+the folder" means: list it, add every new file to `docs/feedback/LEDGER.md`
+(name · Drive id · length · status new / done / open / not this app · its
+feedback doc), and work them OLDEST first. Each recording gets
+`docs/feedback/<date>-<time>.md`: a merged transcript (two transcription
+passes, a third with the volume raised over quiet stretches), the screen read
+at least every two seconds plus every scene change, each sentence matched to
+where the POINTER is, every ask as one row (time · what he said or showed ·
+the change · status), and what he SHOWED without saying.
+`docs/feedback/MASTER-CHECKLIST.md` holds every single ask — recordings and
+chat — as Done (with its proof) / Partly / Not done / Later (only his word) /
+Waiting; voice-typed paragraphs are split into single asks; re-read it before
+every reply. A recording of another project is marked "not this app" and
+reported, never built. While watching, look for asks from EARLIER recordings
+that are still not done.
+
+The tooling lives in the session scratchpad, never the repo (his screen shows
+real client names): faster-whisper for the passes, ffmpeg for the frames,
+composite sheets of crops around the pointer. Pictures drop out of a long
+context — write the frame notes down the moment they are read. **A feedback
+doc, a commit and a helper's brief name a unit by its place ("A3 15"), never
+by the family on his screen** — a family typed into a brief came back as a
+test fixture this round, and two in a feedback doc reached the working branch
+before the sweep caught them. Before a push, sweep the round's diff against
+the production family names (the scratchpad copy of `apartments`).
+
+## The set model counts only its own workspace's stages (`ownStage`)
+`stageSetOf`, `headlineStageId` (the closing markers) and `marksForCurrent`
+keep only the apartment's OWN workspace's stages: a building unit takes the
+global ones (`!projectId`), a Job Board job (`buildingId === 'G'`) takes
+`projectId === 'general'`; a record with no building (a shelf sample) keeps
+every stage. Callers hand in the whole store's list on purpose — the diagram
+squares read "4/13" beside the window's "4/9" because the Job Board's four
+work stages were being counted on Wolfson's squares.
+`scratchpad/stagescope-test.mjs` (offline; four of its six fail without it).
+
+## A Drive film STREAMS (`GET /api/drive-fetch?id=…&k=…`)
+The viewer downloaded the whole file through the POST door before drawing a
+frame — a 51-second site film sat black for nine seconds. `api/drive-fetch.js`
+also answers a GET now: the key rides as `k` (a `<video src>` cannot send a
+header), the browser's `Range` goes to Drive, Drive's 206 + `Content-Range` /
+`Content-Length` / `Accept-Ranges` come straight back, and the Drive stream is
+destroyed when the browser hangs up (a seek opens a new range). `vercel.json`
+gives the function `maxDuration: 60`. No new route (12/12).
+`driveStreamUrl(fileId)` / `isDriveStreamUrl` in driveApi; `MediaViewer` and
+`VideoTile` play from the stream and fall back to the whole-file download
+(`fetchPlanBytes` → blob) only when the `<video>` errors on it
+(`streamFailed`); a stream address is never revoked like a blob. The key in
+the address is the same public bundle key `x-api-key` already carries.
+Harnesses: `scratchpad/drivestream/` (the real handler against a fake
+googleapis, offline: `node --import ./scratchpad/drivestream/register.mjs
+scratchpad/drivestream/test.mjs`) and `scratchpad/filmstream-probe.mjs`
+(keyed 5174: a range is asked for, no POST, a refused stream falls back).
+
+## A picture in the Drive browser opens the picture viewer
+`PlanBrowser`: a file whose `mediaKindOf` is image or video opens
+`onOpenMedia` (the `MediaViewer`) with EVERY picture and film in that folder,
+swipeable — never the plan pane ("Opening the plan… / Back to Registers" over
+a site photo). `viewable` (what the pane can draw) includes images, which is
+how a photo reached the pane first; the kind is now asked before `viewable`.
+Sheets still open in the pane; a `.dwg` still opens as a file card.
+
+## The window prints the floor the way the diagram labels it
+The drawer's header floor goes through `rowNumOf(buildingId, floor)`
+(`data-drawer-floor`) — Wolfson's towers print one lower than the record
+floor, so the window said "Floor 4" over a square in the diagram's row 3.
+
+## The notebook bar says where, and done stays readable
+`TaskBar`: in the two-line bar, line ONE is the unit's label ALONE — every
+extra word on line one is taken out of the unit's own name the moment a cell
+is narrow (a building chip in front cut "12 — Weinstein" on the notebook's
+~98px bar; `notebooklabel-probe` caught it, the 09-22 rule again). Line TWO
+opens with the done tag, the building chip (`data-bar-building`) and the
+workspace tag, then the floor (as the diagram counts it, `floorWord`
+en/he/ru), the address and the stages. A strip (one line) carries chip, label,
+tag and done tag on its single line. A closed task is a GREEN card
+(`#ecfdf5`, border `#a7f3d0`) with a `data-bar-done` pill and a tick — "done"
+/ "finished early" — no strike line, no dimming ("why can't we just mark it
+as done without a cross"). `PlannerCard` (strip and full) the same with
+`data-card-done`. `notebookbars-probe` and `multiday` re-encoded.
+
+## Active jobs draws forty rows at a time (the freeze)
+`ACTIVE_ROW_CAP = 40` in insightWidgets: the widget still ranks every job but
+DRAWS forty; `data-active-more` ("Show N more · M not shown") adds forty more.
+Widgets are never culled, and three copies of a ~1,200-row list were ~77,000
+nodes Chrome restyled on every scroll — the measured cause of "Chrome freezes,
+sometimes the whole computer" (the 2026-09-23 diagnosis). Measured on a
+600-row seed: 13,231 elements in the widget → 959. `scratchpad/activecap-probe.mjs`
+(production bundle on 4173).
+
+## The production data fix (Igor's wrong tower)
+The recording showed Igor's reports filed on A1 9/10/11/12 while the work was
+on A3 9/10/11/12 — a worker picking the wrong tower on the map. Moved by REST
+on his word (backup first in the session scratchpad, dry run, the write, then
+read back): the four stage-report tasks, their 15 photos and 8 messages; the
+three 5-October reports renamed to what was really done (Wall Units & Outdoor
+Units); A1 10/11 lost the Registers tick; A3 9/10/11 got Wall + Outdoor done.
+A1 9, A1 12 and A3 12 were left as they stood (questions to him). A global
+stage `s-drilling` (Drilling / קידוחים / Сверление, #0891b2, order 10) was
+added on his ask; its position is a question to him. The moved photos' Drive
+files still sit in A1's folders — records point at them by id, nothing broke.
+
+## Parallel dev servers
+`vite.config.ts` reads `VITE_CACHE_DIR`: a dev server started with its own
+`VITE_CACHE_DIR` keeps its own prebundle cache, so helpers running harnesses
+side by side never corrupt each other's optimised dependencies.
+
+## The activity log speaks in words (`src/data/activityWords.ts`, pure)
+One builder turns every record shape the app has ever written into "who ·
+what · (a small line)" in English or Hebrew — never a field name, a type code,
+an ISO time or a camera's file name — and EVERY surface that lists history
+reads it: the Activity page, the window's History tab, the header's LIVE
+ticker, the dashboard card, the "What changed" widget and the Changes report
+column. `foldActivity` folds same-kind records by one person on one apartment
+within half an hour into one row ("Igor uploaded 5 photos", which opens up);
+"consecutive" is judged inside that person's own stream, so somebody else's
+line in between never splits a run. **A new record shape needs a `kindOf`
+answer, a sentence in both tables, and a line in
+`scratchpad/activitywords-test.mjs`** (offline, 83). Hebrew uses the masculine
+past, like the app's other Hebrew lines.
+
+## The set model logs which stages moved, never the headline
+`updateApartment` writes ONE `stage_marks` record per write carrying
+`marks: [{id, name, from, to}]` (`stageChangesOf`); `marker` only for a
+headline set BY HAND (a write naming `currentStageId` and no `stageMarks`).
+`updateApartment(..., { quiet: true })` is for a write whose story the line
+beside it already tells (the worker's start). Old "X → Y" records read as
+"— next up: X (was Y)": nothing "changes stage" any more.
+
+## The Job Board's Activity page is the centre (`src/data/activityCenter.ts`)
+Every workspace's records newest first, each row in its workspace's colour,
+under day headings, filtered by Workspace / What / Who / dates. The other
+workspaces' records are fetched ONLY when that page opens (`fetchActivityFor`,
+up to 200 per workspace, cached for the session, a refresh button) and unioned
+with each workspace's local snapshot — at most ~400 reads per machine per
+session, and a static guard keeps every other surface from triggering it. A
+same-workspace row opens the window over the list; a foreign row travels
+(switch first, then the intent) with a return ticket back to `/activity`.
+Wolfson and Netiv keep their own pages. **On `/c/…` the WORKER is the actor**:
+stage ticks and close lines credit the task's worker even with an office login
+in the same browser — that is how the ticker came to read "Yitzchak moved
+Building 1/9 to Registers". `scratchpad/activitycenter.mjs` (58).
+
+## A task moves to the right apartment (`src/data/taskMove.ts`)
+`moveTaskToApartment(taskId, toId, user, {moveMarks})` + `taskMovePlan` in the
+store, over the pure `taskMove.ts`: the task (and its building), every photo
+and message filed under it, and its general-job visit travel; the stage ticks
+the task wrote (`marksTaskWrote` mirrors the closing rule and the worker's
+start) come off the old apartment and go onto the new one through
+`applyMarks` — a tick another task on the old apartment also explains stays, a
+tick the office changed by hand since is left alone, and on the new apartment
+a move never undoes "done" nor overrides "off". Same workspace only. Whole
+records are written (a one-field write to a record not yet in the cloud makes
+a stub). One history line on each apartment (`task_moved_out` /
+`task_moved_in`, with `ActivityLog.taskText` + `workerName`), worded by
+activityWords. `MoveTaskDialog` (pick → confirm; the confirm says exactly what
+moves and which ticks) and `DeleteTaskDialog` share one sealed, portalled shell
+(z-[130]/[140], Escape in the capture phase). **A task delete never uses the
+browser's confirm**: the dialog names what the cascade takes ("2 photos, 1 film
+and 4 messages… the files stay in Google Drive") and offers Move instead. The
+worker's own Move button needs the new permission `moveOwnWork` — only the
+shipped Manager level has it on; never offered on a problem or a general job.
+`levelAnswer()`: a SHIPPED level stored before a switch existed reads the
+shipped answer for that switch — checked against production on 2026-10-05:
+none of the office's four stored levels reads differently. Harnesses
+`taskmove-test.mjs` (35, offline) and `movetask.mjs` (65).
+
+## The plan reader offers only what it can point at
+Owner, 2026-10-05: "Where is it getting this from? … if there's no phone
+number and there's no address it should be empty." A suggestion is shown only
+WITH its location — a page box, a readable cutout and the box inside the
+cutout; the eye draws the box on the cutout and on a small picture of the whole
+sheet. On a text page the model's value must be FOUND in the text layer (a
+phone digit-exact in any printed form; an address by three quarters of its
+word weight plus every house number), and where it was found becomes the box;
+on a scan the model must return a box that contains ink. Always refused:
+sample numbers (`isPlaceholderPhone` — a whole run of seven, or six identical
+digits) and the office's own numbers and address lines (`isOfficeAddress` —
+Azrieli/Sarona outright; on Nachal Kidron and Derech Menachem Begin only the
+office's own house number, so a customer on the same street passes). **Both
+rules are duplicated in `api/geocode.js` — change one, change both.** The
+server prompt says "not printed" is a real answer and asks for
+`{value, box}`. Escape on the eye's popup closes only the popup.
+`api/geocode.js` writes its cache-key separator as `\u0000` — two raw NUL
+bytes had made git treat the file as binary, so no diff of it could be read.
+Harnesses `planhonest.mjs` (keyed, 38) and `planread-test.mjs` (offline, 39).
+**Worktree trap**: with `node_modules` symlinked into a git worktree, Vite
+serves pdf.js's worker raw (its real path is outside `fs.allow`) and every
+pdf.js harness reads "unreachable" — run plan harnesses from the main checkout.
+
+## History for a data fix made by hand
+The 5 October move was written by REST, so the app wrote no history for it.
+`movelog.py` (session scratchpad) added the lines the app itself would have
+written — eight `task_moved_*` and five `stage_marks`, attributed to "Office",
+dated at the move — in one atomic commit that creates documents and never
+touches an existing one, refusing to run twice. A data fix made outside the
+app should leave the same history the app would have left.

@@ -1,0 +1,222 @@
+<title>Igor's Monday, Redrawn</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;700;800;900&family=Inter+Tight:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap">
+<style>
+/* Layout: a drafting table (paper-grey, china-marker red notes) holding the app's own
+   navy notebook squares, so what is proposed and what does the proposing never blur. */
+:root {
+  --table: #e9ebe7;          /* the drafting table */
+  --paper: #f8f9f6;          /* sheets laid on it */
+  --ink: #1d2733;            /* body text */
+  --ink-soft: #5d6a76;       /* secondary text */
+  --rule: #cfd5cf;           /* hairlines */
+  --marker: #c8331f;         /* china-marker notes — never the app's colours */
+  --app-navy: #1e3a5f;       /* the app's own palette, used only inside the mock-ups */
+  --app-accent: #4aa8d8;
+  --app-bar: #eef4fa;
+  --app-bar-line: #c7d4e0;
+  --app-done: #ecfdf5;
+  --app-done-line: #a7f3d0;
+  --app-green: #16a34a;
+  --cell: #ffffff;
+  --display: "Archivo", "Helvetica Neue", Arial, sans-serif;
+  --body: "Inter Tight", "Segoe UI", system-ui, sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --table: #171b1f; --paper: #20262c; --ink: #e8ecef; --ink-soft: #a3adb6; --rule: #36404a;
+  --marker: #ff7a63; --cell: #f8fafc; color-scheme: dark;
+} }
+:root[data-theme="dark"] {
+  --table: #171b1f; --paper: #20262c; --ink: #e8ecef; --ink-soft: #a3adb6; --rule: #36404a;
+  --marker: #ff7a63; --cell: #f8fafc; color-scheme: dark;
+}
+html, body { background: var(--table); color: var(--ink); }
+body { font: 15px/1.55 var(--body); margin: 0; }
+.wrap { max-width: 1060px; margin: 0 auto; padding-inline: 18px; padding-block: 28px 64px; }
+h1 { font: 900 clamp(28px, 5vw, 44px)/1.05 var(--display); letter-spacing: -0.01em; margin: 0 0 10px; text-wrap: balance; }
+h2 { font: 800 22px/1.2 var(--display); margin: 0 0 6px; text-wrap: balance; }
+h3 { font: 800 16px/1.25 var(--display); margin: 0 0 4px; }
+p { margin: 0 0 10px; max-width: 68ch; }
+.lede { color: var(--ink-soft); font-size: 16px; }
+.eyebrow { font: 700 11px/1 var(--mono); letter-spacing: .12em; text-transform: uppercase; color: var(--marker); margin-bottom: 10px; }
+.sheet { background: var(--paper); border: 1px solid var(--rule); border-radius: 10px; padding: 20px; margin-top: 22px; }
+.note { font: 600 13px/1.45 var(--body); color: var(--marker); }
+.grid { display: grid; gap: 18px; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); align-items: start; }
+.opt { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.opt .tag { font: 800 12px/1 var(--mono); color: var(--marker); }
+.rec { display: inline-block; font: 800 11px/1 var(--mono); letter-spacing: .06em; text-transform: uppercase;
+  border: 1.5px solid var(--marker); color: var(--marker); border-radius: 999px; padding: 4px 8px; margin-inline-start: 6px; }
+ul.plain { margin: 6px 0 0; padding-inline-start: 18px; }
+ul.plain li { margin: 3px 0; }
+.q { display: grid; grid-template-columns: 34px 1fr; gap: 10px; padding: 12px 0; border-top: 1px dashed var(--rule); }
+.q:first-of-type { border-top: 0; }
+.q .n { font: 900 22px/1 var(--display); color: var(--marker); }
+.q b { font-weight: 700; }
+
+/* ── the app's notebook square, as it renders ─────────────────────────── */
+.square { background: var(--cell); border: 1px solid #dbe3ea; border-radius: 8px; padding: 6px; display: flex; flex-direction: column; gap: 4px;
+  width: 100%; max-width: 330px; box-shadow: 0 1px 0 rgba(0,0,0,.04); color: #1e3a5f; }
+.square .head { font: 800 10px/1.2 var(--body); color: #64748b; text-transform: uppercase; letter-spacing: .05em; display: flex; justify-content: space-between; }
+.bar { position: relative; background: var(--app-bar); border: 1px solid var(--app-bar-line); border-left: 4px solid var(--c, #9ca3af); border-radius: 6px; padding: 3px 6px; min-width: 0; }
+.bar .l1 { display: flex; align-items: center; gap: 4px; font: 800 11.5px/1.25 var(--body); color: var(--app-navy); min-width: 0; }
+.bar .l1 .t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.bar .l2 { font: 600 10px/1.3 var(--body); color: #64748b; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bar .l2.f { display: flex; align-items: center; gap: 4px; margin-top: 1px; }
+.bar .l2.f .tt { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.chip { flex-shrink: 0; font: 900 10px/1.25 var(--body); background: var(--app-navy); color: #fff; border-radius: 3px; padding: 0 3px; }
+.done { flex-shrink: 0; font: 800 9.5px/1.3 var(--body); background: var(--app-green); color: #fff; border-radius: 999px; padding: 0 5px; }
+.bar.is-done { background: var(--app-done); border-color: var(--app-done-line); }
+.bar.old-done { opacity: .6; background: #f1f5f9; border-color: #e2e8f0; }
+.bar.old-done::after { content: ""; position: absolute; left: 6px; right: 6px; top: 50%; border-top: 2px solid #475569; transform: rotate(-2deg); opacity: .8; }
+.strip { display: flex; gap: 1.5px; height: 3px; margin-top: 3px; }
+.strip i { flex: 1; border-radius: 1px; background: #e5e7eb; }
+.strip i.on { background: var(--c, #9ca3af); }
+.grp { border: 1px solid #dbe3ea; border-radius: 6px; overflow: hidden; }
+.grp > .gh { display: flex; align-items: center; gap: 6px; background: #f1f5f9; padding: 4px 6px; font: 800 11px/1.2 var(--body); color: var(--app-navy); }
+.grp > .gh .cnt { margin-inline-start: auto; font: 700 10px/1 var(--body); color: #64748b; }
+.row { display: flex; align-items: center; gap: 5px; padding: 2px 6px; font: 700 10.5px/1.35 var(--body); color: var(--app-navy); border-top: 1px solid #eef2f6; min-width: 0; }
+.row .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--c, #9ca3af); flex-shrink: 0; }
+.row .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.row .ok { margin-inline-start: auto; color: var(--app-green); font-weight: 900; }
+.row .open { margin-inline-start: auto; color: #b45309; font-weight: 800; }
+.sum { border: 1px solid var(--app-bar-line); border-left: 4px solid var(--app-navy); border-radius: 6px; padding: 6px 8px; background: var(--app-bar); }
+.sum .big { font: 900 13px/1.2 var(--body); color: var(--app-navy); }
+.sum .small { font: 600 10.5px/1.35 var(--body); color: #64748b; }
+.meter { display: flex; height: 6px; border-radius: 3px; overflow: hidden; margin-top: 5px; background: #e5e7eb; }
+.meter b { background: var(--app-green); }
+
+/* ── the activity story mock ────────────────────────────────────────────── */
+.story { background: #fff; color: #1f2937; border: 1px solid #dbe3ea; border-radius: 10px; overflow: hidden; }
+.story .who { display: flex; align-items: center; gap: 10px; padding: 10px 12px; background: #f8fafc; border-bottom: 1px solid #e5e7eb; flex-wrap: wrap; }
+.story .av { width: 28px; height: 28px; border-radius: 50%; background: #7c3aed; color: #fff; display: grid; place-items: center; font: 800 13px/1 var(--body); }
+.story .who b { font: 800 14px/1.2 var(--body); color: var(--app-navy); }
+.story .who span { font: 600 12px/1.2 var(--body); color: #64748b; }
+.story .ws { font: 800 10px/1 var(--body); color: #fff; background: #b8860b; border-radius: 999px; padding: 4px 7px; }
+.visit { display: grid; grid-template-columns: 54px 1fr auto; gap: 10px; padding: 8px 12px; border-top: 1px solid #f1f5f9; align-items: center; }
+.visit .tm { font: 700 11px/1.2 var(--mono); color: #64748b; }
+.visit .what { min-width: 0; font: 600 12.5px/1.35 var(--body); color: #1f2937; }
+.visit .what em { font-style: normal; color: #64748b; }
+.thumbs { display: flex; gap: 3px; }
+.thumbs i { width: 22px; height: 22px; border-radius: 4px; background: linear-gradient(135deg, #cbd5e1, #94a3b8); }
+.flag { display: flex; gap: 8px; align-items: flex-start; padding: 9px 12px; background: #fff7ed; border-top: 1px solid #fed7aa; font: 600 12.5px/1.4 var(--body); color: #9a3412; }
+.flag .ic { font: 900 13px/1 var(--body); background: #ea580c; color: #fff; border-radius: 50%; width: 18px; height: 18px; display: grid; place-items: center; flex-shrink: 0; }
+@media (max-width: 520px) { .visit { grid-template-columns: 46px 1fr; } .visit .thumbs { grid-column: 2; } }
+@media (prefers-reduced-motion: no-preference) { .sheet { animation: rise .35s ease both; } @keyframes rise { from { transform: translateY(6px); } to { transform: none; } } }
+</style>
+
+<div class="wrap">
+  <div class="eyebrow">From your recording · 5 October 2026 · 0:24–2:23</div>
+  <h1>Igor's Monday, redrawn</h1>
+  <p class="lede">Two things you asked me to propose: a different look for a busy notebook day, and a clearer way for the activity log to tell what happened. The small fixes are built today; the bigger changes below wait for your pick. Client names are samples.</p>
+
+  <section class="sheet">
+    <div class="eyebrow">1 · The square you saw, and the square today</div>
+    <div class="grid">
+      <div class="opt">
+        <h3>What you saw</h3>
+        <div class="square" aria-label="Before">
+          <div class="head"><span>Mon 5 Oct · Igor</span><span>20 tasks</span></div>
+          <div class="bar old-done" style="--c:#9ca3af"><div class="l1"><span class="t">15 — Levi, Noam</span><span style="color:#64748b">· done</span></div><div class="l2">Wolfson · Sold/Start → Piping</div></div>
+          <div class="bar old-done" style="--c:#9ca3af"><div class="l1"><span class="t">16 — Katz, Dov</span><span style="color:#64748b">· done</span></div><div class="l2">Wolfson · Sold/Start → Piping</div></div>
+          <div class="bar old-done" style="--c:#9ca3af"><div class="l1"><span class="t">14 — Peretz, Tamar</span><span style="color:#64748b">· done</span></div><div class="l2">Wolfson · Sold/Start → Piping</div></div>
+          <div class="bar" style="--c:#ea580c"><div class="l1"><span class="t">12 — Building 3/12</span></div><div class="l2">Wolfson · Registers</div></div>
+          <div class="bar old-done" style="--c:#9ca3af"><div class="l1"><span class="t">18 — Mizrahi, Hadas</span><span style="color:#64748b">· done</span></div><div class="l2">Wolfson · Sold/Start → Piping</div></div>
+          <div class="bar old-done" style="--c:#9ca3af"><div class="l1"><span class="t">20 — Ohana, Avital</span><span style="color:#64748b">· done</span></div><div class="l2">Wolfson · Sold/Start → Piping</div></div>
+          <div class="head" style="justify-content:center">… 14 more</div>
+        </div>
+        <p class="note">No building, no floor, and the line through "done" wipes out what you need to read.</p>
+      </div>
+      <div class="opt">
+        <h3>Built today</h3>
+        <div class="square" aria-label="Today">
+          <div class="head"><span>Mon 5 Oct · Igor</span><span>20 tasks</span></div>
+          <div class="bar is-done" style="--c:#9ca3af"><div class="l1"><span class="t">15 — Levi, Noam</span></div><div class="l2 f"><span class="done">✓ done</span><span class="chip">A3</span><span class="tt">Floor 5 · Sold/Start → Piping</span></div><div class="strip" style="--c:#9ca3af"><i class="on"></i><i class="on"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div></div>
+          <div class="bar is-done" style="--c:#9ca3af"><div class="l1"><span class="t">16 — Katz, Dov</span></div><div class="l2 f"><span class="done">✓ done</span><span class="chip">A3</span><span class="tt">Floor 5 · Sold/Start → Piping</span></div><div class="strip" style="--c:#9ca3af"><i class="on"></i><i class="on"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div></div>
+          <div class="bar is-done" style="--c:#9ca3af"><div class="l1"><span class="t">14 — Peretz, Tamar</span></div><div class="l2 f"><span class="done">✓ done</span><span class="chip">A3</span><span class="tt">Floor 5 · Sold/Start → Piping</span></div><div class="strip" style="--c:#9ca3af"><i class="on"></i><i class="on"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div></div>
+          <div class="bar" style="--c:#f59e0b"><div class="l1"><span class="t">12 — Building 3/12</span></div><div class="l2 f"><span class="chip">A3</span><span class="tt">Floor 3 · Wall Units &amp; Outdoor Units</span></div><div class="strip" style="--c:#f59e0b"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i></i><i></i><i></i><i></i><i></i></div></div>
+          <div class="head" style="justify-content:center">… 16 more</div>
+        </div>
+        <p class="note">The apartment keeps line one to itself, so its name is never cut. Line two: a green done tag, the building chip, the floor (as the diagram counts it) and the address.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="sheet">
+    <div class="eyebrow">2 · A day with twenty jobs — three looks</div>
+    <p>Igor's Monday had twenty short visits in one square. A row per task works for three or four; at twenty it becomes a wall. Pick the look for a busy day:</p>
+    <div class="grid">
+      <div class="opt">
+        <span class="tag">A · Every task its own bar</span>
+        <div class="square">
+          <div class="head"><span>Mon 5 Oct · Igor</span><span>20</span></div>
+          <div class="bar is-done" style="--c:#9ca3af"><div class="l1"><span class="t">13 — Navon, Ezra</span></div><div class="l2 f"><span class="done">✓ done</span><span class="chip">A3</span><span class="tt">Floor 4 · Sold/Start → Piping</span></div></div>
+          <div class="bar is-done" style="--c:#9ca3af"><div class="l1"><span class="t">14 — Peretz, Tamar</span></div><div class="l2 f"><span class="done">✓ done</span><span class="chip">A3</span><span class="tt">Floor 4 · Sold/Start → Piping</span></div></div>
+          <div class="bar is-done" style="--c:#9ca3af"><div class="l1"><span class="t">15 — Levi, Noam</span></div><div class="l2 f"><span class="done">✓ done</span><span class="chip">A3</span><span class="tt">Floor 5 · Sold/Start → Piping</span></div></div>
+          <div class="head" style="justify-content:center">… 17 more, scroll</div>
+        </div>
+        <p>What is live now. Nothing to learn; long days get long.</p>
+      </div>
+      <div class="opt">
+        <span class="tag">B · Grouped by building <span class="rec">Recommended</span></span>
+        <div class="square">
+          <div class="head"><span>Mon 5 Oct · Igor</span><span>20</span></div>
+          <div class="grp">
+            <div class="gh"><span class="chip">A3</span> 17 apartments <span class="cnt">15 done · 2 open</span></div>
+            <div class="row" style="--c:#9ca3af"><span class="dot"></span><span class="nm">13 Navon · 14 Peretz · 15 Levi · 16 Katz</span><span class="ok">✓</span></div>
+            <div class="row" style="--c:#9ca3af"><span class="dot"></span><span class="nm">17 · 18 Mizrahi · 19 · 20 Ohana</span><span class="ok">✓</span></div>
+            <div class="row" style="--c:#f59e0b"><span class="dot"></span><span class="nm">9 · 10 · 11 · 12 — Wall + Outdoor</span><span class="ok">✓</span></div>
+            <div class="row" style="--c:#c9b95c"><span class="dot"></span><span class="nm">21/24 Tzur — Concealed Units</span><span class="open">open</span></div>
+          </div>
+          <div class="grp">
+            <div class="gh"><span class="chip">A1</span> 3 apartments <span class="cnt">3 done</span></div>
+            <div class="row" style="--c:#ea580c"><span class="dot"></span><span class="nm">9 · 10 · 11 — Registers</span><span class="ok">✓</span></div>
+          </div>
+        </div>
+        <p>One header per building for the day, floor by floor beneath it, a tap opens the floor's jobs. A day split across two buildings shows it at a glance, which is exactly how Igor's mix-up would have jumped out.</p>
+      </div>
+      <div class="opt">
+        <span class="tag">C · One summary card</span>
+        <div class="square">
+          <div class="head"><span>Mon 5 Oct · Igor</span><span>20</span></div>
+          <div class="sum">
+            <div class="big">20 apartments · A3 and A1</div>
+            <div class="small">18 done · 2 open · Sold/Start → Piping (14) · Wall + Outdoor (3) · Registers (3)</div>
+            <div class="meter"><b style="width:90%"></b></div>
+          </div>
+        </div>
+        <p>Above six tasks the square collapses to one card; a tap opens the list. Calmest sheet, but you have to tap to see anything.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="sheet">
+    <div class="eyebrow">3 · Activity — what was built today, and the plan</div>
+    <h2>Built today</h2>
+    <ul class="plain">
+      <li>The Job Board's Activity page shows <b>every workspace's</b> activity, each row tagged with its workspace.</li>
+      <li>Every entry is a plain sentence: "Igor uploaded 5 photos", "Igor started work here — Wall Units". No field names like "viewed", "completedAt" or "photo_uploaded".</li>
+      <li>Repeats collapse: five uploads in a row by the same person on the same apartment are one line you can open.</li>
+      <li>Stage entries speak the new way: "Igor marked Registers done", not "changed stage Wall Units → Registers".</li>
+    </ul>
+    <h2 style="margin-top:18px">The plan: one card per person per day</h2>
+    <p>Each visit to an apartment becomes one line: when it started, what stage, the pictures, when it closed, and where the apartment stands now. Above it, the things that look wrong are flagged before anyone has to read the whole day.</p>
+    <div class="story" aria-label="Day story mock-up">
+      <div class="who"><span class="av">I</span><b>Igor</b><span>Monday 5 October · 20 apartments · 18 closed</span><span class="ws">Wolfson</span></div>
+      <div class="flag"><span class="ic">!</span><span>15:31–15:42: three jobs logged in <b>A1</b>, ten minutes after fourteen in <b>A3</b>. Same floor numbers. Wrong building?</span></div>
+      <div class="flag"><span class="ic">!</span><span>Registers ticked done on A1 9, 10, 11 while Wall Units is still open there.</span></div>
+      <div class="visit"><span class="tm">08:17</span><span class="what"><b>A3 15 · Levi</b> Sold/Start → Piping <em>· closed 09:02 · now Piping</em></span><span class="thumbs"><i></i><i></i><i></i><i></i></span></div>
+      <div class="visit"><span class="tm">08:18</span><span class="what"><b>A3 16 · Katz</b> Sold/Start → Piping <em>· closed 09:33</em></span><span class="thumbs"><i></i><i></i><i></i></span></div>
+      <div class="visit"><span class="tm">11:02</span><span class="what"><b>A3 12</b> Access Panels <em>· closed 11:05</em></span><span class="thumbs"><i></i><i></i><i></i><i></i><i></i></span></div>
+      <div class="visit"><span class="tm">15:40</span><span class="what"><b>A1 9</b> Registers <em>· closed 15:42 · moved to A3 9 by the office</em></span><span class="thumbs"><i></i><i></i><i></i><i></i><i></i></span></div>
+    </div>
+    <p class="note" style="margin-top:10px">Filters on top: workspace, person, building, and kind (pictures · tasks · stage ticks · notes).</p>
+  </section>
+
+  <section class="sheet">
+    <div class="eyebrow">4 · Your answers</div>
+    <div class="q"><span class="n">1</span><div><b>A busy notebook day: A, B or C?</b> I recommend B, grouped by building. A day split across two buildings shows up instantly.</div></div>
+    <div class="q"><span class="n">2</span><div><b>Build the day story (one card per person per day)?</b> Yes or no. It replaces reading row by row.</div></div>
+    <div class="q"><span class="n">3</span><div><b>Flag suspicious entries automatically?</b> For example: work logged in two buildings minutes apart, a stage ticked before the stage it depends on, a task closed with no pictures. Yes or no, and add any rule you want.</div></div>
+  </section>
+</div>

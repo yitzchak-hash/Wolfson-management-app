@@ -6,6 +6,28 @@ have them). The v2 rebuild's original design record is the root
 `DECISIONS.md`; the rules and traps behind each decision are in `CLAUDE.md`
 by round. (Standing order 6, 2026-09-23.)_
 
+## 2026-10-05
+- **Work from screen recordings.** A Drive folder of his recordings; every
+  video gets two transcriptions, the screen read every second, a feedback doc,
+  and a line per ask in the master checklist; "check the folder" works the new
+  ones oldest first. Never ask for passwords or keys in the chat — say where
+  to click. A recording of another project is reported, never built.
+- **Pictures open in a picture viewer that slides, never as a plan** —
+  "it should be a picture viewer where I can slide left and right".
+- **Done on the notebook is a tag, never a cross** — "why can't we just mark it
+  as done without a cross that removes all the information?"
+- **The Job Board's Activity is the activity centre for every workspace**, and
+  repeats fold — "this should be consolidated into 'Igor uploaded four photos'".
+- **A task can be moved to the right apartment, and a worker can be given the
+  permission to move his own mistake.**
+- **The plan reader shows nothing it cannot point at** — "if there's no phone
+  number and there's no address, it should be empty".
+- **Igor's day moved from A1 9–12 to A3 9–12, data only** — "don't touch the
+  code when you move the data".
+- **A Drilling stage** — added after Thermostats; where it belongs is asked.
+- The Active-jobs row cap was built under "fix everything" (standing order 1:
+  never wait) — the freeze diagnosis of 09-23 had been waiting on a go.
+
 ## 2026-09-23
 - **This chat is the builder; tasks come from the Mission Board manager**
   who tests in his real Chrome. Never wait on him here; never call anything
