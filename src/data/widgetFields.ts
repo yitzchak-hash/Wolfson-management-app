@@ -302,7 +302,7 @@ export const WIDGET_FIELDS: Record<string, WidgetField[]> = {
     },
   ],
   duplicates: [title(), limit()],
-  'skipped-stage': [title(), limit()],
+  'skipped-stage': [title()],
 
   // ── Time, tactile and the cheerful ones ────────────────────────────────
   'world-clocks': [
@@ -1083,7 +1083,6 @@ export const WIDGET_PREVIEW: Record<string, Record<string, unknown>> = {
   'open-snags': {},
   'no-plan': {},
   duplicates: {},
-  'skipped-stage': {},
   'world-clocks': { cities: ['il', 'ny', 'lon', 'sha'] },
   'shabbat-clock': { placeId: 'telaviv', vanBuffer: 90 },
   'split-flap': { source: 'text', text: 'TZVIAIR', size: 20 },

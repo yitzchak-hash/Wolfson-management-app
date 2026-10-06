@@ -9,7 +9,11 @@ import {
   describeGroup, describeLog, familyOf, foldActivity, kindOf, newestFirst, placeName,
 } from '../data/activityWords';
 import { rememberReturn } from '../data/unitTravel';
-import { Apartment, projectColor, projectShortName } from '../types';
+import { Apartment, ContractorPhoto, getStageName, projectColor, projectShortName } from '../types';
+import { DAY_WORDS, DayVisit, dayStories } from '../data/dayStory';
+import { DayStoryCard, VisitPlace } from '../components/ui/DayStoryCard';
+import { MediaViewer, ViewerItem } from '../components/ui/MediaViewer';
+import { isPicture, photoSrcOf } from '../data/photoSrc';
 import { ActivityAvatar, FamilyIcon, clockRange, dayKey, dayLabel } from '../components/ui/ActivityBits';
 import { ApartmentDetailDrawer } from '../components/apartment/ApartmentDetailDrawer';
 import { QuickAddTaskPanel } from '../components/apartment/QuickAddTaskPanel';
@@ -18,6 +22,20 @@ import { format } from 'date-fns';
 
 /** How many rows draw before "Show more" — a busy month is thousands of records. */
 const PAGE = 120;
+/** How many day cards draw before "Show more days". */
+const DAY_PAGE = 20;
+
+/** Which view the page opens on — remembered per machine, never synced (how you like to read the log is about this desk). */
+type LogView = 'day' | 'all';
+const VIEW_KEY = 'activity_view';
+function readView(): LogView {
+  try { return localStorage.getItem(VIEW_KEY) === 'all' ? 'all' : 'day'; } catch { return 'day'; }
+}
+function writeView(v: LogView) {
+  try { localStorage.setItem(VIEW_KEY, v); } catch { /* a private window — the choice lasts the visit */ }
+}
+/** A visit's own pictures: uploaded on that apartment within the visit (ten minutes either side). */
+const THUMB_SLACK_MS = 10 * 60 * 1000;
 
 /** A row of filter chips: wraps on a desktop, scrolls sideways on a phone. */
 const CHIP_ROW = 'flex gap-2 min-w-0 flex-nowrap md:flex-wrap overflow-x-auto md:overflow-visible no-bar edge-fade [&>*]:flex-shrink-0';
@@ -159,6 +177,7 @@ function GroupRow({
 export function ActivityLogPage() {
   const activityLogs = useStore(st => st.activityLogs);
   const apartments = useStore(st => st.apartments);
+  const contractorPhotos = useStore(st => st.contractorPhotos);
   const stages = useStore(st => st.stages);
   const projects = useStore(st => st.projects);
   const currentProjectId = useStore(st => st.currentProjectId);
@@ -200,6 +219,7 @@ export function ActivityLogPage() {
       pid: p.id,
       logs: [...cloud, ...snap.activityLogs],
       apts: new Map(snap.apartments.map(a => [a.id, a])),
+      photos: snap.photos,
       known: snap.apartments.length > 0,
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -265,14 +285,25 @@ export function ActivityLogPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [all, wsFilter, person, building, family, dateFrom, dateTo]);
 
-  const groups = useMemo(() => foldActivity(filtered), [filtered]);
+  // ── The view: the day story (one card per person per day) or every change ──
+  const [view, setViewState] = useState<LogView>(readView);
+  const setView = (v: LogView) => { setViewState(v); writeView(v); };
+  const [dayLimit, setDayLimit] = useState(DAY_PAGE);
+  const DW = DAY_WORDS[lang];
+
+  const groups = useMemo(() => (view === 'all' ? foldActivity(filtered) : []), [filtered, view]);
   const shown = groups.slice(0, limit);
+  const stories = useMemo(
+    () => (view === 'day' ? dayStories(filtered, { lang, stages, currentWs: currentProjectId }) : []),
+    [filtered, view, lang, stages, currentProjectId],
+  );
+  const shownStories = stories.slice(0, dayLimit);
 
   const hasFilters = wsFilter !== 'all' || family !== 'all' || person !== 'all' || building !== 'all' || !!dateFrom || !!dateTo;
   function clearFilters() {
     setWsFilter('all'); setFamily('all'); setPerson('all'); setBuilding('all'); setDateFrom(''); setDateTo('');
   }
-  useEffect(() => { setLimit(PAGE); }, [wsFilter, family, person, building, dateFrom, dateTo]);
+  useEffect(() => { setLimit(PAGE); setDayLimit(DAY_PAGE); }, [wsFilter, family, person, building, dateFrom, dateTo]);
 
   // ── Opening the apartment ──
   const [openAptId, setOpenAptId] = useState<string | null>(null);
@@ -315,6 +346,57 @@ export function ActivityLogPage() {
     };
   };
 
+  /** The day story's place: name, door, and where the apartment stands NOW. */
+  const placeOfVisit = (v: DayVisit): VisitPlace => {
+    const ws = v.ws || currentProjectId;
+    const own = ws === currentProjectId;
+    const f = own ? null : foreign.find(x => x.pid === ws);
+    const apt = own ? ownApts.get(v.aptId) : f?.apts.get(v.aptId);
+    const l = v.logs[v.logs.length - 1];
+    const canOpen = own ? !!apt : (!!apt || !f?.known);
+    const job = v.buildingId === 'G';
+    const wsName = projectShortName(projectById.get(ws), lang === 'he', ws);
+    const stage = apt?.currentStageId ? stages.find(st => st.id === apt.currentStageId) : undefined;
+    return {
+      name: placeName(l, apt, lang),
+      open: canOpen ? () => openPlace(ws, v.aptId) : undefined,
+      openTitle: own ? (job ? ui.openJob : ui.openApartment) : ui.opensIn(wsName),
+      now: stage ? { name: getStageName(stage, lang === 'he'), color: stage.color || '#94a3b8' } : undefined,
+    };
+  };
+
+  // Pictures by workspace and apartment — read once per change, not per card.
+  const photosByPlace = useMemo(() => {
+    const m = new Map<string, ContractorPhoto[]>();
+    const add = (ws: string, list: ContractorPhoto[]) => {
+      for (const p of list) {
+        if (!p.apartmentId || !isPicture(p)) continue;
+        const k = `${ws}|${p.apartmentId}`;
+        const arr = m.get(k);
+        if (arr) arr.push(p); else m.set(k, [p]);
+      }
+    };
+    if (view === 'day') {
+      add(currentProjectId, contractorPhotos);
+      for (const f of foreign) add(f.pid, f.photos);
+    }
+    return m;
+  }, [view, currentProjectId, contractorPhotos, foreign]);
+
+  const thumbsOf = (v: DayVisit): ViewerItem[] => {
+    if (!v.photos) return [];
+    const from = Date.parse(v.first) - THUMB_SLACK_MS;
+    const to = Date.parse(v.last) + THUMB_SLACK_MS;
+    return (photosByPlace.get(`${v.ws || currentProjectId}|${v.aptId}`) ?? [])
+      .filter(p => { const t = Date.parse(p.uploadedAt); return t >= from && t <= to; })
+      .sort((a, b) => a.uploadedAt.localeCompare(b.uploadedAt))
+      .map(p => ({ src: photoSrcOf(p), filename: p.filename || 'photo.jpg', mimeType: p.mimeType || 'image/jpeg',
+        fileId: p.driveFileId, when: p.uploadedAt }))
+      .filter(it => !!it.src);
+  };
+  const [viewer, setViewer] = useState<{ items: ViewerItem[]; index: number } | null>(null);
+  const closeViewer = useCallback(() => setViewer(null), []);
+
   const toggle = (id: string) => setOpen(prev => {
     const next = new Set(prev);
     if (next.has(id)) next.delete(id); else next.add(id);
@@ -329,7 +411,7 @@ export function ActivityLogPage() {
 
   let lastDay = '';
   return (
-    <div className="p-3 sm:p-6 max-w-4xl mx-auto w-full">
+    <div className="p-3 sm:p-6 max-w-4xl mx-auto w-full" data-activity-view={view}>
       <div className="flex items-start gap-3 mb-4 flex-wrap">
         <Activity size={24} className="text-[#1e3a5f] mt-0.5 flex-shrink-0" />
         <div className="min-w-0 flex-1">
@@ -341,7 +423,7 @@ export function ActivityLogPage() {
           )}
         </div>
         <div className="flex items-center gap-2 text-sm text-gray-500 flex-shrink-0">
-          <span data-activity-total>{ui.rows(groups.length)}</span>
+          {view === 'all' && <span data-activity-total>{ui.rows(groups.length)}</span>}
           {center && isFirebaseConfigured && (
             <button
               type="button"
@@ -355,6 +437,24 @@ export function ActivityLogPage() {
             </button>
           )}
         </div>
+      </div>
+
+      {/* Day by day, or every change — the same records, the same filters. */}
+      <div className="inline-flex p-1 rounded-xl bg-gray-100 border border-gray-200 mb-3" role="tablist">
+        {(['day', 'all'] as const).map(v => (
+          <button
+            key={v}
+            type="button"
+            role="tab"
+            aria-selected={view === v}
+            data-activity-view-pick={v}
+            onClick={() => setView(v)}
+            className={`px-3.5 py-1.5 rounded-lg text-sm font-semibold transition-colors ${
+              view === v ? 'bg-white text-[#1e3a5f] shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+          >
+            {v === 'day' ? DW.dayView : DW.allView}
+          </button>
+        ))}
       </div>
 
       {/* Filters */}
@@ -466,7 +566,43 @@ export function ActivityLogPage() {
         )}
       </div>
 
+      {/* The day story */}
+      {view === 'day' && (
+        <div className="flex flex-col gap-3" data-day-list>
+          {shownStories.length === 0 ? (
+            <div className="bg-white rounded-xl border border-gray-200 text-center py-12 text-gray-400">
+              <Activity size={32} className="mx-auto mb-3 opacity-40" />
+              <p>{s.noLogsMatch}</p>
+            </div>
+          ) : shownStories.map(card => (
+            <DayStoryCard
+              key={card.key}
+              card={card}
+              lang={lang}
+              dateLabel={dayLabel(card.newest, lang)}
+              place={placeOfVisit}
+              ws={center ? (id => ({ name: projectShortName(projectById.get(id), lang === 'he', id), color: projectColor(projects, id) })) : undefined}
+              thumbs={thumbsOf}
+              onPhotos={(items, index) => setViewer({ items, index })}
+            />
+          ))}
+          {stories.length > shownStories.length && (
+            <div className="flex justify-center">
+              <button
+                type="button"
+                data-day-more
+                onClick={() => setDayLimit(n => n + DAY_PAGE)}
+                className="px-4 py-2 rounded-lg border border-gray-200 bg-white text-sm font-semibold text-gray-600 hover:border-gray-300"
+              >
+                {DW.showMoreDays}
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* The log */}
+      {view === 'all' && (
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden" data-activity-list>
         {shown.length === 0 ? (
           <div className="text-center py-12 text-gray-400">
@@ -518,7 +654,9 @@ export function ActivityLogPage() {
         )}
       </div>
 
-      {groups.length > shown.length && (
+      )}
+
+      {view === 'all' && groups.length > shown.length && (
         <div className="flex justify-center mt-3">
           <button
             type="button"
@@ -549,6 +687,7 @@ export function ActivityLogPage() {
         />
       )}
       {toast && <Toast message={toast.msg} type={toast.type} onClose={closeToast} />}
+      {viewer && <MediaViewer items={viewer.items} initialIndex={viewer.index} onClose={closeViewer} lang={lang} />}
     </div>
   );
 }

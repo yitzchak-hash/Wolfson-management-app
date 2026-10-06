@@ -490,7 +490,7 @@ export interface WordsContext {
 }
 
 /** A stage's name in the reader's language, by id first and stored name second. */
-function stageWord(id: string | undefined, stored: string | undefined, ctx: WordsContext): string {
+export function stageWord(id: string | undefined, stored: string | undefined, ctx: WordsContext): string {
   const list = ctx.stages ?? [];
   const st = (id ? list.find(s => s.id === id) : undefined)
     ?? (stored ? list.find(s => s.name === stored) : undefined);
@@ -501,7 +501,7 @@ function stageWord(id: string | undefined, stored: string | undefined, ctx: Word
 const isNotStarted = (v: string | undefined) => !v || /^not started$/i.test(v.trim());
 
 /** Stages named in a start-of-work task's own words: "Registers + Access Panels — working here today". */
-function workStages(desc: string, ctx: WordsContext): string[] {
+export function workStages(desc: string, ctx: WordsContext): string[] {
   const m = WORK_START.exec(desc ?? '');
   if (!m || !m[1]) return [];
   return m[1].split(/\s+\+\s+/).map(n => stageWord(undefined, n, ctx)).filter(Boolean);

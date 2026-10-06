@@ -41,7 +41,7 @@ const SIZE_KEY = 'widget_store_scale';
 const RECENT: string[] = [
   'active-jobs', 'notes-board',
   'open-snags', 'no-date', 'gone-quiet', 'nobody-booked', 'backlog-trend',
-  'no-plan', 'floor-by-floor', 'duplicates', 'skipped-stage',
+  'no-plan', 'floor-by-floor', 'duplicates',
   'map', 'weather', 'tap-in', 'shabbat', 'world-clocks',
   'btu-hp', 'streak', 'spin', 'bubble-wrap', 'celebrate', 'tiktok',
 ];
@@ -82,7 +82,7 @@ const SHELF: Record<string, string> = {
   // What is quietly going wrong.
   'gone-quiet': 'Catching problems', 'nobody-booked': 'Catching problems',
   'no-plan': 'Catching problems', duplicates: 'Catching problems',
-  'skipped-stage': 'Catching problems', 'open-snags': 'Catching problems',
+  'open-snags': 'Catching problems',
   'floor-by-floor': 'Catching problems',
   // Figures and bars.
   kpi: 'Counts and progress', 'count-by-stage': 'Counts and progress',

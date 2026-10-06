@@ -758,55 +758,25 @@ export const INSIGHT_WIDGETS: WidgetDef[] = [
     },
   },
 
-  // ── 17 · Skipped a stage ──────────────────────────────────────────────────
+  // ── 17 · Skipped a stage — RETIRED (owner, 2026-10-06) ─────────────────
+  // It read the old one-stage-at-a-time log for jumps along a line, and since
+  // the set model a job's stages are ticked in whatever order the site
+  // allows: "skipped" stopped meaning anything. Kept as an entry so a copy
+  // already on a board draws a quiet note instead of "Unknown widget";
+  // `retired` keeps it off the shelf, so nothing new is placed.
   {
     id: 'skipped-stage', rank: 17, name: 'Skipped a stage', category: 'live',
-    icon: SkipForward, w: 240, h: 175,
-    blurb: 'Jobs that jumped past a stage without ever being recorded at it.',
+    icon: SkipForward, w: 240, h: 175, retired: true,
+    blurb: 'Retired — stages are ticked in any order now.',
     data: {},
-    render: (el, c) => {
-      // Read out of the change log rather than guessed from the current stage:
-      // a job sitting at stage 5 tells you nothing about whether it passed
-      // through 3, but the log holds every move it ever made.
-      const order = new Map(c.stages.map((s, i) => [s.name, i]));
-      const moves = c.logs
-        .filter(l => l.fieldChanged === 'currentStageId' && l.apartmentId)
-        .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
-
-      const found = new Map<string, { from: string; to: string; missed: string[] }>();
-      const at = new Map<string, number>();
-      for (const l of moves) {
-        const to = order.get(l.newValue ?? '');
-        if (to === undefined) { at.set(l.apartmentId, -1); continue; }
-        const from = at.get(l.apartmentId) ?? -1;
-        if (from >= 0 && to > from + 1) {
-          found.set(l.apartmentId, {
-            from: c.stages[from].name,
-            to: c.stages[to].name,
-            missed: c.stages.slice(from + 1, to).map(s => s.name),
-          });
-        }
-        at.set(l.apartmentId, to);
-      }
-      const rows = [...found.entries()]
-        .map(([id, info]) => ({ job: c.jobs.find(j => j.id === id), info }))
-        .filter(r => !!r.job);
-      const limit = Number(d(el).limit) || 12;
-
-      return (
-        <Frame title={`Skipped a stage · ${rows.length}`} icon={SkipForward} tone="#d97706">
-          <Scroll>
-            {rows.length === 0 && <Empty good>Nothing has jumped a stage</Empty>}
-            {rows.slice(0, limit).map(({ job, info }) => (
-              <div key={job!.id} className="min-w-0">
-                <MiniJob job={job!} stages={c.stages} assignments={c.assignments}
-                  onOpen={c.openJob} rtl={c.isRtl}
-                  sub={`missed ${info.missed.join(', ')}`} />
-              </div>
-            ))}
-          </Scroll>
-        </Frame>
-      );
-    },
+    render: (_el, c) => (
+      <Frame title="Skipped a stage" icon={SkipForward} tone="#9ca3af">
+        <div data-retired-widget="skipped-stage" className="text-[10.5px] text-gray-500 leading-snug">
+          {c.isRtl
+            ? 'הווידג׳ט הזה הוצא משימוש — את השלבים מסמנים עכשיו בכל סדר. אפשר להסיר אותו מהלוח.'
+            : 'This widget has been retired — stages are ticked in any order now. You can remove it from the board.'}
+        </div>
+      </Frame>
+    ),
   },
 ];

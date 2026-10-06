@@ -37,16 +37,19 @@ asks for it. ☑ done · ☐ next · ✎ awaiting Yitzchak's word. (Standing ord
   squares count their own stages; the activity log in plain words with the
   Job Board as the centre; move a task to the right apartment; the plan
   reader shows its source; Active jobs draws 40 rows (the Chrome freeze).
+- ☑ 2026-10-06 (his answers): the day story on the Activity page (one card
+  per person per day, no flags); Drilling after Sold/Start and ticked
+  wherever Piping is done (and from now on with it); A3 12 Access Panels
+  off; the A1 floor-10 placeholder gone; "Skipped a stage" retired; the
+  deleted-records list keeps every delete again; the header fits at every
+  width.
 
 ## Next (in order)
 - ☐ Watch on production: the foreign photo listener (no Firebase in the
   container), the plan pane's Windows scrollbar re-fit, the Leads folder
   discovery, TikTok's player protocol end to end.
-- ✎ **Igor's Monday, Redrawn** (plan page, 2026-10-05): the busy notebook
-  day — A bar per task / B grouped by building ★ / C one summary card — and
-  the activity "day story" with automatic flags. Build on his answers.
-- ✎ The "Skipped a stage" widget reads only the old "X → Y" records — under
-  the set model stages are done in any order; retire or redefine it.
+- ✎ The "Next:" cue on a building square (the headline is the NEXT stage to
+  do, which reads as if it were done) — asked again in plain words.
 - ✎ The tablet studio layout (the "Studio on the Tablet" plan page: one
   bar, 56px rail, docked tray) — build on Yitzchak's numbers.
 - ✎ OCR for scanned plans (tesseract) when scans matter.

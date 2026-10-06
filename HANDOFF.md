@@ -46,7 +46,7 @@ day still stands, after the numbered list.)
 3. `npx tsc --noEmit -p .` and `npx vite build`. 4. The audits:
    `node scratchpad/loopaudit.mjs`, `backupaudit.mjs`, `navaudit.mjs`, `apilimit.mjs`.
 5. A What's New entry (`src/data/whatsNew.tsx`, dates run AHEAD of the clock;
-   newest is `2027-01-23` — the next entry must be a later date (an older
+   newest is `2027-01-24` — the next entry must be a later date (an older
    entry lower down also wears `2026-12-20`; the marker compares only the TOP
    entry's date, so never reuse a date that appears anywhere in the file)). 6. A CLAUDE.md
    round record. 7. A line in `docs/CRM-CHECKLIST.md`, tick `docs/ROADMAP.md`, date a line in `docs/DECISIONS.md` when he decided something. 8. Rewrite THIS file.
@@ -64,8 +64,29 @@ with starred recommendations is published first; the owner says "approved" /
 "all yes" / answers by number; then it is built. Never build a redesign
 unasked.
 
-## Where things stand (2026-10-05, latest — the first screen recording; PENDING HIS WORD: the "Igor's Monday" plan page + seven small questions)
+## Where things stand (2026-10-06, latest — his seven answers built; PENDING HIS WORD: the "Next:" cue, re-asked in plain words)
 Last commits, newest first (see `git log`):
+- **2026-10-06, latest — his answers to the seven questions.** The Drive
+  folder still holds only the one recording (no new video). Built: the DAY
+  STORY on the Activity page (`dayStory.ts`, `DayStoryCard.tsx`; "Day by
+  day" is the default, "Every change" one press away, per machine; one card
+  per person per day, one line per visit, thumbnails into the viewer, "now
+  <stage>", opened-only places folded, NO flags — he said no). Drilling moved
+  right after Sold/Start (production order 1–10 in CLAUDE.md) and ticked done
+  on the 38 Wolfson flats with Piping done; from now on a fresh Piping tick
+  ticks Drilling (`IMPLIED_DONE` in `applyMarks`). A3 12 Access Panels
+  un-ticked (one Office history line); A1 12 left as he said; the A1
+  floor-10 placeholder `A1-BLANK-37` deleted + tombstoned. "Skipped a stage"
+  retired (no board had a copy). FOUND: tombstones were being OVERWRITTEN to
+  the latest delete since the 09-06 mergeFields fix — `fsTombstone` now
+  merges (`tombproof.mjs` on the emulator); lost entries cannot be recovered.
+  FOUND: the header's buttons overlapped at 360–1280px — fixed, guarded by
+  `headerfit.mjs` (both languages). Esther un-ticked Wall/Outdoor on A3
+  9/10/11 herself on 10-06 07:58 — left standing, reported to him. Still
+  asked: the "Next:" cue on squares (question 5 — re-asked plainly). All 65
+  production writes in ONE atomic commit preconditioned on update times;
+  backups in the session scratchpad only. What's New newest is now
+  `2027-01-24`.
 - **2026-10-05, latest — HIS NEW WAY OF WORKING: screen recordings.** He drops
   recordings into a Drive folder
   (https://drive.google.com/drive/folders/1yOIA6bfj97LuTIvvCAd57CGAYYlgho2V);

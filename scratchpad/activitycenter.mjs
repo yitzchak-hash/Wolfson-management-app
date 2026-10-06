@@ -23,6 +23,8 @@ function seed([now, hebrew]) {
   localStorage.setItem('wolfson_app_version', '3');
   localStorage.setItem('netiv_app_version', '3');
   localStorage.setItem('whats_new_seen', '2099-01-01');
+  // This harness reads the full list; the day story has its own (daystory-probe).
+  if (!localStorage.getItem('activity_view')) localStorage.setItem('activity_view', 'all');
   if (!localStorage.getItem('active_project')) localStorage.setItem('active_project', 'general');
   if (localStorage.getItem('general_app_data')) return;
   const user = { id: 'U-y', name: 'Yitzchak', code: '999999', role: 'admin', active: true, createdAt: '2026-01-01' };

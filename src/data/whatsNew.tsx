@@ -30,6 +30,39 @@ export interface WhatsNewEntry {
 
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    date: '2027-01-24',
+    title: 'Each person’s day as one story, and Drilling before Piping',
+    items: [
+      {
+        title: 'The day story',
+        body: 'The Activity page now opens on “Day by day”: one card per person per day — how many places '
+          + 'they worked and how many they closed — and one line for each visit, in order: when it began '
+          + 'and ended, the stages started, ticked done or left half done, the pictures, when the task '
+          + 'closed, and where that apartment stands now. Press a picture to open it, press a place to '
+          + 'open the apartment. “Every change” is still one press away, with the same filters.',
+        demo: 'list',
+      },
+      {
+        title: 'Drilling comes first',
+        body: 'Drilling now sits right after Sold/Start, before Piping. Every flat whose Piping was already '
+          + 'done has Drilling ticked done, and from now on ticking Piping done ticks Drilling too.',
+        demo: 'tap',
+      },
+      {
+        title: 'Deleted stays deleted',
+        body: 'Something deleted for good could come back from another computer that still had it. That is '
+          + 'fixed — if anything you deleted earlier has come back, delete it once more and it will stay gone.',
+        demo: 'tap',
+      },
+      {
+        title: 'A tidier header',
+        body: 'The buttons along the top no longer sit on top of each other on smaller screens — a laptop, '
+          + 'an upright tablet or a phone.',
+        demo: 'tap',
+      },
+    ],
+  },
+  {
     date: '2027-01-23',
     title: 'The activity log in plain words, moving a task, and a plan reader that shows its source',
     items: [

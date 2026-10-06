@@ -6,6 +6,33 @@ have them). The v2 rebuild's original design record is the root
 `DECISIONS.md`; the rules and traps behind each decision are in `CLAUDE.md`
 by round. (Standing order 6, 2026-09-23.)_
 
+## 2026-10-06
+- **A busy notebook day stays "every task its own bar"** (answer A) — nothing
+  to build; the bars already say where.
+- **Build the day story** — one card per person per day on the Activity page,
+  one line per visit. **No automatic "suspicious" flags** ("no"): the story
+  states what happened and judges nothing.
+- **Drilling goes right after Sold/Start, before Piping** — "you drill before
+  you pipe". **"Take Drilling done whenever Piping is done"**: ticked on every
+  flat where Piping was already done (38 in Wolfson, a quiet list migration
+  with no history lines), and from now on a fresh Piping tick ticks Drilling
+  too (`IMPLIED_DONE` in `stageMarks.ts`) — unless Drilling was set to "not
+  needed" or unticked by hand afterwards.
+- **A1 12 stays ticked** as it is. **A3 12: Access Panels un-ticked** (one
+  history line, "Office").
+- **The empty fifth square on A1 floor 10 is removed** (the old `A1-BLANK-37`
+  placeholder, deleted and tombstoned).
+- **The "Skipped a stage" widget is retired** — under the set model stages
+  are ticked in any order. No board carried a copy; one placed later draws a
+  quiet "retired" note.
+- Asked again in plain words: the "Next:" cue on the squares (question 5 —
+  he did not follow the first wording).
+- Taken without asking (standing order 1), listed for him: Esther's
+  2026-10-06 untick of Wall Units / Outdoor Units on A3 9, 10, 11 was left
+  standing (she did it by hand, one tick at a time); the deleted-records list
+  fix; the header fitting at every width (the "?" and the alerts pill leave
+  the phone header; the Calendar button shows its word from 1024px).
+
 ## 2026-10-05
 - **Work from screen recordings.** A Drive folder of his recordings; every
   video gets two transcriptions, the screen read every second, a feedback doc,

@@ -516,7 +516,13 @@ export function Header() {
       {/* Everything left of the actions has to survive a 390px phone, so the
           company logo shrinks, the divider goes, and the workspace name inside
           the picker truncates before anything is pushed off the edge. */}
-      <div className="flex items-center gap-2 md:gap-4 min-w-0">
+      {/* From the lg line up the LIVE ticker is drawn, and the right side
+          used to refuse to give way (flex-shrink-0) — so on a 1024–1366
+          screen it slid over the workspace picker, Calendar, What's New and
+          the "?" until they sat on top of each other (found 2026-10-06). Now
+          the left side holds its width there and the right side may shrink,
+          where only the ticker (min-w-0, truncating) actually gives. */}
+      <div className="flex items-center gap-2 md:gap-4 min-w-0 lg:flex-shrink-0">
         <TzviAirLogo />
         <div className="hidden md:block w-px h-10" style={{ backgroundColor: lightTheme ? '#e5e7eb' : 'rgba(255,255,255,0.2)' }} />
         <div className="flex items-center gap-1 md:gap-2 min-w-0">
@@ -534,7 +540,7 @@ export function Header() {
                     border: '1px solid rgba(74,168,216,0.45)',
                   }}
                 >
-                  <CalendarDays size={17} /> <span className="hidden md:inline">{s.navCalendar}</span>
+                  <CalendarDays size={17} /> <span className="hidden lg:inline">{s.navCalendar}</span>
                 </button>
               </Tooltip>
             </>
@@ -542,15 +548,18 @@ export function Header() {
         </div>
       </div>
 
-      <div className="flex items-center gap-0.5 md:gap-2 flex-shrink-0">
+      <div className="flex items-center gap-0.5 md:gap-2 flex-shrink-0 lg:flex-shrink lg:min-w-0">
         {/* What the APP learned to do — left of what the office just did. */}
         {currentUser && <WhatsNewButton />}
-        {/* The training session — a practice board that teaches every gesture. */}
-        {currentUser && <TutorialButton />}
+        {/* The training session — a practice board that teaches every gesture.
+            Not on a phone: the phone board only navigates, and in a 390px
+            header the "?" sat on top of the Calendar button. */}
+        {currentUser && <span className="hidden md:contents"><TutorialButton /></span>}
         {/* What just changed, and who did it — see ActivityTicker. */}
         {currentUser && <ActivityTicker light={lightTheme} />}
         {/* Half-done stages — pending shows on BOTH the apartment and here. */}
-        {currentUser && <OfficeAlertsAsk light={lightTheme} />}
+        {/* Desktop alerts are a computer's question — not asked in a phone's header. */}
+        {currentUser && <span className="hidden md:contents"><OfficeAlertsAsk light={lightTheme} /></span>}
         {currentUser && <PendingStagesBell light={lightTheme} />}
         <CloudSyncBadge light={lightTheme} />
 

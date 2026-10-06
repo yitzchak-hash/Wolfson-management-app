@@ -179,6 +179,39 @@ export function headlineStageId(apt: AptLike, sortedStages: Stage[], ctx?: SetCo
 }
 
 /**
+ * Stages that finishing another one implies. Owner, 2026-10-06: Drilling sits
+ * before Piping, and "take Drilling done whenever Piping is done" — nobody
+ * pipes through walls that were never drilled. Without this, every flat whose
+ * Piping was ticked would headline "Drilling" as the next thing to do.
+ *
+ * Only a FRESH "done" on the first stage moves the second, and only when the
+ * second is on the apartment's own list and not already done or switched off
+ * — so unticking Drilling afterwards by hand is never undone behind anyone's
+ * back. A workspace whose list lacks either id simply never meets the rule.
+ */
+export const IMPLIED_DONE: ReadonlyArray<readonly [when: string, also: string]> = [
+  ['s1-piping', 's-drilling'],
+];
+
+export function withImpliedDone(
+  before: Record<string, StageMark> | undefined,
+  marks: Record<string, StageMark> | undefined,
+  sortedStages: Stage[],
+  apt: Partial<Pick<Apartment, 'buildingId'>>,
+): Record<string, StageMark> | undefined {
+  let out = marks;
+  for (const [when, also] of IMPLIED_DONE) {
+    if (out?.[when] !== 'done' || before?.[when] === 'done') continue;
+    const st = sortedStages.find(s => s.id === also);
+    if (!st || !st.active || !ownStage(apt, st)) continue;
+    const cur = out[also];
+    if (cur === 'done' || cur === 'off') continue;
+    out = { ...out, [also]: 'done' };
+  }
+  return out;
+}
+
+/**
  * The ONE writer. Every change to an apartment's marks goes through here —
  * the picker, a task closing, the worker's start, the bulk bar, adding a
  * custom stage — and comes out as the fields to write: the marks (an empty
@@ -192,6 +225,7 @@ export function applyMarks(
   sortedStages: Stage[],
   ctx?: SetContext,
 ): Pick<Apartment, 'stageMarks' | 'currentStageId' | 'bubbles'> {
+  marks = withImpliedDone(apt.stageMarks, marks, sortedStages, apt);
   const clean = marks && Object.keys(marks).length ? marks : undefined;
   const next: AptLike = { ...apt, stageMarks: clean, bubbles: true };
   return { stageMarks: clean, currentStageId: headlineStageId(next, sortedStages, ctx), bubbles: true };

@@ -412,13 +412,32 @@ export function tombstoneCollection(projectId: string): string {
   return projectCollection(projectId, 'tombstones');
 }
 
-/** Record ids as deleted. Merges, so two devices deleting at once cannot clobber each other. */
+/**
+ * Record ids as deleted. ADDS keys to the map — never replaces it — so two
+ * devices deleting at once cannot clobber each other, and a delete today
+ * never forgets the deletes before it.
+ *
+ * Deliberately NOT `fsSet`: since the frozen-notebook fix, fsSet writes with
+ * `mergeFields`, which REPLACES each top-level field wholesale — right for a
+ * record, and exactly wrong here, where the payload is one new key of a map
+ * that must keep all the others. Routed through fsSet, every delete wiped the
+ * list down to itself (found 2026-10-06: each workspace's tombstone doc held
+ * one id, the most recent), and anything deleted before it could come back
+ * from any device still holding a copy. `merge: true` deep-merges a nested
+ * map, which is precisely "add these keys".
+ */
 export async function fsTombstone(projectId: string, ids: string[]) {
   if (!db || ids.length === 0) return;
   const now = Date.now();
-  await fsSet(tombstoneCollection(projectId), TOMB_DOC, {
-    ids: Object.fromEntries(ids.map(id => [id, now])),
-  });
+  try {
+    await _trackWrite(setDoc(doc(db, tombstoneCollection(projectId), TOMB_DOC), {
+      ids: Object.fromEntries(ids.map(id => [id, now])),
+      _updatedAt: serverTimestamp(),
+    }, { merge: true }));
+  } catch (e) {
+    console.warn(`Firestore tombstone write failed for ${projectId}:`, e);
+    _notifySyncError();
+  }
 }
 
 /**

@@ -11,9 +11,9 @@ owner said later) · **Waiting** (needs his answer). Re-read before every reply.
 |---|------|-----|--------|-------|
 | V1-1 | 0:24 | Notebook bars show where the job is — building, floor, address | Done | PlannerWidget TaskBar: building chip + floor/address line |
 | V1-2 | 0:55 | Mark done without a cross that hides the words | Done | green ✓ done tag on bars and cards, no strike, no dimming |
-| V1-3 | 1:03 | Propose a different look for the notebook bars | Waiting | plan page "Igor's Monday, Redrawn" — A / B ★ / C (https://claude.ai/artifact/H8T7EoSpBWYeLQewseGywQ) |
+| V1-3 | 1:03 | Propose a different look for the notebook bars | Done | plan page "Igor's Monday, Redrawn"; he chose A (every task its own bar — what is live), 2026-10-06 |
 | V1-4 | 1:12 | The Job Board's Activity = every workspace's activity | Done | activityCenter.ts · activitycenter.mjs 58/58 |
-| V1-5 | 2:13 | Activity is too hard to read — present a plan | Partly | plain sentences + folding built; the day-story plan is on the same plan page, waiting |
+| V1-5 | 2:13 | Activity is too hard to read — present a plan | Done | plain sentences + folding (10-05), and the day story he said yes to (10-06): dayStory.ts · daystory-test 18/18 · daystory-probe 27/27; flags declined |
 | V1-6 | 2:57 | Group repeated rows ("Igor uploaded 4 photos") | Done | foldActivity · activitywords-test 83/83 |
 | V1-7 | 3:13 | No jargon like "updated stage note task" | Done | activityWords.ts on every surface (page, History tab, LIVE ticker, dashboard card, widget, report) |
 | V1-8 | 3:58 | Pictures open in a picture viewer that slides left/right, not as a plan | Done | PlanBrowser → MediaViewer with the folder's pictures and films |
@@ -25,15 +25,17 @@ owner said later) · **Waiting** (needs his answer). Re-read before every reply.
 | V1-14 | 6:42 | A way to fix a wrong apartment in future + a worker permission to move his own mistake | Done | Move task (window + Tasks page), `moveOwnWork` permission · movetask 65/65, taskmove-test 35/35 |
 | V1-15 | 7:09 | "On the plan" address/phone: show the box it came from; never invent; empty when not on the plan | Done | planhonest 38/38 · planread-test 39/39 |
 | V1-16 | 7:33 | Registers didn't happen; he did Wall Units, Fans, Concealed Units, Piping | Done | same data write as V1-10 |
-| V1-17 | 7:46 | Add a Drilling stage | Done | stage `s-drilling` in production, after Thermostats — position asked |
+| V1-17 | 7:46 | Add a Drilling stage | Done | `s-drilling` moved right after Sold/Start (order 2) and ticked done on the 38 flats with Piping done; Piping ⇒ Drilling from now on (impliedone-test 8/8) — 2026-10-06 |
 
 Seen, not said (video 1): LIVE ticker field names (**Done** — activityWords) · code-word chips on
 Activity rows (**Done**) · squares counted 13 stages vs 9 (**Done** — stageMarks `ownStage`) · window
 "Floor 4" vs diagram 3 (**Done**) · task delete took its 8 messages/photos silently (**Done** — the delete
-dialog names them and offers Move) · A1 floor 10's empty fifth square (Waiting) · A3 12 Access Panels
-ticked by Igor before drywall (Waiting) · A1 12 still has the moved report's stages done (Waiting) · A3
-9/10/11 read "Registers" = next to do (Waiting — a "Next:" cue proposed) · the "Skipped a stage" widget
-only reads old "X → Y" records (Waiting — retire or redefine).
+dialog names them and offers Move) · A1 floor 10's empty fifth square (**Done** 10-06 — the A1-BLANK-37
+placeholder deleted and tombstoned) · A3 12 Access Panels ticked by Igor before drywall (**Done** 10-06 —
+un-ticked, one history line) · A1 12 still has the moved report's stages done (**Done** — he said leave it)
+· A3 9/10/11 read "Registers" = next to do (Waiting — the "Next:" cue, asked again in plain words; note
+Esther unticked Wall/Outdoor there herself on 10-06, so they now read "Wall Units") · the "Skipped a stage"
+widget only reads old "X → Y" records (**Done** 10-06 — retired).
 
 ## From chat
 
@@ -57,3 +59,12 @@ only reads old "X → Y" records (Waiting — retire or redefine).
 | C-16 | 2026-10-05 | Never ask for passwords, keys or tokens in chat — say where to click | Standing | — |
 | C-17 | 2026-10-05 | Recordings of another project: mark "not this app", report, never build | Standing | none so far |
 | C-18 | 2026-10-05 | While watching, look for asks from earlier videos still not done | Standing | video 1 is the first in the folder |
+| C-19 | 2026-10-06 | Busy notebook day: A (every task its own bar) | Done | nothing to build — the live look |
+| C-20 | 2026-10-06 | Build the day story | Done | see V1-5 |
+| C-21 | 2026-10-06 | No automatic suspicious-entry flags | Done | daystory-probe asserts none |
+| C-22 | 2026-10-06 | Drilling right after Sold/Start, before Piping; tick Drilling done wherever Piping is done | Done | see V1-17 |
+| C-23 | 2026-10-06 | A1 12: leave it ticked | Done | untouched |
+| C-24 | 2026-10-06 | A3 12: untick Access Panels | Done | production, read back; "Office · un-ticked Access Panels" |
+| C-25 | 2026-10-06 | Question 5 (the "Next:" cue) — "I don't understand" | Waiting | re-asked in plain words |
+| C-26 | 2026-10-06 | Remove A1 floor 10's empty square | Done | see seen-not-said |
+| C-27 | 2026-10-06 | Retire the "Skipped a stage" widget | Done | retired; no board had a copy |

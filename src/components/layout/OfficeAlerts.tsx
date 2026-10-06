@@ -207,11 +207,15 @@ export function OfficeAlertsAsk({ light }: { light: boolean }) {
       <button data-office-notif-on type="button"
         onClick={() => { void Notification.requestPermission().finally(dismiss); }}
         title={s.officeNotifAskBody}
-        className="flex items-center gap-1.5 ps-2.5 pe-1.5 py-1 rounded-full text-[11.5px] font-bold"
+        className="flex items-center gap-1.5 ps-2.5 pe-1.5 py-1 rounded-full text-[11.5px] font-bold whitespace-nowrap"
         style={{ color: light ? '#9a3412' : '#fcd34d' }}>
         <span aria-hidden>🔔</span>
-        <span className="hidden md:inline">{s.officeNotifAskTitle}</span>
-        <span className="md:hidden">{s.officeNotifAllow}</span>
+        {/* Words only where the header has room for them: below the xl line
+            the pill is the amber bell alone (its title and label say what it
+            asks), or it pushes the header's own buttons on top of each other
+            — measured on a phone, an upright tablet and a 900px laptop. */}
+        <span className="hidden xl:inline">{s.officeNotifAskTitle}</span>
+        <span className="sr-only xl:hidden">{s.officeNotifAllow}</span>
       </button>
       <button data-office-notif-later type="button" onClick={dismiss} title={s.officeNotifLater}
         className="w-5 h-5 rounded-full flex items-center justify-center text-[11px] opacity-70 hover:opacity-100"

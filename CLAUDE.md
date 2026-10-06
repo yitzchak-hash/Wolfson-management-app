@@ -9170,3 +9170,80 @@ written — eight `task_moved_*` and five `stage_marks`, attributed to "Office",
 dated at the move — in one atomic commit that creates documents and never
 touches an existing one, refusing to run twice. A data fix made outside the
 app should leave the same history the app would have left.
+
+---
+
+# v2 — his answers (2026-10-06): the day story, Drilling first, tombstones that add, a header that fits
+
+## The day story (`src/data/dayStory.ts` + `DayStoryCard.tsx`)
+The Activity page opens on **Day by day** (`data-activity-view="day"`; the
+choice is `activity_view` in localStorage, per machine — `[data-activity-view-pick=day|all]`).
+`dayStories(filteredLogs, {lang, stages, currentWs})` — pure — builds one
+card per person (by NAME, `personKeyOf`, the page's own rule) per LOCAL day,
+newest day first; inside, one VISIT per apartment, split by a gap of two
+hours (`VISIT_GAP_MS`), earliest first so the day reads forward. A visit
+carries the stages started (the work-start record's own words), ticked done,
+left half done, un-ticked; old "X → Y" records; photos, messages, notes, new
+tasks, problems, task moves; the newest close. Places only OPENED fold into
+one "also looked at" line, and a place both worked and opened is never
+repeated there. The page adds what the module cannot know: the place's name
+and door (`placeName`, the same travel as a row), **"now <stage>"** from the
+live (or snapshot) record, and thumbnails — pictures on that apartment within
+the visit ±10 minutes, through `photoSrcOf`, opening `MediaViewer`. The same
+filters feed both views (a "Photos" filter leaves cards of pictures only).
+**No flags** — the owner said no; the probe asserts none.
+`stageWord` / `workStages` are now exported from activityWords so both read a
+stage the same way. Harnesses: `daystory-test.mjs` (18, offline) ·
+`daystory-probe.mjs` (27: centre, Wolfson, Hebrew, 390px).
+`activitycenter.mjs` seeds `activity_view: 'all'` — it tests the full list.
+
+## Drilling, and a stage that another implies (`IMPLIED_DONE` in stageMarks.ts)
+Production order (global list, Wolfson + Netiv): Sold/Start 1 · **Drilling 2**
+· Piping 3 · Concealed Units 4 · Fans 5 · Wall Units 6 · Outdoor Units 7 ·
+Registers 8 · Access Panels 9 · Thermostats 10 (the retired parents s1/s4/s7
+moved with their children). `splitCombinedStages` only ADDS missing children,
+so it never rewrites these orders. `applyMarks` now runs `withImpliedDone`
+first: a FRESH "done" on `s1-piping` ticks `s-drilling` done unless Drilling
+is already done or "not needed" (off) — so unticking Drilling afterwards by
+hand stands. A list without either id never meets the rule; a Job Board job
+never does (`ownStage`). `impliedone-test.mjs` (8). The 38 flats whose Piping
+was already done got Drilling done by REST — a list migration, no history
+lines (what the app's own migrations write); 12 flats whose next stage became
+Drilling had their headline rewritten. A3-12's Access Panels un-ticked with
+one "Office" history line; `A1-BLANK-37` (the floor-10 fifth square, a
+placeholder stacked on A1-37's square) deleted and tombstoned. Esther
+un-ticked Wall/Outdoor on A3 9–11 herself that morning — left standing.
+
+## TOMBSTONES ADD — the frozen-notebook fix had broken them
+`fsTombstone` went through `fsSet`, whose `mergeFields` (the 09-06 frozen-
+notebook fix) REPLACES each top-level field — and a tombstone write's only
+field is the `ids` map. Every delete therefore wiped the list down to itself:
+production held ONE id per workspace on 2026-10-06, so anything deleted
+before the latest delete could come back from any device still holding it.
+`fsTombstone` now writes `setDoc(…, {ids:{…}}, { merge: true })` itself — a
+deep merge is exactly "add these keys". **Never route a map that must keep
+its other keys through fsSet.** Proof against the emulator:
+`scratchpad/tombproof.mjs` (the old write forgets, the new one keeps). The
+lost entries cannot be recovered (a delete writes no history line); a job
+that comes back is deleted once more and now stays deleted.
+Emulator here: firebase-tools in its OWN folder in the session scratchpad
+(`npm install --prefix <dir> firebase-tools@13`), never `--no-save` into the
+repo (the prune trap).
+
+## The header fits, phone to wide desktop (`scratchpad/headerfit.mjs`)
+At 1024–1280 the right side (flex-shrink-0) slid over the workspace picker,
+Calendar, What's New and the "?"; on a phone the "?" sat on the Calendar
+button. Now: from `lg` the left group holds its width and the right group may
+shrink — only the LIVE ticker (min-w-0, truncating) actually gives; the alerts
+pill wears its words only from `xl` (1280) and is the amber bell below; the
+pill and the tutorial "?" leave the header below `md` (a phone's board only
+navigates; desktop alerts are a computer's question); the Calendar button
+wears its word from `lg`. `headerfit.mjs` checks every visible header button
+for room of its own and nothing past the edge at twelve widths; `HE=1` in
+Hebrew. Verified non-vacuous against the old header (390/900/1280 fail).
+
+## "Skipped a stage" is retired
+`retired: true` in `insightWidgets.tsx` with a quiet note as its render — no
+survivor to alias to. Off RECENT / SHELF / WIDGET_PREVIEW; its pencil keeps a
+title. No board in production carried a copy (checked all three
+`canvasElements` collections).
