@@ -65,32 +65,8 @@ export function orderTaskRows<T extends { a: ContractorAssignment }>(rows: T[], 
   return [...keyed.map(k => k.r), ...doneSorted.map(k => k.r)];
 }
 
-/**
- * The calendar's DONE work, folded: day → workspace → the tasks closed that
- * cover it. Igor closed twenty-two small "working here today" reports on one
- * Monday; drawn one chip each they buried the day's open work behind "+22".
- * One chip per workspace per day ("Wolfson · 19 done ✓") says the same thing
- * and leaves the open work in sight. A multi-day task counts on every day it
- * covered.
- */
-export function foldDoneByDay<T extends { a: ContractorAssignment; projectId: string }>(rows: T[]): Map<string, Map<string, T[]>> {
-  const out = new Map<string, Map<string, T[]>>();
-  for (const r of rows) {
-    if (!r.a.completedAt) continue;
-    for (const day of daysOf(r.a)) {
-      let byWs = out.get(day);
-      if (!byWs) { byWs = new Map(); out.set(day, byWs); }
-      const list = byWs.get(r.projectId) ?? [];
-      if (!list.includes(r)) list.push(r);
-      byWs.set(r.projectId, list);
-    }
-  }
-  // Newest closed first inside each fold, the list's own rule.
-  for (const byWs of out.values()) for (const list of byWs.values()) {
-    list.sort((x, y) => (y.a.completedAt ?? '').localeCompare(x.a.completedAt ?? ''));
-  }
-  return out;
-}
+// The calendar's done-work FOLD is not here: it is TaskCalendar's own
+// `dayItems` (groupKey = the workspace), shared with the office's calendars.
 
 /** The local date, as the planner writes it — never the UTC date. */
 export function isoToday(now = new Date()): string {

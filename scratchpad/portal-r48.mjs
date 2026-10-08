@@ -18,7 +18,7 @@
 //       no navy bar, fitted to the width, Mark up (blue) + Download on its
 //       corner, pins still on the sheet; the messages smaller with a plain
 //       "Send a note or message to the office" button;
-//   6 · the calendar: open work one by one, DONE folded into one chip per
+//   6 · the calendar: open work one by one, DONE folded (TaskCalendar's own fold, group = workspace) into one chip per
 //       workspace per day (month → a sheet listing them, each a door; week →
 //       a collapsible "N done in Wolfson" row);
 //   7 · a phone whose worker record lands AFTER the page opened no longer
@@ -380,25 +380,29 @@ const BASE = { seeSchedule: true, markUpPlans: true };
     await page.locator('[data-calendar-fill] button').first().click();
     await page.waitForTimeout(400);
   }
-  const titles = await page.locator('[data-calendar-fill] button[title]').evaluateAll(els => els.map(e => e.getAttribute('title')));
-  check(!titles.some(t => /Office job, finished|Measured the office/.test(t)),
-    'no finished task is drawn on its own in the month', titles.filter(t => /finished|Measured/.test(t)).join(' | '));
-  const chip = titles.find(t => /Wolfson — ✓ 6 выполнено/.test(t));
-  check(!!chip && titles.some(t => /Job Board — ✓ 1 выполнено/.test(t)),
-    'the done work is ONE chip per workspace per day: "✓ 6 выполнено · Wolfson" and "✓ 1 выполнено · Job Board"', titles.filter(t => /✓/.test(t)).join(' | '));
-  check(titles.some(t => /AC installation/.test(t)), 'open work still stands on its own');
+  // The fold is the calendar's OWN (TaskCalendar's dayItems — groupKey = the
+  // workspace, three or more done fold into one green chip).
+  const doneSingles = await page.locator('[data-calendar-ev^="wolfson:D-"]').count();
+  check(doneSingles === 0, 'none of the six finished Wolfson tasks is drawn on its own in the month', String(doneSingles));
+  const foldChip = page.locator('[data-calendar-fold-key="wolfson"]');
+  const foldTitle = (await foldChip.getAttribute('title').catch(() => '')) ?? '';
+  check(await foldChip.count() === 1 && (await foldChip.getAttribute('data-calendar-fold')) === '6' && /^Wolfson · 6 ✓/.test(foldTitle),
+    'the six fold into ONE green chip for the day: "Wolfson · 6 ✓" (count + tick, it fits a phone cell)', foldTitle);
+  check(await page.locator(`[data-calendar-ev="general:G-done:${target}"][data-calendar-ev-done="1"]`).count() === 1,
+    'the Job Board\'s single finished task on that day stays its own green chip (a fold is 3 or more)');
+  check(await page.locator(`[data-calendar-ev="wolfson:T-today:${day(0)}"][data-calendar-ev-done="0"]`).count() === 1, 'open work still stands on its own');
   await shot(page, '6a-month');
-  await page.locator(`[data-calendar-fill] button[title="${chip}"]`).click();
+  await foldChip.click();
   await page.waitForTimeout(400);
-  await page.waitForTimeout(200); await shot(page, '6b-daysheet');
-  const rows = await page.locator('[data-done-day-sheet] [data-done-row]').evaluateAll(els => els.map(e => e.getAttribute('data-done-row')));
+  await shot(page, '6b-daysheet');
+  const rows = await page.locator('[data-calendar-daylist-row]').evaluateAll(els => els.map(e => e.getAttribute('data-calendar-daylist-row').split(':')[1]));
   check(JSON.stringify(rows) === JSON.stringify(['D-6', 'D-5', 'D-4', 'D-3', 'D-2', 'D-1']),
     'the chip opens the day\'s list, newest closed first', rows.join(' '));
-  const rowText = (await page.locator('[data-done-row="D-5"]').innerText()).replace(/\s+/g, ' ');
+  const rowText = (await page.locator(`[data-calendar-daylist-row="wolfson:D-5:${target}"]`).innerText()).replace(/\s+/g, ' ');
   check(/12/.test(rowText) && /Сверление/.test(rowText) && /13:00/.test(rowText), 'each row: unit · stage (Russian) · time', rowText);
-  await page.locator('[data-done-row="D-5"]').click();
+  await page.locator(`[data-calendar-daylist-row="wolfson:D-5:${target}"]`).click();
   await waitFor(page, '[data-task-line]');
-  check(/Drilling — working here today|Сверление/.test(await page.locator('[data-task-line]').innerText()) && await page.locator('[data-done-day-sheet]').count() === 0,
+  check(/Drilling — working here today|Сверление/.test(await page.locator('[data-task-line]').innerText()) && await page.locator('[data-calendar-daylist]').count() === 0,
     'a row opens that task');
   await closeSheet(page);
   await page.waitForTimeout(400);
@@ -415,6 +419,7 @@ const BASE = { seeSchedule: true, markUpPlans: true };
   await page.waitForTimeout(250);
   await shot(page, '6c-week');
   check(await page.locator(`[data-week-done-list="wolfson:${target}"] [data-done-row]`).count() === 6, 'pressed, it opens the six');
+  check(await page.locator(`[data-week-done-one="general:G-done:${target}"]`).count() === 1, 'the single Job Board finish is a green row of its own');
   const todayOrder = await page.evaluate(t => {
     const fold = document.querySelector(`[data-week-done-fold^="wolfson:${t}"]`);
     return !!fold;

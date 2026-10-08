@@ -1,4 +1,4 @@
-// The worker's list order and the calendar's done fold
+// The worker's list order
 // (src/components/portal/portalOrder.ts), offline, against a fixed "today":
 // Thursday 2026-10-08.
 import { createServer } from 'vite';
@@ -8,7 +8,7 @@ const check = (ok, l, extra = '') => { console.log(`${ok ? 'PASS' : 'FAIL'} ${l}
 const eq = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 
 const server = await createServer({ server: { middlewareMode: true }, logLevel: 'silent', cacheDir: process.env.VITE_CACHE_DIR });
-const { orderTaskRows, openBucketOf, foldDoneByDay, isoToday } = await server.ssrLoadModule('/src/components/portal/portalOrder.ts');
+const { orderTaskRows, openBucketOf, isoToday } = await server.ssrLoadModule('/src/components/portal/portalOrder.ts');
 
 const T = '2026-10-08';
 const t = (id, dueDate, extra = {}) => ({ a: { id, dueDate, priority: 'normal', completedAt: null, ...extra }, projectId: extra.pid ?? 'wolfson' });
@@ -44,19 +44,8 @@ check(eq(got, ['prob', 'today-urgent', 'today', 'today-low', 'over-near', 'over-
   'problem · today (urgent first) · past due (most recently due first) · future (soonest first) · dateless · done (newest closed first)', got.join(' '));
 check(eq(orderTaskRows([t('b', T), t('a', T)], T).map(r => r.a.id), ['b', 'a']), 'ties keep their order (stable)');
 
-// ── foldDoneByDay ────────────────────────────────────────────────────────────
-const fold = foldDoneByDay([
-  t('w1', '2026-10-06', { completedAt: '2026-10-06T09:00:00' }),
-  t('w2', '2026-10-06', { completedAt: '2026-10-06T13:00:00' }),
-  t('g1', '2026-10-06', { completedAt: '2026-10-06T11:00:00', pid: 'general' }),
-  t('m', '2026-10-07', { completedAt: '2026-10-07T17:00:00', days: ['2026-10-06', '2026-10-07'] }),
-  t('open', '2026-10-06'),
-]);
-check(eq([...fold.keys()].sort(), ['2026-10-06', '2026-10-07']), 'only days with DONE work have a fold');
-check(eq(fold.get('2026-10-06').get('wolfson').map(r => r.a.id), ['m', 'w2', 'w1']),
-  'one fold per workspace per day, newest closed first; a two-day task counts on both of its days');
-check(eq(fold.get('2026-10-06').get('general').map(r => r.a.id), ['g1']), 'the Job Board has its own fold on that day');
-check(!fold.get('2026-10-06').get('wolfson').some(r => r.a.id === 'open'), 'open work is never folded');
+// (The calendar's done-work fold is TaskCalendar's own `dayItems`, tested by
+// the notebook round's probes; the portal hands it groupKey = the workspace.)
 
 check(isoToday(new Date(2026, 9, 8, 23, 59)) === '2026-10-08', 'today is the LOCAL date, never the UTC one');
 

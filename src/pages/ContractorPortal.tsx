@@ -19,7 +19,7 @@ import {
 import { BuildingDiagram } from '../components/diagram/BuildingDiagram';
 import { permsOf } from '../data/workerLevels';
 import { PlannerWidget } from '../components/board/PlannerWidget';
-import { TaskCalendar, CalendarEvent } from '../components/tasks/TaskCalendar';
+import { TaskCalendar, CalendarEvent, CalendarWords, dayItems } from '../components/tasks/TaskCalendar';
 import { VoiceRecorderButton, VoiceMemoPlayer } from '../components/ui/VoiceMemo';
 import { MessageBox } from '../components/ui/MessageBox';
 import { PushBanner, ArrivalWatcher } from '../components/portal/PortalAlerts';
@@ -42,7 +42,7 @@ import { findPlanSetViaBackend, findAllPlansPdfsViaBackend } from '../data/drive
 import { searchJobs } from '../data/searchIndex';
 import { MoveTaskDialog, workerMoveWords, fill } from '../components/tasks/MoveTaskDialog';
 import { placeLabel } from '../data/taskMove';
-import { orderTaskRows, foldDoneByDay, isoToday } from '../components/portal/portalOrder';
+import { orderTaskRows, isoToday } from '../components/portal/portalOrder';
 import { cachedPlanAspect, measurePlanAspect } from '../data/planAspect';
 // Lazy — the studio carries pdf.js, and a worker who never opens a plan should
 // not download it (the drawer's precedent).
@@ -839,8 +839,6 @@ export function ContractorPortal() {
   /** Weekly is what a worker plans his van by; the month grid is one press away. */
   const [calMode, setCalMode] = useState<'week' | 'month'>('month');
   const [calWeekOff, setCalWeekOff] = useState(0);
-  /** A month chip's folded done work, opened ({day, workspace}). */
-  const [doneSheet, setDoneSheet] = useState<{ day: string; pid: string } | null>(null);
   /** The week view's folded done rows that are open ("<workspace>:<day>"). */
   const [weekDoneOpen, setWeekDoneOpen] = useState<string[]>([]);
   const phonePortal = usePhone();
@@ -2355,79 +2353,100 @@ export function ContractorPortal() {
 
       {/* Calendar tab */}
       {activeTab === 'calendar' && (() => {
-        const calRows = [
+        /**
+         * In list order: open work first, the done work newest-closed first —
+         * the calendar keeps the order it is handed inside each part, so a
+         * folded day lists its newest close at the top.
+         */
+        const calRows = orderTaskRows([
           ...assignments.map(a => ({ a, apt: getApt(a.apartmentId), projectId: currentProjectId, projectName: currentWsName })),
           ...otherTasks,
-        ];
+        ], isoToday());
+        /** The stages a task was for, in his language — "Сверление + Трубы". */
+        const stageWordsOf = (a: ContractorAssignment) => taskStageIds(a)
+          .map(id => stages.find(x => x.id === id))
+          .filter((x): x is Stage => !!x)
+          .map(st => stageNameIn(st, readLang))
+          .join(' + ');
         /**
          * OPEN work one by one; DONE work folded (owner, 2026-10-07, on
          * Igor's month: "his calendar doesn't show all his jobs on those days
-         * unless he clicks plus 22 — this has to be rethought"). A day's open
-         * tasks are drawn first and each stands on its own; everything closed
-         * that day becomes ONE chip per workspace — "✓ 19 done · Wolfson" —
-         * whose press lists them (unit · stage · time), each a door to its
-         * task. The events are built in that order because the grid draws a
-         * day's chips in the order it is handed them.
+         * unless he clicks plus 22 — this has to be rethought"). The folding
+         * is the calendar's OWN (TaskCalendar's `dayItems`, shared with the
+         * office pages): every done event carries its WORKSPACE as the group,
+         * so three or more closed in one workspace on one day become ONE green
+         * chip — "Wolfson · 19 выполнено ✓" — whose press lists them, each row
+         * a door to its task. A done event's lines are the unit and what was
+         * done + when, so that list reads unit · stage · time.
          */
-        const openEvents: CalendarEvent[] = calRows
-          .filter(r => !r.a.completedAt)
+        const rowOfEv = new Map<string, typeof calRows[number]>();
+        const calEvents: CalendarEvent[] = calRows
           // Every day of a multi-day task, so the worker's calendar says
           // exactly which days he is expected at the job. Every workspace's
           // tasks — the calendar is his week, wherever the work is.
-          .flatMap(({ a, apt, projectId: pid, projectName: ws }) => {
+          .flatMap(r => {
+            const { a, apt, projectId: pid, projectName: ws } = r;
             const st = stages.find(x => x.id === a.stageId);
-            return daysOf(a).map(day => ({
-              id: `${pid}:${a.id}:${day}`,
-              date: day,
-              title: a.taskDescription,
-              subtitle: a.general ? workAtLabel(readLang, ws) : (apt ? aptLabel(apt) : a.buildingId),
-              // The stage's colour inside the day; the trade colour only for
-              // a task with no stage.
-              color: st?.color ?? projectColor(projects, pid),
-              node: st ? { stageName: stageNameIn(st, readLang), stageColor: st.color } : undefined,
-              completed: false,
-              onClick: () => openTask(pid, a),
-            }));
-          });
-        const doneFold = foldDoneByDay(calRows);
-        const doneEvents: CalendarEvent[] = [];
-        for (const [day, byWs] of doneFold) {
-          for (const [pid, list] of byWs) {
-            doneEvents.push({
-              id: `done:${pid}:${day}`,
-              date: day,
-              subtitle: `✓ ${list.length} ${w('done', 'בוצעו', 'выполнено')}`,
-              title: projectShortName(projects.find(p => p.id === pid), readLang === 'he', pid),
-              color: '#16a34a',
-              completed: false,
-              onClick: () => setDoneSheet({ day, pid }),
+            const where = a.general ? workAtLabel(readLang, ws) : (apt ? aptLabel(apt) : a.buildingId);
+            return daysOf(a).map((day): CalendarEvent => {
+              const ev: CalendarEvent = a.completedAt ? {
+                id: `${pid}:${a.id}:${day}`,
+                date: day,
+                subtitle: where,
+                title: `${stageWordsOf(a) || a.taskDescription} · ✓ ${format(new Date(a.completedAt), 'HH:mm')}`,
+                color: '#16a34a',
+                completed: true,
+                groupKey: pid,
+                groupLabel: projectShortName(projects.find(p => p.id === pid), readLang === 'he', pid),
+                onClick: () => openTask(pid, a),
+              } : {
+                id: `${pid}:${a.id}:${day}`,
+                date: day,
+                title: a.taskDescription,
+                subtitle: where,
+                // The stage's colour inside the day; the trade colour only for
+                // a task with no stage.
+                color: st?.color ?? projectColor(projects, pid),
+                node: st ? { stageName: stageNameIn(st, readLang), stageColor: st.color } : undefined,
+                completed: false,
+                onClick: () => openTask(pid, a),
+              };
+              rowOfEv.set(ev.id, r);
+              return ev;
             });
-          }
-        }
-        const calEvents: CalendarEvent[] = [...openEvents, ...doneEvents];
-        /** One finished task in a fold: the unit, what was done, when — a door to the task. */
-        const doneRow = (r: typeof calRows[number], where: 'week' | 'sheet') => {
-          const names = taskStageIds(r.a)
-            .map(id => stages.find(x => x.id === id))
-            .filter((x): x is Stage => !!x)
-            .map(st => stageNameIn(st, readLang))
-            .join(' + ');
-          return (
-            <button key={`${where}:${r.projectId}:${r.a.id}`} data-done-row={r.a.id}
-              onClick={() => { setDoneSheet(null); openTask(r.projectId, r.a); }}
-              className={`w-full flex items-center gap-2.5 text-left rtl:text-right active:bg-gray-50 ${
-                where === 'sheet' ? 'px-3 py-3 border-b border-gray-100' : 'ps-9 pe-3 py-2'}`}>
-              <span className="font-bold text-[14px] text-[#1e3a5f] flex-shrink-0 max-w-[45%] truncate">
-                {whereLabel(r.a, r.apt, r.projectName)}
-              </span>
-              <span className="flex-1 min-w-0 text-[12.5px] text-gray-500 truncate">{names}</span>
-              <span className="text-[12px] tabular-nums font-semibold text-green-700 flex-shrink-0">
-                ✓ {r.a.completedAt ? format(new Date(r.a.completedAt), 'HH:mm') : ''}
-              </span>
-            </button>
-          );
+          });
+        // A day's biggest fold right after its open work, before any lone
+        // finished chip — the calendar places a fold where its first member
+        // stands, and the fold is what says how the day went.
+        const groupSize = new Map<string, number>();
+        for (const ev of calEvents) if (ev.completed) groupSize.set(`${ev.date}|${ev.groupKey}`, (groupSize.get(`${ev.date}|${ev.groupKey}`) ?? 0) + 1);
+        calEvents.sort((x, y) => (Number(x.completed) - Number(y.completed))
+          || (x.completed ? (groupSize.get(`${y.date}|${y.groupKey}`) ?? 0) - (groupSize.get(`${x.date}|${x.groupKey}`) ?? 0) : 0));
+        /** The calendar's own words, in HIS language. */
+        const calWords: CalendarWords = {
+          // A phone's day is ~52px wide: the chip's tail is the count and the
+          // calendar's own green tick — "Wolfson · 6 ✓" — so the number shows.
+          foldDone: '{n}',
+          more: '+{n}',
+          done: w('done', 'בוצע', 'выполнено'),
+          open: w('open', 'פתוח', 'открыто'),
+          close: w('Close', 'סגירה', 'Закрыть'),
+          foldHint: '',
         };
-        const sheetList = doneSheet ? (doneFold.get(doneSheet.day)?.get(doneSheet.pid) ?? []) : [];
+        /** One finished task in the week's fold: the unit, what was done, when — a door to the task. */
+        const doneRow = (r: typeof calRows[number], key: string) => (
+          <button key={key} data-done-row={r.a.id}
+            onClick={() => openTask(r.projectId, r.a)}
+            className="w-full flex items-center gap-2.5 text-left rtl:text-right active:bg-gray-50 ps-9 pe-3 py-2">
+            <span className="font-bold text-[14px] text-[#1e3a5f] flex-shrink-0 max-w-[45%] truncate">
+              {whereLabel(r.a, r.apt, r.projectName)}
+            </span>
+            <span className="flex-1 min-w-0 text-[12.5px] text-gray-500 truncate">{stageWordsOf(r.a)}</span>
+            <span className="text-[12px] tabular-nums font-semibold text-green-700 flex-shrink-0">
+              ✓ {r.a.completedAt ? format(new Date(r.a.completedAt), 'HH:mm') : ''}
+            </span>
+          </button>
+        );
         const wdLabels = readLang === 'he'
           ? ['א׳', 'ב׳', 'ג׳', 'ד׳', 'ה׳', 'ו׳', 'ש׳']
           : readLang === 'ru' ? ['Вс', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб']
@@ -2440,7 +2459,7 @@ export function ContractorPortal() {
          * week view needs no arithmetic of its own.
          */
         const byDay = new Map<string, CalendarEvent[]>();
-        for (const ev of openEvents) {
+        for (const ev of calEvents) {
           const arr = byDay.get(ev.date) ?? [];
           arr.push(ev); byDay.set(ev.date, arr);
         }
@@ -2478,38 +2497,10 @@ export function ContractorPortal() {
                   weekdayLabels={wdLabels}
                   locale={calLocale}
                   todayLabel={s.filterToday}
+                  rtl={!!s.isRtl}
+                  words={calWords}
                   fill
                 />
-                {/* A folded "✓ 19 done" chip, opened: every task closed that
-                    day in that workspace, newest first, each a door. */}
-                {doneSheet && (
-                  <>
-                    <div className="fixed inset-0 bg-black/40 z-40" onClick={() => setDoneSheet(null)} />
-                    <div data-done-day-sheet={`${doneSheet.pid}:${doneSheet.day}`}
-                      className="fixed bottom-0 left-0 right-0 z-50 rounded-t-3xl bg-white shadow-2xl flex flex-col"
-                      style={{ maxHeight: '80vh' }}>
-                      <div className="flex items-center justify-center pt-3 pb-1 flex-shrink-0">
-                        <div className="w-10 h-1.5 rounded-full bg-gray-200" />
-                      </div>
-                      <div className="flex items-center gap-2 px-4 pb-3 border-b border-gray-100 flex-shrink-0">
-                        <CheckCircle2 size={18} className="text-green-600 flex-shrink-0" />
-                        <div className="min-w-0 flex-1">
-                          <div className="font-extrabold text-[16px] text-gray-800 truncate">
-                            {fill(w('{n} done in {ws}', '{n} בוצעו · {ws}', '{n} выполнено · {ws}'),
-                              { n: sheetList.length, ws: projectShortName(projects.find(p => p.id === doneSheet.pid), readLang === 'he', doneSheet.pid) })}
-                          </div>
-                          <div className="text-[12px] text-gray-500">{format(parseISO(doneSheet.day), 'EEEE d MMMM')}</div>
-                        </div>
-                        <button onClick={() => setDoneSheet(null)} className="p-1.5 rounded-full hover:bg-gray-100 flex-shrink-0">
-                          <X size={18} className="text-gray-500" />
-                        </button>
-                      </div>
-                      <div className="flex-1 overflow-y-auto" style={{ overscrollBehavior: 'contain' }}>
-                        {sheetList.map(r => doneRow(r, 'sheet'))}
-                      </div>
-                    </div>
-                  </>
-                )}
               </div>
             ) : (
               <div data-cal-week>
@@ -2548,47 +2539,59 @@ export function ContractorPortal() {
                             </span>
                           )}
                         </div>
-                        {evs.length === 0 && !doneFold.get(key)?.size ? (
+                        {evs.length === 0 && (
                           <div className="px-3 py-2 text-xs text-gray-300">—</div>
-                        ) : evs.map(ev => (
-                          <button key={ev.id} onClick={ev.onClick}
-                            className="w-full text-left rtl:text-right px-3 py-2.5 border-t border-gray-50 active:bg-gray-50">
-                            <span className="flex items-start gap-2">
-                              <span className="w-2.5 h-2.5 rounded-full flex-shrink-0 mt-1"
-                                style={{ backgroundColor: ev.color }} />
-                              <span className="flex-1 min-w-0">
-                                <span className="block text-sm font-bold text-gray-800">
-                                  <TrText text={ev.title} to={readLang} />
-                                </span>
-                                <span className="block text-xs text-gray-500 truncate">{ev.subtitle}</span>
-                              </span>
-                            </span>
-                          </button>
-                        ))}
-                        {/* The day's DONE work, one folded row per workspace,
-                            under the open work — "19 done in Wolfson ▸". */}
-                        {[...(doneFold.get(key) ?? new Map<string, typeof calRows>())].map(([pid, list]) => {
-                          const foldKey = `${pid}:${key}`;
-                          const open = weekDoneOpen.includes(foldKey);
+                        )}
+                        {/* The month's own rule (`dayItems`): open work first,
+                            each on its own; then the done work, folded per
+                            workspace once there are three — "19 done in
+                            Wolfson ▸" — a single done task as a green row. */}
+                        {dayItems(evs).map(it => {
+                          if (it.kind === 'fold') {
+                            const foldKey = `${it.key}:${key}`;
+                            const open = weekDoneOpen.includes(foldKey);
+                            return (
+                              <div key={foldKey} className="border-t border-gray-50">
+                                <button data-week-done-fold={foldKey} aria-expanded={open}
+                                  onClick={() => setWeekDoneOpen(v => v.includes(foldKey) ? v.filter(x => x !== foldKey) : [...v, foldKey])}
+                                  className="w-full flex items-center gap-2 px-3 py-2.5 text-left rtl:text-right active:bg-green-50"
+                                  style={{ backgroundColor: open ? '#f0fdf4' : undefined }}>
+                                  <CheckCircle2 size={15} className="text-green-600 flex-shrink-0" />
+                                  <span className="flex-1 text-[13px] font-bold text-green-800">
+                                    {fill(w('{n} done in {ws}', '{n} בוצעו · {ws}', '{n} выполнено · {ws}'),
+                                      { n: it.events.length, ws: it.label })}
+                                  </span>
+                                  <ChevronDown size={15} className={`text-green-700 transition-transform ${open ? '' : (s.isRtl ? 'rotate-90' : '-rotate-90')}`} />
+                                </button>
+                                {open && (
+                                  <div data-week-done-list={foldKey} className="pb-1">
+                                    {it.events.map(ev => { const r = rowOfEv.get(ev.id); return r ? doneRow(r, ev.id) : null; })}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          }
+                          const ev = it.ev;
+                          if (ev.completed) {
+                            const r = rowOfEv.get(ev.id);
+                            return r ? (
+                              <div key={ev.id} className="border-t border-gray-50" data-week-done-one={ev.id}>{doneRow(r, ev.id)}</div>
+                            ) : null;
+                          }
                           return (
-                            <div key={foldKey} className="border-t border-gray-50">
-                              <button data-week-done-fold={foldKey} aria-expanded={open}
-                                onClick={() => setWeekDoneOpen(v => v.includes(foldKey) ? v.filter(x => x !== foldKey) : [...v, foldKey])}
-                                className="w-full flex items-center gap-2 px-3 py-2.5 text-left rtl:text-right active:bg-green-50"
-                                style={{ backgroundColor: open ? '#f0fdf4' : undefined }}>
-                                <CheckCircle2 size={15} className="text-green-600 flex-shrink-0" />
-                                <span className="flex-1 text-[13px] font-bold text-green-800">
-                                  {fill(w('{n} done in {ws}', '{n} בוצעו · {ws}', '{n} выполнено · {ws}'),
-                                    { n: list.length, ws: projectShortName(projects.find(p => p.id === pid), readLang === 'he', pid) })}
+                            <button key={ev.id} onClick={ev.onClick} data-week-ev={ev.id}
+                              className="w-full text-left rtl:text-right px-3 py-2.5 border-t border-gray-50 active:bg-gray-50">
+                              <span className="flex items-start gap-2">
+                                <span className="w-2.5 h-2.5 rounded-full flex-shrink-0 mt-1"
+                                  style={{ backgroundColor: ev.color }} />
+                                <span className="flex-1 min-w-0">
+                                  <span className="block text-sm font-bold text-gray-800">
+                                    <TrText text={ev.title} to={readLang} />
+                                  </span>
+                                  <span className="block text-xs text-gray-500 truncate">{ev.subtitle}</span>
                                 </span>
-                                <ChevronDown size={15} className={`text-green-700 transition-transform ${open ? '' : (s.isRtl ? 'rotate-90' : '-rotate-90')}`} />
-                              </button>
-                              {open && (
-                                <div data-week-done-list={foldKey} className="pb-1">
-                                  {list.map(r => doneRow(r, 'week'))}
-                                </div>
-                              )}
-                            </div>
+                              </span>
+                            </button>
                           );
                         })}
                       </div>
