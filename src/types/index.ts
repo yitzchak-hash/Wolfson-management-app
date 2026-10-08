@@ -2923,6 +2923,20 @@ export interface MainUiStrings {
   noteSaved: string;
   stageNameSaved: string;
   stageNameAdded: string;
+  // ── Round 48 (board): Live from site, stages that save themselves, the import window ──
+  sitePhotosTitle: string;
+  sitePhotosEmpty: string;
+  stageAutoSaved: string;
+  importWindowOpen: string;
+  importWindowTitle: string;
+  importEarlier: string;
+  importWindowCount: string;
+  importWindowShown: string;
+  importWindowEdited: string;
+  importWindowSearch: string;
+  importWindowHint: string;
+  importWindowEmpty: string;
+  importMovedToTrash: string;
   userAdded: string;
   contractorAdded: string;
   deletedLabel: string;
@@ -3856,6 +3870,19 @@ export const DEFAULT_MAIN_UI_STRINGS: MainUiStrings = {
   noteSaved: 'Note saved',
   stageNameSaved: 'Stage saved',
   stageNameAdded: 'Stage added',
+  sitePhotosTitle: 'Live from site',
+  sitePhotosEmpty: 'No photos yet',
+  stageAutoSaved: 'Saved',
+  importWindowOpen: 'See the jobs',
+  importWindowTitle: 'Import from {date}',
+  importEarlier: 'an earlier import',
+  importWindowCount: '{n} jobs',
+  importWindowShown: '{shown} of {n} jobs',
+  importWindowEdited: '{n} edited since',
+  importWindowSearch: 'Search these jobs…',
+  importWindowHint: 'Double-click a job to open it',
+  importWindowEmpty: 'No job in this import matches',
+  importMovedToTrash: 'Moved to Trash — nothing is deleted',
   userAdded: 'User added',
   contractorAdded: 'Worker added',
   deletedLabel: 'Deleted',
@@ -4772,6 +4799,19 @@ export const HEBREW_MAIN_UI_STRINGS: MainUiStrings = {
   noteSaved: 'הערה נשמרה',
   stageNameSaved: 'שלב נשמר',
   stageNameAdded: 'שלב נוסף',
+  sitePhotosTitle: 'בזמן אמת מהשטח',
+  sitePhotosEmpty: 'עדיין אין תמונות',
+  stageAutoSaved: 'נשמר',
+  importWindowOpen: 'הצג את העבודות',
+  importWindowTitle: 'ייבוא מ־{date}',
+  importEarlier: 'ייבוא קודם',
+  importWindowCount: '{n} עבודות',
+  importWindowShown: '{shown} מתוך {n} עבודות',
+  importWindowEdited: '{n} נערכו מאז',
+  importWindowSearch: 'חיפוש בעבודות האלה…',
+  importWindowHint: 'לחיצה כפולה על עבודה פותחת אותה',
+  importWindowEmpty: 'אין עבודה בייבוא הזה שמתאימה',
+  importMovedToTrash: 'הועבר לפח — כלום לא נמחק',
   userAdded: 'משתמש נוסף',
   contractorAdded: 'קבלן נוסף',
   deletedLabel: 'נמחק',

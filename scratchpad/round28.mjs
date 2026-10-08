@@ -23,6 +23,10 @@ function seedFn() {
     stages: [],
     canvasElements: [
       { id: 'CE-bin-done', type: 'bin', binKind: 'done', x: 600, y: 300, w: 170, h: 110, text: '', color: '#16a34a', addedAt: '2026-08-01' },
+      // The seeded Goals fixture lands at the view's centre; at the board's
+      // "100%" (a real 0.75 since 2026-10-08) the new tile then nudges a long
+      // way off it to avoid overlapping. Parked, the centre is free.
+      { id: 'CE-goals-board', type: 'widget', widget: 'goals', x: 3600, y: 2600, w: 420, h: 300, text: '', color: '#ffffff', data: {} },
     ],
   }));
 }

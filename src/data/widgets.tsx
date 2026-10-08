@@ -181,26 +181,31 @@ export function isSampleCtx(c: WidgetCtx): boolean {
  * The grid look: the newest pictures and films from EVERY workspace, each a
  * tappable tile that opens the viewer (play, sound, full screen for a film).
  * A shot younger than ten minutes wears a "new" ring, so a glance at the
- * wall catches what just came in. Narrowed to chosen jobs when the pencil
- * says so — job ids from any workspace.
+ * wall catches what just came in.
+ *
+ * EVERY photo, whatever job it is from (owner, 2026-10-08: "it shouldn't
+ * care what job it's from — just every photo that comes in"). The grid used
+ * to honour a `jobIds` list from the pencil, and the pencil's "Pick all"
+ * filled it with every job of the workspace the board was standing in — on
+ * the Job Board, its 3,520 jobs. "Only these 3,520 jobs" then hid every
+ * picture the workers sent from Wolfson and Netiv, and the title read "From
+ * site · 3520 jobs" over "No photos yet". The field is gone from the pencil
+ * and a stored `jobIds` is ignored.
  */
 function SitePhotosGrid({ el, c, sample }: { el: CanvasElement; c: WidgetCtx; sample: boolean }) {
   const shots = useSitePhotos(c, sample);
   const viewer = useShotViewer();
+  const words = useStore(st => st.mainUiStrings);
   // The "new" ring must fall off by itself — one cheap tick.
   useTick(true, 30_000);
-  const only = (d(el).jobIds ?? []) as string[];
-  const allowed = only.length ? new Set(only) : null;
-  const list = useMemo(() => {
-    const kept = allowed ? shots.filter(s => allowed.has(s.jobId)) : shots;
-    return kept.slice(0, Number(d(el).limit) || 12);
-  }, [shots, allowed, el]); // eslint-disable-line react-hooks/exhaustive-deps
+  const limit = Number(d(el).limit) || 12;
+  const list = useMemo(() => shots.slice(0, limit), [shots, limit]);
   const fresh = list.some(s => Date.now() - Date.parse(s.at) < 10 * 60 * 1000);
-  const title = (d(el).title as string) || (only.length ? `From site · ${only.length} jobs` : 'Live from site');
+  const title = (d(el).title as string) || words.sitePhotosTitle || 'Live from site';
   return (
     <Frame title={list.length ? `${title} · ${list.length}` : title} icon={Camera} tone={fresh ? '#4aa8d8' : undefined}>
       {list.length === 0
-        ? <span className="text-[10px] text-gray-400">No photos yet</span>
+        ? <span data-site-photos-empty className="text-[10px] text-gray-400">{words.sitePhotosEmpty || 'No photos yet'}</span>
         : (
           <div data-site-photos className="grid gap-1 h-full content-start"
             style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(78px, 1fr))', gridAutoRows: 'minmax(62px, 1fr)' }}>

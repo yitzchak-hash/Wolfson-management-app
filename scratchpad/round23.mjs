@@ -118,9 +118,13 @@ await page.waitForTimeout(300);
 // Drag Bravo (and Charlie with it) up until the union's top is 3px shy of
 // Anchor's top — the union snap must close that gap on release.
 const from = await screenOf(201 + 107, 420 + 66);
+// 217 WORLD units up, through screenOf — a raw 217 screen px is 217 world
+// units only at a real zoom of 1, and the board's "100%" is a real 0.75
+// since 2026-10-08 (boardZoom.ts).
+const to = await screenOf(201 + 107, 420 + 66 - 217);
 await page.mouse.move(from.x, from.y);
 await page.mouse.down();
-await page.mouse.move(from.x, from.y - 217, { steps: 10 });
+await page.mouse.move(to.x, to.y, { steps: 10 });
 await page.waitForTimeout(200);
 const guides = await page.evaluate(() => document.querySelectorAll('[data-snap-guide]').length);
 await page.mouse.up();

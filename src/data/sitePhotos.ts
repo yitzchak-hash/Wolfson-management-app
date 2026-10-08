@@ -35,7 +35,7 @@ export interface SiteShot {
   who: string;
   /** ISO — when it came in. */
   at: string;
-  /** An address a tile can draw: a real image for a picture, a first-frame thumbnail for a Drive film. */
+  /** An address an <img> can draw: a real image for a picture, Drive's thumbnail for a Drive-only film — '' for a playable film (the tile draws its own first frame). */
   thumb: string;
   /** An address a <video> can play — Firebase Storage or a local data URL; a Drive film has none (its bytes are fetched on open). */
   playable: string;
@@ -76,7 +76,12 @@ export function collectSiteShots(src: {
     const kind = shotKindOf(p);
     if (!kind) continue;
     const playable = p.storageUrl || p.dataUrl || '';
-    const thumb = photoSrcOf(p);
+    // A FILM with a playable address gets no thumbnail: `photoSrcOf` would
+    // hand back the video file itself, and an <img> of a video is a broken
+    // square on the grid, the wall and the rotating look. The tile draws the
+    // film's own first frame instead. A Drive-only film keeps Drive's
+    // thumbnail — the only picture of it there is.
+    const thumb = kind === 'video' && playable ? '' : photoSrcOf(p);
     if (!thumb && !playable) continue;
     const a = asgById.get(p.assignmentId);
     const apt = aptById.get(p.apartmentId || a?.apartmentId || '');

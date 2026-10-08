@@ -27,7 +27,9 @@ const seed = () => {
       { id: 'CE-orange', type: 'box', x: 300, y: 120, w: 900, h: 600, text: 'TV area', color: '#f97316' },
       { id: 'CE-note', type: 'note', x: 380, y: 200, w: 165, h: 150, text: 'inside', color: '#fef9c3' },
       // Far content: makes the world ~6300 wide, unfittable at 25%.
-      { id: 'CE-far', type: 'note', x: 6000, y: 900, w: 165, h: 150, text: 'far', color: '#bbf7d0' },
+      // Far enough that the whole-board fit sits below the ladder's bottom
+      // rung — a REAL 0.1875 ("25%") since the zoom unit became 0.75.
+      { id: 'CE-far', type: 'note', x: 9000, y: 900, w: 165, h: 150, text: 'far', color: '#bbf7d0' },
       { id: 'CE-bin-done', type: 'bin', binKind: 'done', x: 2100, y: 24, w: 180, h: 112, text: 'Done', color: '#16a34a' },
       { id: 'CE-bin-ready', type: 'bin', binKind: 'ready', x: 2100, y: 154, w: 180, h: 112, text: 'Ready', color: '#0ea5e9' },
       { id: 'CE-bin-archive', type: 'bin', binKind: 'archive', x: 2100, y: 284, w: 180, h: 112, text: 'Archive', color: '#64748b' },
@@ -82,7 +84,7 @@ const seed = () => {
   await page.waitForTimeout(400);
   const zo = await geom();
   console.log('       fully zoomed out:', JSON.stringify(zo));
-  check(zo.z < 0.25, 'the ladder steps BELOW 25% on a board too wide for it', `z=${zo.z}`);
+  check(zo.z < 0.1875 - 0.0005, 'the ladder steps BELOW its 25% rung (real 0.1875) on a board too wide for it', `z=${zo.z}`);
   check(zo.world.l >= zo.vp.l - 3 && zo.world.b <= zo.vp.b + 3 && zo.world.t >= zo.vp.t - 3
     && zo.world.r <= zo.vp.r + 3,
     'the ENTIRE board is on screen — desk on the right and below only', JSON.stringify(zo.world));

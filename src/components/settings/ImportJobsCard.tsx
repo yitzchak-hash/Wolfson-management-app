@@ -13,6 +13,7 @@ import {
 import {
   templateCsv, parseTemplateCsv, planImport, ImportPlan, PlannedJob, PlanContext,
 } from '../../data/jobsImport';
+import { ImportBatchWindow } from './ImportBatchWindow';
 
 /**
  * Job Board → project settings: the import wizard.
@@ -58,6 +59,9 @@ export function ImportJobsCard({ onToast }: { onToast: (msg: string, type?: 'suc
   const [step, setStep] = useState<{ label: string; done: number; total: number } | null>(null);
   const [clearing, setClearing] = useState<string | null>(null);
   const [confirmClear, setConfirmClear] = useState<string | null>(null);
+  /** The batch whose jobs are open in the tile window (owner, 2026-10-08). */
+  const [viewing, setViewing] = useState<{ stamp: string; label: string } | null>(null);
+  const words = useStore(st => st.mainUiStrings);
 
   /**
    * Every import is its own BATCH — the ids carry the batch's timestamp
@@ -371,15 +375,22 @@ export function ImportJobsCard({ onToast }: { onToast: (msg: string, type?: 'suc
             const label = b.stamp
               ? new Date(b.when).toLocaleString(undefined,
                   { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
-              : 'earlier import';
+              : words.importEarlier;
             const asking = confirmClear === b.stamp;
             return (
               <div key={b.stamp || 'legacy'} className="flex items-center gap-2 flex-wrap text-xs px-3 py-2">
                 <AlertTriangle size={13} className="text-amber-600 flex-shrink-0" />
-                <span className="text-amber-800 flex-1 min-w-[170px]">
+                {/* The row OPENS the batch: its jobs as the board's own tiles. */}
+                <button type="button" data-import-batch={b.stamp || 'legacy'}
+                  onClick={() => setViewing({ stamp: b.stamp, label })}
+                  title={words.importWindowOpen}
+                  className="text-amber-800 flex-1 min-w-[170px] text-left rounded-md -mx-1 px-1 py-0.5 hover:bg-amber-100 group/imp">
                   Import from <b>{label}</b> — {b.count} job{b.count === 1 ? '' : 's'}
                   {b.edited > 0 && <> · <b>{b.edited} edited since</b></>}
-                </span>
+                  <span className="ml-1.5 inline-flex items-center gap-0.5 font-semibold text-[#1e3a5f] underline-offset-2 group-hover/imp:underline">
+                    {words.importWindowOpen} <ChevronRight size={12} />
+                  </span>
+                </button>
                 {asking ? (
                   <span className="flex items-center gap-1.5">
                     <button onClick={() => clearBatch(b.stamp)} disabled={clearing !== null}
@@ -404,6 +415,10 @@ export function ImportJobsCard({ onToast }: { onToast: (msg: string, type?: 'suc
             Removing an import deletes exactly those jobs, on every device. Anything made by hand is never touched.
           </p>
         </div>
+      )}
+
+      {viewing && (
+        <ImportBatchWindow stamp={viewing.stamp} label={viewing.label} onClose={() => setViewing(null)} />
       )}
 
       {enriching && (

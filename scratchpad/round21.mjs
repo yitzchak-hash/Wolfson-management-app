@@ -49,6 +49,10 @@ await ctx.addInitScript(() => {
       { id: 'CE-bp', type: 'widget', widget: 'project-mini',
         x: 170, y: 360, w: 300, h: 260, text: '', color: '#ffffff',
         data: { projectId: 'wolfson' } },
+      // The seeded Goals fixture lands at the view's centre; at the board's
+      // "100%" (a real 0.75 since 2026-10-08) its bottom edge sits under the
+      // drop point below. Parked out of the way.
+      { id: 'CE-goals-board', type: 'widget', widget: 'goals', x: 3600, y: 2600, w: 420, h: 300, text: '', color: '#ffffff', data: {} },
     ],
   }));
 });
