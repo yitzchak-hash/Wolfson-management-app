@@ -138,6 +138,44 @@ check(permsOf({ levelId: 'lvl-manager' }, levels).moveOwnWork && !permsOf({ leve
   'permsOf follows it: managers can move their own work, contractors cannot');
 check(permsOf({ levelId: 'lvl-contractor', perms: { moveOwnWork: true } }, levels).moveOwnWork, 'a personal override turns it on for one worker');
 
+
+// ── the same-day revert (owner, 2026-10-08): a task that remembers how the
+//    apartment stood when the worker STARTED puts it back exactly so.
+{
+  const SS = [
+    { id: 'skhtatb', name: 'Sold/Start', order: 1, active: true, kind: 'work', color: '#1' },
+    { id: 's-drill', name: 'Drilling', order: 2, active: true, kind: 'work', color: '#2' },
+    { id: 's-pipe', name: 'Piping', order: 3, active: true, kind: 'work', color: '#3' },
+    { id: 's-wall', name: 'Wall units', order: 4, active: true, kind: 'work', color: '#4' },
+  ];
+  // Morning: Wall units was HALF DONE, nothing else. He started on the wrong
+  // flat, picked Wall units + Piping, finished both (Sold/Start ticked itself).
+  const before = { 's-wall': 'pending' };
+  const t = task('TR', 'A1-12', { stageReport: true, stageIds: ['s-wall', 's-pipe'], stagesWorked: ['s-wall', 's-pipe'], stagesUnfinished: [],
+    completedAt: '2026-10-08T15:00:00Z', marksBefore: before, marksBeforeAt: '2026-10-08T08:00:00Z' });
+  const wrong = apt('A1-12', { skhtatb: 'done', 's-pipe': 'done', 's-wall': 'done' });
+  let q = planTaskMove(t, wrong, apt('A3-12', {}), [t], SS);
+  check(q.restored === true, 'a task with a before-snapshot restores the old apartment');
+  check(eq(q.fromMarks, { 's-wall': 'pending' }), 'the old apartment is EXACTLY as it was that morning — half-done Wall units, Sold/Start un-ticked', JSON.stringify(q.fromMarks));
+  check(eq(q.toMarks, { 's-wall': 'done', 's-pipe': 'done' }), 'and the right apartment gets the work', JSON.stringify(q.toMarks));
+  // An office hand changed Piping to "not needed" since: that stays.
+  q = planTaskMove(t, apt('A1-12', { skhtatb: 'done', 's-pipe': 'off', 's-wall': 'done' }), apt('A3-12', {}), [t], SS);
+  check(q.fromMarks['s-pipe'] === 'off', 'a stage somebody changed by hand since is left alone', JSON.stringify(q.fromMarks));
+  // Another task on the old flat stands behind Piping: Piping AND Sold/Start stay.
+  const other2 = task('TO', 'A1-12', { stageIds: ['s-pipe'], stageId: 's-pipe', completedAt: '2026-09-30T10:00:00Z' });
+  q = planTaskMove(t, wrong, apt('A3-12', {}), [t, other2], SS);
+  check(q.fromMarks['s-pipe'] === 'done' && q.fromMarks.skhtatb === 'done', 'a stage another task stands behind stays, and so does the Sold/Start it implies', JSON.stringify(q.fromMarks));
+  check(q.fromMarks['s-wall'] === 'pending', 'while his own Wall units still goes back to half done');
+  // Still open (he only started): the "happening now" marks come off, morning state back.
+  const tOpen = task('TQ', 'A1-12', { stageReport: true, stageIds: ['s-drill'], stagesWorked: ['s-drill'], marksBefore: {}, marksBeforeAt: '2026-10-08T08:00:00Z' });
+  q = planTaskMove(tOpen, apt('A1-12', { skhtatb: 'done', 's-drill': 'doing' }), apt('A3-12', {}), [tOpen], SS);
+  check(q.fromMarks === undefined, 'an open start on the wrong flat leaves it untouched, Sold/Start included', JSON.stringify(q.fromMarks));
+  // No snapshot (an older task): the old rule — ticks come off to "to do".
+  const tOld = { ...t, marksBefore: undefined };
+  q = planTaskMove(tOld, wrong, apt('A3-12', {}), [tOld], SS);
+  check(!q.restored && q.fromMarks?.['s-wall'] === undefined, 'an older task without a snapshot keeps the old rule', JSON.stringify(q.fromMarks));
+}
+
 await server.close();
 console.log(fails ? `\n${fails} FAILED` : '\nALL PASS');
 process.exit(fails ? 1 : 0);

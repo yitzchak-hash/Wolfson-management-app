@@ -1,5 +1,5 @@
 import { Apartment, ContractorAssignment, ContractorNote, ContractorPhoto, Stage, StageMark } from '../types';
-import { isWorkStage, taskStageIds, inBaseSet, migrateToBubbles } from './stageMarks';
+import { isWorkStage, taskStageIds, inBaseSet, migrateToBubbles, isStartStage, IMPLIED_DONE } from './stageMarks';
 import type { SetContext } from './stageMarks';
 import { mediaKindOf } from './mediaKind';
 
@@ -52,6 +52,10 @@ export interface TaskMovePlan {
   toMarks: Record<string, StageMark> | undefined;
   fromChanged: boolean;
   toChanged: boolean;
+  /** The old apartment was put back from the task's own before-snapshot. */
+  restored?: boolean;
+  /** The new apartment's marks before the move — the moved task's next snapshot. */
+  toBefore?: Record<string, StageMark>;
 }
 
 /** The workspace's own stages, in order, inactive ones included — what the completion rule reads. */
@@ -111,7 +115,54 @@ export function planTaskMove(
   const fromMarks = { ...fromBefore };
   const off: MarkMove[] = [];
   const kept: MarkMove[] = [];
-  for (const { stageId, mark } of wrote) {
+  // The worker's own start remembered the apartment as it stood before he
+  // touched it (owner, 2026-10-08: "the apartment that he changed from should
+  // automatically go back to the previous state it was in before he touched
+  // it that day"). With that snapshot the old apartment's touched stages go
+  // back to EXACTLY what they were — a half-done stage is half done again,
+  // not merely "to do" — including the stages his marks ticked by themselves
+  // (Sold/Start, Drilling under Piping). The two safety rules still hold: a
+  // stage another task on that apartment stands behind stays, and a stage
+  // somebody changed by hand since is theirs.
+  const snap = task.marksBefore;
+  const restored = !!snap;
+  if (snap) {
+    const wroteIds = new Set(wrote.map(w => w.stageId));
+    const implied = new Map<string, string[]>();   // stage → the written stages that tick it
+    for (const st of sortedStages) {
+      if (!isStartStage(st)) continue;
+      implied.set(st.id, sortedStages.filter(o => o.order > st.order && wroteIds.has(o.id)).map(o => o.id));
+    }
+    for (const [when, also] of IMPLIED_DONE) if (wroteIds.has(when)) implied.set(also, [...(implied.get(also) ?? []), when]);
+    const coveredLater = (id: string) => {
+      const st = sortedStages.find(o => o.id === id);
+      if (!st) return false;
+      if (isStartStage(st)) return [...covered].some(c => (sortedStages.find(o => o.id === c)?.order ?? -1) > st.order);
+      return IMPLIED_DONE.some(([w, a]) => a === id && covered.has(w));
+    };
+    const touched: MarkMove[] = [
+      ...wrote,
+      ...[...implied.entries()].filter(([id, by]) => by.length && !wroteIds.has(id)).map(([stageId]) => ({ stageId, mark: 'done' as StageMark })),
+    ];
+    for (const { stageId, mark } of touched) {
+      const now = fromMarks[stageId];
+      const was = snap[stageId];
+      if (now === was) continue;
+      if (covered.has(stageId) || coveredLater(stageId)) {
+        if (now && now !== 'todo' && now !== 'off') kept.push({ stageId, mark: now });
+        continue;
+      }
+      // What this task (or its implication) left there: its own mark, or —
+      // for an open report that has since been closed by the same task —
+      // anything it could have written. Anything else is somebody's hand.
+      const ours = now === mark || (wroteIds.has(stageId) && (now === 'doing' || now === 'done' || now === 'pending'));
+      if (!ours) continue;
+      if (was === undefined) delete fromMarks[stageId];
+      else fromMarks[stageId] = was;
+      off.push({ stageId, mark: now ?? 'todo' });
+    }
+  }
+  for (const { stageId, mark } of (restored ? [] : wrote)) {
     const now = fromMarks[stageId];
     if (covered.has(stageId)) {
       if (now && now !== 'todo' && now !== 'off') kept.push({ stageId, mark: now });
@@ -142,6 +193,8 @@ export function planTaskMove(
     toMarks: tidy(toMarks),
     fromChanged: off.length > 0,
     toChanged: on.length > 0,
+    restored,
+    toBefore,
   };
 }
 

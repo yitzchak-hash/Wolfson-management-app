@@ -1176,6 +1176,8 @@ export interface ActivityLog {
    */
   taskText?: string;
   workerName?: string;
+  /** On 'task_moved_out': the apartment was put back as it stood before the worker started there (2026-10-08). */
+  restoredBefore?: boolean;
 }
 
 /**

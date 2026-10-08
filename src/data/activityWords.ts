@@ -133,6 +133,8 @@ interface Words {
   aTask: string;
   tasksN: (n: number) => string;
   movedOut: (what: string, to: string) => string;
+  /** Appended when the apartment a task left was put back as it stood before. */
+  putBack: string;
   movedIn: (what: string, from: string) => string;
   stage: Record<StageVerb, (l: string) => string>;
   stagesCount: (n: number) => string;
@@ -191,6 +193,7 @@ const EN: Words = {
   aTask: 'a task',
   tasksN: n => `${n} tasks`,
   movedOut: (what, to) => `moved ${what} to ${to}`,
+  putBack: 'its stages put back as they were before',
   movedIn: (what, from) => `moved ${what} here from ${from}`,
   stage: {
     done: l => `marked ${l} done`,
@@ -259,6 +262,7 @@ const HE: Words = {
   aTask: 'משימה',
   tasksN: n => `${n} משימות`,
   movedOut: (what, to) => `העביר ${what} ל־${to}`,
+  putBack: 'השלבים חזרו למצבם הקודם',
   movedIn: (what, from) => `העביר ${what} לכאן מ־${from}`,
   stage: {
     done: l => `סימן כגמור: ${l}`,
@@ -713,8 +717,10 @@ export function describeGroup(logs: ActivityLog[], ctx: WordsContext): ActivityS
       const places = [...new Set(logs.map(l => (kind === 'task_moved_in' ? l.previousValue : l.newValue) ?? '')
         .map(x => x.trim()).filter(x => x && !isInternalId(x)))];
       const place = W.list(places) || W.anApartment;
+      const put = kind === 'task_moved_out' && logs.some(l => l.restoredBefore) ? W.putBack : '';
+      const detail = few(logs.map(l => taskDetail(l.taskText, ctx) ?? ''));
       return out(kind === 'task_moved_in' ? W.movedIn(what, place) : W.movedOut(what, place),
-        few(logs.map(l => taskDetail(l.taskText, ctx) ?? '')));
+        [detail, put].filter(Boolean).join(' · ') || undefined);
     }
 
     case 'stages': {
