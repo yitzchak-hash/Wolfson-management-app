@@ -50,7 +50,7 @@ widget only reads old "X → Y" records (**Done** 10-06 — retired).
 | V2-8 | 2:46 | Job Board duplicate stages | Done (his) | he hid them himself |
 | V2-9 | 3:16 | Settings → Stages saves by itself | Done | board-r48 65/65 |
 | V2-10 | 3:42 | An import opens its jobs as tiles | Done | ImportBatchWindow · board-r48 |
-| V2-11 | 4:00 | Show the person and what he did on a bar — give me previews | Waiting | "Notebook Card Options" A–D, awaiting his pick |
+| V2-11 | 4:00 | Show the person and what he did on a bar — give me previews | Done | his pick: A, the small board tile · notebooktile-probe (25), notebooklabel, notebookbars, notebook-r48, multiday |
 | V2-12 | 4:48 | Live photos widget empty | Done | cause: its "Only these jobs" held 3,520 Job Board ids; field removed, stored list ignored · board-r48, sitephotos-probe 25/25 |
 | V2-13 | 5:18 | The board's 75% should be 100% | Done | boardZoom.ts · board.mjs, board-r48 |
 | V2-14 | 5:32 | Calendars: see what was and wasn't done | Done | TaskCalendar folding · notebook-r48 |
@@ -108,7 +108,12 @@ Seen, not said (video 2): a fresh worker phone could crash when his record arriv
 | C-22 | 2026-10-06 | Drilling right after Sold/Start, before Piping; tick Drilling done wherever Piping is done | Done | see V1-17 |
 | C-23 | 2026-10-06 | A1 12: leave it ticked | Done | untouched |
 | C-24 | 2026-10-06 | A3 12: untick Access Panels | Done | production, read back; "Office · un-ticked Access Panels" |
-| C-25 | 2026-10-06 | Question 5 (the "Next:" cue) — "I don't understand" | Waiting | re-asked in plain words |
+| C-25 | 2026-10-06 | Question 5 (the "Next:" cue) — "I don't understand" | Done | 2026-10-08: settled by the last-done headline (answer a) |
 | C-26 | 2026-10-06 | Remove A1 floor 10's empty square | Done | see seen-not-said |
 | C-27 | 2026-10-06 | Retire the "Skipped a stage" widget | Done | retired; no board had a copy |
 | C-28 | 2026-10-08 | A worker moves his own mistaken apartment; the old apartment goes back to how it was before he touched it that day | Done | `marksBefore` · taskmove-test (8 revert checks), movetask, portal-r48 |
+| C-29 | 2026-10-08 | Notebook card: "I want A" — the small board tile | Done | see V2-11 |
+| C-30 | 2026-10-08 | Igor's open Sold/Start reports: close them as mistakes | Done | six closed in production, read back; a second start the same day now reopens the first (ContractorPortal `startWork`) |
+| C-31 | 2026-10-08 | "Next:" cue: settled by the last-done headline | Done | nothing to build |
+| C-32 | 2026-10-08 | Plan reader: the existing key, a stronger model and reasoning | Done | gpt-6.1-sol → gpt-6-sol → gpt-5.5 at high effort, gpt-4o floor · planread-test |
+| C-33 | 2026-10-08 | The stronger shared app key: leave it | Done | nothing changed |

@@ -3274,6 +3274,11 @@ export interface MainUiStrings {
   nbBundleOpenUnit: string;
   nbBundleClose: string;
   nbBundleNoStage: string;
+  /** The bundle tile's floors line — "Floors {range}" / "Floor {n}". */
+  nbBundleFloors: string;
+  nbBundleFloor: string;
+  /** The bundle tile's last line — "See all {n}". */
+  nbBundleSeeAll: string;
   calFoldDone: string;
   calMore: string;
   calDoneWord: string;
@@ -4203,6 +4208,9 @@ export const DEFAULT_MAIN_UI_STRINGS: MainUiStrings = {
   nbBundleOpenUnit: 'Open this apartment',
   nbBundleClose: 'Close',
   nbBundleNoStage: 'no stage',
+  nbBundleFloors: 'Floors {range}',
+  nbBundleFloor: 'Floor {n}',
+  nbBundleSeeAll: 'See all {n}',
   calFoldDone: '{n} done',
   calMore: '+{n} more',
   calDoneWord: 'done',
@@ -5132,6 +5140,9 @@ export const HEBREW_MAIN_UI_STRINGS: MainUiStrings = {
   nbBundleOpenUnit: 'פתיחת הדירה',
   nbBundleClose: 'סגירה',
   nbBundleNoStage: 'ללא שלב',
+  nbBundleFloors: 'קומות {range}',
+  nbBundleFloor: 'קומה {n}',
+  nbBundleSeeAll: 'הצג את כל {n}',
   calFoldDone: '{n} בוצעו',
   calMore: '+{n} נוספות',
   calDoneWord: 'בוצע',

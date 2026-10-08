@@ -21,11 +21,18 @@ delete process.env.ANTHROPIC_API_KEY;
 
 let answer = '{}';
 let lastOpenAi = null, lastAnthropic = null;
+const refuse = new Set();   // models the stubbed account cannot use
+let asked = [];
 const realFetch = globalThis.fetch;
 globalThis.fetch = async (url, init) => {
   const u = String(url instanceof Request ? url.url : url);
   if (u.startsWith('https://api.openai.com/v1/chat/completions')) {
     lastOpenAi = JSON.parse(init.body);
+    asked.push(lastOpenAi.model);
+    if (refuse.has(lastOpenAi.model)) {
+      return new Response(JSON.stringify({ error: { message: `The model ${lastOpenAi.model} does not exist`, code: 'model_not_found' } }),
+        { status: 404, headers: { 'Content-Type': 'application/json' } });
+    }
     return new Response(JSON.stringify({ choices: [{ message: { content: answer } }] }),
       { status: 200, headers: { 'Content-Type': 'application/json' } });
   }
@@ -137,6 +144,31 @@ b = await ask({ address: 'הגפן 7, אפרת' }, { scan: true, crop: true });
 check(b.address === 'הגפן 7, אפרת', 'a CROP is never held to that — the user\'s box is the location');
 
 // ── The Anthropic branch, the same rules ────────────────────────────────────
+// ── The OpenAI key, a stronger model with reasoning (owner, 2026-10-08) ─────
+asked = [];
+b = await ask({ address: { value: 'הגפן 7, אפרת', box: [0.81, 0.16, 0.92, 0.2] }, phone: null });
+check(asked[0] === 'gpt-6.1-sol' && lastOpenAi?.reasoning_effort === 'high' && !('temperature' in lastOpenAi),
+  'the strongest reasoning model is asked first, at high effort, with no temperature', JSON.stringify({ asked, effort: lastOpenAi?.reasoning_effort }));
+check(b.address === 'הגפן 7, אפרת' && b.model === 'gpt-6.1-sol', 'and its answer comes back, naming the model', b.model);
+check(lastOpenAi?.messages?.[0]?.content?.some(c => c.type === 'image_url'), 'the picture goes with it');
+refuse.add('gpt-6.1-sol'); asked = [];
+b = await ask({ address: { value: 'הגפן 7, אפרת', box: [0.81, 0.16, 0.92, 0.2] }, phone: null });
+check(asked.join(',') === 'gpt-6.1-sol,gpt-6-sol' && b.model === 'gpt-6-sol', 'a model the key cannot use falls to the next', asked.join(','));
+asked = [];
+b = await ask({ address: { value: 'הגפן 7, אפרת', box: [0.81, 0.16, 0.92, 0.2] }, phone: null });
+check(asked[0] === 'gpt-6-sol', 'and the next call starts where it answered — no wasted round trip', asked.join(','));
+refuse.add('gpt-6-sol'); refuse.add('gpt-5.5'); asked = [];
+b = await ask({ address: { value: 'הגפן 7, אפרת', box: [0.81, 0.16, 0.92, 0.2] }, phone: null });
+check(b.model === 'gpt-4o' && lastOpenAi?.temperature === 0 && !('reasoning_effort' in lastOpenAi),
+  'with no reasoning model at all the old reader is the floor — never dark', JSON.stringify({ asked, model: b.model }));
+refuse.add('gpt-4o');
+r = await call({ image: IMG, want: 'both' });
+check(r.code === 502 && /gpt-4o/.test(r.body?.error || ''), 'every model refused → an honest 502 naming the last', r.body?.error);
+refuse.clear();
+process.env.PLAN_READ_MODEL_OPENAI = 'gpt-7-test'; asked = [];
+b = await ask({ address: { value: 'הגפן 7, אפרת', box: [0.81, 0.16, 0.92, 0.2] }, phone: null });
+check(asked[0] === 'gpt-7-test' && b.model === 'gpt-7-test', 'PLAN_READ_MODEL_OPENAI picks the model outright', asked.join(','));
+delete process.env.PLAN_READ_MODEL_OPENAI;
 process.env.ANTHROPIC_API_KEY = 'sk-ant-test';
 b = await ask({ address: { value: 'נחלת יצחק 12, בית שמש' }, phone: { value: '054-1234567' } }, { scan: true });
 const aPrompt = lastAnthropic?.messages?.[0]?.content?.find(c => c.type === 'text')?.text ?? '';

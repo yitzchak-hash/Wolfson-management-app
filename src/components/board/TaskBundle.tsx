@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo } from 'react';
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { X, Check, Layers, Circle } from 'lucide-react';
 import {
@@ -8,6 +8,7 @@ import {
 import { useStore, loadProjectSnapshot } from '../../data/store';
 import { buildFloorRows, positionMap, rowCells, rowPillLabel } from '../../data/floorRows';
 import { taskStageIds } from '../../data/stageMarks';
+import { emWidth } from '../diagram/BuildingDiagram';
 
 /**
  * A BUNDLE — the owner's answer to a worker who does a small thing in a
@@ -29,7 +30,8 @@ export const BUNDLE_MIN = 4;
 export type BundleWords = Pick<MainUiStrings,
   'nbBundleTasks' | 'nbBundleDone' | 'nbBundleOpen' | 'nbBundleHint' | 'nbBundleList'
   | 'nbBundleBuilding' | 'nbBundleNoBuilding' | 'nbBundleDoneAt' | 'nbBundleOpenWord'
-  | 'nbBundleLegendDone' | 'nbBundleLegendOpen' | 'nbBundleOpenUnit' | 'nbBundleClose' | 'nbBundleNoStage'>;
+  | 'nbBundleLegendDone' | 'nbBundleLegendOpen' | 'nbBundleOpenUnit' | 'nbBundleClose' | 'nbBundleNoStage'
+  | 'nbBundleFloors' | 'nbBundleFloor' | 'nbBundleSeeAll'>;
 
 const RUSSIAN_BUNDLE_WORDS: BundleWords = {
   nbBundleTasks: '{n} задач',
@@ -46,6 +48,9 @@ const RUSSIAN_BUNDLE_WORDS: BundleWords = {
   nbBundleOpenUnit: 'Открыть квартиру',
   nbBundleClose: 'Закрыть',
   nbBundleNoStage: 'без этапа',
+  nbBundleFloors: 'этажи {range}',
+  nbBundleFloor: 'этаж {n}',
+  nbBundleSeeAll: 'Показать все {n}',
 };
 
 export function bundleWords(lang?: string): BundleWords {
@@ -73,6 +78,14 @@ export interface BundleInfo {
   color: string;
   done: number;
   day: string;
+  /**
+   * Where the bundle's flats are — one entry per building, each with its
+   * floors as the diagram prints them (owner, 2026-10-08: a bundle across two
+   * buildings names BOTH). Empty on the Job Board.
+   */
+  buildings?: { id: string; floors: string[] }[];
+  /** How many of the bundle's tasks are on each stage, in the workspace's order. */
+  stages?: { stage: Stage; count: number }[];
 }
 
 /** A colour at an alpha (hex only — workspace colours are hex). */
@@ -84,6 +97,91 @@ function alpha(hex: string, a: number): string {
   return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`;
 }
 
+
+/** A stage colour darkened until it reads as text on a pale pill (the board tile's ink). */
+export function inkOf(hex: string): string {
+  const h = hex.replace('#', '');
+  const full = h.length === 3 ? h.split('').map(c => c + c).join('') : h;
+  const n = parseInt(full, 16);
+  if (full.length !== 6 || Number.isNaN(n)) return '#334155';
+  const k = 0.58;
+  return `rgb(${Math.round(((n >> 16) & 255) * k)},${Math.round(((n >> 8) & 255) * k)},${Math.round((n & 255) * k)})`;
+}
+
+/**
+ * A stage as the board tile draws it: a pale pill in the stage's colour with
+ * its name in a darker ink, on ONE line — the font shrinks to the room the
+ * card has (never below 6.5 points at 100%) instead of wrapping. `avail` is
+ * the card's inner width in the same local pixels the type is set in; 0
+ * means "not measured yet", which draws at the full size for one frame.
+ */
+export function StagePill({ name, color, count, avail, size, z, ...rest }: {
+  name: string;
+  color: string;
+  count?: number;
+  avail: number;
+  size: number;
+  z: (n: number) => number;
+} & React.HTMLAttributes<HTMLSpanElement>) {
+  const text = count ? `${name} ${count}` : name;
+  const pad = Math.max(4, z(6));
+  const max = Math.max(z(6.5), size - z(1.5));
+  const min = Math.max(5, z(6.5));
+  // emWidth measures at weight 600; the pill is 700, a few per cent wider.
+  const fit = avail > 0 ? Math.floor(((avail - pad * 2) / Math.max(0.1, emWidth(text) * 1.05)) * 10) / 10 : max;
+  const fs = Math.max(min, Math.min(max, fit));
+  return (
+    <span {...rest} className="inline-block rounded-full whitespace-nowrap overflow-hidden" title={text}
+      style={{
+        maxWidth: '100%', textOverflow: 'ellipsis', padding: `${Math.max(1, z(1))}px ${pad}px`,
+        fontSize: fs, fontWeight: 700, lineHeight: 1.35,
+        backgroundColor: alpha(color, 0.15), color: inkOf(color),
+      }}>{text}</span>
+  );
+}
+
+/**
+ * A notebook tile measures itself: its WIDTH (for the pills' fit) as local
+ * state, and its natural HEIGHT reported up so the notebook can give that
+ * lane exactly the room the tallest tile in it needs. Height follows width
+ * and never the other way round, so this cannot feed back on itself; both
+ * writes are damped. Measured in a layout effect so the first paint already
+ * has the right lane heights.
+ */
+export function useTileMeasure<T extends HTMLElement>(id: string, onMeasure?: (id: string, h: number) => void) {
+  const ref = useRef<T | null>(null);
+  const [w, setW] = useState(0);
+  const cb = useRef(onMeasure);
+  cb.current = onMeasure;
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const read = () => {
+      const nw = el.clientWidth;
+      setW(prev => (Math.abs(prev - nw) < 1 ? prev : nw));
+      cb.current?.(id, el.offsetHeight);
+    };
+    read();
+    const ro = new ResizeObserver(read);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [id]);
+  return { ref, w };
+}
+
+/** "3–7", "6", or the names the office gave its floors. */
+function floorsText(floors: string[], words: BundleWords): string {
+  const nums = floors.map(f => Number(f)).filter(n => Number.isFinite(n));
+  const named = [...new Set(floors.filter(f => f && !Number.isFinite(Number(f))))];
+  const parts: string[] = [];
+  if (nums.length) {
+    const lo = Math.min(...nums), hi = Math.max(...nums);
+    parts.push(lo === hi ? fill(words.nbBundleFloor, { n: lo }) : fill(words.nbBundleFloors, { range: `${lo}–${hi}` }));
+  }
+  parts.push(...named);
+  return parts.join(', ');
+}
+
 const DONE_GREEN = '#16a34a';
 const OPEN_AMBER = '#f59e0b';
 
@@ -93,11 +191,14 @@ export const noMenu = {
 };
 
 /**
- * The bundle's bar — the same height as one task bar, so it takes ONE lane.
- * The workspace's colour on its edge and its tint, the count first, and the
- * done share as a green band along the bottom.
+ * The bundle's bar. In STRIPS mode it is one slim line, the same height as a
+ * task bar. In TILES mode (owner, 2026-10-08, "A — a small board tile") it is
+ * a stack of tiles: the count big, the workspace and where in the building,
+ * a pill per stage with its count, the done share as a green band, "✓ 13 done
+ * · 2 open", and "See all 15 ›" — and its natural height is reported up so the
+ * lane it sits in is exactly as tall as it needs.
  */
-export function BundleBar({ bundle, height, z, size, strip, words, onOpen }: {
+export function BundleBar({ bundle, height, z, size, strip, words, onOpen, id, onMeasure }: {
   bundle: BundleInfo;
   height: number;
   z: (n: number) => number;
@@ -105,58 +206,104 @@ export function BundleBar({ bundle, height, z, size, strip, words, onOpen }: {
   strip: boolean;
   words: BundleWords;
   onOpen: () => void;
+  /** The seg's id — what the measured height is filed under. */
+  id?: string;
+  onMeasure?: (id: string, h: number) => void;
 }) {
   const n = bundle.items.length;
   const done = bundle.done;
   const open = n - done;
   const head = fill(words.nbBundleTasks, { n });
   const doneTxt = fill(words.nbBundleDone, { n: done });
-  return (
-    <button
-      type="button"
-      data-no-drag data-el-action
-      data-task-bundle={n} data-bundle-ws={bundle.projectId} data-bundle-done={done}
-      onClick={e => { e.stopPropagation(); onOpen(); }}
-      {...noMenu}
-      title={`${head} · ${bundle.workspace} · ${doneTxt}${open ? ` · ${fill(words.nbBundleOpen, { n: open })}` : ''} — ${words.nbBundleHint}`}
-      className="relative rounded-md min-w-0 flex-shrink-0 text-left w-full hover:brightness-[.97]"
-      style={{
-        height, overflow: 'hidden', position: 'relative', zIndex: 3,
-        backgroundColor: alpha(bundle.color, 0.12),
-        border: `1px solid ${alpha(bundle.color, 0.35)}`,
-        borderLeft: `${Math.max(3, z(4))}px solid ${bundle.color}`,
-        padding: `${Math.max(2, z(3))}px ${Math.max(4, z(6))}px`,
-        cursor: 'pointer',
-      }}
-    >
-      <span className="flex items-center min-w-0" style={{ fontSize: size, fontWeight: 800, color: '#1e3a5f', lineHeight: 1.2, gap: Math.max(2, z(3)) }}>
-        <Layers size={Math.max(9, Math.round(size * 0.95))} className="flex-shrink-0" style={{ color: bundle.color }} />
-        <span data-bundle-count className="flex-shrink-0 whitespace-nowrap">{head}</span>
-        <span className="truncate min-w-0" style={{ flex: '0 20 auto', color: bundle.color, fontWeight: 700, fontSize: Math.max(z(7), size - z(2)) }}>
-          · {bundle.workspace}
-        </span>
-        {strip && (
-          <span className="flex-shrink-0 whitespace-nowrap" style={{ color: DONE_GREEN, fontSize: Math.max(z(7), size - z(2)) }}>
+  const { ref, w } = useTileMeasure<HTMLDivElement>(id ?? '', strip ? undefined : onMeasure);
+  const common = {
+    type: 'button' as const,
+    'data-no-drag': true, 'data-el-action': true,
+    'data-task-bundle': n, 'data-bundle-ws': bundle.projectId, 'data-bundle-done': done,
+    onClick: (e: React.MouseEvent) => { e.stopPropagation(); onOpen(); },
+    ...noMenu,
+    title: `${head} · ${bundle.workspace} · ${doneTxt}${open ? ` · ${fill(words.nbBundleOpen, { n: open })}` : ''} — ${words.nbBundleHint}`,
+  };
+
+  if (strip) {
+    return (
+      <button {...common}
+        className="relative rounded-md min-w-0 flex-shrink-0 text-left w-full hover:brightness-[.97]"
+        style={{
+          height, overflow: 'hidden', position: 'relative', zIndex: 3,
+          backgroundColor: alpha(bundle.color, 0.12),
+          border: `1px solid ${alpha(bundle.color, 0.35)}`,
+          borderLeft: `${Math.max(3, z(4))}px solid ${bundle.color}`,
+          padding: `${Math.max(2, z(3))}px ${Math.max(4, z(6))}px`,
+          cursor: 'pointer',
+        }}
+      >
+        <span className="flex items-center min-w-0" style={{ fontSize: size, fontWeight: 800, color: '#1e3a5f', lineHeight: 1.2, gap: Math.max(2, z(3)) }}>
+          <Layers size={Math.max(9, Math.round(size * 0.95))} className="flex-shrink-0" style={{ color: bundle.color }} />
+          <span data-bundle-count className="flex-shrink-0 whitespace-nowrap">{head}</span>
+          <span className="truncate min-w-0" style={{ flex: '0 20 auto', color: bundle.color, fontWeight: 700, fontSize: Math.max(z(7), size - z(2)) }}>
+            · {bundle.workspace}
+          </span>
+          <span data-bundle-done-txt className="flex-shrink-0 whitespace-nowrap" style={{ color: DONE_GREEN, fontSize: Math.max(z(7), size - z(2)) }}>
             · {doneTxt}
           </span>
-        )}
-      </span>
-      {!strip && (
-        <span className="flex items-center min-w-0 whitespace-nowrap" style={{ fontSize: Math.max(z(7), size - z(2)), fontWeight: 700, gap: Math.max(3, z(4)) }}>
-          <span data-bundle-done-txt className="inline-flex items-center" style={{ color: DONE_GREEN, gap: 2 }}>
-            <Check size={Math.max(8, Math.round(z(9)))} strokeWidth={3.5} />{doneTxt}
-          </span>
-          {open > 0 && (
-            <span className="truncate" style={{ color: '#b45309' }}>· {fill(words.nbBundleOpen, { n: open })}</span>
-          )}
         </span>
-      )}
-      {/* The done share — green for done, amber for still open. */}
-      <span aria-hidden="true" className="absolute flex overflow-hidden rounded-sm"
-        style={{ left: Math.max(4, z(6)), right: Math.max(4, z(6)), bottom: Math.max(2, z(2)), height: Math.max(3, z(4)), backgroundColor: alpha(OPEN_AMBER, 0.55) }}>
-        <span data-bundle-share style={{ width: `${n ? (done / n) * 100 : 0}%`, backgroundColor: DONE_GREEN }} />
-      </span>
-    </button>
+        <span aria-hidden="true" className="absolute flex overflow-hidden rounded-sm"
+          style={{ left: Math.max(4, z(6)), right: Math.max(4, z(6)), bottom: Math.max(2, z(2)), height: Math.max(3, z(4)), backgroundColor: alpha(OPEN_AMBER, 0.55) }}>
+          <span data-bundle-share style={{ width: `${n ? (done / n) * 100 : 0}%`, backgroundColor: DONE_GREEN }} />
+        </span>
+      </button>
+    );
+  }
+
+  const small = Math.max(z(7), size - z(1.5));
+  const padX = Math.max(4, z(7));
+  const shadow = Math.max(3, z(6));
+  const where = (bundle.buildings ?? [])
+    .map(b => [b.id, floorsText(b.floors, words)].filter(Boolean).join(' · '))
+    .filter(Boolean).join(' · ');
+  return (
+    // The wrapper keeps room for the stacked-paper shadow, so the next lane
+    // and the next square never sit under it — and it is what gets measured.
+    <div ref={ref} className="min-w-0 flex-shrink-0" style={{ paddingInlineEnd: shadow, paddingBottom: shadow, position: 'relative', zIndex: 3 }}>
+      <button {...common}
+        className="block w-full text-left rounded-lg min-w-0 hover:brightness-[.98]"
+        style={{
+          backgroundColor: '#ffffff',
+          border: `${Math.max(2, z(3))}px solid #1e3a5f`,
+          padding: `${Math.max(3, z(5))}px ${padX}px ${Math.max(3, z(6))}px`,
+          boxShadow: `${shadow / 2}px ${shadow / 2}px 0 -1px #fff, ${shadow / 2}px ${shadow / 2}px 0 0 #94a3b8, ${shadow}px ${shadow}px 0 -1px #fff, ${shadow}px ${shadow}px 0 0 #94a3b8`,
+          cursor: 'pointer',
+        }}
+      >
+        <span data-bundle-count className="block" style={{ fontSize: size + z(3), fontWeight: 800, color: '#0f172a', lineHeight: 1.1 }}>{head}</span>
+        <span className="block break-words" style={{ fontSize: small, color: '#64748b', marginTop: Math.max(1, z(1)), lineHeight: 1.25 }}>
+          <b data-bundle-ws-name style={{ color: '#7c3aed', fontWeight: 700 }}>{bundle.workspace}</b>
+          {where ? ` ${where}` : ''}
+        </span>
+        {!!bundle.stages?.length && (
+          <span className="flex flex-wrap" style={{ gap: Math.max(2, z(3)), marginTop: Math.max(2, z(4)) }}>
+            {bundle.stages.map(({ stage, count }) => (
+              <StagePill key={stage.id} data-bundle-stage={stage.id} name={stage.name} color={stage.color} count={count}
+                avail={w - padX * 2 - Math.max(4, z(6))} size={size} z={z} />
+            ))}
+          </span>
+        )}
+        <span aria-hidden="true" className="flex rounded-full overflow-hidden"
+          style={{ height: Math.max(3, z(5)), marginTop: Math.max(3, z(5)), backgroundColor: '#e5e7eb' }}>
+          <span data-bundle-share style={{ width: `${n ? (done / n) * 100 : 0}%`, backgroundColor: DONE_GREEN }} />
+        </span>
+        <span className="block" style={{ fontSize: small, marginTop: Math.max(2, z(3)), color: '#64748b', lineHeight: 1.25 }}>
+          <b data-bundle-done-txt className="inline-flex items-center" style={{ color: '#15803d', gap: 2 }}>
+            <Check size={Math.max(8, Math.round(z(9)))} strokeWidth={3.5} />{doneTxt}
+          </b>
+          {open > 0 && <> · {fill(words.nbBundleOpen, { n: open })}</>}
+        </span>
+        <span data-bundle-see-all className="block" style={{ fontSize: small, fontWeight: 700, color: '#2b86b8', marginTop: Math.max(1, z(2)) }}>
+          {fill(words.nbBundleSeeAll, { n })} ›
+        </span>
+      </button>
+    </div>
   );
 }
 

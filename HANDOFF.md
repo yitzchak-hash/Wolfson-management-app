@@ -46,7 +46,7 @@ day still stands, after the numbered list.)
 3. `npx tsc --noEmit -p .` and `npx vite build`. 4. The audits:
    `node scratchpad/loopaudit.mjs`, `backupaudit.mjs`, `navaudit.mjs`, `apilimit.mjs`.
 5. A What's New entry (`src/data/whatsNew.tsx`, dates run AHEAD of the clock;
-   newest is `2027-01-25` — the next entry must be a later date (an older
+   newest is `2027-01-26` — the next entry must be a later date (an older
    entry lower down also wears `2026-12-20`; the marker compares only the TOP
    entry's date, so never reuse a date that appears anywhere in the file)). 6. A CLAUDE.md
    round record. 7. A line in `docs/CRM-CHECKLIST.md`, tick `docs/ROADMAP.md`, date a line in `docs/DECISIONS.md` when he decided something. 8. Rewrite THIS file.
@@ -64,7 +64,35 @@ with starred recommendations is published first; the owner says "approved" /
 "all yes" / answers by number; then it is built. Never build a redesign
 unasked.
 
-## Where things stand (2026-10-08, latest — the second recording built; PENDING HIS WORD: which notebook bar look, A–D)
+## Where things stand (2026-10-08, latest — his five answers built; nothing pending from him)
+His message: "One, I want to do A. Two, a 3 a 4 use the existing key with a
+stronger model and reasoning 5 leave it." No new recording in the Drive
+folder (still two).
+- **Notebook look A, "a small board tile"** — `TaskBar` (tiles mode) and the
+  bundle (`BundleBar`) redrawn as the Job Board tile made small; tiles are as
+  tall as their words and stack PER SQUARE (`tileTop`, a `data-lanes` box per
+  square, tiles absolutely placed); strips mode unchanged. Extras taken
+  without asking: a bare Job Board name borrows the client from its Drive
+  folder, the app's own report words are not repeated, "no name yet".
+  New probe `notebooktile-probe.mjs` (25); `notebookbars-probe` and
+  `notebook-r48` re-encoded to the look.
+- **One start a day**: `startWork` reopens an open same-day report on the same
+  apartment instead of minting another. Production: Igor's six duplicate
+  starts closed (A3 24 ×3, A2 23, A2 16, A2 15) with a history line each;
+  backup `prod/backup-closedup-*.json` in the session scratchpad.
+- **Plan reader on the existing OpenAI key**: gpt-6.1-sol → gpt-6-sol →
+  gpt-5.5 at high reasoning, step-down on refusal, gpt-4o floor;
+  `PLAN_READ_MODEL_OPENAI` overrides; health lists `planModels`.
+  `planread-test.mjs` green. Watch the first real reading on production
+  (which model answered, how long it took).
+- "Next:" cue settled; the shared app key left as it is.
+- Pre-existing reds checked against the unchanged code this round:
+  `round22.mjs` and `notebookflip.mjs` (2) fail identically without the diff.
+- **The reply he saw**: his five answers as numbered bullets, each Done; the
+  notebook in tiles, the duplicate-start fix and the six closed reports, the
+  stronger reader; no questions; the link; "✅ Nothing needed from you".
+
+## Where things stand (2026-10-08 — the second recording built)
 Last commits, newest first (see `git log`):
 - **2026-10-08 — the second screen recording ("Recording 2026-10-08 115349",
   14:01) plus one chat ask.** Feedback doc `docs/feedback/2026-10-08-115349.md`

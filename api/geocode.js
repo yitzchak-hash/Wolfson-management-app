@@ -335,6 +335,79 @@ function planPrompt(want, crop, detail) {
     + (detail ? `A SECOND picture follows: the title-block part of the SAME page (${detail}), enlarged so the small print is readable — read the values from it, but give every box as fractions of the FIRST picture (the whole page). ` : '')
     + `Answer with JSON only, exactly this shape: {"address":{"value":"…","box":[l,t,r,b]} or null,"phone":{"value":"…","box":[l,t,r,b]} or null,"family":"…" or null}. No labels, no trailing punctuation.`;
 }
+/**
+ * The plan reader on the OpenAI key (owner, 2026-10-08: "use the existing key
+ * with a stronger model and reasoning" — no second key). A reasoning model
+ * with vision at HIGH effort reads a Hebrew title block far better than the
+ * old gpt-4o did. The newest first, each falling to the next when the account
+ * cannot use it (a model this key may not have yet answers 400/404), and
+ * gpt-4o as the floor so the reader never goes dark. A warm instance
+ * remembers which model answered and starts there.
+ *
+ * The whole route has 60 seconds (vercel.json), so the reasoning models share
+ * a 42-second budget and the floor keeps what is left: a slow think never
+ * becomes a dead read.
+ */
+const OPENAI_PLAN_MODELS = ['gpt-6.1-sol', 'gpt-6-sol', 'gpt-5.5'];
+const OPENAI_PLAN_FLOOR = 'gpt-4o';
+let openAiPlanStart = 0;
+export function openAiPlanModels() {
+  const own = process.env.PLAN_READ_MODEL_OPENAI;
+  const list = own ? [own] : OPENAI_PLAN_MODELS.slice(openAiPlanStart);
+  return [...list, OPENAI_PLAN_FLOOR].filter((m, i, a) => a.indexOf(m) === i);
+}
+async function openAiPlanRead(content, budgetMs = 42_000) {
+  const deadline = Date.now() + budgetMs;
+  const models = openAiPlanModels();
+  let lastErr = '';
+  for (const model of models) {
+    const floor = model === OPENAI_PLAN_FLOOR;
+    // The floor keeps whatever time the route has left; a reasoning model
+    // only what is left of its budget.
+    const left = floor ? Math.max(8_000, deadline + 14_000 - Date.now()) : deadline - Date.now();
+    if (left < 4_000) continue;
+    const ctl = new AbortController();
+    const timer = setTimeout(() => ctl.abort(), left);
+    try {
+      const r = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        signal: ctl.signal,
+        headers: { Authorization: `Bearer ${process.env.OPENAI_API_KEY}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify(floor ? {
+          model,
+          temperature: 0,
+          response_format: { type: 'json_object' },
+          messages: [{ role: 'user', content }],
+        } : {
+          // A reasoning model takes no temperature; its effort is the dial.
+          model,
+          reasoning_effort: 'high',
+          response_format: { type: 'json_object' },
+          messages: [{ role: 'user', content }],
+        }),
+      });
+      if (!r.ok) {
+        lastErr = `OpenAI ${model} ${r.status}: ${(await r.text()).slice(0, 200)}`;
+        // A model this account cannot use — skip it on the next call too.
+        if ((r.status === 400 || r.status === 404) && !floor && !process.env.PLAN_READ_MODEL_OPENAI) {
+          const at = OPENAI_PLAN_MODELS.indexOf(model);
+          if (at >= openAiPlanStart) openAiPlanStart = at + 1;
+        }
+        continue;
+      }
+      const data = await r.json();
+      const text = data?.choices?.[0]?.message?.content ?? '';
+      if (!text.trim()) { lastErr = `OpenAI ${model}: empty answer`; continue; }
+      return { text, model };
+    } catch (e) {
+      lastErr = `OpenAI ${model}: ${e?.name === 'AbortError' ? 'took too long' : String(e?.message || e)}`;
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+  throw new Error(lastErr || 'OpenAI: no model answered');
+}
+
 async function planRead(req, res, body) {
   if (!process.env.API_KEY || req.headers['x-api-key'] !== process.env.API_KEY) {
     return res.status(401).json({ error: 'Unauthorized' });
@@ -361,6 +434,7 @@ async function planRead(req, res, body) {
   const prompt = planPrompt(want, crop, detailWhere);
   try {
     let text = '';
+    let readBy = viaAnthropic ? (process.env.PLAN_READ_MODEL || 'claude-opus-5-5') : '';
     if (viaAnthropic) {
       // Owner, 2026-10-08: "It should be AI using Opus 5.5 on high thinking."
       // Reading a Hebrew title block exactly is worth the thinking; the
@@ -378,25 +452,14 @@ async function planRead(req, res, body) {
       });
       for (const block of resp.content) if (block.type === 'text') text += block.text;
     } else {
-      const r = await fetch('https://api.openai.com/v1/chat/completions', {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${process.env.OPENAI_API_KEY}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          // Without an Anthropic key: the full vision model, never the mini —
-          // the mini could not read a Hebrew title block (the 2026-10-08 sheet).
-          model: process.env.PLAN_READ_MODEL_OPENAI || 'gpt-4o',
-          temperature: 0,
-          response_format: { type: 'json_object' },
-          messages: [{ role: 'user', content: [
-            { type: 'text', text: prompt },
-            { type: 'image_url', image_url: { url: image, detail: 'high' } },
-            ...(dm ? [{ type: 'image_url', image_url: { url: String(body.detail), detail: 'high' } }] : []),
-          ] }],
-        }),
-      });
-      if (!r.ok) throw new Error(`OpenAI ${r.status}: ${(await r.text()).slice(0, 200)}`);
-      const data = await r.json();
-      text = data?.choices?.[0]?.message?.content ?? '';
+      const content = [
+        { type: 'text', text: prompt },
+        { type: 'image_url', image_url: { url: image, detail: 'high' } },
+        ...(dm ? [{ type: 'image_url', image_url: { url: String(body.detail), detail: 'high' } }] : []),
+      ];
+      const got = await openAiPlanRead(content);
+      text = got.text;
+      readBy = got.model;
     }
     const json = text.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '').trim();
     const parsed = JSON.parse(json) || {};
@@ -423,6 +486,7 @@ async function planRead(req, res, body) {
       family: clean(fieldOf(parsed.family).value),
       addressBox: address ? a.box : null,
       phoneBox: phone ? p.box : null,
+      model: readBy,
     });
   } catch (e) {
     return res.status(502).json({ error: String(e?.message || e) });
@@ -531,6 +595,8 @@ export default async function handler(req, res) {
       hasAiKey: !!(process.env.OPENAI_API_KEY || process.env.ANTHROPIC_API_KEY),
       // Which model reads plans — Opus when an Anthropic key is set (owner's ask).
       planReader: process.env.ANTHROPIC_API_KEY ? 'anthropic' : process.env.OPENAI_API_KEY ? 'openai' : 'none',
+      planModels: process.env.ANTHROPIC_API_KEY ? [process.env.PLAN_READ_MODEL || 'claude-opus-5-5']
+        : process.env.OPENAI_API_KEY ? openAiPlanModels() : [],
       hasPushKeys: !!(process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY),
       allowedOrigin: process.env.ALLOWED_ORIGIN || '(not set — defaults to *)',
       vercelEnv: process.env.VERCEL_ENV || '(not set)',

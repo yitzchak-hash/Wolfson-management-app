@@ -30,6 +30,34 @@ export interface WhatsNewEntry {
 
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    date: '2027-01-26',
+    title: 'The notebook in board tiles',
+    items: [
+      {
+        title: 'Every task is a small board tile',
+        body: 'On the weekly notebook each task now looks like a tile on the Job Board, made small: a card '
+          + 'framed in its stage’s colour (green when done), the apartment’s whole name, the stage, what the '
+          + 'office wrote, the progress line and where it is. A tile is as tall as its words, and a task over '
+          + 'several days never covers anything. A busy day’s bundle names every building and floor with a '
+          + 'count per stage and “See all”. A Job Board job called only “VRF job” shows the client’s name from '
+          + 'its Drive folder.',
+        demo: 'list',
+      },
+      {
+        title: 'One start per apartment a day',
+        body: 'If a worker presses “I’m going to work here” twice on the same apartment on the same day, the '
+          + 'second press opens the report he already started instead of making another.',
+        demo: 'tap',
+      },
+      {
+        title: 'A stronger plan reader',
+        body: 'Reading the address and phone off a plan now asks OpenAI’s strongest model, thinking hard, on '
+          + 'the same key — and falls back by itself if a model is not available.',
+        demo: 'tap',
+      },
+    ],
+  },
+  {
     date: '2027-01-25',
     title: 'Stages that follow the work, a worker who can fix his own mistake, and a busy day in one bar',
     items: [

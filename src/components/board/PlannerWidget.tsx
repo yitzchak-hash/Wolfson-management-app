@@ -1,17 +1,18 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { PlannerDropDialog, PlannerTaskDialog, PlannerRemoveDialog, TaskDialogResult } from './PlannerDialogs';
-import { ChevronUp, ChevronDown, Plus, X, CalendarDays, Maximize2, Eye, EyeOff, ClipboardList, Check } from 'lucide-react';
+import { ChevronUp, ChevronDown, Plus, X, CalendarDays, Maximize2, Eye, EyeOff, ClipboardList, Check, MapPin } from 'lucide-react';
 import {
   Apartment, CanvasElement, Contractor, User, ContractorAssignment, Stage, personColor,
-  aptLabel, getStageName, generalBuildingsText, projectShortName, projectColor } from '../../types';
-import { BUNDLE_MIN, BundleBar, BundleInfo, BundleItem, BundlePopup, bundleWords, noMenu } from './TaskBundle';
+  aptLabel, getStageName, stageNameIn, generalBuildingsText, projectShortName, projectColor } from '../../types';
+import { BUNDLE_MIN, BundleBar, BundleInfo, BundleItem, BundlePopup, bundleWords, noMenu, StagePill, useTileMeasure } from './TaskBundle';
 import {
   registerRota, onRotaHover, rotaCellAt, setRotaHover, RotaHit,
   announceNotebookDrag, quickBoxHover, quickBoxTake,
 } from '../../data/rotaDrop';
 import { daysOf, dayNumberOf, workingRun } from '../../data/taskDays';
-import { progressOf, StageProgress } from '../../data/stageMarks';
+import { progressOf, StageProgress, taskStageIds } from '../../data/stageMarks';
+import { familyNameFromFolderName } from '../../data/driveApi';
 import { rowNumOf } from '../../data/floorRows';
 
 /** "Floor 5" in the reader's language — the floor number as the diagram prints it. */
@@ -910,8 +911,26 @@ export function PlannerWidget({
       // building diagram labels its rows — and the address ride the second line.
       const building = !a.general && apt && apt.buildingId && apt.buildingId !== 'G' ? apt.buildingId : undefined;
       const floorNo = building && apt ? rowNumOf(apt.buildingId, apt.floor) : '';
-      const where = [floorNo ? floorWord(lang, floorNo) : '', apt?.address?.trim() ?? ''].filter(Boolean).join(' · ');
+      const address = apt?.address?.trim() ?? '';
+      const where = [floorNo ? floorWord(lang, floorNo) : '', address].filter(Boolean).join(' · ');
+      /**
+       * The tile's name (owner, 2026-10-08). A Job Board job whose name is
+       * only "VRF job" borrows the CLIENT from its Drive folder's title —
+       * "Rimon · VRF job" — because the folder is named for the family and
+       * the board tile already reads it. A building unit with no family yet
+       * says so quietly instead of looking unfinished.
+       */
+      const fam = !a.general && apt && !building && apt.driveFolderName
+        ? familyNameFromFolderName(apt.driveFolderName) : '';
+      const head = fam && !label.toLowerCase().includes(fam.toLowerCase()) ? fam : '';
+      const tail = head ? (apt?.displayName?.trim() || '') : '';
+      const noName = !!building && !!apt && (!apt.displayName?.trim() || apt.displayName.trim() === String(apt.apartmentNumber ?? '').trim());
       const stl = stagesFor(pid);
+      const stagesOn = taskStageIds(a).map(id => stl.find(st => st.id === id)).filter((x): x is Stage => !!x);
+      // A report the worker started himself carries words the APP wrote
+      // ("Drilling — working here today"); the stage pills already say that.
+      const rawDesc = (a.taskDescription ?? '').trim();
+      const desc = a.stageReport && /working here today/i.test(rawDesc) ? '' : rawDesc;
       // The set model's strip, from the apartment's OWN workspace's list and
       // tipus sets — the same arithmetic a tile and a diagram cell draw.
       const progress = apt
@@ -928,7 +947,8 @@ export function PlannerWidget({
         list.push({
           id: `${a.id}:${run.days[0]}`, taskId: a.id, task: a, pid: `c:${a.contractorId}`,
           weekKey: run.wk, startIdx: run.start, len: run.days.length, days: run.days,
-          label, building, where, desc: (a.taskDescription ?? '').trim(), jobId: a.apartmentId,
+          label, head: head || undefined, tail: tail || undefined, noName, building, where, floorNo: floorNo || undefined,
+          address: address || undefined, stagesOn, desc, jobId: a.apartmentId,
           // A general job's label already NAMES its workspace — the purple
           // tag would print it twice ("Wolfson · Wolfson · A1, A2").
           projectId: pid === currentProjectId ? undefined : pid, workspace: a.general ? undefined : ws,
@@ -983,6 +1003,22 @@ export function PlannerWidget({
           taskId: bar.taskId, task: bar.task, label: bar.label, jobId: bar.jobId, done: bar.done,
         }));
         const first = ordered[0];
+        // Where the flats are — every building named, each with its floors —
+        // and how many tasks sit on each stage, in the workspace's own order.
+        const byBld = new Map<string, string[]>();
+        for (const bar of items) {
+          if (!bar.building) continue;
+          const fl = byBld.get(bar.building) ?? [];
+          if (bar.floorNo) fl.push(bar.floorNo);
+          byBld.set(bar.building, fl);
+        }
+        const stageCount = new Map<string, { stage: Stage; count: number }>();
+        for (const bar of items) {
+          const st = bar.stagesOn[0] ?? bar.stageFrom;
+          if (!st) continue;
+          const hit = stageCount.get(st.id);
+          if (hit) hit.count++; else stageCount.set(st.id, { stage: st, count: 1 });
+        }
         const drop = new Set(items);
         const kept = list.filter(bar => !drop.has(bar));
         kept.push({
@@ -990,12 +1026,15 @@ export function PlannerWidget({
           id: `bundle:${key}:${gk}`, taskId: `bundle:${key}:${gk}`,
           label: proj ? projectShortName(proj, LT === 'he-IL', proj.name) : wsPid,
           desc: '', where: undefined, building: undefined, stageFrom: undefined, stageTo: undefined,
+          head: undefined, tail: undefined, noName: false, floorNo: undefined, address: undefined, stagesOn: [],
           progress: null, done: bundleItems.every(it => it.done),
           bundle: {
             items: bundleItems, projectId: wsPid,
             workspace: proj ? projectShortName(proj, LT === 'he-IL', proj.name) : wsPid,
             color: projectColor(projects, wsPid), done: bundleItems.filter(it => it.done).length,
             day: first.days[0],
+            buildings: [...byBld.entries()].sort((x, y) => x[0].localeCompare(y[0])).map(([id, floors]) => ({ id, floors })),
+            stages: [...stageCount.values()].sort((x, y) => x.stage.order - y.stage.order),
           },
         });
         list.length = 0;
@@ -1114,6 +1153,25 @@ export function PlannerWidget({
    */
   const bWords = bundleWords(lang);
   const [bundleOpen, setBundleOpen] = useState<{ rowKey: string; id: string } | null>(null);
+  /**
+   * Each tile's natural height, by seg id (owner, 2026-10-08 — look A, the
+   * board tile made small: a tile is as tall as its words, never cut to a
+   * fixed bar). A lane is as tall as the tallest tile in it that week, and
+   * every square the lane passes keeps exactly that much room, so a tile
+   * spanning three days lies over real room in all three. Damped: a change
+   * under a pixel writes nothing.
+   */
+  const [barNat, setBarNat] = useState<Record<string, number>>({});
+  const measureBar = useCallback((id: string, h: number) => {
+    // A lane must never be SHORTER than its tile (the browser rounds a height
+    // to whole pixels, so one more keeps the fraction inside); it shrinks only
+    // when the tile really did, by more than a pixel.
+    const want = h + 1;
+    setBarNat(prev => {
+      const old = prev[id];
+      return old !== undefined && want <= old && old - want <= 1 ? prev : { ...prev, [id]: want };
+    });
+  }, []);
   const lastBundle = useRef<BundleInfo | null>(null);
   const liveBundle = bundleOpen
     ? (barsByRow.get(bundleOpen.rowKey)?.find(b => b.id === bundleOpen.id)?.bundle ?? lastBundle.current)
@@ -1571,6 +1629,31 @@ export function PlannerWidget({
                  */
                 const rowBars = barsByRow.get(`${pid}|${iso(wkStart)}`) ?? [];
                 const laneCount = rowBars.reduce((m, bar) => Math.max(m, bar.lane + 1), 0);
+                /**
+                 * Where each tile sits, per square. Strips are one fixed
+                 * height; a tile is as tall as its words (measured — the
+                 * estimate stands in only until the first layout pass, which
+                 * happens before paint). Lane by lane, a tile sits directly
+                 * under whatever is already in its squares — and a tile that
+                 * spans several days sits under the LOWEST of them, so it
+                 * lies over clear room in every square it crosses. A square
+                 * nothing crosses keeps no room at all.
+                 */
+                const fixedH = barHeight(z, textSize, strips);
+                const tileGap = Math.max(2, z(2));
+                const tileTop = new Map<string, number>();
+                const colFloor = new Array<number>(days.length).fill(0);
+                for (let l = 0; l < laneCount; l++) {
+                  for (const bar of rowBars) {
+                    if (bar.lane !== l) continue;
+                    const last = Math.min(days.length, bar.startIdx + bar.len);
+                    let top = 0;
+                    for (let c = bar.startIdx; c < last; c++) top = Math.max(top, colFloor[c]);
+                    tileTop.set(bar.id, top);
+                    const bottom = top + (strips ? fixedH : (barNat[bar.id] ?? fixedH)) + tileGap;
+                    for (let c = bar.startIdx; c < last; c++) colFloor[c] = bottom;
+                  }
+                }
                 const weekEmpty = !rowBars.length && days.every(dt => !(cells[cellKey(pid, iso(dt))]?.length));
                 const rowLit = hover?.person === pid && days.some(dt => iso(dt) === hover.day);
                 const squished = weekEmpty && !rowLit;
@@ -1658,35 +1741,45 @@ export function PlannerWidget({
                               cell a bar passes over leaves that lane's height
                               free, so the bar drawn from the first cell lies over
                               real room, never over another card. */}
-                          {Array.from({ length: laneCount }, (_, lane) => {
+                          {(() => {
+                            // The tiles of this square, each at its own height
+                            // (above); the box is as tall as the lowest tile
+                            // that starts here OR crosses here, so the next
+                            // thing in this square starts below it.
                             const dayIdx = days.findIndex(x => iso(x) === day);
-                            const starts = rowBars.find(bar => bar.lane === lane && bar.startIdx === dayIdx);
-                            if (starts?.bundle) {
-                              const rowKey = `${pid}|${iso(wkStart)}`;
-                              return (
-                                <BundleBar key={`bundle-${starts.id}`} bundle={starts.bundle}
-                                  height={barHeight(z, textSize, strips)} z={z} size={textSize} strip={strips}
-                                  words={bWords}
-                                  onOpen={() => setBundleOpen({ rowKey, id: starts.id })} />
-                              );
-                            }
-                            if (starts) {
-                              return (
-                                <TaskBar key={`bar-${starts.id}`} bar={starts} z={z} size={textSize} strip={strips}
-                                  onHeld={h => { heldBarRef.current = h ? starts.taskId : null; }}
-                                  readOnly={ro || state === 'ending'} isRtl={LT === 'he-IL'} lang={lang}
-                                  onOpen={() => openBar(starts)}
-                                  onDropTo={t => dropBarTo(starts, t)}
-                                  onDragOff={() => setBarAsk(starts)}
-                                  onRemove={() => removeBar(starts)}
-                                  onResizeTo={dd => resizeBarTo(starts, dd)} />
-                              );
-                            }
-                            const covered = rowBars.some(bar => bar.lane === lane && bar.startIdx < dayIdx && dayIdx < bar.startIdx + bar.len);
-                            return covered
-                              ? <span key={`sp-${lane}`} aria-hidden="true" style={{ height: barHeight(z, textSize, strips) }} />
-                              : null;
-                          })}
+                            const roomH = colFloor[dayIdx] > 0 ? colFloor[dayIdx] - tileGap : 0;
+                            if (!roomH) return null;
+                            return (
+                              <div data-lanes className="relative flex-shrink-0" style={{ height: roomH }}>
+                                {rowBars.filter(bar => bar.startIdx === dayIdx).map(bar => {
+                                  const at = { position: 'absolute', top: tileTop.get(bar.id) ?? 0, insetInlineStart: 0, width: '100%' } as const;
+                                  if (bar.bundle) {
+                                    const rowKey = `${pid}|${iso(wkStart)}`;
+                                    return (
+                                      <div key={`bundle-${bar.id}`} style={at}>
+                                        <BundleBar bundle={bar.bundle} id={bar.id} onMeasure={measureBar}
+                                          height={fixedH} z={z} size={textSize} strip={strips}
+                                          words={bWords}
+                                          onOpen={() => setBundleOpen({ rowKey, id: bar.id })} />
+                                      </div>
+                                    );
+                                  }
+                                  return (
+                                    <div key={`bar-${bar.id}`} style={at}>
+                                      <TaskBar bar={bar} z={z} size={textSize} strip={strips} onMeasure={measureBar}
+                                        onHeld={h => { heldBarRef.current = h ? bar.taskId : null; }}
+                                        readOnly={ro || state === 'ending'} isRtl={LT === 'he-IL'} lang={lang}
+                                        onOpen={() => openBar(bar)}
+                                        onDropTo={t => dropBarTo(bar, t)}
+                                        onDragOff={() => setBarAsk(bar)}
+                                        onRemove={() => removeBar(bar)}
+                                        onResizeTo={dd => resizeBarTo(bar, dd)} />
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            );
+                          })()}
                           {entries.map(en => (
                             <PlannerCard
                               lang={lang}
@@ -1914,6 +2007,16 @@ export interface TaskBarSeg {
   building?: string;
   /** Floor (as the diagram prints it) and address, the second line's start. */
   where?: string;
+  /** The floor as the diagram prints it, and the address — the tile's where line. */
+  floorNo?: string;
+  address?: string;
+  /** A Job Board job's client, read off its Drive folder (bold), and the job's own name after it (grey). */
+  head?: string;
+  tail?: string;
+  /** A building unit nobody has named yet. */
+  noName?: boolean;
+  /** Every stage the task is ON, in the job's own workspace's list — the tile's pills. */
+  stagesOn: Stage[];
   desc: string;
   jobId: string;
   projectId?: string;
@@ -1943,8 +2046,10 @@ export interface TaskBarSeg {
  * elsewhere. Drawn from the FIRST cell of its stretch and laid over the
  * cells to its right, which leave that lane's height free.
  */
-function TaskBar({ bar, z, size, strip, readOnly, isRtl, lang, onOpen, onDropTo, onDragOff, onRemove, onResizeTo, onHeld }: {
+function TaskBar({ bar, z, size, strip, readOnly, isRtl, lang, onOpen, onDropTo, onDragOff, onRemove, onResizeTo, onHeld, onMeasure }: {
   bar: TaskBarSeg;
+  /** Told the tile's natural height (tiles only) — what its lane is sized from. */
+  onMeasure?: (id: string, h: number) => void;
   /** Told when a drag goes live and when it ends — the widget never bundles a held bar. */
   onHeld?: (held: boolean) => void;
   z: (n: number) => number;
@@ -1965,6 +2070,7 @@ function TaskBar({ bar, z, size, strip, readOnly, isRtl, lang, onOpen, onDropTo,
   const color = bar.stageFrom?.color ?? '#6366f1';
   const h = barHeight(z, size, strip);
   const n = bar.len;
+  const { ref: tileRef, w: tileW } = useTileMeasure<HTMLDivElement>(bar.id, strip ? undefined : onMeasure);
 
   const handlers = editable ? {
     onPointerDown: (e: React.PointerEvent) => {
@@ -2046,6 +2152,143 @@ function TaskBar({ bar, z, size, strip, readOnly, isRtl, lang, onOpen, onDropTo,
       <Check size={Math.max(8, Math.round(z(9)))} strokeWidth={3.5} />{doneWord}
     </span>
   ) : null;
+
+  const title = `${bar.label}${bar.desc ? ` — ${bar.desc}` : ''}\n${bar.done ? 'Done — kept on the sheet as the record'
+    : bar.foreign ? `${bar.workspace ?? bar.label} — click to open · drag to move · X takes it off`
+    : 'Click to open · drag to move · pull the right edge for more days'}`;
+
+  if (!strip) {
+    /**
+     * LOOK A (owner, 2026-10-08 — "A small board tile"): the Job Board's own
+     * tile, made small. A white card framed in the stage's colour (green when
+     * done), the unit's FULL name wrapping rather than cut, the stage as the
+     * tile's pale pill — one line, the type shrinking to the room — "then X"
+     * when the task moves the job on, the office's own words, the set's
+     * strip with its fraction, and a pin line saying where. As tall as its
+     * words; the lane takes the tallest.
+     */
+    const words3 = (en: string, he: string, ru: string) => (lang === 'he' ? he : lang === 'ru' ? ru : en);
+    // The worker's portal names a reading language; the office reads its own preset.
+    const stName = (st: Stage) => (lang === 'en' || lang === 'he' || lang === 'ru' ? stageNameIn(st, lang) : getStageName(st, isRtl));
+    const small = Math.max(z(7), size - z(1.5));
+    const padX = Math.max(3, z(6));
+    const frame = bar.done ? '#16a34a' : (bar.stagesOn[0]?.color ?? bar.stageFrom?.color ?? '#6366f1');
+    const pills = bar.stagesOn.length ? bar.stagesOn : (bar.stageFrom ? [bar.stageFrom] : []);
+    const thenStage = bar.stageTo && !pills.some(st => st.id === bar.stageTo!.id) ? bar.stageTo : undefined;
+    const total = daysOf(bar.task).length;
+    const whereBits: React.ReactNode[] = [];
+    // Each piece stays whole ("Floor 1" never splits); only the address wraps.
+    if (bar.building) whereBits.push(<span key="b" data-bar-building className="whitespace-nowrap" style={{ fontWeight: 700, color: '#334155' }}>{bar.building}</span>);
+    if (bar.floorNo) whereBits.push(<span key="f" className="whitespace-nowrap">{floorWord(lang, bar.floorNo)}</span>);
+    if (bar.address) whereBits.push(<span key="a">{bar.address}</span>);
+    if (total > 1) whereBits.push(<span key="d" className="whitespace-nowrap">{words3(`${total} days`, `${total} ימים`, `${total} дн.`)}</span>);
+    const showWhere = !!bar.workspace || whereBits.length > 0;
+    return (
+      <div
+        ref={tileRef}
+        {...handlers}
+        {...noMenu}
+        data-no-drag data-el-action data-task-bar={bar.taskId} data-bar-days={bar.len} data-bar-look="tile"
+        className="group/bar relative rounded-lg min-w-0 flex-shrink-0"
+        title={title}
+        style={{
+          position: 'relative', zIndex: 3,
+          width: n > 1 ? `calc(${n * 100}% + ${(n - 1) * 5}px)` : '100%',
+          backgroundColor: bar.done ? '#f0fdf4' : '#ffffff',
+          border: `${Math.max(2, z(3))}px solid ${frame}`,
+          padding: `${Math.max(2, z(4))}px ${padX}px ${Math.max(3, z(5))}px`,
+          boxShadow: '0 1px 2px rgba(15,23,42,.07)',
+          opacity: held ? 0.45 : undefined,
+          cursor: editable ? 'grab' : 'pointer',
+          touchAction: 'none',
+          transition: 'opacity 120ms ease',
+        }}
+      >
+        <div className="flex items-start min-w-0" style={{ gap: Math.max(2, z(3)) }}>
+          {/* The unit's whole name — it WRAPS, it is never cut (2026-09-22,
+              2026-10-05: a cut name was the whole complaint). */}
+          <span data-bar-label className="flex-1 min-w-0 break-words" title={bar.label}
+            style={{ fontSize: size + z(0.5), fontWeight: 600, color: '#111827', lineHeight: 1.2 }}>
+            {bar.head
+              ? <>{bar.head}{bar.tail && <span style={{ color: '#64748b', fontWeight: 600 }}> · {bar.tail}</span>}</>
+              : bar.label}
+            {bar.noName && (
+              <span style={{ color: '#94a3b8', fontWeight: 500 }}> · {words3('no name yet', 'אין שם עדיין', 'имя ещё не указано')}</span>
+            )}
+          </span>
+          {editable && (
+            <button data-card-action data-bar-remove onClick={e => { e.stopPropagation(); onRemove(); }}
+              title="Take this off the sheet"
+              className="flex-shrink-0 rounded text-slate-400 hover:text-red-500 opacity-0 group-hover/bar:opacity-100"
+              style={{ padding: 1 }}>
+              <X size={Math.max(9, Math.round(z(10)))} />
+            </button>
+          )}
+        </div>
+        {(pills.length > 0 || bar.done) && (
+          <div className="flex items-center flex-wrap min-w-0" style={{ gap: Math.max(2, z(3)), marginTop: Math.max(2, z(4)) }}>
+            {pills.map(st => (
+              <StagePill key={st.id} data-bar-stage={st.id} name={stName(st)} color={st.color}
+                avail={tileW - padX * 2} size={size} z={z} />
+            ))}
+            {bar.done && (
+              <span data-bar-done className="flex-shrink-0 inline-flex items-center rounded-full" style={{
+                padding: `0 ${Math.max(3, z(5))}px`, gap: 2,
+                fontSize: Math.max(z(6.5), size - z(2.5)), fontWeight: 800, lineHeight: 1.35,
+                backgroundColor: '#16a34a', color: '#fff',
+              }}>
+                <Check size={Math.max(8, Math.round(z(8.5)))} strokeWidth={3.5} />{doneWord}
+              </span>
+            )}
+          </div>
+        )}
+        {thenStage && (
+          <div data-bar-then style={{ fontSize: Math.max(z(7), size - z(2)), color: '#64748b', marginTop: Math.max(1, z(2)), lineHeight: 1.25 }}>
+            {words3('then', 'ואז', 'затем')} {stName(thenStage)}
+          </div>
+        )}
+        {bar.desc && (
+          <div data-bar-desc className="break-words" style={{ fontSize: small, color: '#334155', marginTop: Math.max(2, z(3)), lineHeight: 1.25 }}>
+            {bar.desc}
+          </div>
+        )}
+        {bar.progress && bar.progress.total > 0 && (
+          <div data-bar-strip aria-hidden="true" className="pointer-events-none flex items-center"
+            style={{ gap: Math.max(3, z(5)), marginTop: Math.max(2, z(4)) }}>
+            <div className="flex-1 flex" style={{ gap: Math.max(1, z(2)), height: Math.max(3, z(4)) }}>
+              {bar.progress.rows.map(r => (
+                <span key={r.stage.id} data-bar-strip-seg={r.state} className="flex-1 rounded-sm h-full" style={{
+                  backgroundColor: r.state === 'done' || r.state === 'doing' ? r.stage.color
+                    : r.state === 'pending' ? '#f97316' : r.state === 'problem' ? '#dc2626' : '#e5e7eb',
+                  opacity: r.state === 'doing' ? 0.55 : 1,
+                }} />
+              ))}
+            </div>
+            <span data-bar-fraction className="tabular-nums leading-none" style={{ fontSize: Math.max(z(7), size - z(2)), fontWeight: 900, color: '#64748b' }}>
+              {bar.progress.done}/{bar.progress.total}
+            </span>
+          </div>
+        )}
+        {showWhere && (
+          <div className="flex items-start min-w-0" style={{ fontSize: small, color: '#6b7280', gap: Math.max(2, z(3)), marginTop: Math.max(2, z(3)), lineHeight: 1.25 }}>
+            <MapPin size={Math.max(8, Math.round(z(10)))} className="flex-shrink-0" style={{ color: '#94a3b8', marginTop: Math.max(1, z(2)) }} />
+            <span className="break-words min-w-0">
+              {bar.workspace && <b data-bar-workspace style={{ color: '#7c3aed', fontWeight: 700 }}>{bar.workspace}</b>}
+              {whereBits.map((node, i) => (
+                <React.Fragment key={i}>{bar.workspace || i > 0 ? ' · ' : ''}{node}</React.Fragment>
+              ))}
+            </span>
+          </div>
+        )}
+        {editable && (
+          <span data-bar-edge aria-hidden="true"
+            className="absolute top-0 bottom-0 cursor-ew-resize"
+            style={{ right: 0, width: Math.max(6, z(8)) }}
+            title="Pull for more days" />
+        )}
+      </div>
+    );
+  }
 
   return (
     <div

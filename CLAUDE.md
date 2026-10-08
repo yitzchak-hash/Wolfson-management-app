@@ -9542,3 +9542,76 @@ first, from every workspace: "Ari finished ● Drilling in 27, 26, 25, 28 · A2"
   `round41/44`, `activitycenter`.
 - `round40-probe`'s "a passed stage is crossed off" is red from the set
   model, not this round: "Ready to start" is a MARKER, so it is never ticked.
+
+---
+
+# v2 — his five answers (2026-10-08): look A, one start a day, a stronger reader on the same key
+
+## The notebook tile is look A — "a small board tile"
+`TaskBar` (PlannerWidget) in TILES mode is the Job Board tile made small: a
+white card in a frame of its first stage's colour (green `#16a34a` on
+`#f0fdf4` when done, with the `data-bar-done` tag), the unit's whole name
+WRAPPING (`data-bar-label`, never cut), the task's stages as `StagePill`s,
+`data-bar-then` ("then X" when `stageWhenDone` is not one of its stages), the
+office's own words (`data-bar-desc`), the set's strip in flow with
+`data-bar-fraction`, and a pin line (`data-bar-workspace` purple · building
+`data-bar-building` · floor as the diagram prints it · address · "N days").
+Root wears `data-bar-look="tile"`. STRIPS mode is the old one-line bar,
+untouched. The bundle (`BundleBar`, TaskBundle.tsx) in tiles mode: the count
+big, workspace + every building with its floors (`BundleInfo.buildings`),
+`data-bundle-stage` pills with counts (`BundleInfo.stages`), the done share,
+"✓ N done · M open", `data-bundle-see-all`; a stacked-paper shadow inside a
+padded wrapper. New strings `nbBundleFloors` / `nbBundleFloor` /
+`nbBundleSeeAll` (both presets + the Russian bundle words).
+
+- **`StagePill`** (TaskBundle.tsx) — one line, font from the card's measured
+  inner width ÷ `emWidth(text)` (×1.05 for bold), clamped
+  [6.5, size − 1.5] scaled; ink is the stage colour × 0.58 (`inkOf`).
+- **`useTileMeasure(id, onMeasure)`** — a layout-effect ResizeObserver: the
+  card's width as damped local state (for the pills), its natural height
+  reported up. Height follows width only, so it cannot feed back.
+- **Per-square stacking, not week-wide lanes.** Each row computes `tileTop`
+  lane by lane: a tile sits under whatever already fills ITS squares, and a
+  tile spanning days sits under the LOWEST of them. Each square draws one
+  `data-lanes` box as tall as the lowest tile starting or crossing it, with
+  the tiles absolutely placed inside (`insetInlineStart: 0`, so RTL spans
+  leftward). Week-wide lanes left a hole as tall as Monday's bundle above
+  Thursday's tiles; the old spacer-per-lane rendering also let a tile from
+  the day before lie over a square whose upper lane was empty.
+- **`measureBar` rounds UP** (offsetHeight + 1) and only shrinks by more than
+  a pixel — `offsetHeight` rounds to whole pixels, and a lane one pixel short
+  let the tile hang into the next.
+- Extras, on the segment: `head`/`tail` (a Job Board job whose name is only
+  its title borrows the client from `driveFolderName` through
+  `familyNameFromFolderName` — "Rimonim, Ofira · VRF job"), `noName` ("no name
+  yet" on a building unit with no family), `stagesOn` (every stage the task
+  is on, from the job's OWN workspace's list), `floorNo`, `address`; a
+  `stageReport` task's "… working here today" description is dropped (the
+  pill already says it).
+- The office's notebook stays in English by the earlier ruling; the words
+  follow the notebook's `lang` (the worker's phone passes his).
+Harness: `scratchpad/notebooktile-probe.mjs` (25 — the tile, the extras,
+nothing under a tile, no two tiles covering, Thursday's tiles packed tight,
+a two-building bundle, and an idle CPU meter for a measuring loop).
+Re-encoded to look A: `notebookbars-probe` (green frame), `notebook-r48`
+(the bundle is one tile in one lane, no longer a bar's height).
+
+## One start per apartment a day
+`startWork` in ContractorPortal: when the worker already has an OPEN stage
+report on this apartment dated today, the press reopens it — adding any
+newly picked stages to `stageIds` / `stagesWorked` — instead of minting a
+second report. Igor's six duplicate starts (A3 24 ×3, A2 23, A2 16, A2 15)
+were closed in production by REST as "(duplicate start — closed by the
+office)" with one `task_completed` history line each (Office); their stage
+ticks were already right.
+
+## The plan reader's OpenAI chain (`api/geocode.js`)
+No Anthropic key (his answer: the existing key, a stronger model). With only
+`OPENAI_API_KEY`, `planRead` asks `OPENAI_PLAN_MODELS` = gpt-6.1-sol →
+gpt-6-sol → gpt-5.5 with `reasoning_effort: 'high'` (no temperature on a
+reasoning model), a 42s budget; a 400/404 for a model advances a warm-instance
+start index so the next call skips it; `gpt-4o` (temperature 0) is always the
+floor, given at least 8s. `PLAN_READ_MODEL_OPENAI` overrides the list. The
+answer names `model`; `health` lists `planModels`. An Anthropic key, if ever
+set, still wins. `scratchpad/planread-test.mjs` stubs fetch and proves the
+order, the step-down, the remembered start, the floor and the override.

@@ -134,8 +134,18 @@ const wdata = page => page.evaluate(() => JSON.parse(localStorage.getItem('wolfs
   check(!['T-b1', 'T-b2', 'T-b3', 'T-b4', 'T-b5'].some(id => bars.includes(id)), '1 · none of the five is drawn on its own', bars.join(','));
   check(bars.includes('T-multi'), '1 · the two-day task stays its own bar', bars.join(','));
   check(bars.includes('T-w1') && bars.includes('T-w2'), '1 · two singles on Wednesday are under the line and stay bars');
-  const multiH = state.bars.find(x => x.id === 'T-multi')?.h ?? 0;
-  check(bun && Math.abs(bun.h - multiH) < 1.5, '1 · the bundle takes ONE lane — a task bar’s height', `${bun?.h} vs ${multiH}`);
+  // Look A (2026-10-08): a tile is as tall as its words, so the bundle is no
+  // longer a bar's height. What must hold is that it is ONE tile in ONE lane:
+  // nothing else in its square lies under it.
+  const lane = await page.evaluate(() => {
+    const el = document.querySelector('[data-task-bundle]');
+    const cell = el?.closest('[data-cell-day]');
+    if (!el || !cell) return null;
+    const kids = [...cell.children].map(k => k.getBoundingClientRect()).filter(r => r.height > 0);
+    const overlaps = kids.some((a, i) => kids.some((b, j) => j > i && a.top < b.bottom - 0.5 && b.top < a.bottom - 0.5));
+    return { overlaps, n: document.querySelectorAll('[data-task-bundle]').length };
+  });
+  check(lane && !lane.overlaps && bun?.h > 0, '1 · the bundle is ONE tile in ONE lane — nothing in its square lies under it', JSON.stringify(lane));
 
   // ── the window ──
   await page.locator('[data-task-bundle]').click();

@@ -3874,6 +3874,36 @@ export function ContractorPortal() {
             // Registers" beside it would say the same thing twice.
             setApartmentMarks(apt.id, marks, workerUser(), { quiet: true });
           }
+          /**
+           * A SECOND start on the same apartment the same day is the same
+           * visit, never a second report (owner's data, 2026-10-08: Igor's
+           * A3 24 carried four "working here today" reports from one
+           * morning, three of them left open for days). His open report here
+           * today is reopened, taking any newly picked stages; it keeps the
+           * FIRST start's `marksBefore`, which is what this apartment goes
+           * back to if the work was on the wrong one.
+           */
+          const already = !partOf ? useStore.getState().contractorAssignments.find(x =>
+            x.stageReport && !x.completedAt && !x.problem && !x.general
+            && x.contractorId === contractorId && x.apartmentId === apt.id && x.dueDate === todayIso) : undefined;
+          if (already) {
+            const had = taskStageIds(already);
+            const more = pickedStages.map(x => x.id).filter(id => !had.includes(id));
+            if (more.length) {
+              const ids = [...had, ...more];
+              const names = ids.map(id => wsSortedAll.find(x => x.id === id)?.name).filter(Boolean);
+              useStore.getState().updateContractorAssignment(already.id, {
+                stageIds: ids,
+                stagesWorked: [...new Set([...(already.stagesWorked ?? had), ...more])],
+                stageId: already.stageId ?? ids[0],
+                taskDescription: `${names.join(' + ')} — working here today`,
+              });
+            }
+            const rec = useStore.getState().contractorAssignments.find(a => a.id === already.id);
+            closeSheet();
+            if (rec) setSelectedAssignment(rec);
+            return;
+          }
           addContractorAssignment({
             id: rid,
             contractorId,

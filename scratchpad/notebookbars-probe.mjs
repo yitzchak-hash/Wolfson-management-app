@@ -102,8 +102,11 @@ const drag = async (from, to) => {
   const op = await doneBar.evaluate(e => getComputedStyle(e).opacity);
   const tag = await doneBar.locator('[data-bar-done]').count();
   const bg = await doneBar.evaluate(e => getComputedStyle(e).backgroundColor);
-  check(Number(op) === 1 && tag === 1 && bg === 'rgb(236, 253, 245)',
-    '2 · the closed task wears a green done tag — readable, not dimmed or struck, not gone', `${op} · tag ${tag} · ${bg}`);
+  const frame = await doneBar.evaluate(e => getComputedStyle(e).borderTopColor);
+  // Look A (2026-10-08): the board tile made small — a pale green card in a
+  // green frame, with the done tag.
+  check(Number(op) === 1 && tag === 1 && bg === 'rgb(240, 253, 244)' && frame === 'rgb(22, 163, 74)',
+    '2 · the closed task wears a green done tag — readable, not dimmed or struck, not gone', `${op} · tag ${tag} · ${bg} · ${frame}`);
   check(await page.locator('[data-day-pill]').count() === 0, '2 · no "day k of n" pills any more');
 }
 

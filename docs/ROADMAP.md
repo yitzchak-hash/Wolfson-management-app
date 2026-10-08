@@ -55,10 +55,8 @@ asks for it. ☑ done · ☐ next · ✎ awaiting Yitzchak's word. (Standing ord
 - ☐ Watch on production: the foreign photo listener (no Firebase in the
   container), the plan pane's Windows scrollbar re-fit, the Leads folder
   discovery, TikTok's player protocol end to end.
-- ✎ The notebook bar look — four options drawn (Notebook Card Options,
-  A–D); build the one he picks.
-- ✎ The "Next:" cue on a building square — probably answered by the
-  last-done headline (10-08); confirm with him.
+- ☐ Watch on production: the plan reader's model chain — `/api/geocode?health=1`
+  lists `planModels`; the first real reading names the model that answered.
 - ✎ The tablet studio layout (the "Studio on the Tablet" plan page: one
   bar, 56px rail, docked tray) — build on Yitzchak's numbers.
 - ✎ OCR for scanned plans (tesseract) when scans matter.
@@ -67,8 +65,8 @@ asks for it. ☑ done · ☐ next · ✎ awaiting Yitzchak's word. (Standing ord
 ## Standing pre-existing reds in the harnesses (not features)
 `planphone.mjs` stale locator · `round39-probe` asserts the deleted "I did
 work here" filter · `boardsize.mjs` left-edge auto-pan · `gapboard.mjs` ·
-`round22.mjs` (Goals fixture intercepts the week plus) · `stripsrow-probe`
-(2) · `round27.mjs` search-to-notebook drag · `round23.mjs` unit-card
+`round22.mjs` (Goals fixture intercepts the week plus) · `notebookflip.mjs`
+(2: it asserts an August month label and a 12px eye) · `round27.mjs` search-to-notebook drag · `round23.mjs` unit-card
 timeout · `round33.mjs` (a `data-map-project` hook removed 09-03) ·
 `round40-probe` "a passed stage is crossed off" (Ready to start is a marker
 under the set model). `round28.mjs` is green again (10-08).

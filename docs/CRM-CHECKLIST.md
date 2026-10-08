@@ -216,4 +216,7 @@ Legend: ☑ shipped · ☐ decided, not built · ◐ built in part · ✎ needs 
 - ☑ The plan reader runs on Opus 5.5 at high effort, sees the title block enlarged, reads only the title block and the label's own column; a bare label is never a reading (2026-10-08)
 - ☑ A worker's start remembers the apartment's stages; moving the task puts the old apartment back exactly as it was that morning (`marksBefore`) (owner, 2026-10-08)
 - ☑ "Who did what" widget — finished work, newest first, every workspace, apartment links, photos under each line (2026-10-08)
-- ✎ The notebook bar look — four options drawn (A–D), awaiting his pick (2026-10-08)
+- ☑ The notebook bar is look A, the board tile made small: stage-colour frame (green when done), the whole unit name, one-line stage pills that shrink to fit, "then X", the office's words, the stage strip, a pin line; tiles as tall as their words, stacked per square, a tile spanning days never covering anything; the bundle in the same look naming every building and floor with a pill per stage (owner, 2026-10-08: "One, I want to do A")
+- ☑ A bare Job Board name borrows the client from its Drive folder on the notebook tile; the app's own report words are not repeated; a unit with no family says "no name yet" (2026-10-08)
+- ☑ A second "I'm going to work here" on the same apartment the same day reopens the report already started; Igor's six duplicate starts closed with a history line each (owner, 2026-10-08: close them as mistakes)
+- ☑ The plan reader on the existing OpenAI key asks the strongest model first at high reasoning (gpt-6.1-sol → gpt-6-sol → gpt-5.5), steps down when refused, always ends on gpt-4o; `PLAN_READ_MODEL_OPENAI` overrides (owner, 2026-10-08)

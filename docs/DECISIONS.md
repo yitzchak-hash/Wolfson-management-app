@@ -6,6 +6,38 @@ have them). The v2 rebuild's original design record is the root
 `DECISIONS.md`; the rules and traps behind each decision are in `CLAUDE.md`
 by round. (Standing order 6, 2026-09-23.)_
 
+## 2026-10-08 (his answers to the five questions)
+- **The notebook bar is look A, "a small board tile"** ("One, I want to do A").
+  Every task on the weekly notebook is the Job Board's own tile made small: a
+  white card framed in its stage's colour (green when done, with the ✓ done
+  tag), the unit's whole name, the stage as one pale pill whose type shrinks
+  to fit, "then X" when the task moves the job on, the office's own words,
+  the stage strip with its fraction, and a pin line saying where. A tile is
+  as tall as its words; each square stacks its own tiles, and a tile spanning
+  days sits under the lowest of its squares so it never covers anything. A
+  busy day's bundle is the same look: the count big, the workspace and every
+  building with its floors, a pill per stage with its count, the done share,
+  "See all N ›". Strips mode keeps its one slim line.
+  Taken without asking (standing order 1): a Job Board job whose name is only
+  "VRF job" borrows the client from its Drive folder ("Rimonim · VRF job");
+  a report the worker started himself does not repeat the app's own words
+  ("Drilling — working here today"); a unit with no family says "no name yet".
+- **Igor's open Sold/Start reports are closed as mistakes** (answer a). Six
+  duplicate starts on A3 24, A2 23, A2 16 and A2 15 were closed with
+  "(duplicate start — closed by the office)" and one history line each; their
+  stage ticks were already right and were not touched. And a second "I'm going
+  to work here" on the same apartment the same day now reopens the report he
+  already started instead of making another.
+- **The "Next:" cue is settled** by the last-done headline (answer a) —
+  nothing more to build.
+- **The plan reader stays on the existing OpenAI key with a stronger model and
+  reasoning** — no Anthropic key. It asks the strongest model first
+  (gpt-6.1-sol, then gpt-6-sol, then gpt-5.5) at high reasoning effort, steps
+  down by itself when OpenAI refuses a model, and always ends on gpt-4o so a
+  reading still comes back. `PLAN_READ_MODEL_OPENAI` in Vercel overrides the
+  list.
+- **The stronger shared app key: leave it** (answer 5).
+
 ## 2026-10-08 (the second screen recording, and chat)
 - **Sold/Start follows the work**: "once anything is done after Sold/Start,
   Sold/Start gets marked off". Any stage ticked done or started after it ticks
