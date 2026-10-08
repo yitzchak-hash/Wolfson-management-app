@@ -363,7 +363,7 @@
     <p class="say">Reply with a letter. Mixing is fine, for example "B, with A's progress line".</p>
     <p>Whatever you pick, the busy-day bundle comes in the same look, and these come with it:</p>
     <ul class="common">
-      <li>A Job Board job named only <q>VRF job</q> borrows the client's name from its Drive folder, so it reads <q>Zamir · VRF job</q>.</li>
+      <li>A Job Board job named only <q>VRF job</q> borrows the client's name from its Drive folder, so it reads <q>Rimon · VRF job</q>.</li>
       <li>The stage pair is said in plain words: <q>Installation, then Installation of Geves</q>, with the office's own words for the task above it.</li>
       <li>A day of work spread across two buildings shows both building names on the bundle, so a wrong tower stands out.</li>
     </ul>
@@ -405,9 +405,9 @@
     { id: 'moti',  name: 'Moti',  color: '#f97316' },
     { id: 'ronen', name: 'Ronen', color: '#10b981' }
   ];
-  var FAM = { 9: 'Levinson', 10: 'Bar-Lev', 11: 'Shaked', 12: 'Navon', 13: 'Golan-Rubin', 14: 'Tal', 15: 'Ben-Ami',
-    16: 'Rosenfeld-Katzir', 17: 'Yaron', 18: '', 19: 'Dagan', 20: 'Carmi', 21: 'Elkayam', 22: 'Friedmann',
-    23: 'Gilboa', 24: 'Harel', 25: 'Inbar', 26: 'Kedem', 27: 'Lavi', 28: 'Marom' };
+  var FAM = { 9: 'Arbel', 10: 'Bar-Lev', 11: 'Eshel', 12: 'Navon', 13: 'Tavor-Kaspi', 14: 'Segev', 15: 'Ben-Ami',
+    16: 'Yarkoni-Almog', 17: 'Nitzan', 18: '', 19: 'Dagan', 20: 'Bareket', 21: 'Elron', 22: 'Friedmann',
+    23: 'Gilboa', 24: 'Harel', 25: 'Inbar', 26: 'Kedem', 27: 'Geva', 28: 'Marom' };
   // As the diagram prints a Wolfson floor: four apartments to a floor.
   function floorOf(n) { return Math.floor((n - 1) / 4) + 1; }
   function prog(set, upTo, doing) {
@@ -427,13 +427,13 @@
   for (var a = 9; a <= 22; a++) MON.push(T({ who: 'igor', day: 1, bld: 'A3', apt: String(a), fam: FAM[a], what: ['drill'], done: true, prog: prog(WOLF, 2) }));
   for (var b = 23; b <= 28; b++) { var fin = b <= 26; MON.push(T({ who: 'igor', day: 1, bld: 'A3', apt: String(b), fam: FAM[b], what: ['piping'], done: fin, prog: prog(WOLF, fin ? 3 : 2) })); }
   var REST = [
-    T({ who: 'igor', day: 2, bld: 'A3', apt: '29', fam: 'Peleg', what: ['piping'], done: true, prog: prog(WOLF, 3) }),
+    T({ who: 'igor', day: 2, bld: 'A3', apt: '29', fam: 'Lotem', what: ['piping'], done: true, prog: prog(WOLF, 3) }),
     T({ who: 'igor', day: 2, bld: 'A3', apt: '30', fam: 'Regev', what: ['piping'], done: true, prog: prog(WOLF, 3) }),
-    T({ who: 'igor', day: 2, bld: 'A3', apt: '31', fam: 'Sagi', what: ['piping'], done: false, prog: prog(WOLF, 2) }),
+    T({ who: 'igor', day: 2, bld: 'A3', apt: '31', fam: 'Meiri', what: ['piping'], done: false, prog: prog(WOLF, 2) }),
     T({ who: 'igor', day: 2, bld: 'A1', apt: '7', fam: 'Ziv', what: ['registers'], done: true, prog: prog(WOLF, 8) }),
-    T({ who: 'igor', day: 4, bld: 'A3', apt: '32', fam: 'Tamir', what: ['concealed'], done: false, desc: 'Two units in the ceiling, check the drain slope first', prog: prog(WOLF, 3, 'concealed') }),
+    T({ who: 'igor', day: 4, bld: 'A3', apt: '32', fam: 'Pnini', what: ['concealed'], done: false, desc: 'Two units in the ceiling, check the drain slope first', prog: prog(WOLF, 3, 'concealed') }),
     T({ who: 'sasha', day: 0, len: 3, bld: 'A1', apt: '44', fam: 'Almog', what: ['wall', 'outdoor'], done: true, prog: prog(WOLF, 7) }),
-    T({ who: 'moti', day: 3, len: 2, jb: true, ws: 'Job Board', fam: 'Zamir', title: 'VRF job', addr: '7 Kalanit St, Kfar Yarden', what: ['inst'], next: 'geves', done: false, desc: 'Hang the 6 VRF indoor units and run the copper to the roof', prog: prog(JB, 0, 'inst') })
+    T({ who: 'moti', day: 3, len: 2, jb: true, ws: 'Job Board', fam: 'Rimon', title: 'VRF job', addr: '7 Kalanit St, Kfar Yarden', what: ['inst'], next: 'geves', done: false, desc: 'Hang the 6 VRF indoor units and run the copper to the roof', prog: prog(JB, 0, 'inst') })
   ];
   var ALL = MON.concat(REST);
   var BY = {}; ALL.forEach(function (t) { BY[t.id] = t; });
