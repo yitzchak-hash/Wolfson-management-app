@@ -83,8 +83,9 @@ folder (still two).
 - **Plan reader on the existing OpenAI key**: gpt-6.1-sol → gpt-6-sol →
   gpt-5.5 at high reasoning, step-down on refusal, gpt-4o floor;
   `PLAN_READ_MODEL_OPENAI` overrides; health lists `planModels`.
-  `planread-test.mjs` green. Watch the first real reading on production
-  (which model answered, how long it took).
+  `planread-test.mjs` green. Live after deploy: health lists the four models,
+  and one made-up title block sent to production came back right from
+  gpt-6.1-sol in 12s. Real office plans not tried here.
 - "Next:" cue settled; the shared app key left as it is.
 - Pre-existing reds checked against the unchanged code this round:
   `round22.mjs` and `notebookflip.mjs` (2) fail identically without the diff.

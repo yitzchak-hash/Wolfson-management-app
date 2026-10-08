@@ -55,8 +55,9 @@ asks for it. ☑ done · ☐ next · ✎ awaiting Yitzchak's word. (Standing ord
 - ☐ Watch on production: the foreign photo listener (no Firebase in the
   container), the plan pane's Windows scrollbar re-fit, the Leads folder
   discovery, TikTok's player protocol end to end.
-- ☐ Watch on production: the plan reader's model chain — `/api/geocode?health=1`
-  lists `planModels`; the first real reading names the model that answered.
+- ☐ Watch on production: the plan reader on real office sheets — the chain is
+  live (health lists `planModels`; a made-up title block read right by
+  gpt-6.1-sol in 12s on 2026-10-08).
 - ✎ The tablet studio layout (the "Studio on the Tablet" plan page: one
   bar, 56px rail, docked tray) — build on Yitzchak's numbers.
 - ✎ OCR for scanned plans (tesseract) when scans matter.
