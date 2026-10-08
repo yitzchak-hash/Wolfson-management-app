@@ -191,9 +191,11 @@ export function DialogShell({ hook, rtl, width, onClose, children }: {
   );
 }
 
-export function MoveTaskDialog({ task, words: w, actingUser, onClose, onMoved }: {
+export function MoveTaskDialog({ task, words: w, actingUser, onClose, onMoved, note }: {
   task: ContractorAssignment;
   words: MoveWords;
+  /** One more plain sentence for the confirm step — the worker's portal says what happens to the apartment he leaves. */
+  note?: string;
   /** Who the history lines and the stage changes are written in the name of. */
   actingUser: User;
   onClose: () => void;
@@ -392,6 +394,12 @@ export function MoveTaskDialog({ task, words: w, actingUser, onClose, onMoved }:
             <p className="text-sm text-gray-700 leading-relaxed" data-move-sentence>
               <WithTask text={movesSentence} task={task.taskDescription || '—'} lang={w.lang} />
             </p>
+            {note && (
+              <p data-move-note className="text-[14px] font-bold leading-snug rounded-xl px-3 py-2.5"
+                style={{ backgroundColor: '#ecfdf5', border: '1px solid #a7f3d0', color: '#065f46' }}>
+                {note}
+              </p>
+            )}
 
             {(marksMove || keptLine) && (
               <div className="rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 space-y-2">

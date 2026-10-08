@@ -1,13 +1,12 @@
 import React, { useState, useRef, useMemo, useEffect, lazy, Suspense } from 'react';
 import { useParams } from 'react-router-dom';
-import { useThreadFold } from '../data/threadFold';
 import { useStore, loadAllProjectsTaskData, loadProjectSnapshot, ensureProjectSnapshot, startForeignSync, stopForeignSync } from '../data/store';
-import { ContractorAssignment, ContractorPhoto, Contractor, Apartment, Project, StageNote, StageNoteEntry, Stage, DEFAULT_CONTRACTOR_UI_STRINGS, HEBREW_CONTRACTOR_UI_STRINGS, RUSSIAN_CONTRACTOR_UI_STRINGS, PortalLang, stageNameIn, aptLabel, workAtLabel, projectColor, projectName } from '../types';
+import { ContractorAssignment, ContractorPhoto, Contractor, Apartment, Project, StageNote, StageNoteEntry, Stage, DEFAULT_CONTRACTOR_UI_STRINGS, HEBREW_CONTRACTOR_UI_STRINGS, RUSSIAN_CONTRACTOR_UI_STRINGS, PortalLang, stageNameIn, aptLabel, workAtLabel, projectColor, projectName, projectShortName } from '../types';
 import { transcribeMemo } from '../data/transcribe';
 import { daysOf, futureDaysOf } from '../data/taskDays';
 import { PlanPinOverlay } from '../components/apartment/PlanPinOverlay';
 import { printSheet, printEsc } from '../data/printing';
-import { format as fmtRaw, isPast, parseISO, isToday, differenceInCalendarDays, startOfDay, startOfWeek, addDays as addDaysFns } from 'date-fns';
+import { format as fmtRaw, parseISO, isToday, differenceInCalendarDays, startOfDay, startOfWeek, addDays as addDaysFns } from 'date-fns';
 import { he as heLocale, ru as ruLocale } from 'date-fns/locale';
 import { usePhone } from '../data/usePhone';
 import {
@@ -20,12 +19,12 @@ import {
 import { BuildingDiagram } from '../components/diagram/BuildingDiagram';
 import { permsOf } from '../data/workerLevels';
 import { PlannerWidget } from '../components/board/PlannerWidget';
-import { TaskCalendar, CalendarEvent } from '../components/tasks/TaskCalendar';
+import { TaskCalendar, CalendarEvent, CalendarWords, dayItems } from '../components/tasks/TaskCalendar';
 import { VoiceRecorderButton, VoiceMemoPlayer } from '../components/ui/VoiceMemo';
 import { MessageBox } from '../components/ui/MessageBox';
 import { PushBanner, ArrivalWatcher } from '../components/portal/PortalAlerts';
 import { problemStates, isLiveProblem, problemDaysLate, problemStateOf } from '../data/problems';
-import { stageSetOf, liveStateOf, taskStageIds, setMark } from '../data/stageMarks';
+import { stageSetOf, liveStateOf, taskStageIds, setMark, isStartStage } from '../data/stageMarks';
 import type { User, StageMark } from '../types';
 import { WazeIcon, wazeUrl } from '../components/ui/BrandIcons';
 import { RecordedMemo } from '../data/voiceMemo';
@@ -43,6 +42,8 @@ import { findPlanSetViaBackend, findAllPlansPdfsViaBackend } from '../data/drive
 import { searchJobs } from '../data/searchIndex';
 import { MoveTaskDialog, workerMoveWords, fill } from '../components/tasks/MoveTaskDialog';
 import { placeLabel } from '../data/taskMove';
+import { orderTaskRows, isoToday } from '../components/portal/portalOrder';
+import { cachedPlanAspect, measurePlanAspect } from '../data/planAspect';
 // Lazy — the studio carries pdf.js, and a worker who never opens a plan should
 // not download it (the drawer's precedent).
 const PlanAnnotator = lazy(() =>
@@ -689,7 +690,6 @@ export function ContractorPortal() {
    * office's Hebrew in Russian; the office reads his Russian in its own.
    */
   const readLang: PortalLang = lang ?? (contractorUiStrings.isRtl ? 'he' : 'en');
-  const thread = useThreadFold();
   const w = wordsOf(readLang);
   const format = dateFmt(readLang);
   const calLocale = localeOf(readLang);
@@ -801,7 +801,7 @@ export function ContractorPortal() {
    * it is at now. Nothing is decided about the finish at the start.
    */
   const [workHere, setWorkHere] = useState<null | {
-    aptId: string; step: 'view' | 'part' | 'pick'; stageId?: string;
+    aptId: string; step: 'view' | 'part' | 'pick' | 'confirm'; stageId?: string;
     /** "What are you doing here?" — the stages he ticked (one or several). */
     picks?: string[];
     /** The general job this report is filed under, once he has said so. */
@@ -839,6 +839,8 @@ export function ContractorPortal() {
   /** Weekly is what a worker plans his van by; the month grid is one press away. */
   const [calMode, setCalMode] = useState<'week' | 'month'>('month');
   const [calWeekOff, setCalWeekOff] = useState(0);
+  /** The week view's folded done rows that are open ("<workspace>:<day>"). */
+  const [weekDoneOpen, setWeekDoneOpen] = useState<string[]>([]);
   const phonePortal = usePhone();
   /**
    * The general job he is choosing apartments FOR (owner, 2026-09-17): its
@@ -878,6 +880,12 @@ export function ContractorPortal() {
   }, [movedTo]);
   // Another task opened (or the sheet closed): the move belongs to the old one.
   useEffect(() => { setMovingTask(false); setMovedTo(null); }, [selectedAssignment?.id]);
+  /**
+   * The message box on the task sheet opens on "Send a note or message to
+   * the office" (owner, 2026-10-07) — closed again for every task opened.
+   */
+  const [composeOpen, setComposeOpen] = useState(false);
+  useEffect(() => { setComposeOpen(false); }, [selectedAssignment?.id]);
   /**
    * The markup studio, for a worker whose level allows it (`markUpPlans`).
    * The Engineered Plans folder is looked up on open so his sketch is filed
@@ -953,22 +961,20 @@ export function ContractorPortal() {
     return () => clearTimeout(t);
   }, [contractor?.id, myProjects, currentProjectId, setCurrentProject]);
 
-  if (!contractor) {
-    return (
-      <div className="min-h-screen flex flex-col items-center justify-center px-6" style={{ backgroundColor: '#0f1f35' }}>
-        <img src="/tzviair-logo.png" alt="TzviAir" className="h-16 mb-8"
-          style={{ filter: 'drop-shadow(0 2px 12px rgba(0,0,0,0.8)) drop-shadow(0 0 4px rgba(0,0,0,0.6))' }} />
-        <div className="text-white text-xl font-semibold mb-2">{s.linkNotFound}</div>
-        <p className="text-gray-400 text-sm text-center">{s.linkInvalid}</p>
-      </div>
-    );
-  }
-
-  const contractorId = contractor.id;
+  /**
+   * "Link not found" is decided HERE but drawn at the very end, below every
+   * hook. It used to return right here, above two dozen hooks — and a phone
+   * opening the link before the worker's record had arrived from the cloud
+   * rendered the short version first and the full one a moment later, which
+   * React refuses ("Rendered more hooks than during the previous render"):
+   * the brand-new phone crashed on its first open, every time.
+   */
+  const notFound = !contractor;
+  const contractorId = contractor?.id ?? '';
   const assignments = contractorAssignments.filter(a => a.contractorId === contractorId);
   /** Every apartment's live problem — the map paints them red whoever the problem is assigned to. */
   const problemMap = useMemo(() => problemStates(contractorAssignments), [contractorAssignments]);
-  const catColor = CATEGORY_COLORS[contractor.category] ?? '#6b7280';
+  const catColor = CATEGORY_COLORS[contractor?.category ?? ''] ?? '#6b7280';
   const wsNameOf = (pid: string) => projectName(projects.find(p => p.id === pid), readLang === 'he', pid);
   const currentWsName = wsNameOf(currentProjectId);
   /** A workspace's own active stages, sorted — the Job Board's are its own. */
@@ -1018,6 +1024,59 @@ export function ContractorPortal() {
     return out;
   // snapshotTick: a hydrated snapshot landing must recompute this.
   }, [contractorId, currentProjectId, projects, snapshotTick]);
+  /**
+   * The building maps he may open: only workspaces that HAVE buildings
+   * (owner, 2026-10-07: "there is no building map here, it shouldn't show
+   * the Job Board"). The open workspace answers from its live buildings; the
+   * others from this phone's snapshot of them — the two built-in towers
+   * always have theirs, and a workspace made in the project builder counts
+   * once any of its units is known.
+   */
+  const allowedMaps = useMemo(() => projects.filter(p => {
+    if (p.id === 'general' || p.type === 'general') return false;
+    if (workerNow?.mapProjects && !workerNow.mapProjects.includes(p.id)) return false;
+    if (p.id === currentProjectId) return buildings.length > 0 || apartments.some(a => a.buildingId && a.buildingId !== 'G');
+    if (p.id === 'wolfson' || p.id === 'netiv') return true;
+    const snap = loadProjectSnapshot(p.id);
+    return snap.buildings.length > 0 || snap.apartments.some(a => a.buildingId && a.buildingId !== 'G');
+    // snapshotTick: a hydrated snapshot can reveal a custom workspace's buildings.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }), [projects, workerNow?.mapProjects, currentProjectId, buildings, apartments, snapshotTick]);
+  /**
+   * Which map opens. A stored pick wins while it still names a map he may
+   * open — a stored workspace WITHOUT buildings is ignored. With no pick, the
+   * one building workspace that holds his OPEN work; with only one map
+   * allowed, that one; otherwise the big squares ask (the owner's chooser,
+   * 2026-09-03 — only when there is a real choice).
+   */
+  const mapTarget = useMemo((): string | null => {
+    const stored = allowedMaps.find(p => p.id === mapChosen);
+    if (stored) return stored.id;
+    const withWork = allowedMaps.filter(p => (p.id === currentProjectId
+      ? assignments : otherTasks.filter(r => r.projectId === p.id).map(r => r.a)).some(a => !a.completedAt));
+    if (withWork.length === 1) return withWork[0].id;
+    if (allowedMaps.length === 1) return allowedMaps[0].id;
+    return null;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [allowedMaps, mapChosen, currentProjectId, contractorAssignments, otherTasks]);
+  /**
+   * The map stands where its building is. The open workspace could be the
+   * Job Board — he opened a Job Board task from the list, or that is where
+   * most of his work is — and the map used to sit there on "…" forever,
+   * wearing the Job Board's name, waiting for a switch nobody made.
+   */
+  useEffect(() => {
+    if (activeTab !== 'map' || !mapTarget || mapTarget === currentProjectId) return;
+    setCurrentProject(mapTarget);
+    setMapBuilding('');
+  }, [activeTab, mapTarget, currentProjectId, setCurrentProject]);
+  /** The apartments with his OPEN work — the only ones the map lights (owner, 2026-10-07). */
+  const openAptIds = useMemo(
+    () => new Set(assignments.filter(a => !a.completedAt && a.apartmentId).map(a => a.apartmentId)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [contractorAssignments, contractorId]);
+  /** Work he began himself on the map ("I'm going to work here") — his to move, no permission needed. */
+  const startedByHim = (a: ContractorAssignment) => !!a.stageReport && a.createdBy === contractorId;
   /** "Apt 47" — or "Work at Wolfson" for a general job. */
   const whereLabel = (a: ContractorAssignment, apt: Apartment | undefined, ws: string) =>
     a.general ? workAtLabel(readLang, ws) : `${w('Apt', 'דירה', 'Кв.')} ${aptLabel(apt)}`;
@@ -1077,6 +1136,32 @@ export function ContractorPortal() {
    * marked on the sheet as the app's guess. Never written to the unit.
    */
   const [autoPlanFor, setAutoPlanFor] = useState<Record<string, string | null>>({});
+  /** Where the plan viewer's own title bar is sent so it is never drawn (see the sheet). */
+  const [planBarSink, setPlanBarSink] = useState<HTMLElement | null>(null);
+  /** The plan row's left end, where the punch-list controls are drawn. */
+  const [pinCtlSlot, setPinCtlSlot] = useState<HTMLElement | null>(null);
+  /**
+   * Each plan's real width ÷ height, so the opened plan's box takes the
+   * sheet's own shape and fits the phone's width (planAspect's cache — paid
+   * once per plan on this phone). Landscape √2 stands in until it is known.
+   */
+  const [planAspectFor, setPlanAspectFor] = useState<Record<string, number>>({});
+  const sheetPlanId = (() => {
+    if (!selectedAssignment) return null;
+    const ap = apartments.find(x => x.id === selectedAssignment.apartmentId);
+    return (ap?.plansPdfLink ? extractFileId(ap.plansPdfLink) : null) ?? (ap ? autoPlanFor[ap.id] ?? null : null);
+  })();
+  useEffect(() => {
+    if (!showPlansPdf || !sheetPlanId || planAspectFor[sheetPlanId]) return;
+    const hit = cachedPlanAspect(sheetPlanId);
+    if (hit) { setPlanAspectFor(m => ({ ...m, [sheetPlanId]: hit })); return; }
+    let dead = false;
+    void measurePlanAspect(sheetPlanId).then(r => {
+      if (!dead && r) setPlanAspectFor(m => ({ ...m, [sheetPlanId]: r }));
+    });
+    return () => { dead = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showPlansPdf, sheetPlanId]);
   useEffect(() => {
     if (!selectedAssignment) return;
     const apt = apartments.find(x => x.id === selectedAssignment.apartmentId);
@@ -1116,6 +1201,15 @@ export function ContractorPortal() {
     if (!list.length) return null;
     const today = format(new Date(), 'yyyy-MM-dd');
     return list.find(d => d >= today) ?? list[list.length - 1];
+  };
+  /**
+   * Late = every day the task covers is BEFORE today. `isPast(dueDate)` read
+   * a task due today as late from midnight on, so today's job wore red.
+   */
+  const isLate = (a: ContractorAssignment): boolean => {
+    if (a.completedAt) return false;
+    const eff = effectiveDue(a);
+    return !!eff && eff < format(new Date(), 'yyyy-MM-dd');
   };
   const dayOffsets = (a: ContractorAssignment): number[] => {
     const today = startOfDay(new Date());
@@ -1191,18 +1285,12 @@ export function ContractorPortal() {
     };
     const live: ListRow[] = filteredAssignments.map(a => ({ a, apt: getApt(a.apartmentId), projectId: currentProjectId, projectName: currentWsName, live: true }));
     const foreign: ListRow[] = otherTasks.filter(r => passes(r.a)).map(r => ({ ...r, live: false }));
-    /**
-     * PROBLEMS FIRST (owner, 2026-09-06): an open problem, then one waiting
-     * for approval, then everything else in the order it came. A stable
-     * sort, so the rest of the list keeps its manner.
-     */
-    const rank = (a: ContractorAssignment) => {
-      const st = problemStateOf(a);
-      return st === 'open' ? 0 : st === 'waiting' ? 1 : 2;
-    };
-    return [...live, ...foreign].sort((x, y) => rank(x.a) - rank(y.a));
+    return orderTaskRows([...live, ...foreign], isoToday());
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filteredAssignments, otherTasks, mapFilter, currentProjectId, currentWsName, apartments]);
+  /** Where the open work ends and the finished work begins — the divider sits here. */
+  const firstDoneRow = listRows.findIndex(r => !!r.a.completedAt);
+  const doneRowCount = firstDoneRow < 0 ? 0 : listRows.length - firstDoneRow;
   const openEverywhere = assignments.filter(a => !a.completedAt).length + otherTasks.filter(r => !r.a.completedAt).length;
 
   async function handleMediaUpload(e: React.ChangeEvent<HTMLInputElement>) {
@@ -1642,6 +1730,10 @@ export function ContractorPortal() {
   const selNotes = selectedAssignment ? getNotes(selectedAssignment.id) : [];
   const selOfficeNotes = selNotes.filter(n => n.authorType === 'office');
   const selContractorNotes = selNotes.filter(n => n.authorType === 'contractor');
+  /** Messages and pictures already on the task — drawn whenever there are any. */
+  const threadCount = selNotes.length + selMedia.length;
+  /** The message box shows on the press, and stays while a draft is in it. */
+  const composeShown = composeOpen || !!noteText.trim() || noteAttachments.length > 0;
   // Three pictures close a job, unless the office relaxed it for this worker.
   /**
    * Pictures: a PROBLEM carries its own answer (the office said yes or no
@@ -1677,6 +1769,17 @@ export function ContractorPortal() {
     { key: 'tomorrow',  label: s.filterTomorrow,  color: '#f59e0b' },
     { key: 'week',      label: s.filterThisWeek,  color: '#3b82f6' },
   ];
+
+  if (notFound || !contractor) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center px-6" style={{ backgroundColor: '#0f1f35' }}>
+        <img src="/tzviair-logo.png" alt="TzviAir" className="h-16 mb-8"
+          style={{ filter: 'drop-shadow(0 2px 12px rgba(0,0,0,0.8)) drop-shadow(0 0 4px rgba(0,0,0,0.6))' }} />
+        <div className="text-white text-xl font-semibold mb-2">{s.linkNotFound}</div>
+        <p className="text-gray-400 text-sm text-center">{s.linkInvalid}</p>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen flex flex-col" style={{ backgroundColor: '#f0f4f8' }} dir={s.isRtl ? 'rtl' : 'ltr'}>
@@ -2099,7 +2202,7 @@ export function ContractorPortal() {
               )}
             </div>
           )}
-          {assignments.length === 0 ? (
+          {assignments.length === 0 && otherTasks.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-20 text-center">
               <div className="w-16 h-16 rounded-full bg-blue-100 flex items-center justify-center mb-4">
                 <FileText size={28} className="text-blue-400" />
@@ -2126,18 +2229,32 @@ export function ContractorPortal() {
             </div>
           ) : (
             <div className="space-y-3 py-2">
-              {listRows.map(({ a, apt, projectId: rowPid, projectName: rowWs, live }) => {
+              {listRows.map(({ a, apt, projectId: rowPid, projectName: rowWs, live }, rowIdx) => {
                 const stage = live ? getStage(a.stageId) : undefined;
                 const media = live ? getMedia(a.id) : [];
                 const notes = live ? getNotes(a.id) : [];
-                const isOverdue = a.dueDate && !a.completedAt && isPast(parseISO(a.dueDate));
+                const isOverdue = isLate(a);
                 const isDone = !!a.completedAt;
                 const dueBadge = getDueBadge(effectiveDue(a), dueWords);
 
                 const prob = problemStateOf(a);
                 const lateDays = problemDaysLate(a, format(new Date(), 'yyyy-MM-dd'));
                 return (
-                  <button key={`${rowPid}:${a.id}`} data-task-card={a.id} data-task-ws={rowPid}
+                  <React.Fragment key={`${rowPid}:${a.id}`}>
+                  {/* The line between the work still to do and the work done
+                      (owner, 2026-10-07): "not everything in one shot". */}
+                  {rowIdx === firstDoneRow && (
+                    <div data-list-divider className="flex items-center gap-3 pt-3 pb-1">
+                      <span className="flex-1 h-px bg-gray-300" />
+                      <span className="flex items-center gap-1.5 text-[13px] font-extrabold text-gray-500">
+                        <CheckCircle2 size={15} className="text-green-500" />
+                        {s.doneDividerLabel || w('Done', 'בוצע', 'Готово')} · {doneRowCount}
+                      </span>
+                      <span className="flex-1 h-px bg-gray-300" />
+                    </div>
+                  )}
+                  <button data-task-card={a.id} data-task-ws={rowPid}
+                    data-task-done={a.completedAt ? '1' : undefined}
                     data-problem-card={prob ?? undefined}
                     onClick={() => openTask(rowPid, a)}
                     className={`w-full text-left bg-white rounded-2xl shadow-sm border p-4 transition-all active:scale-[0.99] hover:shadow-md ${
@@ -2226,6 +2343,7 @@ export function ContractorPortal() {
                       </div>
                     </div>
                   </button>
+                  </React.Fragment>
                 );
               })}
             </div>
@@ -2235,30 +2353,100 @@ export function ContractorPortal() {
 
       {/* Calendar tab */}
       {activeTab === 'calendar' && (() => {
-        const calRows = [
+        /**
+         * In list order: open work first, the done work newest-closed first —
+         * the calendar keeps the order it is handed inside each part, so a
+         * folded day lists its newest close at the top.
+         */
+        const calRows = orderTaskRows([
           ...assignments.map(a => ({ a, apt: getApt(a.apartmentId), projectId: currentProjectId, projectName: currentWsName })),
           ...otherTasks,
-        ];
+        ], isoToday());
+        /** The stages a task was for, in his language — "Сверление + Трубы". */
+        const stageWordsOf = (a: ContractorAssignment) => taskStageIds(a)
+          .map(id => stages.find(x => x.id === id))
+          .filter((x): x is Stage => !!x)
+          .map(st => stageNameIn(st, readLang))
+          .join(' + ');
+        /**
+         * OPEN work one by one; DONE work folded (owner, 2026-10-07, on
+         * Igor's month: "his calendar doesn't show all his jobs on those days
+         * unless he clicks plus 22 — this has to be rethought"). The folding
+         * is the calendar's OWN (TaskCalendar's `dayItems`, shared with the
+         * office pages): every done event carries its WORKSPACE as the group,
+         * so three or more closed in one workspace on one day become ONE green
+         * chip — "Wolfson · 19 выполнено ✓" — whose press lists them, each row
+         * a door to its task. A done event's lines are the unit and what was
+         * done + when, so that list reads unit · stage · time.
+         */
+        const rowOfEv = new Map<string, typeof calRows[number]>();
         const calEvents: CalendarEvent[] = calRows
-          .filter(r => !!r.a.dueDate)
           // Every day of a multi-day task, so the worker's calendar says
           // exactly which days he is expected at the job. Every workspace's
           // tasks — the calendar is his week, wherever the work is.
-          .flatMap(({ a, apt, projectId: pid, projectName: ws }) => {
-            const st = pid === currentProjectId ? stages.find(x => x.id === a.stageId) : undefined;
-            return daysOf(a).map(day => ({
-              id: `${pid}:${a.id}:${day}`,
-              date: day,
-              title: a.taskDescription,
-              subtitle: a.general ? workAtLabel(readLang, ws) : (apt ? aptLabel(apt) : a.buildingId),
-              // The stage's colour inside the day; the trade colour only for
-              // a task with no stage.
-              color: st?.color ?? projectColor(projects, pid),
-              node: st ? { stageName: st.name, stageColor: st.color } : undefined,
-              completed: !!a.completedAt,
-              onClick: () => openTask(pid, a),
-            }));
+          .flatMap(r => {
+            const { a, apt, projectId: pid, projectName: ws } = r;
+            const st = stages.find(x => x.id === a.stageId);
+            const where = a.general ? workAtLabel(readLang, ws) : (apt ? aptLabel(apt) : a.buildingId);
+            return daysOf(a).map((day): CalendarEvent => {
+              const ev: CalendarEvent = a.completedAt ? {
+                id: `${pid}:${a.id}:${day}`,
+                date: day,
+                subtitle: where,
+                title: `${stageWordsOf(a) || a.taskDescription} · ✓ ${format(new Date(a.completedAt), 'HH:mm')}`,
+                color: '#16a34a',
+                completed: true,
+                groupKey: pid,
+                groupLabel: projectShortName(projects.find(p => p.id === pid), readLang === 'he', pid),
+                onClick: () => openTask(pid, a),
+              } : {
+                id: `${pid}:${a.id}:${day}`,
+                date: day,
+                title: a.taskDescription,
+                subtitle: where,
+                // The stage's colour inside the day; the trade colour only for
+                // a task with no stage.
+                color: st?.color ?? projectColor(projects, pid),
+                node: st ? { stageName: stageNameIn(st, readLang), stageColor: st.color } : undefined,
+                completed: false,
+                onClick: () => openTask(pid, a),
+              };
+              rowOfEv.set(ev.id, r);
+              return ev;
+            });
           });
+        // A day's biggest fold right after its open work, before any lone
+        // finished chip — the calendar places a fold where its first member
+        // stands, and the fold is what says how the day went.
+        const groupSize = new Map<string, number>();
+        for (const ev of calEvents) if (ev.completed) groupSize.set(`${ev.date}|${ev.groupKey}`, (groupSize.get(`${ev.date}|${ev.groupKey}`) ?? 0) + 1);
+        calEvents.sort((x, y) => (Number(x.completed) - Number(y.completed))
+          || (x.completed ? (groupSize.get(`${y.date}|${y.groupKey}`) ?? 0) - (groupSize.get(`${x.date}|${x.groupKey}`) ?? 0) : 0));
+        /** The calendar's own words, in HIS language. */
+        const calWords: CalendarWords = {
+          // A phone's day is ~52px wide: the chip's tail is the count and the
+          // calendar's own green tick — "Wolfson · 6 ✓" — so the number shows.
+          foldDone: '{n}',
+          more: '+{n}',
+          done: w('done', 'בוצע', 'выполнено'),
+          open: w('open', 'פתוח', 'открыто'),
+          close: w('Close', 'סגירה', 'Закрыть'),
+          foldHint: '',
+        };
+        /** One finished task in the week's fold: the unit, what was done, when — a door to the task. */
+        const doneRow = (r: typeof calRows[number], key: string) => (
+          <button key={key} data-done-row={r.a.id}
+            onClick={() => openTask(r.projectId, r.a)}
+            className="w-full flex items-center gap-2.5 text-left rtl:text-right active:bg-gray-50 ps-9 pe-3 py-2">
+            <span className="font-bold text-[14px] text-[#1e3a5f] flex-shrink-0 max-w-[45%] truncate">
+              {whereLabel(r.a, r.apt, r.projectName)}
+            </span>
+            <span className="flex-1 min-w-0 text-[12.5px] text-gray-500 truncate">{stageWordsOf(r.a)}</span>
+            <span className="text-[12px] tabular-nums font-semibold text-green-700 flex-shrink-0">
+              ✓ {r.a.completedAt ? format(new Date(r.a.completedAt), 'HH:mm') : ''}
+            </span>
+          </button>
+        );
         const wdLabels = readLang === 'he'
           ? ['א׳', 'ב׳', 'ג׳', 'ד׳', 'ה׳', 'ו׳', 'ש׳']
           : readLang === 'ru' ? ['Вс', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб']
@@ -2309,6 +2497,8 @@ export function ContractorPortal() {
                   weekdayLabels={wdLabels}
                   locale={calLocale}
                   todayLabel={s.filterToday}
+                  rtl={!!s.isRtl}
+                  words={calWords}
                   fill
                 />
               </div>
@@ -2349,23 +2539,61 @@ export function ContractorPortal() {
                             </span>
                           )}
                         </div>
-                        {evs.length === 0 ? (
+                        {evs.length === 0 && (
                           <div className="px-3 py-2 text-xs text-gray-300">—</div>
-                        ) : evs.map(ev => (
-                          <button key={ev.id} onClick={ev.onClick}
-                            className="w-full text-left px-3 py-2.5 border-t border-gray-50 active:bg-gray-50">
-                            <span className="flex items-start gap-2">
-                              <span className="w-2.5 h-2.5 rounded-full flex-shrink-0 mt-1"
-                                style={{ backgroundColor: ev.color }} />
-                              <span className="flex-1 min-w-0">
-                                <span className={`block text-sm font-bold text-gray-800 ${ev.completed ? 'line-through opacity-50' : ''}`}>
-                                  {ev.title}
+                        )}
+                        {/* The month's own rule (`dayItems`): open work first,
+                            each on its own; then the done work, folded per
+                            workspace once there are three — "19 done in
+                            Wolfson ▸" — a single done task as a green row. */}
+                        {dayItems(evs).map(it => {
+                          if (it.kind === 'fold') {
+                            const foldKey = `${it.key}:${key}`;
+                            const open = weekDoneOpen.includes(foldKey);
+                            return (
+                              <div key={foldKey} className="border-t border-gray-50">
+                                <button data-week-done-fold={foldKey} aria-expanded={open}
+                                  onClick={() => setWeekDoneOpen(v => v.includes(foldKey) ? v.filter(x => x !== foldKey) : [...v, foldKey])}
+                                  className="w-full flex items-center gap-2 px-3 py-2.5 text-left rtl:text-right active:bg-green-50"
+                                  style={{ backgroundColor: open ? '#f0fdf4' : undefined }}>
+                                  <CheckCircle2 size={15} className="text-green-600 flex-shrink-0" />
+                                  <span className="flex-1 text-[13px] font-bold text-green-800">
+                                    {fill(w('{n} done in {ws}', '{n} בוצעו · {ws}', '{n} выполнено · {ws}'),
+                                      { n: it.events.length, ws: it.label })}
+                                  </span>
+                                  <ChevronDown size={15} className={`text-green-700 transition-transform ${open ? '' : (s.isRtl ? 'rotate-90' : '-rotate-90')}`} />
+                                </button>
+                                {open && (
+                                  <div data-week-done-list={foldKey} className="pb-1">
+                                    {it.events.map(ev => { const r = rowOfEv.get(ev.id); return r ? doneRow(r, ev.id) : null; })}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          }
+                          const ev = it.ev;
+                          if (ev.completed) {
+                            const r = rowOfEv.get(ev.id);
+                            return r ? (
+                              <div key={ev.id} className="border-t border-gray-50" data-week-done-one={ev.id}>{doneRow(r, ev.id)}</div>
+                            ) : null;
+                          }
+                          return (
+                            <button key={ev.id} onClick={ev.onClick} data-week-ev={ev.id}
+                              className="w-full text-left rtl:text-right px-3 py-2.5 border-t border-gray-50 active:bg-gray-50">
+                              <span className="flex items-start gap-2">
+                                <span className="w-2.5 h-2.5 rounded-full flex-shrink-0 mt-1"
+                                  style={{ backgroundColor: ev.color }} />
+                                <span className="flex-1 min-w-0">
+                                  <span className="block text-sm font-bold text-gray-800">
+                                    <TrText text={ev.title} to={readLang} />
+                                  </span>
+                                  <span className="block text-xs text-gray-500 truncate">{ev.subtitle}</span>
                                 </span>
-                                <span className="block text-xs text-gray-500 truncate">{ev.subtitle}</span>
                               </span>
-                            </span>
-                          </button>
-                        ))}
+                            </button>
+                          );
+                        })}
                       </div>
                     );
                   })}
@@ -2394,10 +2622,8 @@ export function ContractorPortal() {
          * no "0 yours", no scrollbar: if he has a task in an apartment it is
          * lit, whatever day it is for.
          */
-        const allowedMaps = projects.filter(p => p.id !== 'general'
-          && (!workerNow?.mapProjects || workerNow.mapProjects.includes(p.id)));
-        const choice = allowedMaps.find(p => p.id === mapChosen) ?? null;
-        const chooser = !choice && allowedMaps.length !== 1;
+        const choice = allowedMaps.find(p => p.id === mapTarget) ?? null;
+        const chooser = !choice;
         const pick = (pid: string) => {
           setMapChosen(pid);
           try { localStorage.setItem(`portal_map_${token ?? ''}`, pid); } catch { /* private mode */ }
@@ -2457,10 +2683,8 @@ export function ContractorPortal() {
           );
         }
 
-        // One allowed map and nothing chosen yet: go straight in.
-        if (!choice && allowedMaps.length === 1 && mapChosen !== allowedMaps[0].id) {
-          setTimeout(() => pick(allowedMaps[0].id), 0);
-        }
+        // The effect above moves the workspace to the chosen map; until it
+        // lands the map shows a quiet "…" rather than another workspace.
         const switching = choice && choice.id !== currentProjectId;
 
         return (
@@ -2535,7 +2759,7 @@ export function ContractorPortal() {
                           ? { backgroundColor: '#eef4fa', borderColor: '#4aa8d8', color: '#1e3a5f' }
                           : { borderColor: '#e2e8f0', color: '#1e3a5f' }}>
                         <span className="w-2.5 h-7 rounded-sm" style={{ backgroundColor: wsColorOf(p.id) }} />
-                        <span className="flex-1">{p.name}</span>
+                        <span className="flex-1">{projectName(p, readLang === 'he')}</span>
                         {n > 0 && <span className="text-[11px] font-semibold text-gray-400">{n} {n !== 1 ? s.taskPlural : s.taskSingular}</span>}
                         {on && <span style={{ color: '#4aa8d8' }}>✓</span>}
                       </button>
@@ -2576,7 +2800,7 @@ export function ContractorPortal() {
                       selectedBuilding={shown as never}
                       onApartmentClick={handleDiagramClick}
                       showShinuiBadge={false}
-                      highlightedApartmentIds={assignedAptIds}
+                      highlightedApartmentIds={openAptIds}
                       aptSubLabels={aptSubLabels}
                       compact={!phonePortal}
                       phone={phonePortal}
@@ -2640,7 +2864,7 @@ export function ContractorPortal() {
         const a = contractorAssignments.find(x => x.id === selectedAssignment.id) ?? selectedAssignment;
         const apt = getApt(a.apartmentId);
         const stage = getStage(a.stageId);
-        const isOverdue = a.dueDate && !a.completedAt && isPast(parseISO(a.dueDate));
+        const isOverdue = isLate(a);
         const dueBadge = getDueBadge(effectiveDue(a), dueWords);
         // The starred plan — or, when nobody starred one, the app's guess:
         // the plans folder's latest-activity sheet, marked in red as a guess.
@@ -2701,6 +2925,8 @@ export function ContractorPortal() {
                     onAttach={handleNoteFiles}
                     onMemo={handleNoteVoiceMemo}
                     lang={readLang}
+                    // He pressed "Send a note…" — the box is ready to type in.
+                    autoFocus={composeOpen}
                     placeholder={s.yourMessage || (w('Your message', 'ההודעה שלך', 'Ваше сообщение'))}
                   />
           </div>
@@ -2746,44 +2972,62 @@ export function ContractorPortal() {
                     <X size={20} className="text-gray-500" />
                   </button>
                 </div>
-                {apt?.address?.trim() && (
-                  <div className="flex items-start gap-1.5 text-xs text-gray-600 mt-2">
-                    <MapPin size={13} className="text-[#4aa8d8] flex-shrink-0 mt-0.5" />
-                    <span className="leading-snug">{apt.address}</span>
-                    {/* Waze, at the end of the address — one press on site and
-                        the phone is navigating. An icon, nothing more. */}
-                    <a
-                      href={wazeUrl(apt.address)}
-                      target="_blank" rel="noopener noreferrer"
-                      title="Waze"
-                      onClick={e => e.stopPropagation()}
-                      className="flex-shrink-0 -mt-0.5 p-0.5 rounded hover:bg-sky-50"
-                    >
-                      <WazeIcon size={15} />
-                    </a>
-                  </div>
-                )}
-                {a.dueDate && (
-                  <div className={`flex items-center gap-1.5 text-xs font-medium mt-2 flex-wrap ${isOverdue ? 'text-red-500' : 'text-gray-500'}`}>
-                    <CalendarDays size={13} />
-                    {a.days?.length
-                      ? a.days.map(d => format(parseISO(d), 'EEE d MMM')).join(' · ')
-                      : <>{s.duePrefix} {format(parseISO(a.dueDate), 'MMMM d, yyyy')}</>}
-                    {dueBadge && !a.completedAt && (
-                      <span className={`ml-1 px-1.5 py-0.5 rounded border font-semibold text-xs ${dueBadge.cls}`}>
-                        {dueBadge.text}
+                {/* WHEN and WHERE on ONE line (owner, 2026-10-07: "these
+                    should all be in one line — consolidate the space"): the
+                    day with its Today/Overdue badge, then the address and the
+                    Waze icon. It wraps only when a long address must. */}
+                {(a.dueDate || apt?.address?.trim()) && (
+                  <div data-sheet-when-where className="flex items-start gap-3 text-xs mt-2">
+                    {a.dueDate && (
+                      <span data-sheet-when className={`flex items-center gap-1.5 flex-wrap font-medium flex-shrink-0 max-w-[58%] ${isOverdue ? 'text-red-500' : 'text-gray-500'}`}>
+                        <CalendarDays size={13} className="flex-shrink-0" />
+                        <span>
+                          {a.days?.length
+                            ? a.days.map(d => format(parseISO(d), 'EEE d MMM')).join(' · ')
+                            : format(parseISO(a.dueDate), 'EEE d MMM')}
+                        </span>
+                        {dueBadge && !a.completedAt && (
+                          <span className={`px-1.5 py-0.5 rounded border font-semibold text-[11px] ${dueBadge.cls}`}>
+                            {dueBadge.text}
+                          </span>
+                        )}
+                      </span>
+                    )}
+                    {/* The address takes the rest of the row and wraps INSIDE
+                        it, so the line stays one line however long it is. */}
+                    {apt?.address?.trim() && (
+                      <span data-sheet-where-line className="flex items-start gap-1 text-gray-600 min-w-0 flex-1">
+                        <MapPin size={13} className="text-[#4aa8d8] flex-shrink-0 mt-0.5" />
+                        <span className="leading-snug min-w-0">{apt.address}</span>
+                        {/* Waze, at the end of the address — one press on site and
+                            the phone is navigating. An icon, nothing more. */}
+                        <a
+                          href={wazeUrl(apt.address)}
+                          target="_blank" rel="noopener noreferrer"
+                          title="Waze"
+                          onClick={e => e.stopPropagation()}
+                          className="flex-shrink-0 p-0.5 rounded hover:bg-sky-50"
+                        >
+                          <WazeIcon size={16} />
+                        </a>
                       </span>
                     )}
                   </div>
                 )}
-                {/* Recorded on the wrong apartment — only HIS OWN work, only
-                    with the switch, never a general job (it has no apartment)
-                    and never a problem (the office's record of a fault). */}
-                {perms.moveOwnWork && a.contractorId === contractorId && !!a.apartmentId && !a.general && !a.problem && apt && (
+                {/* Recorded on the wrong apartment — only HIS OWN work, never a
+                    general job (it has no apartment) and never a problem (the
+                    office's record of a fault). Work he STARTED HIMSELF ("I'm
+                    going to work here") is always his to put right — no
+                    permission needed (owner, 2026-10-07: "a way for a worker
+                    himself to change an apartment he's working on by
+                    mistake"); a task the office gave him still needs the
+                    `moveOwnWork` switch. */}
+                {(perms.moveOwnWork || startedByHim(a)) && a.contractorId === contractorId && !!a.apartmentId && !a.general && !a.problem && apt && (
                   <button type="button" data-task-move={a.id}
                     onClick={() => setMovingTask(true)}
-                    className="mt-2.5 inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg border border-[#1e3a5f]/20 bg-[#1e3a5f]/5 text-[#1e3a5f] active:bg-[#1e3a5f]/15">
-                    <ArrowRightLeft size={13} /> {workerMoveWords(s, readLang).mvAction}
+                    className="mt-2.5 w-full flex items-center justify-center gap-2 text-[14px] font-extrabold px-3 py-2.5 rounded-xl border-2 active:scale-[0.99]"
+                    style={{ borderColor: '#f59e0b', backgroundColor: '#fffbeb', color: '#92400e' }}>
+                    <ArrowRightLeft size={16} /> {workerMoveWords(s, readLang).mvAction}
                   </button>
                 )}
                 {movedTo && (
@@ -2797,9 +3041,11 @@ export function ContractorPortal() {
               <div className="flex-1 overflow-y-auto px-5 py-4 space-y-5" style={{ overscrollBehavior: 'contain' }}>
                 {/* Task description */}
                 <div>
-                  <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">{s.sectionTask}</h3>
-                  <p className="text-gray-800 text-sm leading-relaxed" data-task-text>
-                    <Translated text={a.taskDescription} to={readLang} />
+                  {/* ONE line (owner, 2026-10-07: "TASK should be with two
+                      dots"): "Task: installation", not a heading above the words. */}
+                  <p className="text-gray-800 text-[15px] leading-relaxed" data-task-line>
+                    <span className="font-extrabold text-[#1e3a5f]">{s.sectionTask}:</span>{' '}
+                    <span data-task-text><Translated text={a.taskDescription} to={readLang} /></span>
                   </p>
                   {a.general && (a.visits?.length ?? 0) > 0 && (
                     <p className="text-xs mt-1.5 font-semibold" style={{ color: '#8a6508' }} data-sheet-visits>
@@ -2902,40 +3148,17 @@ export function ContractorPortal() {
                           'План с последней активностью выбран автоматически — офис ещё не отметил план')}
                       </div>
                     )}
-                    <div className="flex items-center justify-between mb-2">
-                      <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider flex items-center gap-1.5">
-                        <BookOpen size={12} /> {s.engineeringPlans}
+                    {/* The header row is the title and View/Hide, nothing else
+                        (owner, 2026-10-07: "Markup should not be here") — Mark up
+                        and Download sit ON the plan once it is open. */}
+                    <div className="flex items-center justify-between mb-1.5" data-plan-head>
+                      <h3 className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider flex items-center gap-1.5">
+                        <BookOpen size={11} /> {s.engineeringPlans}
                       </h3>
-                      <div className="flex items-center gap-2">
-                        {/* Through the app's own /api/drive-fetch (decision 6):
-                            a drive.google.com link turns away a worker who is
-                            not signed into Google. The service account reads
-                            the bytes; the phone just gets a file. */}
-                        <button onClick={() => void downloadPlanFile(plansPdfFileId, apt ? aptLabel(apt) : a.buildingId)}
-                          disabled={planDlBusy}
-                          className="flex items-center gap-1 text-xs text-[#1e3a5f] hover:underline disabled:opacity-50">
-                          <Download size={11} /> {planDlBusy ? '…' : s.download}
-                        </button>
-                        {perms.markUpPlans && apt && (
-                          <button data-portal-markup
-                            onClick={() => {
-                              setMarkup({ aptId: apt.id, fileId: plansPdfFileId });
-                              if (apt.driveLink) {
-                                void findPlanSetViaBackend(apt.driveLink).then(ps => {
-                                  if (ps.plansFolderId) setMarkup(m => m && m.aptId === apt.id
-                                    ? { ...m, plansFolderId: ps.plansFolderId ?? undefined } : m);
-                                }).catch(() => { /* the job folder stands in */ });
-                              }
-                            }}
-                            className="flex items-center gap-1 text-xs px-2.5 py-1 rounded-lg border border-amber-300 bg-amber-50 text-amber-800 font-medium">
-                            <PenLine size={11} /> {s.markUpBtn || w('Mark up', 'סימון', 'Разметка')}
-                          </button>
-                        )}
-                        <button onClick={() => setShowPlansPdf(v => !v)}
-                          className="text-xs px-2.5 py-1 rounded-lg bg-[#1e3a5f] text-white font-medium">
-                          {showPlansPdf ? s.hide : s.view}
-                        </button>
-                      </div>
+                      <button data-plan-toggle onClick={() => setShowPlansPdf(v => !v)}
+                        className="text-xs px-2.5 py-1 rounded-lg bg-[#1e3a5f] text-white font-medium">
+                        {showPlansPdf ? s.hide : s.view}
+                      </button>
                     </div>
 
                     {/* The office's markup, when there is one.
@@ -2965,11 +3188,65 @@ export function ContractorPortal() {
                         </a>
                       );
                     })()}
+                    {/* The annotator's own navy title bar is sent here and never
+                        shown (owner, 2026-10-07: "this bar should be removed" —
+                        "it should show just the plan, cleanly"). Its pager and
+                        zoom live in the floating pill on the sheet anyway. */}
+                    <div ref={setPlanBarSink} style={{ display: 'none' }} aria-hidden="true" />
                     <div
+                      data-plan-view={showPlansPdf ? 'open' : 'thumb'}
                       className="rounded-xl overflow-hidden border border-gray-200 relative"
-                      style={{ height: showPlansPdf ? '520px' : '160px', cursor: showPlansPdf ? undefined : 'pointer' }}
+                      style={showPlansPdf
+                        /* FITTED to the sheet's width: the box takes the plan's
+                           own shape, so a landscape sheet fills the width with
+                           no band of blue above and below — "make it fit, make
+                           it smaller" (it was a fixed 520px tower). */
+                        ? { aspectRatio: String(planAspectFor[plansPdfFileId] ?? Math.SQRT2), maxHeight: '64dvh', minHeight: 190, width: '100%' }
+                        : { height: '160px', cursor: 'pointer' }}
                       onClick={showPlansPdf ? undefined : () => setShowPlansPdf(true)}
                     >
+                      {/* On the plan's corner, small: Download, and Mark up in
+                          the company blue for a worker allowed to draw. Outside
+                          the annotator, so a press here never opens full screen. */}
+                      {showPlansPdf && apt && (
+                        <div className="absolute top-2 inset-x-2 z-20 flex items-start justify-between gap-1.5 pointer-events-none">
+                        {/* The punch-list controls (Pin, the open count, print)
+                            join this row at its left — floating at the sheet's
+                            own corner they ran into Mark up on a phone. */}
+                        <span ref={setPinCtlSlot} data-plan-pin-controls
+                          className="flex flex-wrap items-center gap-1 min-w-0 pointer-events-auto" />
+                        <div data-plan-actions className="flex items-center gap-1.5 flex-shrink-0 pointer-events-auto"
+                          onClick={e => e.stopPropagation()} onPointerDown={e => e.stopPropagation()}>
+                          {/* Through the app's own /api/drive-fetch (decision 6):
+                              a drive.google.com link turns away a worker who is
+                              not signed into Google. The service account reads
+                              the bytes; the phone just gets a file. */}
+                          <button data-plan-download
+                            onClick={() => void downloadPlanFile(plansPdfFileId, aptLabel(apt))}
+                            disabled={planDlBusy}
+                            title={s.download}
+                            className="flex items-center gap-1 text-[11.5px] font-bold px-2.5 py-1.5 rounded-full bg-white/95 text-[#1e3a5f] border border-gray-200 shadow-sm disabled:opacity-50">
+                            <Download size={12} /> {planDlBusy ? '…' : s.download}
+                          </button>
+                          {perms.markUpPlans && (
+                            <button data-portal-markup data-plan-markup
+                              onClick={() => {
+                                setMarkup({ aptId: apt.id, fileId: plansPdfFileId });
+                                if (apt.driveLink) {
+                                  void findPlanSetViaBackend(apt.driveLink).then(ps => {
+                                    if (ps.plansFolderId) setMarkup(m => m && m.aptId === apt.id
+                                      ? { ...m, plansFolderId: ps.plansFolderId ?? undefined } : m);
+                                  }).catch(() => { /* the job folder stands in */ });
+                                }
+                              }}
+                              className="flex items-center gap-1 text-[11.5px] font-bold px-2.5 py-1.5 rounded-full text-white shadow-sm"
+                              style={{ backgroundColor: '#4aa8d8' }}>
+                              <PenLine size={12} /> {s.markUpBtn || w('Mark up', 'סימון', 'Разметка')}
+                            </button>
+                          )}
+                        </div>
+                        </div>
+                      )}
                       {/*
                         Expanded, the sheet is drawn by the app's own renderer
                         (the drawer's and the wall's precedent) with the pins
@@ -3000,6 +3277,7 @@ export function ContractorPortal() {
                               apartmentLabel={aptLabel(apt)}
                               driveFolderUrl={apt.driveLink}
                               authorName={contractor?.name ?? ''}
+                              barInto={planBarSink}
                               onClose={() => setShowPlansPdf(false)}
                               sheetOverlay={
                                 <PlanPinOverlay
@@ -3008,6 +3286,7 @@ export function ContractorPortal() {
                                   authorName={contractor?.name ?? ''}
                                   driveFolderLink={apt.driveLink}
                                   workerMode
+                                  controlsInto={pinCtlSlot}
                                   planFileId={plansPdfFileId}
                                 />
                               }
@@ -3052,21 +3331,25 @@ export function ContractorPortal() {
                     The office's Add File button left this section (owner's
                     decision — the worker's paperclip lives in the composer
                     and on the closing screen). */}
-                <div>
-                  <button type="button" data-thread-toggle={a.id}
-                    aria-expanded={thread.isOpen(a.id)}
-                    onClick={() => thread.toggle(a.id)}
-                    className="w-full text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3 flex items-center gap-1.5">
-                    <MessageSquare size={12} /> {s.taskMessagesLabel || (w('Task messages', 'הודעות המשימה', 'Сообщения по задаче'))}
-                    {selNotes.length + selMedia.length > 0 && (
-                      <span data-thread-count className="px-1.5 rounded-full bg-gray-200 text-gray-600 text-[11px] tabular-nums normal-case tracking-normal">
-                        {selNotes.length + selMedia.length}
+                {/*
+                  The messages are SHOWN, in a smaller hand, and the way to
+                  write one is a plain button that says what it does (owner,
+                  2026-10-07: "instead of having this collapsible it should be
+                  a button — Send note or message to office"). The box opens
+                  under the messages on the press, and stays open while a
+                  draft is in it. The office's drawer keeps its own fold.
+                */}
+                <div data-portal-thread>
+                  <style>{'[data-portal-thread] [data-thread-bubble]{font-size:13px!important;line-height:1.4!important}'}</style>
+                  {threadCount > 0 && (
+                    <div className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
+                      <MessageSquare size={11} /> {s.taskMessagesLabel || (w('Task messages', 'הודעות המשימה', 'Сообщения по задаче'))}
+                      <span data-thread-count className="px-1.5 rounded-full bg-gray-200 text-gray-600 text-[10.5px] tabular-nums normal-case tracking-normal">
+                        {threadCount}
                       </span>
-                    )}
-                    <span className="flex-1" />
-                    <ChevronDown size={14} className={thread.isOpen(a.id) ? '' : '-rotate-90'} />
-                  </button>
-                  {thread.isOpen(a.id) && (
+                    </div>
+                  )}
+                  {(threadCount > 0 || composeShown) && (
                   <TaskThread
                     assignment={a}
                     notes={selNotes}
@@ -3083,8 +3366,17 @@ export function ContractorPortal() {
                       remove: w('Delete', 'מחיקה', 'Удалить'),
                       removeSure: w('Delete this message?', 'למחוק את ההודעה?', 'Удалить это сообщение?'),
                     }}
-                    footer={composerNode}
+                    footer={composeShown ? composerNode : undefined}
                   />
+                  )}
+                  {!composeShown && (
+                    <button type="button" data-send-office
+                      onClick={() => setComposeOpen(true)}
+                      className="mt-2.5 w-full flex items-center justify-center gap-2 py-3 rounded-xl text-[14px] font-bold border-2 active:scale-[0.99]"
+                      style={{ borderColor: '#bfdcef', backgroundColor: '#f0f8fd', color: '#1e3a5f' }}>
+                      <MessageSquare size={16} />
+                      {s.sendToOfficeBtn || w('Send a note or message to the office', 'שליחת הערה או הודעה למשרד', 'Отправить заметку или сообщение в офис')}
+                    </button>
                   )}
 
                   {/* The hidden pickers stay mounted at sheet level — the
@@ -3465,6 +3757,14 @@ export function ContractorPortal() {
                 task={a}
                 words={workerMoveWords(s, readLang)}
                 actingUser={workerUser()}
+                /* What happens to the apartment he is leaving, in plain words
+                   — said only when the task remembers how that apartment
+                   stood before he started (the store puts it back). */
+                note={a.marksBefore && apt ? fill(
+                  w('{from} goes back to exactly how it was before you started there.',
+                    '{from} תחזור בדיוק למצב שהייתה בו לפני שהתחלת לעבוד שם.',
+                    '{from} вернётся точно в то состояние, в каком была до начала вашей работы там.'),
+                  { from: placeLabel(apt) }) : undefined}
                 onClose={() => setMovingTask(false)}
                 onMoved={to => {
                   // The sheet keeps the record it was opened with; every
@@ -3542,13 +3842,29 @@ export function ContractorPortal() {
         const wsSortedAll = stages
           .filter(x => (currentProjectId === 'general' ? x.projectId === 'general' : !x.projectId))
           .sort((x, y) => x.order - y.order);
+        /**
+         * Never Sold/Start (owner, 2026-10-07: "he shouldn't have the
+         * ability to select Sold/Start") — the start is the office's word
+         * that the job is sold, not work a worker does on site; the store
+         * ticks it by itself the moment any later stage is begun.
+         */
+        const workable = (x: Stage) => !isStartStage(x);
         const openSet = stageSetOf(apt, wsSortedAll, { tipusStages: tipusStagesPortal })
+          .filter(workable)
           .filter(x => { const st = liveStateOf(apt, x.id, wsSortedAll, assignments); return st !== 'done' && st !== 'off'; })
           .filter(x => { const allowed = contractor?.reportStages?.[currentProjectId]; return !allowed?.length || allowed.includes(x.id); });
         const goPick = (partOf: string | null) => setWorkHere({ ...workHere, step: 'pick', partOf, picks: workHere.picks ?? [] });
         const startWork = (partOf: string | null, pickedIds: string[] = []) => {
           const rid = mintId();
-          const pickedStages = pickedIds.map(id => wsSortedAll.find(x => x.id === id)).filter((x): x is Stage => !!x);
+          /**
+           * The apartment's stages exactly as they stood BEFORE he touched
+           * them — read off the live record before the marks below are
+           * written. If the work turns out to be on the wrong apartment and
+           * the task is moved, this is what this apartment goes back to.
+           */
+          const marksBefore = { ...(useStore.getState().apartments.find(x => x.id === apt.id)?.stageMarks ?? {}) };
+          const marksBeforeAt = new Date().toISOString();
+          const pickedStages = pickedIds.map(id => wsSortedAll.find(x => x.id === id)).filter((x): x is Stage => !!x && !isStartStage(x));
           const st = pickedStages[0] ?? curStage ?? null;
           if (pickedStages.length) {
             let marks: Record<string, StageMark> | undefined = apt.stageMarks;
@@ -3581,6 +3897,8 @@ export function ContractorPortal() {
             stageReport: true,
             createdBy: contractorId,
             createdByName: contractor?.name ?? '',
+            marksBefore,
+            marksBeforeAt,
           } as never);
           if (st) recordVisit(rid, st, partOf);
           const rec = useStore.getState().contractorAssignments.find(a => a.id === rid);
@@ -3687,12 +4005,14 @@ export function ContractorPortal() {
                 )}
                 {workHere.step === 'pick' && (() => {
                   const picks = workHere.picks ?? [];
-                  const list = openSet.length ? openSet : stageSetOf(apt, wsSortedAll, { tipusStages: tipusStagesPortal });
+                  const list = openSet.length ? openSet : stageSetOf(apt, wsSortedAll, { tipusStages: tipusStagesPortal }).filter(workable);
                   const toggle = (id: string) => setWorkHere({ ...workHere, picks: picks.includes(id) ? picks.filter(x => x !== id) : [...picks, id] });
                   return (
                     <div data-work-pick className="space-y-2">
+                      {/* TODAY — the owner's word (2026-10-07): the question is
+                          what he will do on THIS visit, not the job's whole list. */}
                       <p className="text-center font-extrabold text-gray-800" style={{ fontSize: 18, lineHeight: 1.3 }}>
-                        {w('What are you doing here?', 'מה אתה עושה כאן?', 'Что вы здесь делаете?')}
+                        {s.whatTodayLabel || w('What are you doing here today?', 'מה אתה עושה כאן היום?', 'Что вы делаете здесь сегодня?')}
                       </p>
                       <p className="text-center text-gray-500 mb-1" style={{ fontSize: 13 }}>
                         {w('select one or multiple', 'בחר אחד או כמה', 'выберите один или несколько')}
@@ -3722,13 +4042,66 @@ export function ContractorPortal() {
                           {w('Nothing is left to do here.', 'לא נשאר כאן מה לעשות.', 'Здесь больше нечего делать.')}
                         </p>
                       )}
+                      {/* Start ASKS first (below) — it never starts on its own. */}
                       <button data-work-start disabled={!picks.length && list.length > 0}
-                        onClick={() => startWork(workHere.partOf ?? null, picks)}
+                        onClick={() => setWorkHere({ ...workHere, step: 'confirm', picks })}
                         className="w-full py-4 rounded-xl text-base font-bold text-white flex items-center justify-center gap-2 active:scale-[0.98] disabled:opacity-40 mt-1"
                         style={{ background: 'linear-gradient(135deg, #1e3a5f, #2c4f78)' }}>
                         <Hammer size={19} />
                         {w('Start', 'התחל', 'Начать')}
                       </button>
+                    </div>
+                  );
+                })()}
+                {/*
+                  "ARE YOU SURE?" (owner, 2026-10-07: "because sometimes he gets
+                  mixed up and selects Outdoor Units"). His picks read back in
+                  his own language, big, with the apartment they are for — the
+                  other half of the mix-up the owner fixed by hand that week —
+                  and only Yes starts anything. Back returns to the picks
+                  exactly as he left them.
+                */}
+                {workHere.step === 'confirm' && (() => {
+                  const picked = (workHere.picks ?? [])
+                    .map(id => wsSortedAll.find(x => x.id === id))
+                    .filter((x): x is Stage => !!x);
+                  return (
+                    <div data-work-confirm className="space-y-3">
+                      <p className="text-center font-extrabold text-gray-800" style={{ fontSize: 18, lineHeight: 1.3 }}>
+                        {picked.length
+                          ? s.sureTodayLabel || w('Are you sure you will be doing these today:', 'בטוח שאתה עושה את אלה היום:', 'Вы уверены, что сегодня будете делать это:')
+                          : w('Are you sure you will be working here today?', 'בטוח שאתה עובד כאן היום?', 'Вы уверены, что сегодня работаете здесь?')}
+                      </p>
+                      <p data-work-confirm-where className="text-center font-black text-[#1e3a5f]" style={{ fontSize: 20 }}>
+                        {w('Apt', 'דירה', 'Кв.')} {aptLabel(apt)} · {apt.buildingId}
+                      </p>
+                      {picked.length > 0 && (
+                        <div className="flex flex-wrap justify-center gap-2" data-work-confirm-list>
+                          {picked.map(st => (
+                            <span key={st.id} data-work-confirm-stage={st.id}
+                              className="inline-flex items-center gap-2 px-3.5 py-2 rounded-full text-[16px] font-extrabold text-white"
+                              style={{ backgroundColor: st.color }}>
+                              <span className="w-2.5 h-2.5 rounded-full bg-white/80" />
+                              {stageNameIn(st, readLang)}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                      <div className="grid grid-cols-2 gap-2 pt-1">
+                        <button data-work-confirm-back
+                          onClick={() => setWorkHere({ ...workHere, step: 'pick' })}
+                          className="py-4 rounded-xl text-base font-extrabold border-2 border-gray-200 text-gray-600 bg-white active:scale-[0.98] flex items-center justify-center gap-1.5">
+                          {s.isRtl ? <ChevronRight size={18} /> : <ChevronLeft size={18} />}
+                          {w('Back', 'חזרה', 'Назад')}
+                        </button>
+                        <button data-work-confirm-yes
+                          onClick={() => startWork(workHere.partOf ?? null, workHere.picks ?? [])}
+                          className="py-4 rounded-xl text-base font-extrabold text-white active:scale-[0.98] flex items-center justify-center gap-1.5"
+                          style={{ background: 'linear-gradient(135deg, #22c55e, #16a34a)' }}>
+                          <CheckCircle2 size={18} />
+                          {w('Yes', 'כן', 'Да')}
+                        </button>
+                      </div>
                     </div>
                   );
                 })()}

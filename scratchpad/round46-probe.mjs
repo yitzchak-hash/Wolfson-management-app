@@ -147,7 +147,9 @@ async function openDrawer(page) {
   await page.locator('[data-work-here]').click(); await page.waitForTimeout(800);
   // The set model (2026-09-22): pick what he is doing, then Start.
   if (await page.locator('[data-work-stage]').count()) await page.locator('[data-work-stage]').first().click();
-  await page.locator('[data-work-start]').click(); await page.waitForTimeout(1400);
+  await page.locator('[data-work-start]').click(); await page.waitForTimeout(300);
+  // Round 48: Start asks "are you sure you will be doing these today" first.
+  await page.locator('[data-work-confirm-yes]').click(); await page.waitForTimeout(1400);
   const d = await store(page);
   const made = (d.contractorAssignments || []).find(a => a.stageReport);
   check(!!made, 'the worker started a task');

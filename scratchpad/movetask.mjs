@@ -342,7 +342,17 @@ const read = page => page.evaluate(() => JSON.parse(localStorage.getItem('wolfso
   await page.getByText('Registers — working here today').first().click();
   await page.waitForTimeout(800);
   check(await page.locator('[data-sheet-where]').count() === 1, 'the worker\'s task sheet is open');
-  check(await page.locator('[data-task-move]').count() === 0, 'a worker WITHOUT the switch sees no move button');
+  // Round 48 (owner, 2026-10-07: "a way for a worker himself to change an
+  // apartment he's working on by mistake"): a report he STARTED himself is
+  // his to move with no switch; any other task still needs it.
+  check(await page.locator('[data-task-move="T-REG"]').count() === 1,
+    'a worker WITHOUT the switch can move a report he started himself');
+  await page.mouse.click(195, 30);
+  await page.waitForTimeout(500);
+  await page.getByText('Fix the condensate drain').first().click();
+  await page.waitForTimeout(800);
+  check(await page.locator('[data-sheet-where]').count() === 1 && await page.locator('[data-task-move]').count() === 0,
+    'but sees no move button on a task that is not his own started report');
   check(!errs.length, 'no page errors (worker, no switch)', errs[0] || '');
   await ctx.close();
 }

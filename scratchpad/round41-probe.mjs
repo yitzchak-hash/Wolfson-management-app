@@ -118,7 +118,9 @@ const waitSheet = async (page, scope = '') => {
   await page.waitForTimeout(400);
   await page.getByText('Fix the duct').first().click();
   await page.waitForTimeout(1200);
-  check(await page.locator('[data-portal-markup]').count() === 1, 'a worker with the markUpPlans permission sees Mark up');
+  // Round 48 (owner, 2026-10-07: "Markup should not be here"): Mark up left
+  // the plans header row and sits ON the opened plan.
+  check(await page.locator('[data-portal-markup]').count() === 0, 'Mark up is not in the plans header row');
   // View → the app's own renderer, not Google's frame
   await page.evaluate(() => {
     const f = document.querySelector('iframe[title="Engineering Plans"]');
@@ -127,6 +129,7 @@ const waitSheet = async (page, scope = '') => {
   check(await waitSheet(page, '[data-plan-surface="pane"]'), 'the worker\'s expanded preview draws the sheet itself');
   await page.waitForTimeout(800);
   check(await page.locator('iframe[title="Engineering Plans"]').count() === 0, 'no Drive iframe while expanded');
+  check(await page.locator('[data-plan-view="open"] [data-portal-markup]').count() === 1, 'a worker with the markUpPlans permission sees Mark up on the opened plan');
   const c = await pinFractions(page, '[data-plan-surface="pane"]');
   check(!!c && near(c.fx, 0.30) && near(c.fy, 0.40), 'the worker sees the pin at 30% / 40% of the SHEET', c ? `${c.fx.toFixed(3)} / ${c.fy.toFixed(3)}` : 'no pin');
 
