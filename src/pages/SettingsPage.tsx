@@ -630,10 +630,63 @@ function StageSettings({ stages, updateStage, addStage, deleteStage, onToast, cu
     setEdits(prev => ({ ...prev, [id]: { ...(prev[id] ?? {}), ...changes } }));
   }
 
-  function saveStage(stage: Stage) {
-    updateStage(stage.id, edits[stage.id] ?? {});
-    setEdits(prev => { const n = { ...prev }; delete n[stage.id]; return n; });
-    onToast(s.stageNameSaved);
+  /**
+   * EVERY FIELD SAVES ITSELF (owner, 2026-10-08: "make it save automatically
+   * — I don't know why we need these save buttons"). A typed field saves on
+   * blur (Enter blurs, the app-wide rule), a toggle or a colour on change,
+   * and a small "Saved" tick answers beside the row. Only what actually
+   * differs from the stored stage is written, so tabbing through a row
+   * writes nothing. The draft in `edits` is cleared as it is written.
+   */
+  const [savedAt, setSavedAt] = useState<Record<string, number>>({});
+  const savedTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+  const colorTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+  useEffect(() => () => {
+    Object.values(savedTimers.current).forEach(clearTimeout);
+    Object.values(colorTimers.current).forEach(clearTimeout);
+  }, []);
+  function commit(stage: Stage, changes: Partial<Stage>) {
+    const diff: Partial<Stage> = {};
+    let any = false;
+    for (const k of Object.keys(changes) as (keyof Stage)[]) {
+      if (changes[k] !== stage[k]) { (diff as Record<string, unknown>)[k] = changes[k]; any = true; }
+    }
+    setEdits(prev => {
+      const mine = { ...(prev[stage.id] ?? {}) };
+      for (const k of Object.keys(changes)) delete (mine as Record<string, unknown>)[k];
+      const n = { ...prev };
+      if (Object.keys(mine).length) n[stage.id] = mine; else delete n[stage.id];
+      return n;
+    });
+    if (!any) return;
+    updateStage(stage.id, diff);
+    setSavedAt(prev => ({ ...prev, [stage.id]: Date.now() }));
+    clearTimeout(savedTimers.current[stage.id]);
+    savedTimers.current[stage.id] = setTimeout(() => {
+      setSavedAt(prev => { const n = { ...prev }; delete n[stage.id]; return n; });
+    }, 2200);
+  }
+  /** A typed name on blur: the English one may not go blank (a nameless stage), the others clear to nothing. */
+  function commitName(stage: Stage, key: 'name' | 'nameHe' | 'nameRu') {
+    const raw = edits[stage.id]?.[key];
+    if (raw === undefined) return;
+    const v = String(raw).trim();
+    if (key === 'name' && !v) {
+      setEdits(prev => { const mine = { ...(prev[stage.id] ?? {}) }; delete mine.name; return { ...prev, [stage.id]: mine }; });
+      return;
+    }
+    commit(stage, { [key]: v || undefined } as Partial<Stage>);
+  }
+  /**
+   * A colour saves a beat after the hand stops — the native picker reports
+   * every step of a drag, and the hex box every keystroke. Only a whole
+   * colour (#rgb / #rrggbb) is ever written.
+   */
+  function pickColor(stage: Stage, c: string) {
+    setEdit(stage.id, { color: c });
+    clearTimeout(colorTimers.current[stage.id]);
+    if (!/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(c)) return;
+    colorTimers.current[stage.id] = setTimeout(() => commit(stage, { color: c }), 260);
   }
 
   function moveStage(id: string, dir: -1 | 1) {
@@ -691,8 +744,10 @@ function StageSettings({ stages, updateStage, addStage, deleteStage, onToast, cu
                 </Tooltip>
                 <div className="flex-1 flex flex-col gap-1">
                   <input
+                    data-stage-name={stage.id}
                     value={name}
                     onChange={e => setEdit(stage.id, { name: e.target.value })}
+                    onBlur={() => commitName(stage, 'name')}
                     placeholder={s.stageNameEnglishPlaceholder}
                     className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30"
                   />
@@ -700,6 +755,7 @@ function StageSettings({ stages, updateStage, addStage, deleteStage, onToast, cu
                     data-stage-he
                     value={(edit.nameHe ?? stage.nameHe) ?? ''}
                     onChange={e => setEdit(stage.id, { nameHe: e.target.value })}
+                    onBlur={() => commitName(stage, 'nameHe')}
                     placeholder="שם בעברית"
                     dir="rtl"
                     className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30 text-right"
@@ -710,6 +766,7 @@ function StageSettings({ stages, updateStage, addStage, deleteStage, onToast, cu
                     data-stage-ru
                     value={(edit.nameRu ?? stage.nameRu) ?? ''}
                     onChange={e => setEdit(stage.id, { nameRu: e.target.value })}
+                    onBlur={() => commitName(stage, 'nameRu')}
                     placeholder="Название по-русски"
                     className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30"
                   />
@@ -719,8 +776,9 @@ function StageSettings({ stages, updateStage, addStage, deleteStage, onToast, cu
                     // Hiding a stage that still holds jobs strands them, so it
                     // goes through the same move-them-first flow as deleting.
                     if (active && countIn(stage.id) > 0) setStageAction({ stage, mode: 'hide' });
-                    else setEdit(stage.id, { active: !active });
+                    else commit(stage, { active: !active });
                   }}
+                    data-stage-active={stage.id}
                     className={`text-xs px-3 py-1.5 rounded-lg border font-medium transition-all whitespace-nowrap ${active ? 'bg-green-50 border-green-200 text-green-700' : 'bg-gray-100 border-gray-200 text-gray-500'}`}>
                     {active ? s.activeLabel : s.hiddenLabel}
                   </button>
@@ -734,7 +792,7 @@ function StageSettings({ stages, updateStage, addStage, deleteStage, onToast, cu
                   return (
                     <div className="flex flex-col items-end gap-1 flex-shrink-0">
                       <button data-stage-kind={stage.id} data-kind={kind}
-                        onClick={() => setEdit(stage.id, { kind: kind === 'work' ? 'marker' : 'work' })}
+                        onClick={() => commit(stage, { kind: kind === 'work' ? 'marker' : 'work' })}
                         className="text-[10px] px-2 py-1 rounded-lg border font-bold uppercase tracking-wide whitespace-nowrap"
                         style={kind === 'marker'
                           ? { backgroundColor: '#f1f5f9', borderColor: '#cbd5e1', color: '#475569' }
@@ -745,7 +803,7 @@ function StageSettings({ stages, updateStage, addStage, deleteStage, onToast, cu
                         <label className="flex items-center gap-1 text-[10px] text-gray-500 whitespace-nowrap cursor-pointer">
                           <input type="checkbox" data-stage-everywhere={stage.id}
                             checked={!!(edit.everywhere ?? stage.everywhere)}
-                            onChange={e => setEdit(stage.id, { everywhere: e.target.checked || undefined })} />
+                            onChange={e => commit(stage, { everywhere: e.target.checked || undefined })} />
                           {s.setEverywhere}
                         </label>
                       )}
@@ -762,9 +820,12 @@ function StageSettings({ stages, updateStage, addStage, deleteStage, onToast, cu
                     </div>
                   );
                 })()}
-                <Tooltip text={s.saveChanges}>
-                  <button data-stage-save onClick={() => saveStage(stage)} className="p-2 text-[#1e3a5f] hover:bg-[#1e3a5f]/5 rounded-lg"><Save size={16} /></button>
-                </Tooltip>
+                {/* No Save button: every field saved itself. The tick says so. */}
+                <span data-stage-saved={stage.id} aria-live="polite"
+                  className={`flex items-center gap-1 text-[11px] font-bold text-emerald-600 whitespace-nowrap transition-opacity duration-300 ${
+                    savedAt[stage.id] ? 'opacity-100' : 'opacity-0'}`}>
+                  <Check size={13} /> {s.stageAutoSaved}
+                </span>
                 <Tooltip text={s.deleteStageTooltip}>
                   <button onClick={() => setStageAction({ stage, mode: 'delete' })}
                     className="p-2 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg"><Trash2 size={16} /></button>
@@ -773,7 +834,7 @@ function StageSettings({ stages, updateStage, addStage, deleteStage, onToast, cu
               {isExpanded && (
                 <div className="px-4 pb-4 border-t border-gray-100 pt-3 bg-gray-50">
                   <p className="text-xs font-medium text-gray-500 mb-2">{s.pickColor}</p>
-                  <ColorPickerWithPresets value={color} onChange={c => setEdit(stage.id, { color: c })} />
+                  <ColorPickerWithPresets value={color} onChange={c => pickColor(stage, c)} />
                 </div>
               )}
             </div>

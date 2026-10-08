@@ -57,7 +57,7 @@ const world = () => page.evaluate(() => {
   const t = getComputedStyle(moved).transform;
   const m = t && t !== 'none' ? t.match(/matrix\(([^)]+)\)/) : null;
   const n = m ? m[1].split(',').map(Number) : [1, 0, 0, 1, 0, 0];
-  return { w: w.offsetWidth, h: w.offsetHeight, panX: Math.round(n[4]), panY: Math.round(n[5]) };
+  return { w: w.offsetWidth, h: w.offsetHeight, panX: Math.round(n[4]), panY: Math.round(n[5]), z: n[0] };
 });
 
 const before = await world();
@@ -65,9 +65,14 @@ console.log('       world at rest:', JSON.stringify(before));
 check(!!before && before.w >= 3200, 'the far note holds the board open', `${before?.w}px wide`);
 
 // Pan right so the far note is on screen and there IS empty board past it.
+// The distance is worked out from the zoom the board opened at: the note's
+// centre (world x 3100) lands at screen x 700. At a real zoom of 1 that is
+// the 2400px this harness always dragged; the board's "100%" is a real 0.75
+// since 2026-10-08 (boardZoom.ts), where 2400px overshot it off the left.
+const panBy = before.panX - (700 - 3100 * before.z);
 await page.mouse.move(700, 500);
 await page.mouse.down({ button: 'middle' });
-await page.mouse.move(-1700, 500, { steps: 20 });
+await page.mouse.move(700 - panBy, 500, { steps: 20 });
 await page.mouse.up({ button: 'middle' });
 await page.waitForTimeout(500);
 

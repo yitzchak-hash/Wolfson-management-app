@@ -57,7 +57,10 @@ await page.waitForTimeout(500);
 const after = await stored();
 check((after.w ?? 0) > 260 && (after.h ?? 0) > 160, `the new size is stored (${after.w}×${after.h})`);
 const box1 = await tile.boundingBox();
-check(Math.abs(box1.width - after.w) < 3, 'the tile draws at its stored size');
+// The screen box is the stored size times the board's REAL zoom — the board
+// opens at its "100%", a real 0.75 since 2026-10-08 (boardZoom.ts).
+const zNow = await page.evaluate(() => { const w = document.querySelector('[data-board-world]'); return w.getBoundingClientRect().width / w.offsetWidth; });
+check(Math.abs(box1.width - after.w * zNow) < 3, `the tile draws at its stored size (${box1.width.toFixed(0)} on screen = ${after.w} × ${zNow})`);
 
 // 0 mid-gesture puts it back.
 await tile.hover();

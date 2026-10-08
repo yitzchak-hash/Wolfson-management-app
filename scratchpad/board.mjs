@@ -115,7 +115,9 @@ if (await hundred.count()) {
   await page.waitForTimeout(400);
   const home = await readPan();
   console.log('pan after 100%:', JSON.stringify(home));
-  console.log(home && home.z === 1 && Math.abs(home.x) <= 3
+  // "100%" is the board's own unit — a REAL zoom of 0.75 since the owner's
+  // 2026-10-08 ruling (what read 75% now reads 100%; src/data/boardZoom.ts).
+  console.log(home && Math.abs(home.z - 0.75) < 0.001 && Math.abs(home.x) <= 3
     ? 'PASS 100% comes home flush to the corner'
     : `FAIL 100% did not settle on the corner: ${JSON.stringify(home)}`);
 } else {

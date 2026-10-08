@@ -61,6 +61,7 @@ import { JobTile, BoardNode, BoardHandlers, TILE_W, TILE_H, tileSize } from '../
 import { useTouchGestures, isFingerTouch } from '../hooks/useTouchGestures';
 import { detectPasteIntent, fieldForIntent, canCreateFromIntent, PasteIntent } from '../data/pasteIntent';
 import { arrangeGrid } from '../data/arrangeGrid';
+import { BOARD_ZOOM_STEPS, HOME_ZOOM, shownZoomPct, realZoomFromPct, nearestRung, defaultZoomFromStored, storedFromRealZoom } from '../data/boardZoom';
 import { StrokeNib, nibDash } from '../components/board/BoardNodes';
 import { pointsBounds, fmtPoints, planErase, strokeRecord } from '../data/boardInk';
 import { EraserCursor } from '../components/board/EraserCursor';
@@ -704,7 +705,7 @@ export function GeneralJobsPage() {
   const [markStyle, setMarkStyle] = useState({ color: '#facc15', width: 16, nib: 'chisel' as StrokeNib });
   const [exportMenu, setExportMenu] = useState(false);
   const [titleEdit, setTitleEdit] = useState<string | null>(null);
-  const [zoomField, setZoomField] = useState('100');
+  const [zoomField, setZoomField] = useState('100');  // DISPLAYED % (boardZoom.ts)
   /** True while a left-button-held wheel zoom is happening, so nothing drags. */
   const zoomingWithButton = useRef(false);
   /** Left button currently held, tracked here because a wheel event's
@@ -957,10 +958,9 @@ export function GeneralJobsPage() {
    * — the same rule as the Drive desktop root.
    */
   const defaultZoomKey = `board_default_zoom_${currentProjectId}`;
-  const [zoom, setZoom] = useState(() => {
-    const stored = Number(localStorage.getItem(defaultZoomKey));
-    return stored >= 0.25 && stored <= 3 ? stored : 1;
-  });
+  // The key holds a DISPLAYED fraction; the state is the REAL zoom. With
+  // nothing stored the board opens at its own "100%" — the old 75%.
+  const [zoom, setZoom] = useState(() => defaultZoomFromStored(localStorage.getItem(defaultZoomKey)));
   const [pan, setPan] = useState({ x: 0, y: 0 });
   /**
    * The live zoom and pan, for handlers that must compute both together.
@@ -1646,8 +1646,13 @@ export function GeneralJobsPage() {
   }
   const panRef = useRef<{ px: number; py: number; ox: number; oy: number } | null>(null);
 
-  /** Discrete steps: text renders far better and "am I at 100%?" is answerable. */
-  const ZOOM_STEPS = [0.25, 0.33, 0.5, 0.67, 0.75, 1, 1.25, 1.5, 2, 3];
+  /**
+   * Discrete steps: text renders far better and "am I at 100%?" is answerable.
+   * REAL zooms — the ladder people read (25/33/50/67/75/100/125/150/200/300)
+   * times the board's zoom unit, so "100%" is what used to be 75% (owner,
+   * 2026-10-08). See src/data/boardZoom.ts.
+   */
+  const ZOOM_STEPS = BOARD_ZOOM_STEPS;
   /** The zoom the whole board fits at, written each render from the live world size. */
   const fitZoomRef = useRef(0.25);
   /** The live world size, written each render beside fitZoomRef. */
@@ -1757,7 +1762,7 @@ export function GeneralJobsPage() {
     setPan(nextPan);
   }, []);
   // The field follows the zoom unless it is being typed in.
-  useEffect(() => { setZoomField(String(Math.round(zoom * 100))); }, [zoom]);
+  useEffect(() => { setZoomField(String(shownZoomPct(zoom))); }, [zoom]);
 
   /**
    * The header zoom buttons anchor at the MIDDLE of the view — the owner's
@@ -5400,8 +5405,8 @@ function isPointerNode(el: CanvasElement | undefined): boolean {
     onGesture: useCallback((scale: number, dx: number, dy: number) => {
       const st = pinchStart.current;
       if (!st) return;
-      const floor = Math.min(0.25, fitZoomRef.current || 0.25);
-      const next = Math.min(3, Math.max(floor, st.zoom * scale));
+      const floor = Math.min(ZOOM_STEPS[0], fitZoomRef.current || ZOOM_STEPS[0]);
+      const next = Math.min(ZOOM_STEPS[ZOOM_STEPS.length - 1], Math.max(floor, st.zoom * scale));
       const k = next / st.zoom;
       setZoom(next);
       // The world point under the FIRST-touch centre stays under it (scaled
@@ -5532,8 +5537,10 @@ function isPointerNode(el: CanvasElement | undefined): boolean {
     const headroom = hb ? Math.max(0, Math.min(hb.bottom - r.top, r.height * 0.4)) : 0;
     const b = contentBounds();
     if (!b) return;
-    const raw = Math.min(r.width / (b.w + 48), (r.height - headroom) / (b.h + 48), 1);
-    const MIN = r.width < 700 ? 0.5 : 0.25;
+    // Capped at the board's own 100% (HOME_ZOOM); the phone's legibility
+    // floor is the real half-scale it always was — the "67%" rung now.
+    const raw = Math.min(r.width / (b.w + 48), (r.height - headroom) / (b.h + 48), HOME_ZOOM);
+    const MIN = r.width < 700 ? ZOOM_STEPS[3] : ZOOM_STEPS[0];
     const s = Math.max(raw, MIN);
     const rungs = zoomSteps();
     const step = [...rungs].reverse().find(z => z <= s) ?? rungs[0];
@@ -5575,11 +5582,10 @@ function isPointerNode(el: CanvasElement | undefined): boolean {
 
   /** Typing a percentage snaps to the nearest step the board actually uses. */
   function commitZoomField() {
-    const want = Number(zoomField) / 100;
-    if (!Number.isFinite(want) || want <= 0) { setZoomField(String(Math.round(zoom * 100))); return; }
-    const all = zoomSteps();
-    const step = all.reduce((best, z) =>
-      Math.abs(z - want) < Math.abs(best - want) ? z : best, all[0]);
+    // Typed in DISPLAYED percent; the ladder is real zoom.
+    const want = realZoomFromPct(Number(zoomField));
+    if (!Number.isFinite(want) || want <= 0) { setZoomField(String(shownZoomPct(zoom))); return; }
+    const step = nearestRung(zoomSteps(), want);
     setZoom(step);
     setPan(p => clampPanRef.current(p));
   }
@@ -6376,7 +6382,7 @@ function isPointerNode(el: CanvasElement | undefined): boolean {
             <button onClick={() => zoomCentre(1)} title="Zoom in"
               className="w-8 h-9 text-gray-500 hover:bg-gray-50 text-base font-bold">+</button>
             <span className="hidden sm:block w-px h-5 bg-gray-200" />
-            <button onClick={() => { setZoom(1); setPan(homePanRef.current(1)); }}
+            <button onClick={() => { setZoom(HOME_ZOOM); setPan(homePanRef.current(HOME_ZOOM)); }}
               title="Back to 100%"
               className="hidden sm:block px-2.5 h-9 text-[11px] font-bold text-gray-500 hover:bg-gray-50">100%</button>
             <button onClick={zoomToFit} title="Fit the whole board"
@@ -6615,11 +6621,20 @@ function isPointerNode(el: CanvasElement | undefined): boolean {
                     defaultValue={Math.round((Number(localStorage.getItem(defaultZoomKey)) || 1) * 100)}
                     data-default-zoom
                     onBlur={e => {
+                      // The key holds the DISPLAYED fraction (1.5 = 150%);
+                      // the board scales by the real zoom (boardZoom.ts).
                       const pct = Math.round(Number(e.target.value));
-                      if (!Number.isFinite(pct) || pct === 100) { localStorage.removeItem(defaultZoomKey); return; }
+                      if (!Number.isFinite(pct)) return;
+                      // Cleared, or 100: back to the board's own 100%.
+                      if (pct === 100 || !e.target.value.trim()) {
+                        localStorage.removeItem(defaultZoomKey);
+                        setZoom(HOME_ZOOM); setPan(pp => clampPanRef.current(pp, HOME_ZOOM));
+                        return;
+                      }
                       const v = Math.min(3, Math.max(0.25, pct / 100));
                       localStorage.setItem(defaultZoomKey, String(v));
-                      setZoom(v); setPan(pp => clampPanRef.current(pp, v));
+                      const real = defaultZoomFromStored(String(v));
+                      setZoom(real); setPan(pp => clampPanRef.current(pp, real));
                       setToast(`The board will open at ${Math.round(v * 100)}%`);
                     }}
                     className="w-16 text-[10.5px] border border-gray-200 rounded-lg px-1.5 py-1 bg-white text-right tabular-nums" />
@@ -6627,8 +6642,8 @@ function isPointerNode(el: CanvasElement | undefined): boolean {
                 </div>
                 <button
                   onClick={() => {
-                    localStorage.setItem(defaultZoomKey, String(zoom));
-                    setToast(`The board will open at ${Math.round(zoom * 100)}%`);
+                    localStorage.setItem(defaultZoomKey, storedFromRealZoom(zoom));
+                    setToast(`The board will open at ${shownZoomPct(zoom)}%`);
                   }}
                   title="Save the current zoom as this computer's starting zoom"
                   className="text-[9.5px] font-bold px-1.5 py-1 rounded-lg border border-gray-200 text-gray-500 hover:text-[#1e3a5f]">

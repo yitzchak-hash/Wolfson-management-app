@@ -332,6 +332,7 @@ export function LatestPhoto({ c, sample = false }: { c: WidgetCtx; sample?: bool
   // Every workspace's shots, newest first — the wall stands on the Job Board
   // while the pictures come in on Wolfson and Netiv.
   const shots = useSitePhotos(c, sample);
+  const words = useStore(st => st.mainUiStrings);
   const reel = useMemo(() => shots.slice(0, 12), [shots]);
   const [at, setAt] = useState(0);
   const viewer = useShotViewer();
@@ -353,8 +354,8 @@ export function LatestPhoto({ c, sample = false }: { c: WidgetCtx; sample?: bool
     <div className="w-full h-full relative overflow-hidden bg-slate-100">
       {s
         ? <ShotTile shot={s} size={1.6} onOpen={() => viewer.open(reel, i)} className="absolute inset-0 w-full h-full rounded-none" />
-        : <span className="absolute inset-0 flex items-center justify-center text-[13px] text-slate-400">
-            No photos yet
+        : <span data-site-photos-empty className="absolute inset-0 flex items-center justify-center text-[13px] text-slate-400">
+            {words.sitePhotosEmpty || 'No photos yet'}
           </span>}
       {viewer.node}
     </div>
@@ -372,6 +373,7 @@ export function LatestPhoto({ c, sample = false }: { c: WidgetCtx; sample?: bool
 export function PhotoWall({ c, sample = false }: { c: WidgetCtx; sample?: boolean }) {
   const shots = useSitePhotos(c, sample);
   const viewer = useShotViewer();
+  const words = useStore(st => st.mainUiStrings);
   const groups = useMemo(() => {
     const byJob = new Map<string, { key: string; name: string; label: string; color: string; shots: SiteShot[] }>();
     for (const s of shots) {
@@ -384,9 +386,9 @@ export function PhotoWall({ c, sample = false }: { c: WidgetCtx; sample?: boolea
   }, [shots]);
 
   return (
-    <Card label="From site">
+    <Card label={words.sitePhotosTitle || 'Live from site'}>
       {groups.length === 0 ? (
-        <span className="text-[13px] text-slate-400">No photos yet.</span>
+        <span data-site-photos-empty className="text-[13px] text-slate-400">{words.sitePhotosEmpty || 'No photos yet'}</span>
       ) : (
         <div className="h-full overflow-hidden grid gap-2.5 content-start">
           {groups.map(g => (

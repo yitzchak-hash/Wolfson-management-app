@@ -53,7 +53,9 @@ export function ShotTile({ shot, onOpen, caption = true, size = 1, className = '
 }) {
   const fresh = isFreshShot(shot);
   const video = shot.kind === 'video';
-  const useVideoFrame = video && !!shot.playable && !shot.thumb;
+  // A film that can play draws its own first frame — never an <img> of the
+  // video file. Only a Drive-only film falls back to Drive's thumbnail.
+  const useVideoFrame = video && !!shot.playable;
   return (
     <button type="button" data-no-drag data-el-action data-site-shot={shot.id} data-shot-kind={shot.kind}
       data-fresh={fresh ? '1' : undefined}

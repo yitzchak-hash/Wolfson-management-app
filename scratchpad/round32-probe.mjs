@@ -34,6 +34,10 @@ await ctx.addInitScript(([sun]) => {
       { id: 'CE-rota', type: 'widget', widget: 'rota', x: 1050, y: 560, w: 420, h: 260,
         text: '', color: '#ffffff',
         data: { people: ['c:C-a'], firstWeek: sun, weekCount: 1, cells: {} } },
+      // The seeded Goals fixture lands at the view's centre, which at the new
+      // 100% (a real 0.75) is exactly where the right-drag presses — park it.
+      { id: 'CE-goals-board', type: 'widget', widget: 'goals', x: 2600, y: 1800, w: 420, h: 300,
+        text: '', color: '#ffffff', data: {} },
     ],
   }));
 }, [sunday]);
@@ -55,7 +59,10 @@ const worldXf = () => page.evaluate(() => {
   return w ? getComputedStyle(w.parentElement).transform : '';
 });
 const xfBefore = await worldXf();
-const sx = t2.x + t2.width + 120, sy = t2.y + t2.height + 160;
+// Start in the gap right of the second tile. +120 sat in empty board at the
+// old 100%; at the new 100% (a real 0.75, boardZoom.ts) it lands ON the
+// notebook, which takes the press as its own — +40 is empty at either zoom.
+const sx = t2.x + t2.width + 40, sy = t2.y + t2.height + 160;
 await page.mouse.move(sx, sy);
 await page.mouse.down({ button: 'right' });
 for (let i = 1; i <= 8; i++) {
