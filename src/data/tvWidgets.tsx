@@ -576,6 +576,7 @@ export const TV_ALLOWED = new Set([
   'w-title', 'banner', 'quote', 'divider', 'legend', 'photo',
   'w-countdown', 'w-stopwatch', 'clock',
   'board-mini', 'project-mini', 'rota', 'goals', 'search-tile', 'file-tray',
+  'who-did-what',
   // Retired ids (widgetAliases.ts) — hardcoded rather than imported, because
   // importing the alias table from here would close a runtime cycle.
   'tv-workspace', 'tv-out-today', 'tv-late', 'tv-week-done', 'tv-tomorrow',

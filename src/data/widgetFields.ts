@@ -259,6 +259,25 @@ export const WIDGET_FIELDS: Record<string, WidgetField[]> = {
       hint: 'Counted from the day the task was handed out.',
     },
   ],
+  'who-did-what': [
+    title(),
+    {
+      key: 'days', label: 'Window', kind: 'select',
+      options: [
+        { value: '1', label: 'Today only' }, { value: '3', label: 'Last 3 days' },
+        { value: '7', label: 'Last 7 days' }, { value: '14', label: 'Last 14 days' },
+        { value: '30', label: 'Last 30 days' },
+      ],
+      hint: 'Counted from when each task was closed — every workspace at once.',
+    },
+    {
+      key: 'photos', label: 'Pictures under each line', kind: 'select',
+      options: [{ value: '1', label: 'Show them' }, { value: '0', label: 'Hide them' }],
+    },
+    {
+      key: 'contractorId', label: 'Whose work', kind: 'contractor', allowNone: 'Everybody',
+    },
+  ],
   'active-jobs': [
     title(),
     {
@@ -1076,6 +1095,9 @@ export const WIDGET_PREVIEW: Record<string, Record<string, unknown>> = {
   // on a shelf is indistinguishable from a widget that does not work.
   'gone-quiet': { days: 0 },
   'active-jobs': { days: 30 },
+  // A canned week of finished work — the shelf reads no store and makes no
+  // network calls, and an empty "nothing closed" card previews nothing.
+  'who-did-what': { sample: 1 },
   'backlog-trend': { weeks: 8 },
   'floor-by-floor': {},
   'no-date': {},
