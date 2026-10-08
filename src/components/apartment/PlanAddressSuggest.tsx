@@ -6,6 +6,9 @@ import {
 } from '../../data/planAddress';
 import { aiPlanReadingAvailable, aiReadPlanImage, type Frac } from '../../data/planAi';
 
+/** A title-block LABEL on its own — what a box over an outlined value catches. */
+const LABEL_ONLY = /^(address|floor|phone|tel\.?|mobile|city|project name(\/ ?city)?|family name|contact info|job ?#|כתובת|קומה|טלפון|נייד|עיר|שם משפחה|שם הפרויקט)\s*[:/.]?$/i;
+
 /** A fraction box as CSS percentages, for an overlay laid over the picture it describes. */
 const pctBox = (b: Frac): React.CSSProperties => ({
   left: `${Math.min(b.x0, b.x1) * 100}%`,
@@ -111,20 +114,26 @@ function RegionPicker({ fileId, kind, onUse, onClose }: {
     // The pull, RIGHT AWAY — the box has barely been let go of.
     const b = boxRef.current;
     if (b && Math.abs(b.x1 - b.x0) > 0.005 && Math.abs(b.y1 - b.y0) > 0.005) {
-      const local = readerRef.current.read(b);
-      setReadText(local);
+      // A LABEL is never the reading ("Reads: Floor" — the 2026-10-08 sheet,
+      // where the address itself is drawn as outlines and the only text in
+      // the box was the next row's label).
+      const raw = readerRef.current.read(b);
+      const local = LABEL_ONLY.test(tidy(raw)) ? '' : raw;
       // With an AI key on the server the CROP goes to the model, which reads
-      // exactly what is inside the box — the text layer is the fallback.
+      // exactly what is inside the box — the text layer is the fallback, and
+      // it is not shown while the model is still looking.
       const seq = ++readSeq.current;
       if (aiPlanReadingAvailable()) {
+        setReadText('');
         setAiBusy(true);
         void aiReadPlanImage(readerRef.current.crop(b), kind, true).then(ai => {
           if (seq !== readSeq.current) return;
           setAiBusy(false);
           const v = ai ? keepAi(tidy(kind === 'address' ? ai.address : ai.phone)) : '';
-          if (v) setReadText(v);
+          setReadText(v || local);
         });
       } else {
+        setReadText(local);
         setAiBusy(false);
       }
     } else {
