@@ -884,6 +884,24 @@ Last commits, newest first (see `git log`):
   `npx vite --port 5173` and `VITE_DRIVE_API_KEY=test npx vite --port 5174`.
 
 ## The last reply the owner saw (so the next one continues it)
+**Newest (2026-10-08, the second recording)**: the reply opened with the
+full transcript of "Recording 2026-10-08 115349", one heading per minute,
+then the END RESULT line and 38 numbered bullets: his words + video time →
+the fix → Done / Waiting. They covered all of V2-1…V2-36, the three
+seen-not-said bugs and the chat ask (the worker's own move with the
+same-day revert). It ended with "What I need from you":
+1. the notebook bar look (A–D, link to Notebook Card Options) and its three
+   optional extras;
+2. Igor's open "working here today" reports picked on Sold/Start;
+3. whether the "Next:" cue is now answered;
+4. adding ANTHROPIC_API_KEY in Vercel (health said `planReader: openai`),
+   with the clicks spelled out;
+5. optionally a stronger shared app key than the current one.
+
+It also said that a machine whose saved board view sat at the old 100% opens
+reading 125% until 100% is pressed once. Then the link and the bold one-line
+verdict.
+
 **Newest (2026-09-23, Live from site)**: the reply said the widget had only
 ever shown the workspace you were standing in, which on the TV was the Job
 Board's own uploads while the workers send from Wolfson and Netiv; that it
