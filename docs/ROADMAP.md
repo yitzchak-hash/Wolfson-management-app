@@ -43,13 +43,22 @@ asks for it. ☑ done · ☐ next · ✎ awaiting Yitzchak's word. (Standing ord
   off; the A1 floor-10 placeholder gone; "Skipped a stage" retired; the
   deleted-records list keeps every delete again; the header fits at every
   width.
+- ☑ 2026-10-08 (the second screen recording): Sold/Start follows the work;
+  a building unit shows its last stage done; the stage panel is one ordered
+  line with arrows; the plan reader runs on Opus 5.5 at high effort and reads
+  the title block; a worker moves his own mistaken work and the old
+  apartment goes back to how it was that morning; the "Who did what"
+  widget; the worker's phone, notebook, calendars, Tasks page, window and
+  board fixes (see `docs/feedback/2026-10-08-115349.md`).
 
 ## Next (in order)
 - ☐ Watch on production: the foreign photo listener (no Firebase in the
   container), the plan pane's Windows scrollbar re-fit, the Leads folder
   discovery, TikTok's player protocol end to end.
-- ✎ The "Next:" cue on a building square (the headline is the NEXT stage to
-  do, which reads as if it were done) — asked again in plain words.
+- ✎ The notebook bar look — four options drawn (Notebook Card Options,
+  A–D); build the one he picks.
+- ✎ The "Next:" cue on a building square — probably answered by the
+  last-done headline (10-08); confirm with him.
 - ✎ The tablet studio layout (the "Studio on the Tablet" plan page: one
   bar, 56px rail, docked tray) — build on Yitzchak's numbers.
 - ✎ OCR for scanned plans (tesseract) when scans matter.

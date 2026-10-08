@@ -9247,3 +9247,116 @@ Hebrew. Verified non-vacuous against the old header (390/900/1280 fail).
 survivor to alias to. Off RECENT / SHELF / WIDGET_PREVIEW; its pencil keeps a
 title. No board in production carried a copy (checked all three
 `canvasElements` collections).
+
+---
+
+# v2 — the second screen recording (2026-10-08): the work moves the stages, the plan reader reads the title block
+
+## Sold/Start follows the work (`isStartStage` in stageMarks.ts)
+"Once anything is done after Sold/Start, Sold/Start gets marked off." Inside
+`withImpliedDone` (so `applyMarks`, the one writer, enforces it), a FRESH done
+or doing on any stage ordered after the start stage ticks it done. Fresh means
+the mark changed in this write, so unticking Sold/Start by hand afterwards
+stands. The start stage is `skhtatb` or a name reading Sold/Start. The Job
+Board never meets it (`ownStage`). Tested in `impliedone-test.mjs`.
+
+## A building unit's headline is its LAST stage done (`lastDoneHeadline`)
+"It doesn't move to that stage — it just shows the last stage that was done."
+For a building unit (`buildingId` set and not `'G'`), `headlineStageId`
+resolves in this order:
+1. doing
+2. pending
+3. the last stage done in order, while something is still left
+4. the next to do, when nothing is done yet
+5. the closing marker, when everything is done or off
+
+The Job Board keeps "next to do". `marksForCurrent` for a building unit marks
+the target X itself done (the old "the job is at X" meant X was next).
+Re-encoded to this ruling: `stagescope-test`, `bubbles-probe`. Its group
+selectors now read `[data-stage-flow] [data-stage-state=…]`.
+
+## The stage panel is one ordered line (`StagePicker.tsx`)
+There are no group headings any more. `data-stage-flow` holds every stage of
+the set plus the off ones, in the workspace's order, with a small
+`ChevronRight` (`data-stage-arrow`) between them; the arrow is rotated under
+RTL. Every stage keeps its state hook (`data-stage-state`). An off stage sits
+in its place with its put-back control. Done is a tick, never a strike.
+
+## The worker's mistaken apartment goes back to how it was (`marksBefore`)
+The owner (chat, 2026-10-08): the apartment a worker moved his work away from
+"should automatically go back to the previous state it was in before he
+touched it. That day."
+- `ContractorAssignment.marksBefore` / `marksBeforeAt` hold the apartment's
+  `stageMarks` at the moment the worker STARTED (the portal's `startWork`
+  writes it).
+- `planTaskMove`, when the task carries a snapshot, restores exactly the
+  stages it touched to their snapshot state: the stages it wrote, plus the
+  implied Sold/Start and Drilling. Two rules hold even then:
+  - a stage another task on that apartment also explains stays;
+  - a stage the office changed by hand since stays.
+- The moved task gets a fresh snapshot of the NEW apartment (`plan.toBefore`),
+  so a second move reverts correctly too.
+- The old apartment's history line carries `restoredBefore`, which reads
+  "its stages put back as they were before".
+
+Tested in `taskmove-test.mjs` (8 revert checks).
+
+## The plan reader reads the TITLE BLOCK, and the model reads it first
+The office's sheets draw the Hebrew address as OUTLINES, and their Hebrew text
+layer is garbled. The local reader took a margin caption on the "Address:"
+row, because `columnLine` returned the WHOLE band when nothing sat in the
+label's column. Now:
+- `columnLine` returns an empty line when the column is empty.
+- An unlabelled candidate counts only inside the title block: landscape
+  x0 ≥ 0.62 or y0 ≥ 0.82; portrait y0 ≥ 0.68 or x0 ≥ 0.66.
+- A label's value is read only from the label part's own column.
+- Server (`planRead` in api/geocode.js): `claude-opus-5-5`,
+  `thinking: {type:'adaptive'}`, `output_config: {effort:'high'}`,
+  max_tokens 16000. It is sent a second image — the title block cropped
+  (`detail` / `detailWhere` in planAi.ts) and enlarged. The OpenAI fallback
+  is gpt-4o. `health` reports `planReader: anthropic|openai|none`.
+- An AI answer NOT found in the text layer is accepted only if all three hold
+  (`outlinedSpot`):
+  - its box is in the title block;
+  - the box holds ink;
+  - no text-layer text sits inside it.
+
+  An invented value pointing at blank paper or at real text is still refused
+  (`planhonest` holds).
+- The draw-a-box picker never offers a bare label (`LABEL_ONLY`: "Floor",
+  "כתובת:") and says "Reading the box…" while the model reads.
+
+## A widget's surface is laid out left-to-right under RTL (BoardItems)
+`WidgetSurface`'s outer box is `relative` and its inner box is
+`position:absolute; left:0; top:0`. Under `dir="rtl"`, an inner box in normal
+flow started from the RIGHT edge, and its scale transform (origin 0 0) pushed
+the drawing off the card's left side. Every widget in Hebrew showed half its
+width.
+
+## Who did what (`src/data/workDone.ts` + `WhoDidWhatWidget.tsx`)
+The owner's ask (recording 2026-10-08): finished work as sentences, newest
+first, from every workspace: "Ari finished ● Drilling in 27, 26, 25, 28 · A2".
+- **Links and pictures.** Each apartment is a link: `openJob` in the open
+  workspace, `openUnit` travel otherwise. The pictures sit under the line and
+  open the `MediaViewer`.
+- **Source.** The only source is CLOSED tasks (`completedAt`) and their
+  photos. The open workspace is live; the others come from snapshots on
+  `snapshotTick` (a shared cache keyed `tick|openPid`). Activity logs are
+  never read, because only the open workspace's log is live.
+- **The pure builder.** `workDone()` makes one line per worker × local day ×
+  workspace × stage. Stages come from `stagesWorked`, else `taskStageIds`.
+- **What each line says.**
+  - A `stagesUnfinished` stage reads "(not finished)".
+  - Lines naming the SAME flats merge into "Wall Units + Outdoor Units".
+  - A stage-tagged photo appears only under its own stage.
+  - A task with no stages shows its own words.
+  - A problem reads "fixed a problem", dated at `problem.closedAt`.
+  - A general job with visits is skipped (its visits are reports already).
+- **Grouped jobs.** It reads the store's full apartment list, so a job filed
+  into a group still appears.
+- **Limits and pencil.** It draws 30 lines and 8 thumbnails per line. The
+  pencil sets the days, pictures on or off, and one worker.
+- **Films.** A film with a playable address gets NO thumbnail, so its tile
+  draws its own first frame.
+- **Shelf and tests.** The shelf previews `sampleWork()`. Harnesses:
+  `workdone-test.mjs` (offline, 25) and `whodidwhat-probe.mjs` (37).
