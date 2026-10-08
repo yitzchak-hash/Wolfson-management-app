@@ -2310,6 +2310,22 @@ export interface MainUiStrings {
   tlQuietWindow: string;
   tlNoDates: string;
   tlJumpNext: string;
+  /** The Who-did-what widget's own words (owner, 2026-10-08). */
+  wdwTitle: string;
+  wdwWindow: string;
+  wdwFinished: string;
+  wdwWorkedOn: string;
+  wdwNotFinished: string;
+  wdwFixedProblem: string;
+  wdwWorked: string;
+  wdwIn: string;
+  wdwYesterday: string;
+  wdwEmpty: string;
+  wdwEmptyWho: string;
+  wdwPlaces: string;
+  wdwWorkers: string;
+  wdwShowMore: string;
+  wdwMorePhotos: string;
   navTasks: string;
   navAnalytics: string;
   navReports: string;
@@ -3191,6 +3207,21 @@ export const DEFAULT_MAIN_UI_STRINGS: MainUiStrings = {
   tlQuietWindow: 'Nothing scheduled in this window',
   tlNoDates: 'No dated tasks yet — give tasks due dates and they show here',
   tlJumpNext: 'Jump to the next task',
+  wdwTitle: 'Who did what',
+  wdwWindow: 'last {n} days',
+  wdwFinished: 'finished',
+  wdwWorkedOn: 'worked on',
+  wdwNotFinished: 'not finished',
+  wdwFixedProblem: 'fixed a problem',
+  wdwWorked: 'worked',
+  wdwIn: 'in',
+  wdwYesterday: 'Yesterday',
+  wdwEmpty: 'No work closed in the last {n} days',
+  wdwEmptyWho: 'Nothing closed by {who} in the last {n} days',
+  wdwPlaces: 'places',
+  wdwWorkers: 'workers',
+  wdwShowMore: 'Show {n} more',
+  wdwMorePhotos: 'See all {n} pictures',
   navTasks: 'Tasks',
   navAnalytics: 'Analytics',
   navReports: 'Reports',
@@ -4044,6 +4075,21 @@ export const HEBREW_MAIN_UI_STRINGS: MainUiStrings = {
   tlQuietWindow: 'אין משימות בתקופה הזו',
   tlNoDates: 'אין עדיין משימות עם תאריך — קבעו תאריכים והן יופיעו כאן',
   tlJumpNext: 'קפיצה למשימה הבאה',
+  wdwTitle: 'מי עשה מה',
+  wdwWindow: '{n} הימים האחרונים',
+  wdwFinished: 'סיים',
+  wdwWorkedOn: 'עבד על',
+  wdwNotFinished: 'לא הסתיים',
+  wdwFixedProblem: 'תיקן תקלה',
+  wdwWorked: 'עבד',
+  wdwIn: 'ב־',
+  wdwYesterday: 'אתמול',
+  wdwEmpty: 'לא נסגרה עבודה ב־{n} הימים האחרונים',
+  wdwEmptyWho: '{who} לא סגר עבודה ב־{n} הימים האחרונים',
+  wdwPlaces: 'מקומות',
+  wdwWorkers: 'עובדים',
+  wdwShowMore: 'הצג עוד {n}',
+  wdwMorePhotos: 'כל {n} התמונות',
   navTasks: 'משימות',
   navAnalytics: 'ניתוח',
   navReports: 'דוחות',
