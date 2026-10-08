@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Check, Clock, ChevronDown, AlertTriangle, X, Plus, Hammer, CalendarDays } from 'lucide-react';
+import { Check, Clock, ChevronDown, ChevronRight, AlertTriangle, X, Plus, Hammer, CalendarDays } from 'lucide-react';
 import { Stage, MainUiStrings, Apartment, ContractorAssignment, Contractor, ContractorPhoto, StageMark, getStageName } from '../../types';
 import {
   stageSetOf, liveStateOf, cycleMark, setMark, progressOf, isWorkStage, taskStageIds,
@@ -74,15 +74,9 @@ export function StagePicker({
   const notOnApt = workStages.filter(st => !set.some(x => x.id === st.id) && marks?.[st.id] !== 'off');
   const pendingCount = Object.values(marks ?? {}).filter(m => m === 'pending').length;
 
-  const groups: Array<{ key: StageState; label: string }> = [
-    { key: 'doing', label: ui.setHappeningNow },
-    { key: 'problem', label: ui.problemLabel },
-    { key: 'booked', label: ui.setBooked },
-    { key: 'pending', label: ui.setHalfDone },
-    { key: 'todo', label: ui.setStillToDo },
-    { key: 'done', label: ui.setDone },
-  ];
   const rows = set.map(st => ({ stage: st, state: stateOf(st.id) }));
+  const flow = [...rows, ...off.map(st => ({ stage: st, state: 'off' as StageState }))]
+    .sort((a, b) => a.stage.order - b.stage.order);
 
   /** The small line under a bubble: who is on it, when it is booked, how many pictures. */
   function whoLine(st: Stage, state: StageState): string {
@@ -179,7 +173,7 @@ export function StagePicker({
         }}
       >
         {ring(st, state)}
-        <span className="truncate" style={done ? { textDecoration: 'line-through' } : undefined}>{getStageName(st, rtl)}</span>
+        <span className="truncate">{getStageName(st, rtl)}</span>
         {who && <span className="text-[9.5px] font-semibold text-gray-500 whitespace-nowrap">{who}</span>}
         {state === 'pending' && <Clock size={11} className="pending-glow flex-shrink-0" style={{ color: '#f97316' }} />}
         {state === 'doing' && <Hammer size={10} className="flex-shrink-0" style={{ color: st.color }} />}
@@ -196,9 +190,6 @@ export function StagePicker({
     );
   };
 
-  const groupLabel = (text: string) => (
-    <div className="text-[9.5px] font-extrabold uppercase tracking-wider text-gray-400 mt-2 mb-1 first:mt-0">{text}</div>
-  );
 
   return (
     <>
@@ -255,32 +246,30 @@ export function StagePicker({
                 ))}
               </div>
             )}
-            {groups.map(g => {
-              const list = rows.filter(r => r.state === g.key);
-              if (!list.length) return null;
-              return (
-                <div key={g.key} data-stage-group={g.key}>
-                  {groupLabel(g.label)}
-                  <div className="flex flex-wrap gap-1.5">{list.map(r => bubble(r.stage, r.state))}</div>
-                </div>
-              );
-            })}
-            {off.length > 0 && (
-              <div data-stage-group="off">
-                {groupLabel(ui.setNotNeeded)}
-                <div className="flex flex-wrap gap-1.5">
-                  {off.map(st => (
-                    <span key={st.id} data-stage-bubble={st.id} data-stage-state="off"
+            {/* ONE line in the workspace's own order, a tiny arrow between
+                stages (owner, 2026-10-08: "we don't need to separate done and
+                still to do… just put Drilling in its right respective place,
+                with little tiny arrows in between them"). Each stage wears its
+                own state; a stage switched off sits in its place, dashed. */}
+            <div data-stage-flow className="flex flex-wrap items-center gap-x-1 gap-y-1.5">
+              {flow.map((r, i) => (
+                <React.Fragment key={r.stage.id}>
+                  {r.state === 'off' ? (
+                    <span data-stage-bubble={r.stage.id} data-stage-state="off"
                       className="inline-flex items-center gap-1.5 rounded-full border border-dashed border-gray-300 pl-1.5 pr-1 py-1 text-[11.5px] font-semibold text-gray-400 max-w-full">
-                      {ring(st, 'off')}
-                      <span className="truncate">{getStageName(st, rtl)}</span>
-                      <button data-stage-putback={st.id} onClick={() => onMarks(setMark(marks, st.id, 'todo'))}
+                      {ring(r.stage, 'off')}
+                      <span className="truncate">{getStageName(r.stage, rtl)}</span>
+                      <button data-stage-putback={r.stage.id} onClick={() => onMarks(setMark(marks, r.stage.id, 'todo'))}
                         className="text-[9.5px] font-bold text-[#1e3a5f] px-1.5 py-0.5 rounded-full hover:bg-[#1e3a5f]/10">{ui.setPutBack}</button>
                     </span>
-                  ))}
-                </div>
-              </div>
-            )}
+                  ) : bubble(r.stage, r.state)}
+                  {i < flow.length - 1 && (
+                    <ChevronRight data-stage-arrow size={12} strokeWidth={2.5}
+                      className={`text-gray-300 flex-shrink-0 ${rtl ? 'rotate-180' : ''}`} aria-hidden="true" />
+                  )}
+                </React.Fragment>
+              ))}
+            </div>
 
             {/* + add a stage: from the list, or a new custom one (locked answers 15 + 16). */}
             <div className="mt-2.5">
