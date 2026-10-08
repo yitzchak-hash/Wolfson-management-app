@@ -201,9 +201,10 @@ const read = page => page.evaluate(() => JSON.parse(localStorage.getItem('wolfso
   const a3 = d.apartments.find(x => x.id === 'A3-10');
   check(a1.stageMarks?.['s7-registers'] !== 'done', 'Registers DONE is gone from A1-10', JSON.stringify(a1.stageMarks));
   check(a1.stageMarks?.['s1-piping'] === 'done', 'Piping — another task\'s tick — is untouched on A1-10');
-  check(a1.currentStageId === 's7-registers', 'A1-10\'s headline walks back to Registers (next to do)', a1.currentStageId);
+  // A building unit's headline is its LAST stage done (owner, 2026-10-08).
+  check(a1.currentStageId === 's4-wall', 'A1-10\'s headline walks back to Wall Units (the last stage still done)', a1.currentStageId);
   check(a3.stageMarks?.['s7-registers'] === 'done', 'Registers DONE is on A3-10', JSON.stringify(a3.stageMarks));
-  check(a3.currentStageId === 's7-panels', 'A3-10\'s headline walks on to Access Panels', a3.currentStageId);
+  check(a3.currentStageId === 's7-registers', 'A3-10\'s headline reads Registers (now the last stage done)', a3.currentStageId);
   const out = d.activityLogs.find(l => l.actionType === 'task_moved_out');
   const inn = d.activityLogs.find(l => l.actionType === 'task_moved_in');
   check(out?.apartmentId === 'A1-10' && inn?.apartmentId === 'A3-10', 'one history line on EACH apartment');

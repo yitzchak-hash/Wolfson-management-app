@@ -229,7 +229,9 @@ await page.locator('[data-apt-id="A1-7"]').first().click();
 await page.waitForTimeout(900);
 await page.locator('.drawer-panel button:has-text("Tasks")').first().click();
 await page.waitForTimeout(500);
-const pill = await page.locator('[data-stage-pill]').first().innerText();
+// A CLOSED task's card wears its stages as done pills (2026-10-08) — the
+// from→to chip is for an open task.
+const pill = (await page.locator('[data-task-done-stage]').allInnerTexts()).join(' | ');
 check(pill.includes('Concealed units') && pill.includes('Extra drainage'), 'the task row names both stages it was for', pill);
 await page.locator('.drawer-panel button:has-text("Details")').first().click();
 await page.waitForTimeout(400);

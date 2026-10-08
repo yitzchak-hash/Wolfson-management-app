@@ -9483,3 +9483,62 @@ first, from every workspace: "Ari finished ● Drilling in 27, 26, 25, 28 · A2"
     drawer above the window.
   - Escape backs out: the drawer first, then the search, then the window.
 - Guard: `scratchpad/board-r48.mjs` (65).
+
+## The worker's phone (2026-10-08 recording)
+- **My Tasks orders through `orderTaskRows`** (`src/components/portal/portalOrder.ts`,
+  pure, `today` passed in; offline test `scratchpad/portalorder-test.mjs`).
+  The order is:
+  1. live problems
+  2. today's work (a multi-day task covering today counts as today)
+  3. past due, most recently due first
+  4. future, soonest first
+  5. undated
+
+  Then a `data-list-divider` line "Done · N", then done tasks with the most
+  recently closed first.
+- **The map** only offers workspaces with buildings (`allowedMaps`).
+  - A stored `portal_map_<token>` naming one without buildings is ignored.
+  - The map switches the workspace to its target itself (it used to sit on
+    "…" with the Job Board's name in the bar).
+  - Only apartments with an OPEN task of his are lit (`openAptIds`).
+- **"I'm going to work here"**:
+  - never offers Sold/Start (`isStartStage`);
+  - asks "What are you doing here today?";
+  - Start goes to a confirm step (`data-work-confirm` / `-yes` / `-back`)
+    that reads his picks AND the apartment and building back — the original
+    mix-up was the wrong tower.
+
+  `startWork` writes `marksBefore` + `marksBeforeAt` from the live record
+  before any mark is set.
+- **A stage report he started himself** (`stageReport && createdBy === him`)
+  can be moved with no permission. It is a big amber "Wrong apartment? Move
+  it". `MoveTaskDialog` takes an optional `note` (`data-move-note`): "<from>
+  goes back to exactly how it was before you started there", shown only when
+  the task carries `marksBefore`. Office tasks still need `moveOwnWork`.
+- **The task sheet**:
+  - "Task: …" sits on one line (`data-task-line`).
+  - Date, address and Waze share one row (`data-sheet-when-where`).
+  - Mark up is out of the plans header.
+  - The opened plan (`data-plan-view="open"`) takes the sheet's own shape
+    from `planAspect`. Its navy bar goes to a hidden `barInto` element. Its
+    corner row holds the pin controls (`controlsInto`), Download
+    (`data-plan-download`) and a blue Mark up (`data-plan-markup` /
+    `data-portal-markup`).
+  - Messages draw at 13px through a scoped style.
+  - `data-send-office` opens the composer, focused.
+- **The portal calendar folds** through TaskCalendar's own
+  `groupKey` = workspace, with the worker's `words`. The fold tail is
+  `'{n}'`, so "Wolfson · 6 ✓" fits a 52px phone cell, and the biggest fold
+  comes first. The week view uses the same `dayItems`
+  (`data-week-done-fold="<ws>:<day>"`, `data-week-done-one`).
+- **The "link not found" check sits below every hook.** Returning early
+  crashed a fresh phone whose worker record arrived from the cloud after the
+  page opened ("Rendered more hooks…").
+- **A task is late only when every day it covers is before today**
+  (`isLate`). `isPast(dueDate)` turned a task due today red from midnight.
+- Probe: `scratchpad/portal-r48.mjs` (51; `SHOTS=<dir>` for screenshots).
+- Re-encoded to this round's rules: `bubbles-probe` (done-card pills),
+  `movetask` (last-done headline), `round46-probe` (last-done headline),
+  `round41/44`, `activitycenter`.
+- `round40-probe`'s "a passed stage is crossed off" is red from the set
+  model, not this round: "Ready to start" is a MARKER, so it is never ticked.
