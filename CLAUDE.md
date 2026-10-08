@@ -9393,3 +9393,45 @@ first, from every workspace: "Ari finished ● Drilling in 27, 26, 25, 28 · A2"
     characters.
   - The health check scans every plans folder and one level down.
   - Guard: `scratchpad/drawer-r48.mjs` (53).
+
+## A busy day folds, calendars fold, and the Tasks page spans workspaces (2026-10-08 recording)
+- **Notebook bundles** (`TaskBundle.tsx`, `BUNDLE_MIN`, built inside
+  `barsByRow`): four or more single-day tasks of one person on one day in
+  one workspace draw as ONE bar, e.g. "5 tasks · Wolfson · 4 done · 1 open".
+  - It wears the workspace colour and a done-share band.
+  - Pressing it opens a sealed, portalled window: every task, open first,
+    beside the workspace's buildings drawn small from `floorRows` (live store
+    or snapshot) with the apartments lit — done green, open amber.
+  - A row or a lit cell opens the unit through the standing paths.
+  - Multi-day stretches are never bundled, and neither is the bar under the
+    hand (`heldBarRef`).
+  - `BuildingDiagram` reads the store's buildings, so it can only draw the
+    open workspace; that is why the bundle draws its own small picture.
+  - Hooks: `data-task-bundle` · `data-bundle-popup` · `data-bundle-row` ·
+    `data-bundle-diagram` · `data-bundle-cell`.
+- **A notebook bar or card ignores every non-left button and prevents its
+  context menu** (`noMenu`). A right-click used to ask "Take this off this
+  day?" and open the browser's menu on top of it.
+- **`TaskCalendar` folds** (all additive).
+  - New optional fields `groupKey` / `groupLabel`.
+  - Open events come first in a day.
+  - Done events of one group fold into one green chip at `FOLD_MIN = 3`
+    ("Igor · Wolfson · 4 done ✓"), which opens their list. Done is never
+    struck.
+  - `maxPerDay` plus "+N more" opens the whole day's list; each row keeps its
+    own click.
+  - Office pages pass `OFFICE_DAY_CAP` (5) and `calendarWordsOf(s)`. The day
+    list is icon-only apart from the date, so the portal's Russian worker
+    reads no English.
+- **The Tasks page has a "This workspace / All workspaces" switch**
+  (`tasks_scope`, per machine), fed by each other workspace's
+  `loadProjectSnapshot` and re-read on `snapshotTick`.
+  - A foreign row's name travels to the apartment with a return ticket.
+  - Its pencil switches workspace and opens the editor there
+    (`editOnArrival`).
+  - Its tick is display-only: closing runs stage rules only in its own
+    workspace. Move and Delete are hidden on it.
+  - Active filters show as chips with a count and "Clear all".
+  - The list is open first, then a "Done · N" divider, then done newest
+    first.
+- Guard: `scratchpad/notebook-r48.mjs` (64).
