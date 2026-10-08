@@ -9360,3 +9360,36 @@ first, from every workspace: "Ari finished ● Drilling in 27, 26, 25, 28 · A2"
   draws its own first frame.
 - **Shelf and tests.** The shelf previews `sampleWork()`. Harnesses:
   `workdone-test.mjs` (offline, 25) and `whodidwhat-probe.mjs` (37).
+
+## The apartment window (2026-10-08 recording)
+- **A closed task is a green DONE card.** Background #ecfdf5, border #a7f3d0;
+  never faded, never struck through.
+  - Its bold `data-task-done-badge` reads "Done · Tue 6 Oct · 14:49 · <who>".
+  - Nothing stores who closed a task. `closerOf()` reads it from the close's
+    own history line: `contractor_complete` or `task_completed`, within 10
+    minutes of `completedAt`, preferring the line that names the task.
+  - An approved problem shows its approver. Without a matching line it falls
+    back to the task's worker.
+  - The stages it worked are pills (`data-task-done-stage`; half done is
+    `data-half`), and `data-task-photo-count` counts its pictures.
+- **The Photos tab draws each picture ONCE.** There is no "N new from the
+  site" block any more.
+  - An unreviewed photo wears `data-photo-new` in its own section.
+  - A photo Drive doesn't list joins the section named after its stage.
+  - "Mark all reviewed (N)" sits in the tab's header row.
+  - Opening a new photo marks it reviewed, and reviewing never makes a photo
+    disappear.
+- **Drive and Zoho are `LinkSection`s** (`data-collapse-drive` /
+  `data-collapse-zoho`). Folded, each is one line carrying the folder title
+  (or linked / not linked) and an open-arrow. Open or folded is kept per
+  machine in `drawer_fold_<id>`; absent means open.
+- **The folder status.** `folderIssues(health, planShowing)` is the one
+  builder for the Drive row and the Photos tab.
+  - It never says "no plan PDF" or "no Engineered Plans folder" while the
+    window shows a plan.
+  - It is cleared on a new apartment or a new link.
+  - `normFolderName` / `isPhotosFolder` / `pickPhotosFolder` in `driveApi.ts`
+    are the only folder-name tests. They ignore case, spacing and zero-width
+    characters.
+  - The health check scans every plans folder and one level down.
+  - Guard: `scratchpad/drawer-r48.mjs` (53).
