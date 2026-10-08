@@ -1751,6 +1751,11 @@ export interface ContractorUiStrings {
   goingToWorkBtn?: string;
   whatStageNow?: string;
   stageNowLabel?: string;
+  /** Igor's recording (2026-10-07): the start asks about TODAY and checks; the sheet's message button; the list's done line. Optional, same rule. */
+  whatTodayLabel?: string;
+  sureTodayLabel?: string;
+  sendToOfficeBtn?: string;
+  doneDividerLabel?: string;
   /** The closing screen and the task thread (the 2026-08-30 UI round) — optional, same rule. */
   jobClosedLabel?: string;
   closingTitle?: string;
@@ -1915,6 +1920,10 @@ export const DEFAULT_CONTRACTOR_UI_STRINGS: ContractorUiStrings = {
   goingToWorkBtn: "I'm going to work here",
   whatStageNow: 'What stage is it at?',
   stageNowLabel: 'What stage is it at now?',
+  whatTodayLabel: 'What are you doing here today?',
+  sureTodayLabel: 'Are you sure you will be doing these today:',
+  sendToOfficeBtn: 'Send a note or message to the office',
+  doneDividerLabel: 'Done',
   jobClosedLabel: 'Job closed',
   closingTitle: 'Closing the job',
   sendAndClose: 'Send and close the job',
@@ -2069,6 +2078,10 @@ export const HEBREW_CONTRACTOR_UI_STRINGS: ContractorUiStrings = {
   goingToWorkBtn: 'אני הולך לעבוד כאן',
   whatStageNow: 'באיזה שלב זה נמצא?',
   stageNowLabel: 'באיזה שלב זה עכשיו?',
+  whatTodayLabel: 'מה אתה עושה כאן היום?',
+  sureTodayLabel: 'בטוח שאתה עושה את אלה היום:',
+  sendToOfficeBtn: 'שליחת הערה או הודעה למשרד',
+  doneDividerLabel: 'בוצע',
   jobClosedLabel: 'העבודה נסגרה',
   closingTitle: 'סגירת העבודה',
   sendAndClose: 'שליחה וסגירת העבודה',
@@ -2228,6 +2241,10 @@ export const RUSSIAN_CONTRACTOR_UI_STRINGS: ContractorUiStrings = {
   goingToWorkBtn: 'Я буду здесь работать',
   whatStageNow: 'На каком этапе это сейчас?',
   stageNowLabel: 'На каком этапе это теперь?',
+  whatTodayLabel: 'Что вы делаете здесь сегодня?',
+  sureTodayLabel: 'Вы уверены, что сегодня будете делать это:',
+  sendToOfficeBtn: 'Отправить заметку или сообщение в офис',
+  doneDividerLabel: 'Готово',
   jobClosedLabel: 'Работа закрыта',
   closingTitle: 'Закрытие работы',
   sendAndClose: 'Отправить и закрыть работу',

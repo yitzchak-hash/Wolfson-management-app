@@ -170,6 +170,10 @@ check(await page.locator('[data-work-start]').isDisabled(), 'Start waits for a p
 await page.locator('[data-work-stage="S3"]').click();
 await page.locator(`[data-work-stage="${custom.id}"]`).click();
 await page.locator('[data-work-start]').click();
+// Round 48 (owner, 2026-10-07): Start now ASKS "are you sure you will be
+// doing these today" — only Yes writes anything.
+await page.waitForTimeout(300);
+await page.locator('[data-work-confirm-yes]').click();
 await page.waitForTimeout(1200);
 d = await store(page);
 const report = d.contractorAssignments.find(a => a.stageReport && a.apartmentId === 'A1-7');
