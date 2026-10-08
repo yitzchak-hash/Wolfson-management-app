@@ -176,17 +176,14 @@ export async function checkFolderHealth(
   try {
     const files = await listFolder(folderId, token);
     health.mainFolderAccessible = true;
-    health.photosFolderFound = files.some(
-      f => f.mimeType === 'application/vnd.google-apps.folder' &&
-           /photo/i.test(f.name),
-    );
+    health.photosFolderFound = !!pickPhotosFolder(files);
     const plansFolder = files.find(
       f => f.mimeType === 'application/vnd.google-apps.folder' && isEngineeredPlansFolder(f.name),
     );
     health.plansFolderFound = !!plansFolder;
     if (plansFolder) {
       const planFiles = await listFolder(plansFolder.id, token);
-      health.plansPdfFound = planFiles.find(f => f.mimeType === 'application/pdf') ?? null;
+      health.plansPdfFound = planFiles.find(isPdfFile) ?? null;
     }
   } catch {
     health.mainFolderAccessible = false;
@@ -332,6 +329,44 @@ export async function findPlansPdfViaBackend(driveLink: string): Promise<DriveFi
 const FOLDER_MIME = 'application/vnd.google-apps.folder';
 
 /**
+ * A Drive folder's title, reduced to what a person MEANT by it.
+ *
+ * Folder names are typed by hand on four different machines and copied out of
+ * e-mails, so the same folder arrives as "Photos", "photos ", "Engineered
+ * plans", "Engineered_Plans" or with a non-breaking or zero-width space in the
+ * middle. Every subfolder test goes through this one normaliser, so "is this
+ * the Photos folder" can never get two different answers in two places — the
+ * drawer once said "no Photos folder · no plan PDF inside it" beside a plan it
+ * was showing.
+ */
+export function normFolderName(name: string): string {
+  return (name ?? '')
+    .normalize('NFKC')
+    .replace(/[\u200B-\u200F\u2060\uFEFF]/g, '')
+    .toLowerCase()
+    .replace(/[_\-–—.]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/** The job's Photos subfolder, by meaning: "Photos", "photos", "Photo", "Site Photos", "תמונות". */
+export function isPhotosFolder(name: string): boolean {
+  const n = normFolderName(name);
+  return /\bphotos?\b/.test(n) || n.includes('תמונות');
+}
+
+/**
+ * Which of a folder's children is THE Photos folder. An exact "Photos" (any
+ * case, any spacing) wins over a looser "Site photos", so a stray "Old photos"
+ * beside the real one is never picked first.
+ */
+export function pickPhotosFolder<T extends { name: string; mimeType: string }>(files: T[]): T | undefined {
+  const folders = files.filter(f => f.mimeType === 'application/vnd.google-apps.folder');
+  return folders.find(f => /^photos?$/.test(normFolderName(f.name)) || normFolderName(f.name) === 'תמונות')
+    ?? folders.find(f => isPhotosFolder(f.name));
+}
+
+/**
  * Matches ONLY the dedicated engineered-plans folder.
  *
  * This deliberately requires the full phrase. Matching loose fragments like
@@ -339,9 +374,10 @@ const FOLDER_MIME = 'application/vnd.google-apps.folder';
  * contractor could be shown the wrong document.
  */
 export function isEngineeredPlansFolder(name: string): boolean {
-  const n = name.trim().toLowerCase().replace(/[_\-–—]+/g, ' ').replace(/\s+/g, ' ');
-  // "Engineered Plans", "Engineering Plan", "01 Engineered Plans Final", …
-  if (/\bengineer(ed|ing)?\s+plans?\b/.test(n)) return true;
+  const n = normFolderName(name);
+  // "Engineered Plans", "Engineered plans", "Engineering Plan",
+  // "EngineeredPlans", "01 Engineered Plans Final", …
+  if (/\bengineer(ed|ing)?\s*plans?\b/.test(n)) return true;
   // Hebrew equivalent — full phrase only, never a fragment
   if (n.includes('תוכניות הנדסיות') || n.includes('תכניות הנדסיות')) return true;
   return false;
@@ -373,14 +409,25 @@ export async function checkFolderHealthViaBackend(
   try {
     const files = await listFolderViaBackend(folderId);
     health.mainFolderAccessible = true;
-    health.photosFolderFound = files.some(
-      f => f.mimeType === 'application/vnd.google-apps.folder' && /photo/i.test(f.name),
-    );
-    const plansFolder = files.find(f => f.mimeType === FOLDER_MIME && isEngineeredPlansFolder(f.name));
-    health.plansFolderFound = !!plansFolder;
-    if (plansFolder) {
-      const planFiles = await listFolderViaBackend(plansFolder.id);
-      health.plansPdfFound = planFiles.find(f => f.mimeType === 'application/pdf') ?? null;
+    health.photosFolderFound = !!pickPhotosFolder(files);
+    // EVERY folder that reads as the plans folder, not the first: a job folder
+    // can carry both the real one and a shortcut to an older copy, and the
+    // first one Drive happens to list is not a promise about the other.
+    const plansFolders = files.filter(f => f.mimeType === FOLDER_MIME && isEngineeredPlansFolder(f.name));
+    health.plansFolderFound = plansFolders.length > 0;
+    health.plansPdfFound = null;
+    for (const pf of plansFolders) {
+      const planFiles = await listFolderViaBackend(pf.id);
+      const direct = planFiles.find(isPdfFile);
+      if (direct) { health.plansPdfFound = direct; break; }
+      // One level deeper: "Engineered plans/Final/…" is a plan PDF inside the
+      // plans folder as far as anybody looking at it is concerned.
+      const subs = planFiles.filter(f => f.mimeType === FOLDER_MIME).slice(0, 6);
+      for (const sf of subs) {
+        const inner = (await listFolderViaBackend(sf.id).catch(() => [] as DriveFile[])).find(isPdfFile);
+        if (inner) { health.plansPdfFound = inner; break; }
+      }
+      if (health.plansPdfFound) break;
     }
   } catch {
     health.mainFolderAccessible = false;
@@ -487,7 +534,7 @@ export async function shareJobFolderSurfacesNow(driveLink: string | null | undef
   try {
     const files = await listFolderViaBackend(folderId);
     const plans = files.find(f => f.mimeType === FOLDER_MIME && isEngineeredPlansFolder(f.name));
-    const photos = files.find(f => f.mimeType === FOLDER_MIME && /^photos?$/i.test(f.name.trim()));
+    const photos = pickPhotosFolder(files);
     // Some job folders are flat — no subfolders, the sheets sit in the root.
     // Sharing the job folder itself is then the only thing that opens them.
     if (!plans && !photos) await shareFileToDrive(folderId);
@@ -651,9 +698,9 @@ export async function listAllPhotosViaBackend(driveLink: string): Promise<DriveP
   if (!mainFolderId) return [];
   try {
     const mainFiles = await listFolderViaBackend(mainFolderId);
-    const photosFolder = mainFiles.find(
-      f => f.mimeType === 'application/vnd.google-apps.folder' && /^photos?$/i.test(f.name.trim()),
-    );
+    // The SAME test the folder status uses, so "no Photos folder" and an
+    // empty photos tab can never disagree about one folder.
+    const photosFolder = pickPhotosFolder(mainFiles);
     if (!photosFolder) return [];
     // Opening a job's photos is the moment they are needed by somebody — make
     // the whole Photos folder link-readable so every picture inside (and every
