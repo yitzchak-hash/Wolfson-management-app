@@ -31,7 +31,8 @@ const fs = stageSetOf(flat, ALL);
 check(fs.length === 9 && fs.every(s => !s.projectId), 'a Wolfson flat\'s set is the nine global work stages', fs.map(s => s.id).join(','));
 const p = progressOf(flat, ALL);
 check(p.done === 4 && p.total === 9, 'its square reads 4/9 — the same as its window', `${p.done}/${p.total}`);
-check(headlineStageId(flat, ALL) === 's4-wall', 'and its headline is still Wall Units', headlineStageId(flat, ALL));
+// Owner, 2026-10-08: a building unit's cell shows the LAST stage done.
+check(headlineStageId(flat, ALL) === 's1-fans', 'and its headline is the last stage done (Fans)', headlineStageId(flat, ALL));
 
 const js = stageSetOf(job, ALL);
 check(js.length === 4 && js.every(s => s.projectId === 'general'), 'a Job Board job\'s set is its own four work stages', js.map(s => s.id).join(','));

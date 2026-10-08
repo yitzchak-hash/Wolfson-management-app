@@ -19,8 +19,9 @@ import { isLiveProblem } from './problems';
  *     half done / done / not needed, each written by a person or a close.
  *
  * `currentStageId` survives as the apartment's HEADLINE — the one word the
- * cell prints (locked answer 3: what is happening now, else the next thing
- * in the order) — and it is DERIVED and re-written by `applyMarks` every
+ * cell prints: what is happening now; else, on a building unit, the LAST
+ * stage done (owner, 2026-10-08), on a Job Board job the next thing in the
+ * order — and it is DERIVED and re-written by `applyMarks` every
  * time the marks change, so the fifty readers written for one stage keep
  * working without knowing any of this happened.
  */
@@ -150,6 +151,11 @@ export function taskStageIds(t: Pick<ContractorAssignment, 'stageId' | 'stageIds
  * a white "not started" cell or a "Ready to start" marker — so the
  * migration turns no building into a wall of the first stage's colour.
  */
+/** Building units headline the LAST stage done; Job Board jobs the next to do. */
+export function lastDoneHeadline(apt: Partial<Pick<Apartment, 'buildingId'>>): boolean {
+  return !!apt.buildingId && apt.buildingId !== 'G';
+}
+
 export function headlineStageId(apt: AptLike, sortedStages: Stage[], ctx?: SetContext): string | null {
   const set = stageSetOf(apt, sortedStages, ctx);
   const state = (id: string) => stageStateOf(apt, id, sortedStages);
@@ -166,6 +172,16 @@ export function headlineStageId(apt: AptLike, sortedStages: Stage[], ctx?: SetCo
   if (doing) return doing.id;
   const pending = set.find(st => state(st.id) === 'pending');
   if (pending) return pending.id;
+  const allDone = set.every(st => state(st.id) === 'done' || state(st.id) === 'off');
+  if (!allDone && lastDoneHeadline(apt)) {
+    // A BUILDING unit's cell shows the LAST stage that was done (owner's
+    // recording, 2026-10-08: "it doesn't move to that stage, it just shows
+    // the last stage that was done") — the furthest stage in the order that
+    // is ticked. The Job Board keeps "the next thing to do", which is what
+    // its stage columns are for.
+    const lastDone = [...set].reverse().find(st => state(st.id) === 'done');
+    if (lastDone) return lastDone.id;
+  }
   const next = set.find(st => state(st.id) === 'todo');
   if (next) return next.id;
   // Everything in the set is done: the CLOSING marker ("Job completed") if
@@ -193,6 +209,16 @@ export const IMPLIED_DONE: ReadonlyArray<readonly [when: string, also: string]> 
   ['s1-piping', 's-drilling'],
 ];
 
+/**
+ * The START stage — "Sold/Start", the line that only says the job began.
+ * Owner, 2026-10-08: "once anything is done after Sold/Start, Sold/Start
+ * gets marked off", and a worker "shouldn't have the ability to select
+ * Sold/Start" — nobody does Sold/Start on site, it follows from the work.
+ */
+export function isStartStage(st: Pick<Stage, 'id' | 'name'>): boolean {
+  return st.id === 'skhtatb' || /^\s*sold\s*\/?\s*start\b/i.test(st.name || '');
+}
+
 export function withImpliedDone(
   before: Record<string, StageMark> | undefined,
   marks: Record<string, StageMark> | undefined,
@@ -200,6 +226,16 @@ export function withImpliedDone(
   apt: Partial<Pick<Apartment, 'buildingId'>>,
 ): Record<string, StageMark> | undefined {
   let out = marks;
+  // Anything started or finished after the start stage ticks the start stage.
+  for (const start of sortedStages) {
+    if (!isStartStage(start) || !start.active || !ownStage(apt, start)) continue;
+    const cur = out?.[start.id];
+    if (cur === 'done' || cur === 'off') continue;
+    const later = sortedStages.some(st => st.id !== start.id && st.order > start.order && ownStage(apt, st)
+      && (out?.[st.id] === 'done' || out?.[st.id] === 'doing')
+      && before?.[st.id] !== out?.[st.id]);
+    if (later) out = { ...(out ?? {}), [start.id]: 'done' };
+  }
   for (const [when, also] of IMPLIED_DONE) {
     if (out?.[when] !== 'done' || before?.[when] === 'done') continue;
     const st = sortedStages.find(s => s.id === also);
@@ -267,7 +303,13 @@ export function marksForCurrent(
   const set = stageSetOf({ ...apt, stageMarks: marks }, sortedStages, ctx);
   for (const st of set) {
     if (st.order < target.order) { if (marks[st.id] !== 'off') marks[st.id] = 'done'; }
-    else if (st.id === target.id) { if (marks[st.id] !== 'pending') marks[st.id] = 'todo'; }
+    else if (st.id === target.id) {
+      // A building unit headlines its LAST stage done, so "the unit is at X"
+      // means X is done too — or setting the stage to X would print the one
+      // before it. A Job Board job "at X" is working on X: to do.
+      if (lastDoneHeadline(apt)) { if (marks[st.id] !== 'off') marks[st.id] = 'done'; }
+      else if (marks[st.id] !== 'pending') marks[st.id] = 'todo';
+    }
     else if (marks[st.id] === 'done' || marks[st.id] === 'doing') delete marks[st.id];
   }
   // A stage after the target that was done stays done? No — "the job is at

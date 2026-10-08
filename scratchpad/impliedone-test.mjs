@@ -16,7 +16,8 @@ const apt = (marks, extra = {}) => ({ id: 'A1-5', buildingId: 'A1', currentStage
 
 let r = applyMarks(apt({ skhtatb: 'done' }), { skhtatb: 'done', 's1-piping': 'done' }, ST);
 check(r.stageMarks['s-drilling'] === 'done', 'ticking Piping done ticks Drilling done');
-check(r.currentStageId === 's4-wall', 'and the headline is the next real stage, not Drilling', r.currentStageId);
+// Owner, 2026-10-08: a building unit headlines the LAST stage done.
+check(r.currentStageId === 's1-piping', 'and the headline is the last stage done (Piping), never Drilling', r.currentStageId);
 
 r = applyMarks(apt({ skhtatb: 'done', 's1-piping': 'done', 's-drilling': 'done' }), { skhtatb: 'done', 's1-piping': 'done' }, ST);
 check(!r.stageMarks['s-drilling'], 'unticking Drilling by hand afterwards stands (Piping was already done)');
@@ -37,5 +38,16 @@ r = applyMarks(apt({}), { 's1-piping': 'done' }, ST.filter(s => s.id !== 's-dril
 check(!r.stageMarks?.['s-drilling'], 'a list without Drilling never meets the rule');
 
 await server.close();
+
+// Owner, 2026-10-08: anything done (or started) after Sold/Start ticks Sold/Start.
+r = applyMarks(apt({}), { 's-drilling': 'done' }, ST);
+check(r.stageMarks.skhtatb === 'done', 'Drilling done ticks Sold/Start done');
+check(r.currentStageId === 's-drilling', 'and the unit shows Drilling — the last stage done', r.currentStageId);
+r = applyMarks(apt({}), { 's1-piping': 'doing' }, ST);
+check(r.stageMarks.skhtatb === 'done', 'starting work on a later stage ticks Sold/Start too');
+r = applyMarks(apt({ 's-drilling': 'done' }), { 's-drilling': 'done', skhtatb: 'todo' }, ST);
+check(r.stageMarks.skhtatb === 'todo', 'un-ticking Sold/Start by hand afterwards stands (nothing later changed)');
+r = applyMarks(apt({}, { buildingId: 'G' }), { 'g-pipe': 'done' }, ST);
+check(!r.stageMarks.skhtatb, 'a Job Board job never meets the start rule');
 console.log(fails ? `${fails} FAILED` : 'ALL PASS');
 process.exit(fails ? 1 : 0);
