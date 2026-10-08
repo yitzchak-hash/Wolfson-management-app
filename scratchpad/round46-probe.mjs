@@ -105,7 +105,9 @@ async function openDrawer(page) {
   await ctx.close();
 }
 
-// ── B · crossing the current stage off moves the job on ──
+// ── B · crossing a stage off — the square shows the LAST stage done ──
+// (owner, 2026-10-08: "it doesn't move to that stage — it just shows the last
+// stage that was done"; it used to advance to the next stage, S3)
 {
   const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
   await seed(ctx);
@@ -124,7 +126,7 @@ async function openDrawer(page) {
   const d = await store(page);
   const apt = (d.apartments || []).find(a => a.id === 'A1-7');
   check(apt?.stageMarks?.S2 === 'done', 'the stage is crossed off', JSON.stringify(apt?.stageMarks));
-  check(apt?.currentStageId === 'S3', 'and the job moved to the next stage by itself', String(apt?.currentStageId));
+  check(apt?.currentStageId === 'S2', 'and the job now reads the last stage done', String(apt?.currentStageId));
   await ctx.close();
 }
 
