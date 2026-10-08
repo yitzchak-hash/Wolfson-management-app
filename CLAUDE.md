@@ -9435,3 +9435,51 @@ first, from every workspace: "Ari finished ● Drilling in 27, 26, 25, 28 · A2"
   - The list is open first, then a "Done · N" divider, then done newest
     first.
 - Guard: `scratchpad/notebook-r48.mjs` (64).
+
+## The board's 100% is the old 75%, and the photo widget shows every photo (2026-10-08 recording)
+- **The zoom unit** (owner: "the way 75 is now should be the 100%").
+  `src/data/boardZoom.ts` holds:
+  - the unit, `ZOOM_UNIT` 0.75;
+  - the ladder people read (25…300), scaled into the real `BOARD_ZOOM_STEPS`;
+  - the conversions.
+
+  Everything a person reads or types is in DISPLAYED numbers: the header
+  readout, the typed %, the 100% button (`HOME_ZOOM`), the ladder, and
+  `board_default_zoom_<pid>`. That key holds a displayed fraction
+  (1.5 = 150%), and older values are read the same way.
+
+  Everything the board computes with stays REAL. That includes the view
+  memory `board_view_<pid>_<view>`, whose main-board view id is `''`, not
+  `main`. So a machine whose saved view sat at the old 100% opens reading
+  125% until 100% is pressed once.
+
+  Fit caps at the new 100%. The phone's legibility floor is still a real
+  0.5.
+- **Harness rule:** at the new zoom the seeded Goals widget
+  (`CE-goals-board`, placed at the view centre) moves over fixed screen
+  points — park it in seeds. About twenty harnesses seed
+  `board_default_zoom_general = '1'` and now open at a real 0.75; one that
+  clicks fixed screen points needs the zoom-aware treatment.
+- **Live from site shows every photo.** The production grid carried
+  `data.jobIds` = 3,520 Job Board ids. The pencil's "Only these jobs" picker
+  has a "Pick all" that writes every job of the OPEN workspace, so every
+  Wolfson and Netiv photo was filtered away, and the title printed
+  "3520 jobs".
+  - The field is gone from the `recent-photos` pencil, and a stored
+    `jobIds` is ignored.
+  - A playable film draws its own first frame, never an `<img>` of the
+    video; a Drive-only film keeps Drive's thumbnail.
+  - `count-by-stage` still has the same "Pick all" trap.
+- **Settings → Stages saves itself.**
+  - Names save on blur; a blank English name is refused.
+  - Switches save on the press.
+  - A colour saves ~260ms after the last change, and only as a whole hex.
+  - Only changed fields are written, and a `[data-stage-saved]` tick answers.
+- **An Import jobs row opens its batch** (`data-import-batch` →
+  `ImportBatchWindow`).
+  - The batch shows as real `JobTile`s, culled by rows (40 of 1,100
+    mounted), searchable through `searchJobs`, each wearing its group.
+  - One click picks a tile; a second click or a double-click opens the real
+    drawer above the window.
+  - Escape backs out: the drawer first, then the search, then the window.
+- Guard: `scratchpad/board-r48.mjs` (65).
