@@ -2,8 +2,8 @@ import React, { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { CalendarDays } from 'lucide-react';
 import { useStore } from '../data/store';
-import { TaskCalendar, CalendarEvent } from '../components/tasks/TaskCalendar';
-import { aptLabel, projectColor } from '../types';
+import { TaskCalendar, CalendarEvent, calendarWordsOf, OFFICE_DAY_CAP } from '../components/tasks/TaskCalendar';
+import { aptLabel, projectColor, projectShortName } from '../types';
 import { daysOf } from '../data/taskDays';
 
 const CAT_COLORS: Record<string, string> = { drywall: '#f59e0b', ac: '#3b82f6', general: '#10b981' };
@@ -27,6 +27,7 @@ export function ProjectCalendarPage() {
 
   const accent = projectColor(projects, currentProjectId);
   const projectName = projects.find(p => p.id === currentProjectId)?.name ?? currentProjectId;
+  const wsShort = projectShortName(projects.find(p => p.id === currentProjectId), !!s.isRtl, projectName);
 
   const events: CalendarEvent[] = useMemo(() => {
     const out: CalendarEvent[] = [];
@@ -45,6 +46,10 @@ export function ProjectCalendarPage() {
         subtitle: apt ? `${apt.buildingId} · ${aptLabel(apt)}` : a.buildingId,
         color: contractor ? (CAT_COLORS[contractor.category] ?? '#6b7280') : '#6b7280',
         completed: !!a.completedAt,
+        // A worker's done tasks in this workspace fold into one chip a day
+        // (owner, 2026-10-08) — "Igor · Wolfson · 19 done ✓".
+        groupKey: `${a.contractorId}|${currentProjectId}`,
+        groupLabel: `${contractor?.name ?? s.unknownUser} · ${wsShort}`,
         onClick: () => navigate('/tasks'),
         // Full-node payload so a day renders the same card the board does
         node: apt ? {
@@ -59,7 +64,7 @@ export function ProjectCalendarPage() {
       });
     }
     return out;
-  }, [contractorAssignments, apartments, contractors, stages, filterContractorId, showCompleted, navigate]);
+  }, [contractorAssignments, apartments, contractors, stages, filterContractorId, showCompleted, navigate, currentProjectId, wsShort, s.unknownUser]);
 
   return (
     <div className="p-4 md:p-6 w-full">
@@ -110,7 +115,7 @@ export function ProjectCalendarPage() {
       </div>
 
       <TaskCalendar events={events} todayLabel={s.today} rtl={!!s.isRtl}
-        printTitle={projectName} />
+        printTitle={projectName} maxPerDay={OFFICE_DAY_CAP} words={calendarWordsOf(s)} />
     </div>
   );
 }

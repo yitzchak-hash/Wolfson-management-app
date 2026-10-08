@@ -3223,6 +3223,41 @@ export interface MainUiStrings {
   deleteApartmentLabel: string;
   jobLabel: string;
   openZohoBtn: string;
+  /**
+   * The flood round (owner, 2026-10-08 — a worker doing a small task in
+   * twenty apartments a day). `nbBundle…` = the notebook's bundle bar and
+   * its window; `cal…` = the office calendars' folded done chips and day
+   * list; `tp…` = the Tasks page's scope switch, filter chips and divider.
+   */
+  nbBundleTasks: string;
+  nbBundleDone: string;
+  nbBundleOpen: string;
+  nbBundleHint: string;
+  nbBundleList: string;
+  nbBundleBuilding: string;
+  nbBundleNoBuilding: string;
+  nbBundleDoneAt: string;
+  nbBundleOpenWord: string;
+  nbBundleLegendDone: string;
+  nbBundleLegendOpen: string;
+  nbBundleOpenUnit: string;
+  nbBundleClose: string;
+  nbBundleNoStage: string;
+  calFoldDone: string;
+  calMore: string;
+  calDoneWord: string;
+  calOpenWord: string;
+  calClose: string;
+  calFoldHint: string;
+  tpScopeHere: string;
+  tpScopeAll: string;
+  tpScopeNote: string;
+  tpFilterBtn: string;
+  tpClearAll: string;
+  tpRemoveFilter: string;
+  tpDoneDivider: string;
+  tpOpenThere: string;
+  tpForeignStatus: string;
 }
 
 export const DEFAULT_MAIN_UI_STRINGS: MainUiStrings = {
@@ -4110,6 +4145,35 @@ export const DEFAULT_MAIN_UI_STRINGS: MainUiStrings = {
   deleteApartmentLabel: 'Delete Apartment',
   jobLabel: 'Job',
   openZohoBtn: 'Open in Zoho',
+  nbBundleTasks: '{n} tasks',
+  nbBundleDone: '{n} done',
+  nbBundleOpen: '{n} open',
+  nbBundleHint: 'Click to see every task and where it is in the building',
+  nbBundleList: 'Every task that day',
+  nbBundleBuilding: 'Where in the building',
+  nbBundleNoBuilding: 'No building diagram for these jobs.',
+  nbBundleDoneAt: 'done {time}',
+  nbBundleOpenWord: 'open',
+  nbBundleLegendDone: 'Done',
+  nbBundleLegendOpen: 'Still open',
+  nbBundleOpenUnit: 'Open this apartment',
+  nbBundleClose: 'Close',
+  nbBundleNoStage: 'no stage',
+  calFoldDone: '{n} done',
+  calMore: '+{n} more',
+  calDoneWord: 'done',
+  calOpenWord: 'open',
+  calClose: 'Close',
+  calFoldHint: 'Click to see each one',
+  tpScopeHere: 'This workspace ({n})',
+  tpScopeAll: 'All workspaces ({n})',
+  tpScopeNote: 'The other workspaces show what this computer last saw of them.',
+  tpFilterBtn: 'Filter',
+  tpClearAll: 'Clear all',
+  tpRemoveFilter: 'Remove this filter',
+  tpDoneDivider: 'Done · {n}',
+  tpOpenThere: 'Opens in {ws}',
+  tpForeignStatus: 'Open it in {ws} to change it',
 };
 
 export const HEBREW_MAIN_UI_STRINGS: MainUiStrings = {
@@ -4997,4 +5061,33 @@ export const HEBREW_MAIN_UI_STRINGS: MainUiStrings = {
   deleteApartmentLabel: 'מחק דירה',
   jobLabel: 'עבודה',
   openZohoBtn: 'פתח ב-Zoho',
+  nbBundleTasks: '{n} משימות',
+  nbBundleDone: '{n} בוצעו',
+  nbBundleOpen: '{n} פתוחות',
+  nbBundleHint: 'לחצו כדי לראות כל משימה ואיפה היא בבניין',
+  nbBundleList: 'כל המשימות באותו יום',
+  nbBundleBuilding: 'איפה בבניין',
+  nbBundleNoBuilding: 'אין תרשים בניין לעבודות האלה.',
+  nbBundleDoneAt: 'בוצע {time}',
+  nbBundleOpenWord: 'פתוחה',
+  nbBundleLegendDone: 'בוצע',
+  nbBundleLegendOpen: 'עדיין פתוח',
+  nbBundleOpenUnit: 'פתיחת הדירה',
+  nbBundleClose: 'סגירה',
+  nbBundleNoStage: 'ללא שלב',
+  calFoldDone: '{n} בוצעו',
+  calMore: '+{n} נוספות',
+  calDoneWord: 'בוצע',
+  calOpenWord: 'פתוח',
+  calClose: 'סגירה',
+  calFoldHint: 'לחצו כדי לראות כל אחת',
+  tpScopeHere: 'סביבת העבודה הזאת ({n})',
+  tpScopeAll: 'כל סביבות העבודה ({n})',
+  tpScopeNote: 'סביבות העבודה האחרות מוצגות כפי שהמחשב הזה ראה אותן לאחרונה.',
+  tpFilterBtn: 'סינון',
+  tpClearAll: 'ניקוי הכל',
+  tpRemoveFilter: 'הסרת הסינון',
+  tpDoneDivider: 'בוצעו · {n}',
+  tpOpenThere: 'נפתח ב{ws}',
+  tpForeignStatus: 'כדי לשנות, פתחו אותה ב{ws}',
 };

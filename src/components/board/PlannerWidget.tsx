@@ -4,7 +4,8 @@ import { PlannerDropDialog, PlannerTaskDialog, PlannerRemoveDialog, TaskDialogRe
 import { ChevronUp, ChevronDown, Plus, X, CalendarDays, Maximize2, Eye, EyeOff, ClipboardList, Check } from 'lucide-react';
 import {
   Apartment, CanvasElement, Contractor, User, ContractorAssignment, Stage, personColor,
-  aptLabel, getStageName, generalBuildingsText, projectShortName } from '../../types';
+  aptLabel, getStageName, generalBuildingsText, projectShortName, projectColor } from '../../types';
+import { BUNDLE_MIN, BundleBar, BundleInfo, BundleItem, BundlePopup, bundleWords, noMenu } from './TaskBundle';
 import {
   registerRota, onRotaHover, rotaCellAt, setRotaHover, RotaHit,
   announceNotebookDrag, quickBoxHover, quickBoxTake,
@@ -867,6 +868,8 @@ export function PlannerWidget({
   const stagesFor = (pid: string) => pid === currentProjectId ? stages
     : allStages.filter(st => pid === 'general' ? st.projectId === 'general' : !st.projectId);
 
+  /** The task whose bar a hand is holding — never folded into a bundle mid-drag. */
+  const heldBarRef = useRef<string | null>(null);
   /**
    * THE BARS — every task, drawn FROM THE TASK (locked answer 7, 2026-09-15).
    *
@@ -951,6 +954,53 @@ export function PlannerWidget({
       // The SHORT name — the tag sits beside the unit's own name on a cell
       // ~160px wide, and "Wolfson Residence" left no room for it.
       (snap.assignments ?? []).forEach(a => put(a, snap.apartments, p.id, projectShortName(p, LT === 'he-IL', p.name)));
+    }
+    /**
+     * BUNDLES (owner, 2026-10-08 — "someone that does a small task in a bunch
+     * of apartments every day … it needs to be collapsible"). On one row, on
+     * one day, four or more SINGLE-DAY tasks of one workspace become one bar:
+     * "15 tasks · Wolfson · 13 done", which opens a window with every task and
+     * the building lit. A multi-day task is a stretch and stays itself, and so
+     * does the bar a hand is holding right now (a snapshot landing mid-drag
+     * must not fold the very bar under the pointer into a bundle).
+     */
+    const held = heldBarRef.current;
+    for (const [key, list] of map) {
+      const groups = new Map<string, TaskBarSeg[]>();
+      for (const bar of list) {
+        if (bar.len !== 1 || bar.taskId === held || daysOf(bar.task).length !== 1) continue;
+        const gk = `${bar.startIdx}|${bar.projectId ?? currentProjectId}`;
+        const g = groups.get(gk);
+        if (g) g.push(bar); else groups.set(gk, [bar]);
+      }
+      for (const [gk, items] of groups) {
+        if (items.length < BUNDLE_MIN) continue;
+        const wsPid = gk.slice(gk.indexOf('|') + 1);
+        const proj = projects.find(p => p.id === wsPid);
+        const ordered = [...items].sort((x, y) => Number(x.done) - Number(y.done)
+          || x.label.localeCompare(y.label, undefined, { numeric: true }));
+        const bundleItems: BundleItem[] = ordered.map(bar => ({
+          taskId: bar.taskId, task: bar.task, label: bar.label, jobId: bar.jobId, done: bar.done,
+        }));
+        const first = ordered[0];
+        const drop = new Set(items);
+        const kept = list.filter(bar => !drop.has(bar));
+        kept.push({
+          ...first,
+          id: `bundle:${key}:${gk}`, taskId: `bundle:${key}:${gk}`,
+          label: proj ? projectShortName(proj, LT === 'he-IL', proj.name) : wsPid,
+          desc: '', where: undefined, building: undefined, stageFrom: undefined, stageTo: undefined,
+          progress: null, done: bundleItems.every(it => it.done),
+          bundle: {
+            items: bundleItems, projectId: wsPid,
+            workspace: proj ? projectShortName(proj, LT === 'he-IL', proj.name) : wsPid,
+            color: projectColor(projects, wsPid), done: bundleItems.filter(it => it.done).length,
+            day: first.days[0],
+          },
+        });
+        list.length = 0;
+        list.push(...kept);
+      }
     }
     // Lanes: earliest start first, longer first; a bar takes the first lane
     // whose last bar ended before it starts.
@@ -1045,7 +1095,7 @@ export function PlannerWidget({
     else updateAssignment(task.id, patch);
   };
 
-  function openBar(bar: TaskBarSeg) {
+  function openBar(bar: Pick<TaskBarSeg, 'jobId' | 'projectId'>) {
     if (!bar.jobId) return;   // a general job — no unit to open
     if (bar.projectId && bar.projectId !== currentProjectId) {
       if (openUnit) { openUnit(bar.projectId, bar.jobId); return; }
@@ -1055,6 +1105,21 @@ export function PlannerWidget({
     }
     openJob(bar.jobId);
   }
+
+  /**
+   * The bundle window — held as WHICH bundle (row + id), re-resolved from the
+   * live bars every render, so a task closing while it is open shows at once.
+   * If the bundle dissolves under it (fewer than four left), the last one
+   * seen stays up until it is closed rather than vanishing mid-read.
+   */
+  const bWords = bundleWords(lang);
+  const [bundleOpen, setBundleOpen] = useState<{ rowKey: string; id: string } | null>(null);
+  const lastBundle = useRef<BundleInfo | null>(null);
+  const liveBundle = bundleOpen
+    ? (barsByRow.get(bundleOpen.rowKey)?.find(b => b.id === bundleOpen.id)?.bundle ?? lastBundle.current)
+    : null;
+  lastBundle.current = liveBundle;
+  const closeBundle = useCallback(() => setBundleOpen(null), []);
   /** A bar dropped on a square: the task's days shift, and its worker follows the row. */
   function dropBarTo(bar: TaskBarSeg, target: RotaHit) {
     const cid = rowContractorId(target.person);
@@ -1596,9 +1661,19 @@ export function PlannerWidget({
                           {Array.from({ length: laneCount }, (_, lane) => {
                             const dayIdx = days.findIndex(x => iso(x) === day);
                             const starts = rowBars.find(bar => bar.lane === lane && bar.startIdx === dayIdx);
+                            if (starts?.bundle) {
+                              const rowKey = `${pid}|${iso(wkStart)}`;
+                              return (
+                                <BundleBar key={`bundle-${starts.id}`} bundle={starts.bundle}
+                                  height={barHeight(z, textSize, strips)} z={z} size={textSize} strip={strips}
+                                  words={bWords}
+                                  onOpen={() => setBundleOpen({ rowKey, id: starts.id })} />
+                              );
+                            }
                             if (starts) {
                               return (
                                 <TaskBar key={`bar-${starts.id}`} bar={starts} z={z} size={textSize} strip={strips}
+                                  onHeld={h => { heldBarRef.current = h ? starts.taskId : null; }}
                                   readOnly={ro || state === 'ending'} isRtl={LT === 'he-IL'} lang={lang}
                                   onOpen={() => openBar(starts)}
                                   onDropTo={t => dropBarTo(starts, t)}
@@ -1703,6 +1778,29 @@ export function PlannerWidget({
         })}
         </>}
       </div>
+
+      {/* The bundle window — every task in the bundle, and the building lit. */}
+      {bundleOpen && liveBundle && (() => {
+        const person = personOf(bundleOpen.rowKey.slice(0, bundleOpen.rowKey.indexOf('|')), contractors, users);
+        const when = new Date(`${liveBundle.day}T00:00:00`);
+        return (
+          <BundlePopup
+            bundle={liveBundle}
+            person={person.name}
+            personColor={person.color}
+            dayLabel={isNaN(when.getTime()) ? liveBundle.day
+              : when.toLocaleDateString(LT, { weekday: 'long', day: 'numeric', month: 'long' })}
+            stages={stagesFor(liveBundle.projectId)}
+            words={bWords}
+            isRtl={LT === 'he-IL'}
+            onClose={closeBundle}
+            onOpenItem={it => {
+              setBundleOpen(null);
+              openBar({ jobId: it.jobId, projectId: liveBundle.projectId === currentProjectId ? undefined : liveBundle.projectId });
+            }}
+          />
+        );
+      })()}
 
       {/* What that drag meant. Rendered through a portal at the top of the
           page: the notebook is a board node inside a transformed, scrolling
@@ -1827,6 +1925,12 @@ export interface TaskBarSeg {
   progress?: StageProgress | null;
   foreign: boolean;
   lane: number;
+  /**
+   * Set on a BUNDLE (owner, 2026-10-08): four or more single-day tasks of
+   * this person, on this day, in one workspace, drawn as one bar. The seg's
+   * own task fields are its first item's and mean nothing on their own.
+   */
+  bundle?: BundleInfo;
 }
 
 /**
@@ -1839,8 +1943,10 @@ export interface TaskBarSeg {
  * elsewhere. Drawn from the FIRST cell of its stretch and laid over the
  * cells to its right, which leave that lane's height free.
  */
-function TaskBar({ bar, z, size, strip, readOnly, isRtl, lang, onOpen, onDropTo, onDragOff, onRemove, onResizeTo }: {
+function TaskBar({ bar, z, size, strip, readOnly, isRtl, lang, onOpen, onDropTo, onDragOff, onRemove, onResizeTo, onHeld }: {
   bar: TaskBarSeg;
+  /** Told when a drag goes live and when it ends — the widget never bundles a held bar. */
+  onHeld?: (held: boolean) => void;
   z: (n: number) => number;
   size: number;
   strip: boolean;
@@ -1862,6 +1968,12 @@ function TaskBar({ bar, z, size, strip, readOnly, isRtl, lang, onOpen, onDropTo,
 
   const handlers = editable ? {
     onPointerDown: (e: React.PointerEvent) => {
+      // Only the PRIMARY button picks a bar up (owner, 2026-10-08: a
+      // right-click captured the pointer, the browser's own menu stole the
+      // release, and the stray move-then-release read as "dragged off the
+      // sheet" — the "Take this off this day?" ask popped up beside the
+      // browser's menu). A right press does nothing here at all.
+      if (e.button !== 0) return;
       if ((e.target as HTMLElement).closest('[data-card-action]')) return;
       const resize = !!(e.target as HTMLElement).closest('[data-bar-edge]');
       drag.current = { x: e.clientX, y: e.clientY, live: false, resize };
@@ -1873,6 +1985,7 @@ function TaskBar({ bar, z, size, strip, readOnly, isRtl, lang, onOpen, onDropTo,
       if (!dd) return;
       if (!dd.live && Math.hypot(e.clientX - dd.x, e.clientY - dd.y) < 4) return;
       if (!dd.live && !dd.resize) announceNotebookDrag(true);
+      if (!dd.live) onHeld?.(true);
       dd.live = true;
       setHeld(true);
       const hit = rotaCellAt(e.clientX, e.clientY);
@@ -1881,11 +1994,13 @@ function TaskBar({ bar, z, size, strip, readOnly, isRtl, lang, onOpen, onDropTo,
     },
     onPointerUp: (e: React.PointerEvent) => {
       const dd = drag.current;
+      if (!dd) return;   // not a press this bar started (a right button, say)
       drag.current = null;
       setHeld(false);
+      if (dd.live) onHeld?.(false);
       announceNotebookDrag(false);
       (e.currentTarget as HTMLElement).releasePointerCapture?.(e.pointerId);
-      if (!dd?.live) {
+      if (!dd.live) {
         if (!(e.target as HTMLElement).closest('[data-card-action],[data-bar-edge]')) onOpen();
         return;
       }
@@ -1898,6 +2013,7 @@ function TaskBar({ bar, z, size, strip, readOnly, isRtl, lang, onOpen, onDropTo,
       onDragOff();
     },
     onPointerCancel: () => {
+      if (drag.current?.live) onHeld?.(false);
       drag.current = null; setHeld(false); setRotaHover(null); announceNotebookDrag(false);
     },
   } : { onClick: () => onOpen() };
@@ -1934,11 +2050,16 @@ function TaskBar({ bar, z, size, strip, readOnly, isRtl, lang, onOpen, onDropTo,
   return (
     <div
       {...handlers}
+      // No browser menu over a bar — and no board menu either: a right-click
+      // here means nothing, and saying nothing is better than two menus.
+      {...noMenu}
       data-no-drag data-el-action data-task-bar={bar.taskId} data-bar-days={bar.len}
       className="group/bar relative rounded-md min-w-0 flex-shrink-0"
-      title={bar.done ? 'Done — kept on the sheet as the record'
+      // The FULL unit label first — a narrow cell cuts "15 — Family-name" to
+      // "15 — Fam…", and hovering the bar is the cheap way to read it all.
+      title={`${bar.label}${bar.desc ? ` — ${bar.desc}` : ''}\n${bar.done ? 'Done — kept on the sheet as the record'
         : bar.foreign ? `${bar.workspace ?? bar.label} — click to open · drag to move · X takes it off`
-        : 'Click to open · drag to move · pull the right edge for more days'}
+        : 'Click to open · drag to move · pull the right edge for more days'}`}
       style={{
         position: 'relative', zIndex: 3,
         // n cells plus the gaps and paddings between them — the bar lies
@@ -1970,7 +2091,7 @@ function TaskBar({ bar, z, size, strip, readOnly, isRtl, lang, onOpen, onDropTo,
               strip is ONE line, so there they share it and give way first. */}
           <div className="flex items-center min-w-0" style={{ fontSize: size, fontWeight: 800, color: '#1e3a5f', lineHeight: 1.2 }}>
             {strip && chip(true)}
-            <span data-bar-label className="truncate min-w-0" style={{ flex: '0 1 auto' }}>{bar.label}</span>
+            <span data-bar-label className="truncate min-w-0" style={{ flex: '0 1 auto' }} title={bar.label}>{bar.label}</span>
             {bar.workspace && strip && (
               // flexShrink 20: the tag gives way (to nothing) before the unit
               // loses a letter.
@@ -2153,6 +2274,9 @@ function PlannerCard({
     : {};
   const dragHandlers = readOnly || !onDragTo ? openHandlers : {
     onPointerDown: (e: React.PointerEvent) => {
+      // The primary button only — a right-click must not pick the card up
+      // (the bar's own trap, 2026-10-08).
+      if (e.button !== 0) return;
       // NOT `closest('a,button')`: the job's name is itself a button, so that
       // test refused to start a drag anywhere except the few pixels of padding
       // around it. Only the links and the little remove cross are exempt.
@@ -2176,11 +2300,12 @@ function PlannerCard({
     },
     onPointerUp: (e: React.PointerEvent) => {
       const d = drag.current;
+      if (!d) return;   // not a press this card started (a right button, say)
       drag.current = null;
       setHeld(false);
       announceNotebookDrag(false);
       (e.currentTarget as HTMLElement).releasePointerCapture?.(e.pointerId);
-      if (!d?.live) {
+      if (!d.live) {
         // A press that never travelled IS a click, and a click opens the job —
         // the same thing it does anywhere else. Done here rather than in a
         // separate onClick so there is one path, not two that must agree.
@@ -2253,6 +2378,7 @@ function PlannerCard({
       return (
         <div
           {...dragHandlers}
+          {...noMenu}
           data-no-drag data-el-action
           className="group/en relative rounded planner-card min-w-0 flex-1"
           style={{
@@ -2309,6 +2435,7 @@ function PlannerCard({
     return (
       <div
         {...dragHandlers}
+        {...noMenu}
         // The board's node handler takes the pointer on pointerdown so it can
         // start dragging the notebook; without these the card never saw the
         // press at all, so clicking one did nothing and dragging one moved the
