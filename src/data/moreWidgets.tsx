@@ -2,7 +2,7 @@ import React from 'react';
 import {
   Globe2, Flame, Images, Rows3, Trophy, Disc3, Grid3x3, PartyPopper, Calculator,
   Fingerprint, Map as MapIcon, CloudSun, Music2, Building2, Search,
-  GitCommitHorizontal, Inbox,
+  GitCommitHorizontal, Inbox, ListChecks,
 } from 'lucide-react';
 import { UnitCard } from '../components/board/UnitCard';
 import { WidgetDef } from './widgets';
@@ -18,6 +18,7 @@ import { GoalsWidget } from '../components/board/GoalsWidget';
 import { SearchTileWidget } from '../components/board/SearchTileWidget';
 import { FileTrayWidget } from '../components/board/FileTrayWidget';
 import { TimelineWidget } from '../components/board/TimelineWidget';
+import { WhoDidWhatWidget } from '../components/board/WhoDidWhatWidget';
 
 /**
  * The widgets whose render is a real component rather than a few lines.
@@ -27,6 +28,20 @@ import { TimelineWidget } from '../components/board/TimelineWidget';
  * after that file has finished defining them rather than sitting inside it.
  */
 export const MORE_WIDGETS: WidgetDef[] = [
+  {
+    /**
+     * WHO DID WHAT (owner, 2026-10-08): the work that was finished, as
+     * sentences, newest first, across every workspace — "Igor finished
+     * Drilling in 27, 26, 25, 28 · A2" with each apartment a link and the
+     * pictures under the line. Read off CLOSED tasks and their photos.
+     */
+    id: 'who-did-what', rank: 2, name: 'Who did what', category: 'live',
+    icon: ListChecks, w: 360, h: 320,
+    blurb: 'What was finished, said in sentences, newest first — who finished which stage in '
+      + 'which apartments, each apartment a link, with the pictures from site under it.',
+    data: {},
+    render: (el, c) => <WhoDidWhatWidget el={el} c={c} />,
+  },
   {
     /**
      * One apartment from another workspace, standing on this board — the

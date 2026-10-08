@@ -319,7 +319,7 @@ function fieldOf(raw) {
   return { value: '', box: null };
 }
 
-function planPrompt(want, crop) {
+function planPrompt(want, crop, detail) {
   return `You read the title block of an HVAC installation plan from Israel (Hebrew and/or English). `
     + (crop
       ? `The picture is a small CROP the user drew around ONE thing. Return ONLY what is written inside it — nothing inferred, nothing from around it. `
@@ -332,6 +332,7 @@ function planPrompt(want, crop) {
     + `The PHONE is the customer's phone number — never a fax, and never the office numbers ${OWN_NUMBERS.join(', ')}. `
     + (want === 'address' ? `The user wants the ADDRESS. ` : want === 'phone' ? `The user wants the PHONE number. ` : '')
     + `For every value you return, give "box": the tightest rectangle around that printed value, as fractions of the picture, [left, top, right, bottom], where 0,0 is the top-left corner and 1,1 the bottom-right. `
+    + (detail ? `A SECOND picture follows: the title-block part of the SAME page (${detail}), enlarged so the small print is readable — read the values from it, but give every box as fractions of the FIRST picture (the whole page). ` : '')
     + `Answer with JSON only, exactly this shape: {"address":{"value":"…","box":[l,t,r,b]} or null,"phone":{"value":"…","box":[l,t,r,b]} or null,"family":"…" or null}. No labels, no trailing punctuation.`;
 }
 async function planRead(req, res, body) {
@@ -348,19 +349,30 @@ async function planRead(req, res, body) {
   if (m[2].length > 6_000_000) return res.status(413).json({ error: 'image too large' });
   const want = ['address', 'phone', 'both'].includes(body.want) ? body.want : 'both';
   const crop = !!body.crop;
+  // The title block, enlarged (owner, 2026-10-08: "the address should usually
+  // come from the right side of the sheet") — a whole A1 page squeezed into
+  // one picture leaves its small print a few pixels tall.
+  const dm = body.detail ? /^data:(image\/(?:png|jpeg|webp));base64,([A-Za-z0-9+/=]+)$/.exec(String(body.detail)) : null;
+  if (dm && dm[2].length > 6_000_000) return res.status(413).json({ error: 'detail image too large' });
+  const detailWhere = dm ? (body.detailWhere === 'bottom' ? 'the bottom strip of the page' : 'the right-hand column of the page') : '';
   // A scan has no text layer the browser can check a value against, so there
   // the box IS the proof: a value the model cannot point at is not returned.
   const scan = !!body.scan && !crop;
-  const prompt = planPrompt(want, crop);
+  const prompt = planPrompt(want, crop, detailWhere);
   try {
     let text = '';
     if (viaAnthropic) {
+      // Owner, 2026-10-08: "It should be AI using Opus 5.5 on high thinking."
+      // Reading a Hebrew title block exactly is worth the thinking; the
+      // budget is adaptive and the effort high.
       const resp = await client().messages.create({
-        model: process.env.PLAN_READ_MODEL || 'claude-opus-5',
-        max_tokens: 600,
-        thinking: { type: 'disabled' },
+        model: process.env.PLAN_READ_MODEL || 'claude-opus-5-5',
+        max_tokens: 16000,
+        thinking: { type: 'adaptive' },
+        output_config: { effort: 'high' },
         messages: [{ role: 'user', content: [
           { type: 'image', source: { type: 'base64', media_type: m[1], data: m[2] } },
+          ...(dm ? [{ type: 'image', source: { type: 'base64', media_type: dm[1], data: dm[2] } }] : []),
           { type: 'text', text: prompt },
         ] }],
       });
@@ -370,12 +382,15 @@ async function planRead(req, res, body) {
         method: 'POST',
         headers: { Authorization: `Bearer ${process.env.OPENAI_API_KEY}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          model: process.env.PLAN_READ_MODEL_OPENAI || 'gpt-4o-mini',
+          // Without an Anthropic key: the full vision model, never the mini —
+          // the mini could not read a Hebrew title block (the 2026-10-08 sheet).
+          model: process.env.PLAN_READ_MODEL_OPENAI || 'gpt-4o',
           temperature: 0,
           response_format: { type: 'json_object' },
           messages: [{ role: 'user', content: [
             { type: 'text', text: prompt },
             { type: 'image_url', image_url: { url: image, detail: 'high' } },
+            ...(dm ? [{ type: 'image_url', image_url: { url: String(body.detail), detail: 'high' } }] : []),
           ] }],
         }),
       });
@@ -514,6 +529,8 @@ export default async function handler(req, res) {
       clientEmail,
       hasApiKey: !!process.env.API_KEY,
       hasAiKey: !!(process.env.OPENAI_API_KEY || process.env.ANTHROPIC_API_KEY),
+      // Which model reads plans — Opus when an Anthropic key is set (owner's ask).
+      planReader: process.env.ANTHROPIC_API_KEY ? 'anthropic' : process.env.OPENAI_API_KEY ? 'openai' : 'none',
       hasPushKeys: !!(process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY),
       allowedOrigin: process.env.ALLOWED_ORIGIN || '(not set — defaults to *)',
       vercelEnv: process.env.VERCEL_ENV || '(not set)',

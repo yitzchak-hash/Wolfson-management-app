@@ -6,6 +6,36 @@ have them). The v2 rebuild's original design record is the root
 `DECISIONS.md`; the rules and traps behind each decision are in `CLAUDE.md`
 by round. (Standing order 6, 2026-09-23.)_
 
+## 2026-10-08 (the second screen recording, and chat)
+- **Sold/Start follows the work**: "once anything is done after Sold/Start,
+  Sold/Start gets marked off". Any stage ticked done or started after it ticks
+  Sold/Start done (`isStartStage` in `stageMarks.ts`). Applied to the live
+  data: 11 units.
+- **A building unit shows its LAST stage done**: "it doesn't move to that
+  stage — it just shows the last stage that was done". The square's colour
+  and the window's stage field read the last stage finished. Something
+  happening now or half done still wins, and with everything done it reads
+  the closing marker. The Job Board keeps "next to do". 60 live units were
+  re-derived.
+- **The stage panel is one line in order with tiny arrows**, with no "still
+  to do" or "done" headings. Done is a tick, never a strike-through.
+- **The plan reader is AI-first**: "it should be AI, using Opus 5.5 on high
+  thinking", reading the title block on the right side of the sheet. The
+  server runs Opus 5.5 at high effort and sends the enlarged title block
+  beside the page. When no Anthropic key is set, the OpenAI key stands in.
+- **A worker can move work HE started to the right apartment himself**, and
+  "the apartment that he changed from should automatically go back to the
+  previous state it was in before he touched it. That day." The start
+  remembers the apartment's stages, and a move puts them back exactly. A
+  stage another task also explains, or one the office changed by hand since,
+  is left alone.
+- **Notebook bars: four looks drawn (A–D) for him to pick**. Nothing in the
+  app changes until he picks.
+- Also built from the recording: a new "Who did what" widget; Settings →
+  Stages saves itself; the board's 100% is today's 75%; a right-click on a
+  notebook bar does nothing; the Zoho and Drive rows fold away. The rest of
+  the list is in `docs/feedback/2026-10-08-115349.md`.
+
 ## 2026-10-06
 - **A busy notebook day stays "every task its own bar"** (answer A) — nothing
   to build; the bars already say where.

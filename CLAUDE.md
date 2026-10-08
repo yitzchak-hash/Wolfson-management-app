@@ -9247,3 +9247,191 @@ Hebrew. Verified non-vacuous against the old header (390/900/1280 fail).
 survivor to alias to. Off RECENT / SHELF / WIDGET_PREVIEW; its pencil keeps a
 title. No board in production carried a copy (checked all three
 `canvasElements` collections).
+
+---
+
+# v2 — the second screen recording (2026-10-08): the work moves the stages, the plan reader reads the title block
+
+## Sold/Start follows the work (`isStartStage` in stageMarks.ts)
+"Once anything is done after Sold/Start, Sold/Start gets marked off." Inside
+`withImpliedDone` (so `applyMarks`, the one writer, enforces it), a FRESH done
+or doing on any stage ordered after the start stage ticks it done. Fresh means
+the mark changed in this write, so unticking Sold/Start by hand afterwards
+stands. The start stage is `skhtatb` or a name reading Sold/Start. The Job
+Board never meets it (`ownStage`). Tested in `impliedone-test.mjs`.
+
+## A building unit's headline is its LAST stage done (`lastDoneHeadline`)
+"It doesn't move to that stage — it just shows the last stage that was done."
+For a building unit (`buildingId` set and not `'G'`), `headlineStageId`
+resolves in this order:
+1. doing
+2. pending
+3. the last stage done in order, while something is still left
+4. the next to do, when nothing is done yet
+5. the closing marker, when everything is done or off
+
+The Job Board keeps "next to do". `marksForCurrent` for a building unit marks
+the target X itself done (the old "the job is at X" meant X was next).
+Re-encoded to this ruling: `stagescope-test`, `bubbles-probe`. Its group
+selectors now read `[data-stage-flow] [data-stage-state=…]`.
+
+## The stage panel is one ordered line (`StagePicker.tsx`)
+There are no group headings any more. `data-stage-flow` holds every stage of
+the set plus the off ones, in the workspace's order, with a small
+`ChevronRight` (`data-stage-arrow`) between them; the arrow is rotated under
+RTL. Every stage keeps its state hook (`data-stage-state`). An off stage sits
+in its place with its put-back control. Done is a tick, never a strike.
+
+## The worker's mistaken apartment goes back to how it was (`marksBefore`)
+The owner (chat, 2026-10-08): the apartment a worker moved his work away from
+"should automatically go back to the previous state it was in before he
+touched it. That day."
+- `ContractorAssignment.marksBefore` / `marksBeforeAt` hold the apartment's
+  `stageMarks` at the moment the worker STARTED (the portal's `startWork`
+  writes it).
+- `planTaskMove`, when the task carries a snapshot, restores exactly the
+  stages it touched to their snapshot state: the stages it wrote, plus the
+  implied Sold/Start and Drilling. Two rules hold even then:
+  - a stage another task on that apartment also explains stays;
+  - a stage the office changed by hand since stays.
+- The moved task gets a fresh snapshot of the NEW apartment (`plan.toBefore`),
+  so a second move reverts correctly too.
+- The old apartment's history line carries `restoredBefore`, which reads
+  "its stages put back as they were before".
+
+Tested in `taskmove-test.mjs` (8 revert checks).
+
+## The plan reader reads the TITLE BLOCK, and the model reads it first
+The office's sheets draw the Hebrew address as OUTLINES, and their Hebrew text
+layer is garbled. The local reader took a margin caption on the "Address:"
+row, because `columnLine` returned the WHOLE band when nothing sat in the
+label's column. Now:
+- `columnLine` returns an empty line when the column is empty.
+- An unlabelled candidate counts only inside the title block: landscape
+  x0 ≥ 0.62 or y0 ≥ 0.82; portrait y0 ≥ 0.68 or x0 ≥ 0.66.
+- A label's value is read only from the label part's own column.
+- Server (`planRead` in api/geocode.js): `claude-opus-5-5`,
+  `thinking: {type:'adaptive'}`, `output_config: {effort:'high'}`,
+  max_tokens 16000. It is sent a second image — the title block cropped
+  (`detail` / `detailWhere` in planAi.ts) and enlarged. The OpenAI fallback
+  is gpt-4o. `health` reports `planReader: anthropic|openai|none`.
+- An AI answer NOT found in the text layer is accepted only if all three hold
+  (`outlinedSpot`):
+  - its box is in the title block;
+  - the box holds ink;
+  - no text-layer text sits inside it.
+
+  An invented value pointing at blank paper or at real text is still refused
+  (`planhonest` holds).
+- The draw-a-box picker never offers a bare label (`LABEL_ONLY`: "Floor",
+  "כתובת:") and says "Reading the box…" while the model reads.
+
+## A widget's surface is laid out left-to-right under RTL (BoardItems)
+`WidgetSurface`'s outer box is `relative` and its inner box is
+`position:absolute; left:0; top:0`. Under `dir="rtl"`, an inner box in normal
+flow started from the RIGHT edge, and its scale transform (origin 0 0) pushed
+the drawing off the card's left side. Every widget in Hebrew showed half its
+width.
+
+## Who did what (`src/data/workDone.ts` + `WhoDidWhatWidget.tsx`)
+The owner's ask (recording 2026-10-08): finished work as sentences, newest
+first, from every workspace: "Ari finished ● Drilling in 27, 26, 25, 28 · A2".
+- **Links and pictures.** Each apartment is a link: `openJob` in the open
+  workspace, `openUnit` travel otherwise. The pictures sit under the line and
+  open the `MediaViewer`.
+- **Source.** The only source is CLOSED tasks (`completedAt`) and their
+  photos. The open workspace is live; the others come from snapshots on
+  `snapshotTick` (a shared cache keyed `tick|openPid`). Activity logs are
+  never read, because only the open workspace's log is live.
+- **The pure builder.** `workDone()` makes one line per worker × local day ×
+  workspace × stage. Stages come from `stagesWorked`, else `taskStageIds`.
+- **What each line says.**
+  - A `stagesUnfinished` stage reads "(not finished)".
+  - Lines naming the SAME flats merge into "Wall Units + Outdoor Units".
+  - A stage-tagged photo appears only under its own stage.
+  - A task with no stages shows its own words.
+  - A problem reads "fixed a problem", dated at `problem.closedAt`.
+  - A general job with visits is skipped (its visits are reports already).
+- **Grouped jobs.** It reads the store's full apartment list, so a job filed
+  into a group still appears.
+- **Limits and pencil.** It draws 30 lines and 8 thumbnails per line. The
+  pencil sets the days, pictures on or off, and one worker.
+- **Films.** A film with a playable address gets NO thumbnail, so its tile
+  draws its own first frame.
+- **Shelf and tests.** The shelf previews `sampleWork()`. Harnesses:
+  `workdone-test.mjs` (offline, 25) and `whodidwhat-probe.mjs` (37).
+
+## The apartment window (2026-10-08 recording)
+- **A closed task is a green DONE card.** Background #ecfdf5, border #a7f3d0;
+  never faded, never struck through.
+  - Its bold `data-task-done-badge` reads "Done · Tue 6 Oct · 14:49 · <who>".
+  - Nothing stores who closed a task. `closerOf()` reads it from the close's
+    own history line: `contractor_complete` or `task_completed`, within 10
+    minutes of `completedAt`, preferring the line that names the task.
+  - An approved problem shows its approver. Without a matching line it falls
+    back to the task's worker.
+  - The stages it worked are pills (`data-task-done-stage`; half done is
+    `data-half`), and `data-task-photo-count` counts its pictures.
+- **The Photos tab draws each picture ONCE.** There is no "N new from the
+  site" block any more.
+  - An unreviewed photo wears `data-photo-new` in its own section.
+  - A photo Drive doesn't list joins the section named after its stage.
+  - "Mark all reviewed (N)" sits in the tab's header row.
+  - Opening a new photo marks it reviewed, and reviewing never makes a photo
+    disappear.
+- **Drive and Zoho are `LinkSection`s** (`data-collapse-drive` /
+  `data-collapse-zoho`). Folded, each is one line carrying the folder title
+  (or linked / not linked) and an open-arrow. Open or folded is kept per
+  machine in `drawer_fold_<id>`; absent means open.
+- **The folder status.** `folderIssues(health, planShowing)` is the one
+  builder for the Drive row and the Photos tab.
+  - It never says "no plan PDF" or "no Engineered Plans folder" while the
+    window shows a plan.
+  - It is cleared on a new apartment or a new link.
+  - `normFolderName` / `isPhotosFolder` / `pickPhotosFolder` in `driveApi.ts`
+    are the only folder-name tests. They ignore case, spacing and zero-width
+    characters.
+  - The health check scans every plans folder and one level down.
+  - Guard: `scratchpad/drawer-r48.mjs` (53).
+
+## A busy day folds, calendars fold, and the Tasks page spans workspaces (2026-10-08 recording)
+- **Notebook bundles** (`TaskBundle.tsx`, `BUNDLE_MIN`, built inside
+  `barsByRow`): four or more single-day tasks of one person on one day in
+  one workspace draw as ONE bar, e.g. "5 tasks · Wolfson · 4 done · 1 open".
+  - It wears the workspace colour and a done-share band.
+  - Pressing it opens a sealed, portalled window: every task, open first,
+    beside the workspace's buildings drawn small from `floorRows` (live store
+    or snapshot) with the apartments lit — done green, open amber.
+  - A row or a lit cell opens the unit through the standing paths.
+  - Multi-day stretches are never bundled, and neither is the bar under the
+    hand (`heldBarRef`).
+  - `BuildingDiagram` reads the store's buildings, so it can only draw the
+    open workspace; that is why the bundle draws its own small picture.
+  - Hooks: `data-task-bundle` · `data-bundle-popup` · `data-bundle-row` ·
+    `data-bundle-diagram` · `data-bundle-cell`.
+- **A notebook bar or card ignores every non-left button and prevents its
+  context menu** (`noMenu`). A right-click used to ask "Take this off this
+  day?" and open the browser's menu on top of it.
+- **`TaskCalendar` folds** (all additive).
+  - New optional fields `groupKey` / `groupLabel`.
+  - Open events come first in a day.
+  - Done events of one group fold into one green chip at `FOLD_MIN = 3`
+    ("Igor · Wolfson · 4 done ✓"), which opens their list. Done is never
+    struck.
+  - `maxPerDay` plus "+N more" opens the whole day's list; each row keeps its
+    own click.
+  - Office pages pass `OFFICE_DAY_CAP` (5) and `calendarWordsOf(s)`. The day
+    list is icon-only apart from the date, so the portal's Russian worker
+    reads no English.
+- **The Tasks page has a "This workspace / All workspaces" switch**
+  (`tasks_scope`, per machine), fed by each other workspace's
+  `loadProjectSnapshot` and re-read on `snapshotTick`.
+  - A foreign row's name travels to the apartment with a return ticket.
+  - Its pencil switches workspace and opens the editor there
+    (`editOnArrival`).
+  - Its tick is display-only: closing runs stage rules only in its own
+    workspace. Move and Delete are hidden on it.
+  - Active filters show as chips with a count and "Clear all".
+  - The list is open first, then a "Done · N" divider, then done newest
+    first.
+- Guard: `scratchpad/notebook-r48.mjs` (64).

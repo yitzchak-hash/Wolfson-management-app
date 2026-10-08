@@ -14,6 +14,7 @@ import { VoiceRecorderButton, VoiceMemoPlayer } from '../ui/VoiceMemo';
 import { MessageBox, memoFile } from '../ui/MessageBox';
 import { transcribeMemo } from '../../data/transcribe';
 import { format, parseISO, differenceInCalendarDays, startOfDay } from 'date-fns';
+import { he as heLocale } from 'date-fns/locale';
 import { StageNotesSection } from './StageNotesSection';
 import { ActivitySection } from './ActivitySection';
 import { MediaViewer } from '../ui/MediaViewer';
@@ -27,6 +28,8 @@ import { DriveStatus, driveStateOf } from '../ui/DriveStatus';
 import { DriveDesktopPath } from './DriveDesktopPath';
 import { DeleteImpact } from '../ui/DeleteImpact';
 import { LinkField } from '../ui/LinkField';
+import { LinkSection } from './LinkSection';
+import { photoSrcOf } from '../../data/photoSrc';
 import { printSheet, printEsc } from '../../data/printing';
 import { PlanAddressSuggest } from './PlanAddressSuggest';
 import { StagePicker } from './StagePicker';
@@ -76,6 +79,10 @@ function DriveImg({ src, alt, className }: { src: string; alt: string; className
 }
 
 const EMPTY_TIPUSIM: string[] = [];
+/** A stage colour with an alpha suffix — only for a six-digit hex, which can take one. */
+function tintHex(c: string | undefined, alpha: string): string {
+  return c && /^#[0-9a-f]{6}$/i.test(c) ? c + alpha : (c || '#94a3b8');
+}
 interface OfficeThreadAtt { dataUrl: string; filename: string; mimeType: string; driveFileId?: string; driveUrl?: string; transcript?: string }
 function fileToDataUrl(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -234,12 +241,44 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
    * photos tab, so their answers can never disagree; the refresh at the end
    * of the status simply runs it again.
    */
+  /**
+   * Which link the last check was FOR. A check runs against the drawer's own
+   * link (the board hands the drawer the record captured at open, so the prop
+   * can be a link that was changed a minute ago), and an answer that comes
+   * back for a link no longer on screen is dropped — a status about another
+   * folder, or another apartment, is the contradiction the owner recorded.
+   */
+  const healthFor = useRef('');
   async function runHealthCheck() {
-    if (!apartment?.driveLink) return;
+    const link = (driveLink || apartment?.driveLink || '').trim();
+    if (!link) return;
+    healthFor.current = link;
     setCheckingHealth(true);
-    setFolderHealth(await checkFolderHealthViaBackend(apartment.driveLink, apartment.plansPdfLink)
-      .catch(() => ({ mainFolderLinked: true, plansPdfLinked: !!apartment.plansPdfLink, mainFolderAccessible: false })));
+    const answer = await checkFolderHealthViaBackend(link, plansPdfLink || apartment?.plansPdfLink)
+      .catch((): FolderHealth => ({ mainFolderLinked: true, plansPdfLinked: !!plansPdfLink, mainFolderAccessible: false }));
+    if (healthFor.current !== link) return;
+    setFolderHealth(answer);
     setCheckingHealth(false);
+  }
+  /** Forget a status the moment it stops being about what is on screen. */
+  function dropHealth() { healthFor.current = ''; setFolderHealth(null); setCheckingHealth(false); }
+  /**
+   * The folder status, in words — ONE builder for the Drive row and the
+   * Photos tab, so the two can never disagree. `planShowing`: the pane has a
+   * plan (found, starred or picked). "No plan PDF inside it" beside a plan
+   * the window is drawing is the contradiction the owner recorded on
+   * 2026-10-08, so whatever the folder check made of the plans folder, a plan
+   * on screen silences both plan complaints.
+   */
+  function folderIssues(h: FolderHealth, planShowing: boolean): string[] {
+    if (!h.mainFolderAccessible) return [ui.folderNotReachable];
+    const out: string[] = [];
+    if (!h.photosFolderFound) out.push(ui.folderNoPhotos);
+    if (!planShowing) {
+      if (!h.plansFolderFound) out.push(ui.folderNoPlansFolder);
+      else if (!h.plansPdfFound) out.push(ui.folderNoPlanPdf);
+    }
+    return out;
   }
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   /**
@@ -485,6 +524,8 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
       setMergedWithId(apartment.mergedWith ?? '');
       setShowPdfViewer(false);
       setShowHealthCheck(false);
+      // A status checked on the last apartment is not a status of this one.
+      dropHealth();
       setShowSettings(false);
       setActiveTab('details');
       setDrivePhotos([]);
@@ -618,6 +659,9 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
   if (!apartment) return null;
 
   const detectedPdfId = availablePdfs[selectedPdfIdx]?.id ?? null;
+  /** The window has a plan to draw — found, starred, picked or in the plan set. */
+  const planShowing = !!(detectedPdfId || shownPlanId || plansPdfLink.trim()
+    || planSet.plans.some(p => p.kind === 'original'));
   /**
    * The browser's three facts. A job with a Drive link and NO plan to show
    * browses its folder root by itself (this replaces the old "No plans in
@@ -815,6 +859,40 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
     .filter(a => a.apartmentId === apartment.id)
     .sort((a, b) => (a.completedAt ? 1 : 0) - (b.completedAt ? 1 : 0) || (a.dueDate ?? 'z').localeCompare(b.dueDate ?? 'z'));
   const pendingTaskCount = aptTasks.filter(a => !a.completedAt).length;
+
+  /**
+   * WHO closed a task. There is no field for it, so it is read from the
+   * history the close itself wrote: the worker's "closed the task" line on the
+   * portal, or the office's tick here — whichever lies within ten minutes of
+   * `completedAt` on this apartment, nearest first. An approved problem names
+   * its approver. A close older than the kept history falls back to the
+   * task's own worker, which is who closes nearly every task (a stage report
+   * is only ever closed by the man who started it).
+   */
+  function closerOf(a: ContractorAssignment): string {
+    if (a.problem?.approvedBy) return a.problem.approvedBy;
+    const worker = contractors.find(c => c.id === a.contractorId)?.name;
+    if (!a.completedAt) return worker ?? ui.unknownUser;
+    const at = new Date(a.completedAt).getTime();
+    const words = (a.taskDescription ?? '').slice(0, 60);
+    let best: { who: string; gap: number } | null = null;
+    for (const l of activityLogs) {
+      if (l.apartmentId !== a.apartmentId) continue;
+      if (l.actionType !== 'contractor_complete' && l.actionType !== 'task_completed') continue;
+      const gap = Math.abs(new Date(l.createdAt).getTime() - at);
+      if (gap > 10 * 60_000) continue;
+      // Two tasks closed in the same ten minutes: the line naming THIS task's words wins.
+      const named = !!words && !!l.newValue && (l.newValue.startsWith(words) || words.startsWith(l.newValue.slice(0, 60)));
+      const score = gap - (named ? 3_600_000 : 0);
+      if (l.userName && (!best || score < best.gap)) best = { who: l.userName, gap: score };
+    }
+    return best?.who ?? worker ?? ui.unknownUser;
+  }
+  /** "Tue 6 Oct · 14:49" — the moment a task was closed, in the office's own language. */
+  function closedWhen(iso: string): string {
+    try { return format(new Date(iso), 'EEE d MMM · HH:mm', ui.isRtl ? { locale: heLocale } : undefined); }
+    catch { return ''; }
+  }
 
   function getTaskDueBadge(dueDate: string | null) {
     if (!dueDate) return null;
@@ -2143,7 +2221,21 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
               {/* One column on a phone. Two fixed columns forced each LinkField
                   to its own minimum, so the pair measured 585px inside a 390px
                   screen and the second field sat off the edge entirely. */}
-              <div className={`grid gap-3 ${isGeneralProject ? 'grid-cols-1' : 'grid-cols-1 md:grid-cols-2'}`}>
+              {/* Each of the two is a section that FOLDS (owner, 2026-10-08) —
+                  one line saying what is linked, the full controls under it.
+                  items-start: a folded section beside an open one keeps its
+                  own height instead of stretching to its neighbour's. */}
+              <div className={`grid gap-3 items-start ${isGeneralProject ? 'grid-cols-1' : 'grid-cols-1 md:grid-cols-2'}`}>
+                <LinkSection
+                  id="drive"
+                  icon={FolderOpen}
+                  label={ui.driveFolder}
+                  linked={!!driveLink.trim()}
+                  summary={driveLink.trim() ? (driveFolderName || ui.linkLinked) : ui.linkNotLinked}
+                  href={driveLink}
+                  toggleTitle={ui.linkFoldToggle}
+                  extra={<DriveStatus job={{ driveLink, plansPdfLink }} />}
+                >
                 <LinkField
                   label={ui.driveFolder}
                   icon={FolderOpen}
@@ -2152,6 +2244,8 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                   placeholder="https://drive.google.com/drive/folders/…"
                   onSave={next => {
                     setDriveLink(next);
+                    // A new folder: whatever the last check said was about the old one.
+                    dropHealth();
                     if (!currentUser) return;
                     updateApartment(apartment!.id, { driveLink: next || undefined }, currentUser);
                     const folderId = next ? extractFolderId(next) : null;
@@ -2171,7 +2265,7 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                   actions={<DriveDesktopPath driveLink={driveLink} onToast={onToast} />}
                   hint={
                     <span className="flex items-center gap-1.5 text-[10.5px] text-gray-400 flex-wrap">
-                      <DriveStatus job={apartment} />
+                      {/* The Drive light rides the section's own line now. */}
                       {driveLink
                         ? (detectedPdfId ? 'Plans found'
                           : fetchingPdf ? 'Looking for plans…'
@@ -2186,27 +2280,22 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                           Drive row — with the refresh at the end of it. */}
                       {driveLink && backendConfigured && (
                         folderHealth === null ? (
-                          <button type="button" onClick={runHealthCheck} disabled={checkingHealth}
+                          <button type="button" data-folder-status-btn onClick={runHealthCheck} disabled={checkingHealth}
                             className="font-bold text-[#4aa8d8] hover:underline disabled:opacity-50">
-                            {checkingHealth ? 'Checking…' : 'Status'}
+                            {checkingHealth ? ui.folderChecking : ui.folderStatusBtn}
                           </button>
                         ) : (() => {
-                          const issues: string[] = [];
-                          if (!folderHealth.mainFolderAccessible) issues.push('folder not reachable');
-                          else {
-                            if (!folderHealth.photosFolderFound) issues.push('no Photos folder');
-                            if (!folderHealth.plansFolderFound) issues.push('no Engineered Plans folder');
-                            else if (!folderHealth.plansPdfFound) issues.push('no plan PDF inside it');
-                          }
+                          const issues = folderIssues(folderHealth, planShowing);
                           const ok = issues.length === 0;
                           return (
-                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full font-bold"
+                            <span data-folder-status={ok ? 'ok' : 'issues'}
+                              className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full font-bold"
                               style={ok
                                 ? { backgroundColor: '#dcfce7', color: '#166534' }
                                 : { backgroundColor: '#fef3c7', color: '#92400e' }}>
-                              {ok ? 'Folder complete' : issues.join(' · ')}
+                              {ok ? ui.folderComplete : issues.join(' · ')}
                               <button type="button" onClick={runHealthCheck} disabled={checkingHealth}
-                                title="Check it again"
+                                title={ui.folderCheckAgain}
                                 className="disabled:opacity-50"
                                 style={{ color: 'inherit' }}>
                                 <RefreshCw size={10} className={checkingHealth ? 'animate-spin' : ''} />
@@ -2218,8 +2307,18 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                     </span>
                   }
                 />
+                </LinkSection>
 
                 {/* Zoho, on every job rather than only on the job board. */}
+                <LinkSection
+                  id="zoho"
+                  icon={ExternalLink}
+                  label={ui.zohoLinkLabel}
+                  linked={!!zohoLinkLocal.trim()}
+                  summary={zohoLinkLocal.trim() ? ui.linkLinked : ui.linkNotLinked}
+                  href={zohoLinkLocal}
+                  toggleTitle={ui.linkFoldToggle}
+                >
                 <LinkField
                   label={ui.zohoLinkLabel}
                   icon={ExternalLink}
@@ -2232,6 +2331,7 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                     if (currentUser) updateApartment(apartment!.id, { zohoLink: next || undefined }, currentUser);
                   }}
                 />
+                </LinkSection>
               </div>
 
               {/* No Save button — every field on this tab saves on its own:
@@ -2341,13 +2441,36 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                     const badge = getTaskDueBadge(a.dueDate);
                     const CAT_COLORS: Record<string, string> = { drywall: '#f59e0b', ac: '#3b82f6', general: '#10b981' };
                     const isEditing = drawerEditingTaskId === a.id;
+                    /**
+                     * A CLOSED task reads as done at a glance (owner,
+                     * 2026-10-08: "it's so hard to see it — done October 6th…
+                     * I need this visually better"). It was a faded,
+                     * struck-through row with a tiny green date; it is now a
+                     * green card — the notebook's done card, same family — with
+                     * one bold badge saying when and by whom, the stages it did
+                     * as their own coloured pills, the words left readable and
+                     * the number of pictures it brought back. Open tasks are
+                     * untouched.
+                     */
+                    const done = !!a.completedAt && !isEditing;
+                    const workedIds = done ? (a.stagesWorked?.length ? a.stagesWorked : taskStageIds(a)) : [];
+                    const unfinishedIds = done
+                      ? (a.stagesUnfinished ?? (a.stagesFinished === false ? workedIds : []))
+                      : [];
+                    const doneStages = workedIds
+                      .map(id => stages.find(s => s.id === id))
+                      .filter((s): s is NonNullable<typeof s> => !!s);
+                    const movedTo = done && a.stageWhenDone && !workedIds.includes(a.stageWhenDone)
+                      ? stages.find(s => s.id === a.stageWhenDone) : undefined;
+                    const photoCount = done ? contractorPhotos.filter(p => p.assignmentId === a.id).length : 0;
                     return (
                       <div key={a.id} data-task-card={a.id} data-task-lit={litTaskId === a.id ? '1' : undefined}
+                        data-task-done={done ? '1' : undefined}
                         className={`rounded-xl border transition-all ${litTaskId === a.id ? 'ring-2 ring-[#4aa8d8] ring-offset-1 ' : ''}${
                         isEditing
                           ? 'border-[#1e3a5f]/40 bg-[#f0f4fa]'
                           : a.completedAt
-                            ? 'border-green-100 bg-green-50/40 opacity-75'
+                            ? 'border-[#a7f3d0] bg-[#ecfdf5]'
                             : 'border-gray-200 bg-white'
                       }`}>
                         {/* Card header row */}
@@ -2363,6 +2486,18 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                             }
                           </button>
                           <div className="flex-1 min-w-0">
+                            {done && (
+                              <div className="mb-1.5">
+                                <span data-task-done-badge
+                                  className="inline-flex items-center gap-1.5 px-2 py-1 rounded-full text-[11.5px] font-bold text-white max-w-full"
+                                  style={{ backgroundColor: '#16a34a' }}>
+                                  <CheckCircle2 size={13} className="flex-shrink-0" />
+                                  <span className="min-w-0 truncate">
+                                    {ui.taskDoneWord} · {closedWhen(a.completedAt!)} · {closerOf(a)}
+                                  </span>
+                                </span>
+                              </div>
+                            )}
                             <div className="flex items-center gap-1.5 flex-wrap mb-0.5">
                               {contractor && (
                                 <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full"
@@ -2370,7 +2505,8 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                                   {contractor.name}
                                 </span>
                               )}
-                              {(stage || a.stageWhenDone) && (
+                              {/* A done card names its stages in their own row below. */}
+                              {!done && (stage || a.stageWhenDone) && (
                                 <StagePairPill task={a} stages={stages} isRtl={ui.isRtl} size="xs" />
                               )}
                               {a.priority === 'urgent' && (
@@ -2386,9 +2522,41 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                             </div>
                             {!isEditing && (
                               <>
-                                <p className={`text-xs leading-snug ${a.completedAt ? 'line-through text-gray-400' : 'text-gray-700'}`} data-task-text>
+                                <p className={`leading-snug ${done ? 'text-[13px] font-medium text-gray-800' : 'text-xs text-gray-700'}`} data-task-text>
                                   <Translated text={a.taskDescription} to={ui.isRtl ? 'he' : 'en'} />
                                 </p>
+                                {done && (doneStages.length > 0 || movedTo || photoCount > 0) && (
+                                  <div className="flex items-center gap-1.5 mt-1.5 flex-wrap" data-task-done-stages>
+                                    {doneStages.map(st => {
+                                      const half = unfinishedIds.includes(st.id);
+                                      return (
+                                        <span key={st.id} data-task-done-stage={st.id} data-half={half ? '1' : undefined}
+                                          title={half ? `${getStageName(st, ui.isRtl)} · ${ui.stagePendingLabel}` : getStageName(st, ui.isRtl)}
+                                          className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full border"
+                                          style={{ backgroundColor: tintHex(st.color, '26'), borderColor: tintHex(st.color, '80'), color: '#1f2937' }}>
+                                          <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: st.color }} />
+                                          {getStageName(st, ui.isRtl)}
+                                          {half
+                                            ? <Clock size={11} className="flex-shrink-0 text-amber-600" />
+                                            : <CheckCircle2 size={11} className="flex-shrink-0 text-green-600" />}
+                                        </span>
+                                      );
+                                    })}
+                                    {movedTo && (
+                                      <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full border border-gray-200 bg-white text-gray-600">
+                                        → <span className="w-2 h-2 rounded-full" style={{ backgroundColor: movedTo.color }} />
+                                        {getStageName(movedTo, ui.isRtl)}
+                                      </span>
+                                    )}
+                                    {photoCount > 0 && (
+                                      <span data-task-photo-count
+                                        className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-white border border-[#a7f3d0] text-green-800">
+                                        <Camera size={11} />
+                                        {photoCount === 1 ? ui.photoCountOne : ui.photoCountMany.replace('{n}', String(photoCount))}
+                                      </span>
+                                    )}
+                                  </div>
+                                )}
                                 <div className="flex items-center gap-1.5 mt-1 flex-wrap">
                                   {/* A multi-day task shows its RANGE — "Sep 1–2 · 2
                                       days" — and swallows the bare date beside it.
@@ -2419,9 +2587,7 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                                       {badge.text}
                                     </span>
                                   )}
-                                  {a.completedAt && (
-                                    <span className="text-[10px] text-green-600">Done {format(new Date(a.completedAt), 'MMM d')}</span>
-                                  )}
+                                  {/* The tiny green "Done Oct 6" is the badge on top now. */}
                                   {(a.attachments?.length ?? 0) > 0 && (
                                     <span className="flex items-center gap-0.5 text-[10px] text-gray-400">
                                       <Paperclip size={9} /> {a.attachments!.length}
@@ -2685,101 +2851,219 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
             </div>
           )}
 
-          {activeTab === 'photos' && (
-            <div>
-              {/* Photo review queue.
-                  Uploads from the site that nobody has looked at yet. It lives
-                  in the job rather than in a notification, so reviewing a photo
-                  happens next to the plan, the notes and the tasks it relates
-                  to. Marking one reviewed only records that someone looked. */}
-              {(() => {
-                const jobAssignments = new Set(
-                  contractorAssignments.filter(a => a.apartmentId === apartment.id).map(a => a.id));
-                const queue = contractorPhotos
-                  .filter(p => jobAssignments.has(p.assignmentId) && !p.reviewedAt)
-                  .sort((a, b) => (b.uploadedAt ?? '').localeCompare(a.uploadedAt ?? ''));
-                if (queue.length === 0) return null;
-                return (
-                  <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50/60 p-3">
-                    <div className="flex items-center gap-2 mb-2">
-                      <Camera size={14} className="text-amber-600" />
-                      <span className="text-xs font-bold text-amber-800">
-                        {queue.length} new from the site
-                      </span>
-                      <button
-                        onClick={() => queue.forEach(p => updateContractorPhoto(p.id, {
-                          reviewedAt: new Date().toISOString(), reviewedBy: currentUser.name,
-                        }))}
-                        className="ml-auto text-[11px] font-bold text-amber-700 hover:text-amber-900"
-                      >
-                        Mark all reviewed
-                      </button>
-                    </div>
-                    <div className="grid grid-cols-4 gap-1.5">
-                      {queue.slice(0, 8).map(p => {
-                        const src = p.storageUrl || (p.driveFileId ? driveThumbUrl(p.driveFileId, 300) : p.dataUrl);
-                        const who = contractors.find(c => c.id === p.contractorId)?.name;
-                        return (
-                          <button
-                            key={p.id}
-                            title={`${who ?? 'Contractor'} · ${p.filename} — click to mark reviewed`}
-                            onClick={() => updateContractorPhoto(p.id, {
-                              reviewedAt: new Date().toISOString(), reviewedBy: currentUser.name,
-                            })}
-                            className="aspect-square rounded-lg overflow-hidden bg-white border border-amber-200 relative"
-                          >
-                            {src
-                              ? <img src={src} alt={p.filename} className="w-full h-full object-cover" />
-                              : <div className="w-full h-full flex items-center justify-center"><FileText size={14} className="text-gray-300" /></div>}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                );
-              })()}
+          {activeTab === 'photos' && (() => {
+            /**
+             * The review queue — site uploads nobody in the office has looked
+             * at yet. It used to be its own amber block ABOVE the stage
+             * sections, which meant every new picture was drawn twice: once in
+             * "3 new from the site" and again in its stage's section a scroll
+             * below (the owner, 2026-10-08: "why can't we just see Drilling and
+             * have like a 'new' mark"). Now a new photo wears a NEW badge in
+             * place, in the section it belongs to, and the tab's header row
+             * keeps one small "Mark all reviewed (N)". Opening a new photo marks
+             * it reviewed — marking only ever recorded that somebody looked.
+             */
+            const jobTasks = new Map(contractorAssignments
+              .filter(a => a.apartmentId === apartment.id).map(a => [a.id, a] as const));
+            const queue = contractorPhotos
+              .filter(p => jobTasks.has(p.assignmentId) && !p.reviewedAt)
+              .sort((a, b) => (b.uploadedAt ?? '').localeCompare(a.uploadedAt ?? ''));
+            const newByDrive = new Map(queue.filter(p => p.driveFileId).map(p => [p.driveFileId!, p] as const));
+            const markReviewed = (ids: string[]) => {
+              const at = new Date().toISOString();
+              ids.forEach(id => updateContractorPhoto(id, { reviewedAt: at, reviewedBy: currentUser.name }));
+            };
+            const whoOf = (cid: string) => contractors.find(c => c.id === cid)?.name ?? ui.unknownUser;
 
-              {/* Drive folder health — inside the job only, never on a tile. */}
-              {apartment.driveLink && backendConfigured && (
-                <div className="mb-3 flex items-center gap-2 text-[11px]">
-                  {folderHealth === null ? (
-                    <button
-                      onClick={runHealthCheck}
-                      disabled={checkingHealth}
-                      className="text-gray-400 hover:text-gray-600 font-semibold"
-                    >
-                      {checkingHealth ? 'Checking folder…' : 'Check Drive folder'}
-                    </button>
-                  ) : (() => {
-                    const issues: string[] = [];
-                    if (!folderHealth.mainFolderAccessible) issues.push('folder not reachable');
-                    else {
-                      if (!folderHealth.photosFolderFound) issues.push('no Photos folder');
-                      if (!folderHealth.plansFolderFound) issues.push('no Engineered Plans folder');
-                      else if (!folderHealth.plansPdfFound) issues.push('no plan PDF inside it');
-                    }
-                    const ok = issues.length === 0;
-                    return (
-                      <span
-                        title={ok ? 'Folder looks complete' : issues.join(' · ')}
-                        className="inline-flex items-center gap-1.5 px-2 py-1 rounded-full font-bold"
-                        style={ok
-                          ? { backgroundColor: '#dcfce7', color: '#166534' }
-                          : { backgroundColor: '#fef3c7', color: '#92400e' }}
+            interface Tile {
+              key: string; fileId: string; filename: string; mimeType: string;
+              thumb: string; full: string; download: string;
+              /** A Drive file draws Drive's thumbnail; a site file draws its own address. */
+              onDrive: boolean;
+              fresh?: { id: string; who: string };
+            }
+            interface Group { name: string; tiles: Tile[] }
+            const driveGroups: Group[] = [];
+            const looseGroups: Group[] = [];
+            const byName = new Map<string, Group>();
+            const keyOf = (name: string) => name.trim().toLowerCase();
+
+            if (!loadingPhotos) {
+              for (const dp of drivePhotos) {
+                const k = keyOf(dp.folderName);
+                let g = byName.get(k);
+                if (!g) { g = { name: dp.folderName, tiles: [] }; byName.set(k, g); driveGroups.push(g); }
+                const fresh = newByDrive.get(dp.fileId);
+                g.tiles.push({
+                  key: dp.fileId, fileId: dp.fileId, filename: dp.filename, mimeType: dp.mimeType,
+                  thumb: driveThumbUrl(dp.fileId, 400), full: driveThumbUrl(dp.fileId, 800),
+                  download: `https://drive.google.com/uc?export=download&id=${dp.fileId}`,
+                  onDrive: true,
+                  fresh: fresh ? { id: fresh.id, who: whoOf(fresh.contractorId) } : undefined,
+                });
+              }
+              // Site photos the Drive listing does not carry — kept in Firebase
+              // Storage only, or Drive not reachable from here. They join the
+              // section named for their stage (Drive's subfolders ARE the
+              // stage names), or a section of their own; an unreviewed one
+              // still wears NEW. Reviewed ones stay too — marking a picture
+              // reviewed must never be what makes it disappear.
+              const onDrive = new Set(drivePhotos.map(d => d.fileId));
+              const loose = contractorPhotos
+                .filter(p => jobTasks.has(p.assignmentId) && !(p.driveFileId && onDrive.has(p.driveFileId)))
+                .sort((a, b) => (b.uploadedAt ?? '').localeCompare(a.uploadedAt ?? ''));
+              for (const p of [...loose].reverse()) {
+                const task = jobTasks.get(p.assignmentId);
+                const st = stages.find(s => s.id === (p.stageId || task?.stageId));
+                const name = st ? getStageName(st, ui.isRtl) : ui.fromTheSite;
+                const k = keyOf(name);
+                const mime = p.mimeType
+                  || (p.fileType === 'video' ? 'video/mp4' : p.fileType === 'file' ? 'application/octet-stream' : 'image/jpeg');
+                const full = p.storageUrl || p.dataUrl || (p.driveFileId ? driveThumbUrl(p.driveFileId, 800) : '');
+                const tile: Tile = {
+                  key: p.id, fileId: p.driveFileId ?? '', filename: p.filename, mimeType: mime,
+                  thumb: photoSrcOf(p, 400), full,
+                  download: p.storageUrl || p.dataUrl
+                    || (p.driveFileId ? `https://drive.google.com/uc?export=download&id=${p.driveFileId}` : ''),
+                  onDrive: false,
+                  fresh: p.reviewedAt ? undefined : { id: p.id, who: whoOf(p.contractorId) },
+                };
+                // Walked oldest-first and put at the FRONT, so the newest
+                // lands first in its section.
+                const g = byName.get(k);
+                if (g) g.tiles.unshift(tile);
+                else { const ng = { name, tiles: [tile] }; byName.set(k, ng); looseGroups.unshift(ng); }
+              }
+            }
+            const groups = [...looseGroups, ...driveGroups];
+            const allTiles = groups.flatMap(g => g.tiles);
+            const openTile = (t: Tile) => {
+              setLightbox({
+                items: allTiles.map(x => ({
+                  fileId: x.onDrive ? x.fileId : '', filename: x.filename, mimeType: x.mimeType,
+                  thumbSrc: x.full, downloadHref: x.download,
+                })),
+                index: Math.max(0, allTiles.indexOf(t)),
+              });
+              if (t.fresh) markReviewed([t.fresh.id]);
+            };
+
+            return (
+            <div>
+              {/* The tab's header row: the Drive folder's status on the left,
+                  the one review link on the right. */}
+              {((apartment.driveLink && backendConfigured) || queue.length > 0) && (
+                <div className="mb-3 flex items-center gap-2 text-[11px] flex-wrap" data-photos-header>
+                  {apartment.driveLink && backendConfigured && (
+                    folderHealth === null ? (
+                      <button
+                        onClick={runHealthCheck}
+                        disabled={checkingHealth}
+                        className="text-gray-400 hover:text-gray-600 font-semibold"
                       >
-                        <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: ok ? '#16a34a' : '#d97706' }} />
-                        {ok ? 'Drive folder complete' : issues.join(' · ')}
-                        <button type="button" onClick={runHealthCheck} disabled={checkingHealth}
-                          title="Check it again" className="disabled:opacity-50" style={{ color: 'inherit' }}>
-                          <RefreshCw size={11} className={checkingHealth ? 'animate-spin' : ''} />
-                        </button>
-                      </span>
-                    );
-                  })()}
+                        {checkingHealth ? ui.folderChecking : ui.folderCheckBtn}
+                      </button>
+                    ) : (() => {
+                      const issues = folderIssues(folderHealth, planShowing);
+                      const ok = issues.length === 0;
+                      return (
+                        <span
+                          data-folder-status={ok ? 'ok' : 'issues'}
+                          title={ok ? ui.folderComplete : issues.join(' · ')}
+                          className="inline-flex items-center gap-1.5 px-2 py-1 rounded-full font-bold"
+                          style={ok
+                            ? { backgroundColor: '#dcfce7', color: '#166534' }
+                            : { backgroundColor: '#fef3c7', color: '#92400e' }}
+                        >
+                          <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: ok ? '#16a34a' : '#d97706' }} />
+                          {ok ? ui.folderComplete : issues.join(' · ')}
+                          <button type="button" onClick={runHealthCheck} disabled={checkingHealth}
+                            title={ui.folderCheckAgain} className="disabled:opacity-50" style={{ color: 'inherit' }}>
+                            <RefreshCw size={11} className={checkingHealth ? 'animate-spin' : ''} />
+                          </button>
+                        </span>
+                      );
+                    })()
+                  )}
+                  {queue.length > 0 && (
+                    <button
+                      type="button"
+                      data-photos-mark-all
+                      onClick={() => markReviewed(queue.map(p => p.id))}
+                      className="ms-auto text-[11px] font-bold text-amber-700 hover:text-amber-900 hover:underline"
+                    >
+                      {ui.markAllReviewedN.replace('{n}', String(queue.length))}
+                    </button>
+                  )}
                 </div>
               )}
 
-              {!apartment.driveLink ? (
+              {loadingPhotos ? (
+                <div className="flex items-center justify-center py-16 text-gray-400">
+                  <RefreshCw size={18} className="animate-spin mr-2" /> {ui.loadingPhotos}
+                </div>
+              ) : groups.length > 0 ? (
+                <div className="space-y-5">
+                  {groups.map(g => (
+                    <div key={keyOf(g.name)} data-photo-section={g.name}>
+                      <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                        {g.name}
+                        {g.tiles.some(t => t.fresh) && (
+                          <span className="normal-case tracking-normal text-[10px] font-bold text-amber-700">
+                            · {g.tiles.filter(t => t.fresh).length} {ui.photoNewBadge.toLowerCase()}
+                          </span>
+                        )}
+                      </h4>
+                      <div className="grid grid-cols-3 gap-1.5">
+                        {g.tiles.map(t => {
+                          const isImg = t.mimeType.startsWith('image/');
+                          const isVid = t.mimeType.startsWith('video/');
+                          return (
+                            <div
+                              key={t.key}
+                              data-photo-tile={t.key}
+                              data-photo-fresh={t.fresh ? '1' : undefined}
+                              title={t.fresh ? `${t.fresh.who} · ${t.filename} — ${ui.photoNewTitle}` : t.filename}
+                              className={`aspect-square rounded-lg overflow-hidden bg-gray-100 cursor-pointer relative ${
+                                t.fresh ? 'ring-2 ring-amber-400 ring-offset-1' : ''}`}
+                              onClick={() => openTile(t)}
+                            >
+                              {isImg ? (
+                                <DriveImg src={t.thumb} alt={t.filename} className="w-full h-full object-cover" />
+                              ) : isVid ? (
+                                <div className="w-full h-full relative bg-gray-900">
+                                  {t.onDrive
+                                    ? <DriveImg src={t.thumb} alt={t.filename} className="w-full h-full object-cover opacity-90" />
+                                    : <video src={t.full} muted preload="metadata" playsInline className="w-full h-full object-cover opacity-90" />}
+                                  <div className="absolute inset-0 flex items-center justify-center">
+                                    <span className="w-9 h-9 rounded-full flex items-center justify-center text-white"
+                                      style={{ backgroundColor: 'rgba(30,58,95,.85)', border: '2px solid rgba(255,255,255,.85)' }}>
+                                      <Play size={16} fill="currentColor" className="ms-0.5" />
+                                    </span>
+                                  </div>
+                                  <span className="absolute bottom-0.5 inset-x-0 text-center text-white text-[9px] opacity-70 truncate px-1">{t.filename}</span>
+                                </div>
+                              ) : (
+                                <div className="w-full h-full flex flex-col items-center justify-center bg-blue-50 px-1">
+                                  <FileText size={18} className="text-blue-400" />
+                                  <span className="text-[9px] text-gray-500 text-center break-all leading-tight line-clamp-2 mt-1">{t.filename}</span>
+                                </div>
+                              )}
+                              {t.fresh && (
+                                <span data-photo-new
+                                  className="absolute top-1 start-1 px-1.5 py-0.5 rounded-md text-[9px] font-black tracking-wide text-white shadow"
+                                  style={{ backgroundColor: '#d97706' }}>
+                                  {ui.photoNewBadge}
+                                </span>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : !apartment.driveLink ? (
                 <div className="flex flex-col items-center py-16 text-center px-4">
                   <Camera size={32} className="text-gray-300 mb-3" />
                   <p className="text-sm font-medium text-gray-500">{ui.noDriveLinked}</p>
@@ -2791,75 +3075,12 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                   <p className="text-sm font-medium text-gray-500">{ui.driveBackendNotConfigured}</p>
                   <p className="text-xs text-gray-400 mt-1">{ui.driveApiKeyHint}</p>
                 </div>
-              ) : loadingPhotos ? (
-                <div className="flex items-center justify-center py-16 text-gray-400">
-                  <RefreshCw size={18} className="animate-spin mr-2" /> {ui.loadingPhotos}
-                </div>
-              ) : photosLoaded && drivePhotos.length === 0 ? (
+              ) : photosLoaded ? (
                 <div className="flex flex-col items-center py-16 text-center px-4">
                   <Camera size={32} className="text-gray-300 mb-3" />
                   <p className="text-sm font-medium text-gray-500">{ui.noPhotosYet}</p>
                   <p className="text-xs text-gray-400 mt-1">{ui.photosDesc}</p>
                 </div>
-              ) : drivePhotos.length > 0 ? (
-                (() => {
-                  const groups = drivePhotos.reduce<Record<string, DrivePhotoItem[]>>((acc, p) => {
-                    (acc[p.folderName] = acc[p.folderName] || []).push(p);
-                    return acc;
-                  }, {});
-                  return (
-                    <div className="space-y-5">
-                      {Object.entries(groups).map(([folder, items]) => (
-                        <div key={folder}>
-                          <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">{folder}</h4>
-                          <div className="grid grid-cols-3 gap-1.5">
-                            {items.map((photo) => {
-                              const isImg = photo.mimeType.startsWith('image/');
-                              const isVid = photo.mimeType.startsWith('video/');
-                              return (
-                                <div
-                                  key={photo.fileId}
-                                  className="aspect-square rounded-lg overflow-hidden bg-gray-100 cursor-pointer relative"
-                                  onClick={() => {
-                                    const allItems = drivePhotos.map(p => ({
-                                      fileId: p.fileId,
-                                      filename: p.filename,
-                                      mimeType: p.mimeType,
-                                      thumbSrc: driveThumbUrl(p.fileId, 800),
-                                      downloadHref: `https://drive.google.com/uc?export=download&id=${p.fileId}`,
-                                    }));
-                                    const globalIdx = drivePhotos.findIndex(p => p.fileId === photo.fileId);
-                                    setLightbox({ items: allItems, index: globalIdx });
-                                  }}
-                                >
-                                  {isImg ? (
-                                    <DriveImg src={driveThumbUrl(photo.fileId, 400)} alt={photo.filename} className="w-full h-full object-cover" />
-                                  ) : isVid ? (
-                                    <div className="w-full h-full relative bg-gray-900">
-                                      <DriveImg src={driveThumbUrl(photo.fileId, 400)} alt={photo.filename} className="w-full h-full object-cover opacity-90" />
-                                      <div className="absolute inset-0 flex items-center justify-center">
-                                        <span className="w-9 h-9 rounded-full flex items-center justify-center text-white"
-                                          style={{ backgroundColor: 'rgba(30,58,95,.85)', border: '2px solid rgba(255,255,255,.85)' }}>
-                                          <Play size={16} fill="currentColor" className="ms-0.5" />
-                                        </span>
-                                      </div>
-                                      <span className="absolute bottom-0.5 inset-x-0 text-center text-white text-[9px] opacity-70 truncate px-1">{photo.filename}</span>
-                                    </div>
-                                  ) : (
-                                    <div className="w-full h-full flex flex-col items-center justify-center bg-blue-50 px-1">
-                                      <FileText size={18} className="text-blue-400" />
-                                      <span className="text-[9px] text-gray-500 text-center break-all leading-tight line-clamp-2 mt-1">{photo.filename}</span>
-                                    </div>
-                                  )}
-                                </div>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  );
-                })()
               ) : (
                 <div className="flex flex-col items-center py-16 text-center px-4">
                   <Camera size={32} className="text-gray-300 mb-3" />
@@ -2867,7 +3088,8 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                 </div>
               )}
             </div>
-          )}
+            );
+          })()}
 
           {activeTab === 'stages' && (
             <StageNotesSection

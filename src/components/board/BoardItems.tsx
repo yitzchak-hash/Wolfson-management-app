@@ -533,9 +533,15 @@ export function WidgetSurface({ el, w, h, children }: {
   const innerW = Math.max(naturalW, w / k);
 
   return (
-    <div className="w-full h-full overflow-hidden">
+    // The drawing is pinned to the LEFT edge by position, not by flow: under
+    // right-to-left a block narrower than its box sits against the RIGHT
+    // edge, and then scaling from the top-left corner pushed every widget off
+    // the right side of its node in Hebrew. The text inside keeps its own
+    // direction.
+    <div className="relative w-full h-full overflow-hidden">
       <div
         style={{
+          position: 'absolute', left: 0, top: 0,
           width: innerW,
           height: h / k,
           transform: `scale(${k})`,

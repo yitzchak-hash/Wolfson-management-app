@@ -1176,6 +1176,8 @@ export interface ActivityLog {
    */
   taskText?: string;
   workerName?: string;
+  /** On 'task_moved_out': the apartment was put back as it stood before the worker started there (2026-10-08). */
+  restoredBefore?: boolean;
 }
 
 /**
@@ -2325,6 +2327,22 @@ export interface MainUiStrings {
   tlQuietWindow: string;
   tlNoDates: string;
   tlJumpNext: string;
+  /** The Who-did-what widget's own words (owner, 2026-10-08). */
+  wdwTitle: string;
+  wdwWindow: string;
+  wdwFinished: string;
+  wdwWorkedOn: string;
+  wdwNotFinished: string;
+  wdwFixedProblem: string;
+  wdwWorked: string;
+  wdwIn: string;
+  wdwYesterday: string;
+  wdwEmpty: string;
+  wdwEmptyWho: string;
+  wdwPlaces: string;
+  wdwWorkers: string;
+  wdwShowMore: string;
+  wdwMorePhotos: string;
   navTasks: string;
   navAnalytics: string;
   navReports: string;
@@ -2775,6 +2793,33 @@ export interface MainUiStrings {
   setPdfHint: string;
   saveChangesBtn: string;
   driveFolder: string;
+  // ── The apartment window, round 48 (owner's screen recording, 2026-10-08) ──
+  /** The bold word on a closed task's badge — "Done · Tue 6 Oct · 14:49 · Igor". */
+  taskDoneWord: string;
+  /** A closed task's picture count. {n} is the number. */
+  photoCountOne: string;
+  photoCountMany: string;
+  /** The small badge on a photo nobody in the office has looked at yet. */
+  photoNewBadge: string;
+  photoNewTitle: string;
+  /** The tab header's link that clears every NEW badge at once. {n} is the count. */
+  markAllReviewedN: string;
+  /** The section a new site photo sits in when it has no Drive folder of its own. */
+  fromTheSite: string;
+  /** A collapsed link section's one-line summary. */
+  linkLinked: string;
+  linkNotLinked: string;
+  linkFoldToggle: string;
+  /** The Drive folder's status line. */
+  folderNotReachable: string;
+  folderNoPhotos: string;
+  folderNoPlansFolder: string;
+  folderNoPlanPdf: string;
+  folderComplete: string;
+  folderStatusBtn: string;
+  folderChecking: string;
+  folderCheckAgain: string;
+  folderCheckBtn: string;
   connectedUnit: string;
   linkedToApt: string;
   noConnection: string;
@@ -3195,6 +3240,41 @@ export interface MainUiStrings {
   deleteApartmentLabel: string;
   jobLabel: string;
   openZohoBtn: string;
+  /**
+   * The flood round (owner, 2026-10-08 — a worker doing a small task in
+   * twenty apartments a day). `nbBundle…` = the notebook's bundle bar and
+   * its window; `cal…` = the office calendars' folded done chips and day
+   * list; `tp…` = the Tasks page's scope switch, filter chips and divider.
+   */
+  nbBundleTasks: string;
+  nbBundleDone: string;
+  nbBundleOpen: string;
+  nbBundleHint: string;
+  nbBundleList: string;
+  nbBundleBuilding: string;
+  nbBundleNoBuilding: string;
+  nbBundleDoneAt: string;
+  nbBundleOpenWord: string;
+  nbBundleLegendDone: string;
+  nbBundleLegendOpen: string;
+  nbBundleOpenUnit: string;
+  nbBundleClose: string;
+  nbBundleNoStage: string;
+  calFoldDone: string;
+  calMore: string;
+  calDoneWord: string;
+  calOpenWord: string;
+  calClose: string;
+  calFoldHint: string;
+  tpScopeHere: string;
+  tpScopeAll: string;
+  tpScopeNote: string;
+  tpFilterBtn: string;
+  tpClearAll: string;
+  tpRemoveFilter: string;
+  tpDoneDivider: string;
+  tpOpenThere: string;
+  tpForeignStatus: string;
 }
 
 export const DEFAULT_MAIN_UI_STRINGS: MainUiStrings = {
@@ -3206,6 +3286,21 @@ export const DEFAULT_MAIN_UI_STRINGS: MainUiStrings = {
   tlQuietWindow: 'Nothing scheduled in this window',
   tlNoDates: 'No dated tasks yet — give tasks due dates and they show here',
   tlJumpNext: 'Jump to the next task',
+  wdwTitle: 'Who did what',
+  wdwWindow: 'last {n} days',
+  wdwFinished: 'finished',
+  wdwWorkedOn: 'worked on',
+  wdwNotFinished: 'not finished',
+  wdwFixedProblem: 'fixed a problem',
+  wdwWorked: 'worked',
+  wdwIn: 'in',
+  wdwYesterday: 'Yesterday',
+  wdwEmpty: 'No work closed in the last {n} days',
+  wdwEmptyWho: 'Nothing closed by {who} in the last {n} days',
+  wdwPlaces: 'places',
+  wdwWorkers: 'workers',
+  wdwShowMore: 'Show {n} more',
+  wdwMorePhotos: 'See all {n} pictures',
   navTasks: 'Tasks',
   navAnalytics: 'Analytics',
   navReports: 'Reports',
@@ -3639,6 +3734,25 @@ export const DEFAULT_MAIN_UI_STRINGS: MainUiStrings = {
   setPdfHint: 'Set the Drive folder in Settings below to auto-detect Plans PDF.',
   saveChangesBtn: 'Save Changes',
   driveFolder: 'Google Drive Folder',
+  taskDoneWord: 'Done',
+  photoCountOne: '1 photo',
+  photoCountMany: '{n} photos',
+  photoNewBadge: 'NEW',
+  photoNewTitle: 'New from the site — opening it marks it reviewed',
+  markAllReviewedN: 'Mark all reviewed ({n})',
+  fromTheSite: 'From the site',
+  linkLinked: 'linked',
+  linkNotLinked: 'not linked',
+  linkFoldToggle: 'Show or hide',
+  folderNotReachable: 'folder not reachable',
+  folderNoPhotos: 'no Photos folder',
+  folderNoPlansFolder: 'no Engineered Plans folder',
+  folderNoPlanPdf: 'no plan PDF inside it',
+  folderComplete: 'Folder complete',
+  folderStatusBtn: 'Status',
+  folderChecking: 'Checking…',
+  folderCheckAgain: 'Check it again',
+  folderCheckBtn: 'Check Drive folder',
   connectedUnit: 'Connected Unit (buyer-merged apartments)',
   linkedToApt: 'Linked to Apt',
   noConnection: '— No connection —',
@@ -4048,6 +4162,35 @@ export const DEFAULT_MAIN_UI_STRINGS: MainUiStrings = {
   deleteApartmentLabel: 'Delete Apartment',
   jobLabel: 'Job',
   openZohoBtn: 'Open in Zoho',
+  nbBundleTasks: '{n} tasks',
+  nbBundleDone: '{n} done',
+  nbBundleOpen: '{n} open',
+  nbBundleHint: 'Click to see every task and where it is in the building',
+  nbBundleList: 'Every task that day',
+  nbBundleBuilding: 'Where in the building',
+  nbBundleNoBuilding: 'No building diagram for these jobs.',
+  nbBundleDoneAt: 'done {time}',
+  nbBundleOpenWord: 'open',
+  nbBundleLegendDone: 'Done',
+  nbBundleLegendOpen: 'Still open',
+  nbBundleOpenUnit: 'Open this apartment',
+  nbBundleClose: 'Close',
+  nbBundleNoStage: 'no stage',
+  calFoldDone: '{n} done',
+  calMore: '+{n} more',
+  calDoneWord: 'done',
+  calOpenWord: 'open',
+  calClose: 'Close',
+  calFoldHint: 'Click to see each one',
+  tpScopeHere: 'This workspace ({n})',
+  tpScopeAll: 'All workspaces ({n})',
+  tpScopeNote: 'The other workspaces show what this computer last saw of them.',
+  tpFilterBtn: 'Filter',
+  tpClearAll: 'Clear all',
+  tpRemoveFilter: 'Remove this filter',
+  tpDoneDivider: 'Done · {n}',
+  tpOpenThere: 'Opens in {ws}',
+  tpForeignStatus: 'Open it in {ws} to change it',
 };
 
 export const HEBREW_MAIN_UI_STRINGS: MainUiStrings = {
@@ -4059,6 +4202,21 @@ export const HEBREW_MAIN_UI_STRINGS: MainUiStrings = {
   tlQuietWindow: 'אין משימות בתקופה הזו',
   tlNoDates: 'אין עדיין משימות עם תאריך — קבעו תאריכים והן יופיעו כאן',
   tlJumpNext: 'קפיצה למשימה הבאה',
+  wdwTitle: 'מי עשה מה',
+  wdwWindow: '{n} הימים האחרונים',
+  wdwFinished: 'סיים',
+  wdwWorkedOn: 'עבד על',
+  wdwNotFinished: 'לא הסתיים',
+  wdwFixedProblem: 'תיקן תקלה',
+  wdwWorked: 'עבד',
+  wdwIn: 'ב־',
+  wdwYesterday: 'אתמול',
+  wdwEmpty: 'לא נסגרה עבודה ב־{n} הימים האחרונים',
+  wdwEmptyWho: '{who} לא סגר עבודה ב־{n} הימים האחרונים',
+  wdwPlaces: 'מקומות',
+  wdwWorkers: 'עובדים',
+  wdwShowMore: 'הצג עוד {n}',
+  wdwMorePhotos: 'כל {n} התמונות',
   navTasks: 'משימות',
   navAnalytics: 'ניתוח',
   navReports: 'דוחות',
@@ -4492,6 +4650,25 @@ export const HEBREW_MAIN_UI_STRINGS: MainUiStrings = {
   setPdfHint: 'הגדר תיקיית Drive בהגדרות למטה לזיהוי אוטומטי של PDF תוכניות.',
   saveChangesBtn: 'שמור שינויים',
   driveFolder: 'תיקיית Google Drive',
+  taskDoneWord: 'בוצע',
+  photoCountOne: 'תמונה אחת',
+  photoCountMany: '{n} תמונות',
+  photoNewBadge: 'חדש',
+  photoNewTitle: 'חדש מהשטח — פתיחה מסמנת אותה כנבדקה',
+  markAllReviewedN: 'סמן הכול כנבדק ({n})',
+  fromTheSite: 'מהשטח',
+  linkLinked: 'מקושר',
+  linkNotLinked: 'לא מקושר',
+  linkFoldToggle: 'הצג או הסתר',
+  folderNotReachable: 'אין גישה לתיקייה',
+  folderNoPhotos: 'אין תיקיית Photos',
+  folderNoPlansFolder: 'אין תיקיית Engineered Plans',
+  folderNoPlanPdf: 'אין בה קובץ PDF של תוכנית',
+  folderComplete: 'התיקייה תקינה',
+  folderStatusBtn: 'מצב',
+  folderChecking: 'בודק…',
+  folderCheckAgain: 'לבדוק שוב',
+  folderCheckBtn: 'בדיקת תיקיית Drive',
   connectedUnit: 'יחידה מקושרת (דירות משולבות)',
   linkedToApt: 'מקושר לדירה',
   noConnection: '— אין חיבור —',
@@ -4901,4 +5078,33 @@ export const HEBREW_MAIN_UI_STRINGS: MainUiStrings = {
   deleteApartmentLabel: 'מחק דירה',
   jobLabel: 'עבודה',
   openZohoBtn: 'פתח ב-Zoho',
+  nbBundleTasks: '{n} משימות',
+  nbBundleDone: '{n} בוצעו',
+  nbBundleOpen: '{n} פתוחות',
+  nbBundleHint: 'לחצו כדי לראות כל משימה ואיפה היא בבניין',
+  nbBundleList: 'כל המשימות באותו יום',
+  nbBundleBuilding: 'איפה בבניין',
+  nbBundleNoBuilding: 'אין תרשים בניין לעבודות האלה.',
+  nbBundleDoneAt: 'בוצע {time}',
+  nbBundleOpenWord: 'פתוחה',
+  nbBundleLegendDone: 'בוצע',
+  nbBundleLegendOpen: 'עדיין פתוח',
+  nbBundleOpenUnit: 'פתיחת הדירה',
+  nbBundleClose: 'סגירה',
+  nbBundleNoStage: 'ללא שלב',
+  calFoldDone: '{n} בוצעו',
+  calMore: '+{n} נוספות',
+  calDoneWord: 'בוצע',
+  calOpenWord: 'פתוח',
+  calClose: 'סגירה',
+  calFoldHint: 'לחצו כדי לראות כל אחת',
+  tpScopeHere: 'סביבת העבודה הזאת ({n})',
+  tpScopeAll: 'כל סביבות העבודה ({n})',
+  tpScopeNote: 'סביבות העבודה האחרות מוצגות כפי שהמחשב הזה ראה אותן לאחרונה.',
+  tpFilterBtn: 'סינון',
+  tpClearAll: 'ניקוי הכל',
+  tpRemoveFilter: 'הסרת הסינון',
+  tpDoneDivider: 'בוצעו · {n}',
+  tpOpenThere: 'נפתח ב{ws}',
+  tpForeignStatus: 'כדי לשנות, פתחו אותה ב{ws}',
 };

@@ -2784,6 +2784,9 @@ export const useStore = create<AppState>((set, get) => ({
     //    remembers the stage of the apartment it is NOW on.
     const moved: ContractorAssignment = {
       ...task, apartmentId: to.id, buildingId: to.buildingId,
+      // The new apartment's own "before" — so a second move (wrong again)
+      // puts THIS apartment back too.
+      ...(task.marksBefore && plan?.toBefore ? { marksBefore: plan.toBefore, marksBeforeAt: new Date().toISOString() } : {}),
       ...(task.problem ? { problem: { ...task.problem, stageBefore: to.currentStageId ?? null } } : {}),
     };
     const contractorAssignments = st.contractorAssignments.map(a => {
@@ -2824,6 +2827,7 @@ export const useStore = create<AppState>((set, get) => ({
       stageId: task.stageId ?? '',
       taskText: task.taskDescription,
       ...(workerName ? { workerName } : {}),
+      ...(actionType === 'task_moved_out' && plan?.restored && plan.fromChanged ? { restoredBefore: true } : {}),
     });
     if (from) line(from, 'task_moved_out');
     line(to, 'task_moved_in');

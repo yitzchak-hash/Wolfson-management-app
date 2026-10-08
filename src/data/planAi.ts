@@ -49,7 +49,7 @@ export function fracOf(b: unknown): Frac | null {
 
 export async function aiReadPlanImage(
   image: string, want: 'address' | 'phone' | 'both', crop: boolean,
-  opts: { scan?: boolean } = {},
+  opts: { scan?: boolean; detail?: string; detailWhere?: 'right' | 'bottom' } = {},
 ): Promise<AiPlanRead | null> {
   if (!API_KEY || serverOff) return null;
   try {
@@ -58,7 +58,9 @@ export async function aiReadPlanImage(
       headers: { 'Content-Type': 'application/json', 'x-api-key': API_KEY },
       // `scan` tells the server the page has no text layer to check against,
       // so a value the model cannot point at is not worth returning.
-      body: JSON.stringify({ planRead: { image, want, crop, scan: !!opts.scan } }),
+      // `detail`: the title block of the same page, enlarged (2026-10-08).
+      body: JSON.stringify({ planRead: { image, want, crop, scan: !!opts.scan,
+        ...(opts.detail ? { detail: opts.detail, detailWhere: opts.detailWhere ?? 'right' } : {}) } }),
     });
     if (resp.status === 501 || resp.status === 401) { serverOff = true; return null; }
     if (!resp.ok) return null;

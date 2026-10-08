@@ -83,28 +83,29 @@ await page.waitForTimeout(900);
 check((await page.locator('[data-stage-fraction]').innerText()).trim() === '1/3', 'the field wears the fraction');
 await page.locator('[data-stage-picker]').click();
 await page.waitForTimeout(400);
-check(await page.locator('[data-stage-group="todo"] [data-stage-bubble]').count() === 2
-  && await page.locator('[data-stage-group="done"] [data-stage-bubble="S2"]').count() === 1,
-  'the panel groups: two still to do, Piping done');
+check(await page.locator('[data-stage-flow] [data-stage-state="todo"][data-stage-bubble]').count() === 2
+  && await page.locator('[data-stage-flow] [data-stage-state="done"][data-stage-bubble="S2"]').count() === 1,
+  'the panel is one line in order: two to do, Piping done');
 check(await page.locator('[data-stage-marker="S1"]').count() === 1 && await page.locator('[data-stage-bubble="S1"]').count() === 0,
   'the marker is offered as a whole-flat state, never as a bubble');
 // a TAP walks Wall units on: to do → happening now
 await page.locator('[data-stage-bubble="S4"]').click();
 await page.waitForTimeout(600);
-check(await page.locator('[data-stage-group="doing"] [data-stage-bubble="S4"]').count() === 1, 'a tap makes Wall units HAPPENING NOW');
+check(await page.locator('[data-stage-flow] [data-stage-state="doing"][data-stage-bubble="S4"]').count() === 1, 'a tap makes Wall units HAPPENING NOW');
 a7 = await aptOf(page, 'A1-7');
 check(a7.currentStageId === 'S4', 'and the headline follows the work happening now', a7.currentStageId);
 // another tap: done
 await page.locator('[data-stage-bubble="S4"]').click();
 await page.waitForTimeout(600);
 a7 = await aptOf(page, 'A1-7');
-check(a7.stageMarks?.S4 === 'done' && a7.currentStageId === 'S3', 'a second tap finishes it and the headline falls back to the next to do', `${a7.currentStageId} ${JSON.stringify(a7.stageMarks)}`);
+// Owner, 2026-10-08: a building unit shows the LAST stage done.
+check(a7.stageMarks?.S4 === 'done' && a7.currentStageId === 'S4', 'a second tap finishes it and the headline is the last stage done', `${a7.currentStageId} ${JSON.stringify(a7.stageMarks)}`);
 check((await page.locator('[data-stage-fraction]').innerText()).trim() === '2/3', 'fraction 2/3');
 // right-click: half done
 await page.locator('[data-stage-bubble="S3"]').click({ button: 'right' });
 await page.waitForTimeout(600);
 a7 = await aptOf(page, 'A1-7');
-check(a7.stageMarks?.S3 === 'pending' && await page.locator('[data-stage-group="pending"] [data-stage-bubble="S3"]').count() === 1,
+check(a7.stageMarks?.S3 === 'pending' && await page.locator('[data-stage-flow] [data-stage-state="pending"][data-stage-bubble="S3"]').count() === 1,
   'a right-click marks Concealed units HALF DONE');
 check(await page.locator('[data-pending-bell]').count() === 1, 'the header wears the orange clock');
 // × takes a stage off; the fraction shrinks; put back restores
@@ -131,9 +132,9 @@ d = await store(page);
 const custom = d.stages.find(s => s.name === 'Extra drainage');
 check(!!custom && custom.custom === true && JSON.stringify(custom.onApartments) === JSON.stringify(['A1-7']),
   'the custom stage lives in the workspace list, flagged, on A1-7 alone', JSON.stringify(custom));
-check(await page.locator(`[data-stage-group="todo"] [data-stage-bubble="${custom?.id}"]`).count() === 1
+check(await page.locator(`[data-stage-flow] [data-stage-state="todo"][data-stage-bubble="${custom?.id}"]`).count() === 1
   && (await page.locator('[data-stage-fraction]').innerText()).trim() === '2/4',
-  'it shows under Still to do and the fraction is 2/4');
+  'it shows in the line as to do and the fraction is 2/4');
 await page.keyboard.press('Escape');
 await page.waitForTimeout(300);
 await page.keyboard.press('Escape');
@@ -234,7 +235,7 @@ await page.locator('.drawer-panel button:has-text("Details")').first().click();
 await page.waitForTimeout(400);
 await page.locator('[data-stage-picker]').click();
 await page.waitForTimeout(400);
-check(await page.locator(`[data-stage-group="pending"] [data-stage-bubble="${custom.id}"]`).count() === 1, 'the office sees Extra drainage half done');
+check(await page.locator(`[data-stage-flow] [data-stage-state="pending"][data-stage-bubble="${custom.id}"]`).count() === 1, 'the office sees Extra drainage half done');
 await page.locator(`[data-stage-bubble="${custom.id}"]`).click();
 await page.waitForTimeout(600);
 a7 = await aptOf(page, 'A1-7');

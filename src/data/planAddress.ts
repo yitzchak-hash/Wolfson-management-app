@@ -271,7 +271,11 @@ function columnLine(label: Line, band: Line): Line {
   const cx = (label.x1 + label.x2) / 2;
   const halfW = Math.max(160, (label.x2 - label.x1) * 3);
   const parts = band.parts.filter(pt => Math.abs(pt.x - cx) < halfW);
-  if (!parts.length || parts.length === band.parts.length) return band;
+  if (parts.length === band.parts.length) return band;
+  // NOTHING in the label's column is nothing — never the rest of the band.
+  // Handing back the whole band read a garbled caption from the opposite
+  // margin as the address (the 2026-10-08 sheet, whose value is outlines).
+  if (!parts.length) return { ...band, parts: [], text: '' };
   return { ...band, parts };
 }
 
@@ -802,9 +806,39 @@ async function readNow(fileId: string): Promise<PlanAddressResult> {
     const lines = hasText ? buildLines(items) : [];
     const segs = hasText ? segmentsOf(lines) : [];
 
-    const pageH = vp1.viewBox[3] - vp1.viewBox[1];
-    /** Title blocks live low on the sheet; PDF y grows upward. */
-    const titleBlockBonus = (l: Line) => (l.y1 < pageH / 3 ? 10 : 0);
+    /**
+     * THE TITLE BLOCK — where a customer's details are printed (owner,
+     * 2026-10-08: "the address should usually come from this side — the
+     * right side of the sheet"). On a landscape sheet the right-hand column
+     * (and a bottom strip); on a portrait one the bottom (and a right strip).
+     * Outside it, a line counts only when it carries an explicit label —
+     * the legend and the photo captions in the margins once handed back
+     * their (garbled) Hebrew as the "address".
+     */
+    const landscape = W1 >= H1;
+    const inTitleFrac = (f: Frac) => (landscape
+      ? (f.x0 >= 0.62 || f.y0 >= 0.82)
+      : (f.y0 >= 0.68 || f.x0 >= 0.66));
+    const inTitleBlock = (l: Line) => inTitleFrac(toFrac({ x1: l.x1, y1: l.y1, x2: l.x2, y2: l.y2 }));
+    const titleBlockBonus = (l: Line) => (inTitleBlock(l) ? 25 : 0);
+    /** Does the text layer print anything inside this box? (fractions) */
+    const textInBox = (b: Frac) => segs.some(sg => sg.parts.some(pt => {
+      const f = toFrac(partRect(pt, sg.lineH, sg.y1));
+      const cx = (f.x0 + f.x1) / 2, cy = (f.y0 + f.y1) / 2;
+      return cx >= b.x0 && cx <= b.x1 && cy >= b.y0 && cy <= b.y1;
+    }));
+    /**
+     * The model's answer on a page WITH a text layer, where the value itself
+     * is not text (outlines — the 2026-10-08 sheet's Hebrew address): it
+     * stands only where it points at INK, inside the title block, with NO
+     * text printed there. Text in the box that does not match the answer
+     * means the answer is not what is printed — refused, as before.
+     */
+    const outlinedSpot = (box: Frac | null | undefined, canvas: HTMLCanvasElement): Frac | null => {
+      const b = usableBox(box);
+      if (!b || !inTitleFrac(b) || textInBox(b)) return null;
+      return inkShare(canvas, b) >= MIN_INK ? b : null;
+    };
 
     // ── The ADDRESS ─────────────────────────────────────────────────────────
     let bestAddr: { line: Line; extra?: Line; text: string; score: number } | null = null;
@@ -815,7 +849,14 @@ async function readNow(fileId: string): Promise<PlanAddressResult> {
       let score = 0;
       let text = '';
       let extra: Line | undefined;
-      for (const v of variantsOf(l)) {
+      // A line is a y-band across the WHOLE sheet, so the band holding the
+      // label "Address:" also holds whatever else sits at that height — on
+      // the 2026-10-08 sheet a garbled Hebrew photo caption in the far left
+      // margin, which came back as the address. Read only the label's column.
+      const lp = l.parts.find(pt => LABEL.test(pt.str));
+      const labelLine: Line = lp ? { ...l, x1: lp.x, x2: lp.x + (lp.w ?? 40), parts: [lp] } : l;
+      const src = lp ? columnLine(labelLine, l) : l;
+      for (const v of variantsOf(src)) {
         if (LABEL.test(v)) {
           const stripped = stripLabel(v);
           if (score < 100) { score = 100; text = stripped; }
@@ -830,7 +871,7 @@ async function readNow(fileId: string): Promise<PlanAddressResult> {
               // Only the label's own column of that band, read in the most
               // Hebrew-plausible order — and if what is there does not look
               // like an address at all, say nothing rather than gibberish.
-              const sub = columnLine(l, next);
+              const sub = columnLine(labelLine, next);
               const read = pickReading(variantsOf(sub));
               text = plausibleAddress(read) ? read : '';
               extra = next;
@@ -841,6 +882,7 @@ async function readNow(fileId: string): Promise<PlanAddressResult> {
         }
       }
       if (!score) return;
+      if (score < 100 && !inTitleBlock(l)) return;
       const clean = text.replace(/\s+/g, ' ').trim();
       if (clean.length < 3 || clean.length > 90) return;
       // Mostly digits is a number wearing a street word, not an address —
@@ -872,6 +914,7 @@ async function readNow(fileId: string): Promise<PlanAddressResult> {
           hitAny = true;
           let score = 50;
           if (PHONE_LABEL.test(v)) score += 50;
+          else if (!inTitleBlock(l)) continue;   // a bare number out in the drawing is not the customer's
           // A mobile is almost always the CUSTOMER — the office and the
           // consultant print landlines.
           if (normalizePhoneDigits(raw).startsWith('05')) score += 15;
@@ -923,7 +966,26 @@ async function readNow(fileId: string): Promise<PlanAddressResult> {
           ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, canvas.width, canvas.height);
           await page.render({ canvasContext: ctx, viewport: vp } as never).promise;
           pageCanvas = canvas;
-          const ai = await aiReadPlanImage(canvasToJpeg(canvas, undefined, 1800), 'both', false, { scan: !hasText });
+          // The title block again, enlarged — the small print a whole-page
+          // picture shrinks to a few pixels.
+          let detail: string | undefined;
+          try {
+            const ds = Math.min(4, 2400 / Math.max(W1, H1) * (landscape ? 1.6 : 1.4));
+            const dvp = page.getViewport({ scale: ds });
+            const dc = document.createElement('canvas');
+            dc.width = Math.round(dvp.width); dc.height = Math.round(dvp.height);
+            if (dc.width * dc.height <= 16_000_000) {
+              const dctx = dc.getContext('2d');
+              if (dctx) {
+                dctx.fillStyle = '#fff'; dctx.fillRect(0, 0, dc.width, dc.height);
+                await page.render({ canvasContext: dctx, viewport: dvp } as never).promise;
+                detail = canvasToJpeg(dc, landscape ? { x0: 0.62, y0: 0, x1: 1, y1: 1 } : { x0: 0, y0: 0.68, x1: 1, y1: 1 }, 2400);
+              }
+              dc.width = 0; dc.height = 0;
+            }
+          } catch { /* the whole page alone */ }
+          const ai = await aiReadPlanImage(canvasToJpeg(canvas, undefined, 1800), 'both', false,
+            { scan: !hasText, detail, detailWhere: landscape ? 'right' : 'bottom' });
           if (ai) {
             out.ai = true;
             const aiAddr = tidy(ai.address);
@@ -931,6 +993,10 @@ async function readNow(fileId: string): Promise<PlanAddressResult> {
               if (hasText) {
                 const at = locateWords(aiAddr, segs, ai.addressBox ? toPdf(ai.addressBox) : null, 2);
                 if (at && at !== 'office') addr = { value: aiAddr, box: toFrac(at.rect), lineH: at.lineH, from: 'ai' };
+                else if (!at) {
+                  const b = outlinedSpot(ai.addressBox, canvas);
+                  if (b) addr = { value: aiAddr, box: b, lineH: 0, from: 'ai' };
+                }
               } else {
                 const b = usableBox(ai.addressBox);
                 if (b && inkShare(canvas, b) >= MIN_INK) addr = { value: aiAddr, box: b, lineH: 0, from: 'ai' };
@@ -943,6 +1009,10 @@ async function readNow(fileId: string): Promise<PlanAddressResult> {
               if (hasText) {
                 const at = locatePhone(digits, segs, ai.phoneBox ? toPdf(ai.phoneBox) : null);
                 if (at) phone = { value: aiPhone, box: toFrac(at.rect), lineH: at.lineH, from: 'ai' };
+                else {
+                  const b = outlinedSpot(ai.phoneBox, canvas);
+                  if (b) phone = { value: aiPhone, box: b, lineH: 0, from: 'ai' };
+                }
               } else {
                 const b = usableBox(ai.phoneBox);
                 if (b && inkShare(canvas, b) >= MIN_INK) phone = { value: aiPhone, box: b, lineH: 0, from: 'ai' };
