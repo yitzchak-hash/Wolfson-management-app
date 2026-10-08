@@ -116,6 +116,9 @@ const seed = (ctx, w) => ctx.addInitScript(([user, stages, worker, apts, tasks])
   // The set model (2026-09-22): the start asks what he is doing here first.
   if (await page.locator('[data-work-stage]').count()) await page.locator('[data-work-stage]').first().click();
   await page.locator('[data-work-start]').click();
+  // Round 48: Start asks "are you sure you will be doing these today" first.
+  await page.waitForTimeout(300);
+  await page.locator('[data-work-confirm-yes]').click();
   await page.waitForTimeout(1000);
   const d = await page.evaluate(() => JSON.parse(localStorage.getItem('wolfson_app_data')));
   const gen = d.contractorAssignments.find(a => a.id === 'T-gen');

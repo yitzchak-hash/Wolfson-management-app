@@ -277,6 +277,9 @@ const rowText = (page, sel) => page.$eval(sel, e => e.textContent.replace(/\s+/g
   await page.waitForTimeout(500);
   await page.locator('[data-work-stage="st-reg"]').click();
   await page.locator('[data-work-start]').click();
+  // Round 48: Start asks "are you sure you will be doing these today" first.
+  await page.waitForTimeout(300);
+  await page.locator('[data-work-confirm-yes]').click();
   await page.waitForTimeout(1200);
   let logs = await logsNow();
   const added = logs.slice(0, logs.length - before);
