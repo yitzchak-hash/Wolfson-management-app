@@ -1,5 +1,6 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { useStore } from '../data/store';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
+import { useStore, loadProjectSnapshot } from '../data/store';
+import { rememberReturn } from '../data/unitTravel';
 import { useNavigate } from 'react-router-dom';
 import { rememberTaskFocus } from '../data/taskFocus';
 import { VoiceMemoPlayer } from '../components/ui/VoiceMemo';
@@ -13,11 +14,14 @@ import { BulkAddTaskModal } from '../components/apartment/BulkAddTaskModal';
 import { MoveTaskDialog, officeMoveWords, fill } from '../components/tasks/MoveTaskDialog';
 import { DeleteTaskDialog } from '../components/tasks/DeleteTaskDialog';
 import { placeLabel } from '../data/taskMove';
-import { TaskCalendar, CalendarEvent } from '../components/tasks/TaskCalendar';
+import { TaskCalendar, CalendarEvent, calendarWordsOf, OFFICE_DAY_CAP } from '../components/tasks/TaskCalendar';
 import { TaskDaysPicker, daysFields, taskWrites, splitStringsOf, TaskSplit } from '../components/tasks/TaskDaysPicker';
 import { StagePairPicker, StagePairPill, stagePairStrings } from '../components/tasks/StagePair';
 import { taskStageIds } from '../data/stageMarks';
-import { ContractorAssignment, ContractorCategory, TaskAttachment, TaskPriority, getStageName, aptLabel, isCountableApartment, generalBuildingsText } from '../types';
+import {
+  Apartment, ContractorAssignment, ContractorCategory, TaskAttachment, TaskPriority, getStageName, aptLabel,
+  isCountableApartment, generalBuildingsText, projectShortName, projectColor,
+} from '../types';
 import { Toast } from '../components/ui/Toast';
 import { printTable, printDot, printPill } from '../data/printing';
 import { Tooltip } from '../components/ui/Tooltip';
@@ -34,27 +38,63 @@ const CAT_COLORS: Record<ContractorCategory, string> = {
   drywall: '#f59e0b', ac: '#3b82f6', general: '#10b981',
 };
 
+/** "This workspace" or "All workspaces" — remembered per machine. */
+const TASK_SCOPE_KEY = 'tasks_scope';
+/**
+ * A task from another workspace whose pencil was pressed: the page switches
+ * workspace and opens its editor when the task arrives in the live list.
+ * Module-level and session-only — a pointer into a gesture already under
+ * way, never the office's data (the taskFocus idiom, kept separate so the
+ * apartment window's own hand-over can never take it).
+ */
+let editOnArrival: { id: string; at: number } | null = null;
+
+/** Where a row lives, and its unit — kept beside the task, never on it. */
+interface RowMeta { pid: string; foreign: boolean; apt?: Apartment }
+
 export function TasksPage() {
   const {
     contractors, contractorAssignments, apartments, stages, buildings,
     addContractorAssignment, updateContractorAssignment,
     addAssignmentToProject,
     updateApartment, currentUser, mainUiStrings: s, currentProjectId, projects,
-    pendingFocus, setPendingFocus,
+    pendingFocus, setPendingFocus, setCurrentProject,
   } = useStore();
   const projectName = projects.find(p => p.id === currentProjectId)?.name ?? 'Workspace';
   const navigate = useNavigate();
+  const fillWs = (t: string, ws: string) => t.replace('{ws}', ws);
+  /** "All workspaces" without its count — for printed titles. */
+  const allWsWords = s.tpScopeAll.replace(/\s*\(\{n\}\)\s*/, '').trim();
+  const wsShort = (pid: string) => projectShortName(projects.find(p => p.id === pid), !!s.isRtl, pid);
   /**
    * The task's NAME opens the apartment window ON that task (owner,
    * 2026-09-22) — the same hand-over a notification uses: remember the task,
    * set the intent, and let the page that can show the unit open the drawer
    * on its Tasks tab with the card lit. A general job has no unit to open.
    */
-  const openInWindow = (a: ContractorAssignment) => {
-    if (!a.apartmentId) return;
+  const openInWindow = (a: ContractorAssignment, pid: string = currentProjectId) => {
+    if (!a.apartmentId) { if (pid !== currentProjectId) editThere(a, pid); return; }
     rememberTaskFocus(a.id);
+    // Another workspace: hold a ticket home (closing the window brings the
+    // office back to this list), switch FIRST, then the intent —
+    // setCurrentProject clears pendingFocus.
+    if (pid !== currentProjectId) {
+      rememberReturn(currentProjectId, '/tasks', a.apartmentId);
+      setCurrentProject(pid);
+    }
     setPendingFocus({ kind: 'task', id: a.id, apartmentId: a.apartmentId });
-    navigate(currentProjectId === 'general' ? '/jobs' : '/project');
+    navigate(pid === 'general' ? '/jobs' : '/project');
+  };
+  /**
+   * Editing a task that lives in ANOTHER workspace travels there: the page
+   * stays on Tasks, the workspace switches under it, and the task's editor
+   * opens the moment the task is in the live list (the arrival effect). Its
+   * record lives in that workspace's collections, and every rule a save
+   * runs (the stage ticks, the late-close day) runs there, not on a copy.
+   */
+  const editThere = (a: ContractorAssignment, pid: string) => {
+    editOnArrival = { id: a.id, at: Date.now() };
+    setCurrentProject(pid);
   };
 
   const PRIORITY_CONFIG: Record<TaskPriority, { label: string; cls: string; dot: string }> = {
@@ -270,27 +310,137 @@ export function TasksPage() {
     setFilterDateTo('');
   }
 
-  const filtered = contractorAssignments
-    .filter(a => {
-      if (filterContractorId && a.contractorId !== filterContractorId) return false;
-      if (filterBuilding !== 'all' && a.buildingId !== filterBuilding) return false;
-      if (filterStage && a.stageId !== filterStage) return false;
-      if (filterPriority && (a.priority ?? 'normal') !== filterPriority) return false;
-      if (filterOverdue && (a.completedAt || !a.dueDate || a.dueDate >= today)) return false;
-      if (filterDateFrom && a.dueDate && a.dueDate < filterDateFrom) return false;
-      if (filterDateTo && a.dueDate && a.dueDate > filterDateTo) return false;
-      return true;
-    })
-    .sort((a, b) => {
-      const priorityOrder: Record<string, number> = { urgent: 0, normal: 1, low: 2 };
-      const aVal = a.completedAt ? 1 : 0;
-      const bVal = b.completedAt ? 1 : 0;
-      if (aVal !== bVal) return aVal - bVal;
-      const aPrio = priorityOrder[a.priority ?? 'normal'] ?? 1;
-      const bPrio = priorityOrder[b.priority ?? 'normal'] ?? 1;
-      if (aPrio !== bPrio) return aPrio - bPrio;
-      return (a.dueDate ?? 'z').localeCompare(b.dueDate ?? 'z');
-    });
+  /**
+   * WHICH TASKS — this workspace, or all of them (owner, 2026-10-08: "how is
+   * it that he finished so many tasks and they're not even there?" — Igor's
+   * forty Wolfson reports never appeared on the Job Board's Tasks page, and
+   * nothing said the page was one workspace). The other workspaces come from
+   * this machine's snapshots, which the foreign live sync keeps current,
+   * re-read whenever one lands. Remembered per machine.
+   */
+  const [scope, setScopeState] = useState<'here' | 'all'>(() => {
+    try { return localStorage.getItem(TASK_SCOPE_KEY) === 'all' ? 'all' : 'here'; } catch { return 'here'; }
+  });
+  const setScope = (v: 'here' | 'all') => {
+    setScopeState(v);
+    try { localStorage.setItem(TASK_SCOPE_KEY, v); } catch { /* private window — the choice lasts the visit */ }
+  };
+  const snapTick = useStore(st => st.snapshotTick);
+  /**
+   * The OTHER workspaces' tasks and units — the same per-workspace snapshots
+   * `loadAllProjectsTaskData` reads, but one per workspace that is NOT open
+   * (parsing the open one only to throw it away cost a whole Job Board's
+   * JSON on every foreign tick), and including workspaces made with the
+   * project builder.
+   */
+  const foreignData = useMemo(() => projects
+    .filter(p => p.id !== currentProjectId)
+    .map(p => {
+      const sn = loadProjectSnapshot(p.id);
+      return { pid: p.id, assignments: sn.assignments, aptById: new Map(sn.apartments.map(x => [x.id, x])) };
+    }),
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  [projects, currentProjectId, snapTick]);
+  const aptById = useMemo(() => new Map(apartments.map(x => [x.id, x])), [apartments]);
+  const scoped = useMemo(() => {
+    const meta = new WeakMap<ContractorAssignment, RowMeta>();
+    const list: ContractorAssignment[] = [];
+    for (const a of contractorAssignments) {
+      meta.set(a, { pid: currentProjectId, foreign: false, apt: aptById.get(a.apartmentId) });
+      list.push(a);
+    }
+    let foreignCount = 0;
+    for (const f of foreignData) {
+      foreignCount += f.assignments.length;
+      if (scope !== 'all') continue;
+      for (const a of f.assignments) {
+        meta.set(a, { pid: f.pid, foreign: true, apt: f.aptById.get(a.apartmentId) });
+        list.push(a);
+      }
+    }
+    return { list, meta, foreignCount };
+  }, [contractorAssignments, aptById, foreignData, scope, currentProjectId]);
+  const metaOf = (a: ContractorAssignment): RowMeta =>
+    scoped.meta.get(a) ?? { pid: currentProjectId, foreign: false, apt: aptById.get(a.apartmentId) };
+  /** A unit in the row's OWN workspace (a general job's visits name several). */
+  const aptIn = (pid: string, id: string) => pid === currentProjectId
+    ? aptById.get(id) : foreignData.find(f => f.pid === pid)?.aptById.get(id);
+
+  const priorityOrder: Record<string, number> = { urgent: 0, normal: 1, low: 2 };
+  const filtered = scoped.list.filter(a => {
+    if (filterContractorId && a.contractorId !== filterContractorId) return false;
+    if (filterBuilding !== 'all' && a.buildingId !== filterBuilding) return false;
+    if (filterStage && a.stageId !== filterStage) return false;
+    if (filterPriority && (a.priority ?? 'normal') !== filterPriority) return false;
+    if (filterOverdue && (a.completedAt || !a.dueDate || a.dueDate >= today)) return false;
+    if (filterDateFrom && a.dueDate && a.dueDate < filterDateFrom) return false;
+    if (filterDateTo && a.dueDate && a.dueDate > filterDateTo) return false;
+    return true;
+  });
+  /**
+   * OPEN first — urgent, then by due date — and then a divider and the DONE
+   * ones, newest first (the rule the owner asked for on the worker's phone):
+   * what was finished today sits right under the line, not at the bottom of
+   * a month of old reports.
+   */
+  const openRows = filtered.filter(a => !a.completedAt).sort((a, b) => {
+    const aPrio = priorityOrder[a.priority ?? 'normal'] ?? 1;
+    const bPrio = priorityOrder[b.priority ?? 'normal'] ?? 1;
+    if (aPrio !== bPrio) return aPrio - bPrio;
+    return (a.dueDate ?? 'z').localeCompare(b.dueDate ?? 'z');
+  });
+  const doneRows = filtered.filter(a => !!a.completedAt)
+    .sort((a, b) => String(b.completedAt).localeCompare(String(a.completedAt)));
+  const ordered = [...openRows, ...doneRows];
+
+  /**
+   * The filters that are ON, as chips under the bar — a list that has
+   * narrowed itself silently reads as missing work ("I don't understand
+   * what's filtered, what's not filtered").
+   */
+  const activeChips: { key: string; label: string; clear: () => void }[] = [];
+  if (filterContractorId) activeChips.push({ key: 'worker',
+    label: `${s.contractorLabel}: ${contractors.find(c => c.id === filterContractorId)?.name ?? s.unknownUser}`,
+    clear: () => setFilterContractorId('') });
+  if (filterBuilding !== 'all') activeChips.push({ key: 'building',
+    label: `${s.buildingPrefix}: ${filterBuilding}`, clear: () => setFilterBuilding('all') });
+  if (filterStage) {
+    const st = stages.find(x => x.id === filterStage);
+    activeChips.push({ key: 'stage', label: `${s.stageLabel}: ${st ? getStageName(st, !!s.isRtl) : filterStage}`,
+      clear: () => setFilterStage('') });
+  }
+  if (filterPriority) activeChips.push({ key: 'priority',
+    label: `${s.priorityLabel}: ${PRIORITY_CONFIG[filterPriority as TaskPriority]?.label ?? filterPriority}`,
+    clear: () => setFilterPriority('') });
+  if (filterDateFrom) activeChips.push({ key: 'from',
+    label: `${s.dueFrom}: ${format(parseISO(filterDateFrom), 'd MMM yyyy')}`, clear: () => setFilterDateFrom('') });
+  if (filterDateTo) activeChips.push({ key: 'to',
+    label: `${s.dueTo}: ${format(parseISO(filterDateTo), 'd MMM yyyy')}`, clear: () => setFilterDateTo('') });
+  if (filterOverdue) activeChips.push({ key: 'overdue', label: s.overdueOnly, clear: () => setFilterOverdue(false) });
+  const clearAllFilters = () => { clearAdvancedFilters(); setFilterContractorId(''); };
+
+  /** Scroll a task's row into the middle of the screen. */
+  const focusRow = (id: string) => requestAnimationFrame(() => {
+    const el = document.querySelector(`[data-task-row="${CSS.escape(id)}"]`);
+    el?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  });
+
+  /**
+   * The arrival half of `editThere`: once the workspace has switched and the
+   * task is in the live list, its editor opens and the row comes into view.
+   */
+  useEffect(() => {
+    const want = editOnArrival;
+    if (!want) return;
+    if (Date.now() - want.at > 20_000) { editOnArrival = null; return; }
+    const t = contractorAssignments.find(x => x.id === want.id);
+    if (!t) return;
+    editOnArrival = null;
+    setView('list');
+    startEdit(t);
+    focusRow(t.id);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [contractorAssignments]);
 
   function startEdit(a: ContractorAssignment) {
     setEditingId(a.id);
@@ -378,27 +528,38 @@ export function TasksPage() {
     onToast(s.taskAdded);
   }
 
-  const calendarEvents: CalendarEvent[] = filtered
+  const calendarEvents: CalendarEvent[] = ordered
     .filter(a => a.dueDate)
     // A task that takes days is plotted on EVERY one of them — it carries all
     // its days now, and one chip on the last day was the old world.
     .flatMap(a => {
-      const apt = apartments.find(ap => ap.id === a.apartmentId);
+      const m = metaOf(a);
+      const apt = m.apt;
       const contractor = contractors.find(c => c.id === a.contractorId);
       const stage = stages.find(st => st.id === a.stageId);
+      const where = a.general
+        ? `${wsShort(a.general.projectId)}${generalBuildingsText(a.general) ? ` · ${generalBuildingsText(a.general)}` : ''}`
+        : `${a.buildingId} · ${s.aptPrefix} ${aptLabel(apt)}`;
       return daysOf(a).map(day => {
         const pill = dayNumberOf(a.days, day);
         return {
-          id: `${a.id}:${day}`,
+          id: `${m.pid}:${a.id}:${day}`,
           date: day,
           title: pill ? `${a.taskDescription} · ${pill.k}/${pill.n}` : a.taskDescription,
-          subtitle: `${a.buildingId} · ${s.aptPrefix} ${aptLabel(apt)}`,
+          // Across workspaces, each chip says which one it is in.
+          subtitle: m.foreign || scope === 'all' ? `${wsShort(m.pid)} · ${where}` : where,
           // The day shows the STAGE's colour; the worker's trade colour is only
           // the fallback for a task with no stage.
           color: stage?.color ?? (contractor ? CAT_COLORS[contractor.category] : '#6b7280'),
           completed: !!a.completedAt,
+          // One worker's done tasks in one workspace fold into one chip a day.
+          groupKey: `${a.contractorId}|${m.pid}`,
+          groupLabel: `${contractor?.name ?? s.unknownUser} · ${wsShort(m.pid)}`,
           node: stage ? { stageName: getStageName(stage, !!s.isRtl), stageColor: stage.color } : undefined,
-          onClick: () => { setView('list'); startEdit(a); },
+          onClick: () => {
+            if (m.foreign) { editThere(a, m.pid); return; }
+            setView('list'); startEdit(a); focusRow(a.id);
+          },
         };
       });
     });
@@ -435,6 +596,30 @@ export function TasksPage() {
       <h1 className="hidden md:block text-2xl font-bold text-gray-900 mb-6">{s.pageTasks}</h1>
 
       <div className="space-y-3 md:space-y-4">
+        {/* WHICH TASKS — this workspace or all of them, said in words with the
+            counts, so a page showing one workspace can never again pass for
+            the whole company's work (owner, 2026-10-08). */}
+        <div className="flex items-center gap-2 flex-wrap" data-task-scope-bar>
+          <div className="inline-flex rounded-xl border border-gray-200 bg-white p-0.5" role="tablist">
+            {(['here', 'all'] as const).map(v => {
+              const n = v === 'here' ? contractorAssignments.length : contractorAssignments.length + scoped.foreignCount;
+              const on = scope === v;
+              return (
+                <button key={v} type="button" role="tab" aria-selected={on}
+                  data-task-scope={v} data-on={on ? '1' : undefined}
+                  onClick={() => setScope(v)}
+                  className={`px-3 py-1.5 rounded-lg text-[12.5px] md:text-sm font-bold transition-colors whitespace-nowrap ${
+                    on ? 'bg-[#1e3a5f] text-white' : 'text-gray-500 hover:text-[#1e3a5f]'}`}>
+                  {(v === 'here' ? s.tpScopeHere : s.tpScopeAll).replace('{n}', String(n))}
+                </button>
+              );
+            })}
+          </div>
+          {scope === 'all' && (
+            <span className="text-[11px] text-gray-400" data-task-scope-note>{s.tpScopeNote}</span>
+          )}
+        </div>
+
         {/* Toolbar */}
         {/* ONE row on a phone. At desktop sizes these six controls sit on a line;
             at 390px they stacked into three rows and pushed the list itself below
@@ -459,6 +644,7 @@ export function TasksPage() {
                 "All worker", a word cut in half by a box that had almost
                 enough room. */}
             <select
+              data-filter-worker
               value={filterContractorId}
               onChange={e => setFilterContractorId(e.target.value)}
               className="border border-gray-200 rounded-lg px-2 py-1.5 md:px-3 md:py-2 text-[12px] md:text-sm min-w-[112px] max-w-[44vw] md:max-w-none focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30"
@@ -469,18 +655,26 @@ export function TasksPage() {
               ))}
             </select>
 
-            <Tooltip text="More filters">
+            <Tooltip text={s.tpFilterBtn}>
               <button
+                data-filter-btn
                 onClick={() => setShowFilters(v => !v)}
-                aria-label="More filters"
+                aria-label={s.tpFilterBtn}
                 className={`flex items-center gap-1 px-2 py-1.5 md:px-3 md:py-2 border rounded-lg text-[12px] md:text-sm font-medium transition-colors flex-shrink-0 ${
-                  hasAdvancedFilters ? 'border-[#1e3a5f] bg-[#1e3a5f]/5 text-[#1e3a5f]' : 'border-gray-200 text-gray-500 hover:border-gray-300'
+                  activeChips.length ? 'border-[#1e3a5f] bg-[#1e3a5f]/5 text-[#1e3a5f]' : 'border-gray-200 text-gray-500 hover:border-gray-300'
                 }`}
               >
                 <Filter size={14} />
-                {/* Icon alone on a phone — the navy fill is what says "filtered",
-                    and the word cost 40px on a row that has none to spare. */}
-                <span className="hidden md:inline">{hasAdvancedFilters ? 'Filtered' : 'Filter'}</span>
+                {/* Icon alone on a phone — the count badge is what says
+                    "filtered", and the word cost 40px on a row that has none
+                    to spare. */}
+                <span className="hidden md:inline">{s.tpFilterBtn}</span>
+                {activeChips.length > 0 && (
+                  <span data-filter-count={activeChips.length}
+                    className="min-w-[18px] h-[18px] px-1 rounded-full bg-[#1e3a5f] text-white text-[10.5px] font-black flex items-center justify-center tabular-nums">
+                    {activeChips.length}
+                  </span>
+                )}
               </button>
             </Tooltip>
 
@@ -490,7 +684,7 @@ export function TasksPage() {
               {/* Was "12 tasks · 3 done" written in English inside a bilingual
                   page — the same fault as the portal's countdown badges, and
                   visible the moment the office switched to Hebrew. */}
-              {filtered.length} {s.navTasks} · {filtered.filter(a => a.completedAt).length} {s.completedLabel}
+              {filtered.length} {s.navTasks} · {doneRows.length} {s.completedLabel}
             </span>
 
             {/* A work list somebody can carry. Prints exactly what the filters
@@ -499,12 +693,13 @@ export function TasksPage() {
               <button
                 onClick={() => {
                   const ok = printTable(
-                    `Tasks — ${projectName}`,
-                    filtered,
+                    `Tasks — ${scope === 'all' ? allWsWords : projectName}`,
+                    ordered,
                     [
                       { header: 'Job', value: a => {
-                        const apt = apartments.find(x => x.id === a.apartmentId);
-                        return apt ? aptLabel(apt) : '—';
+                        const m = metaOf(a);
+                        const label = m.apt ? aptLabel(m.apt) : a.general ? wsShort(a.general.projectId) : '—';
+                        return scope === 'all' ? `${wsShort(m.pid)} · ${label}` : label;
                       } },
                       { header: 'Task', value: a => a.taskDescription || '—' },
                       { header: 'Contractor', value: a => contractors.find(c => c.id === a.contractorId)?.name ?? '—' },
@@ -542,7 +737,7 @@ export function TasksPage() {
             <div className="flex items-center rounded-lg border border-gray-200 overflow-hidden flex-shrink-0">
               <Tooltip text={s.listView}>
                 <button
-                  onClick={() => setView('list')}
+                  data-task-view="list" onClick={() => setView('list')}
                   className={`flex items-center gap-1 px-2 py-1.5 md:px-3 md:py-2 text-[12px] md:text-sm font-medium transition-colors ${
                     view === 'list' ? 'bg-[#1e3a5f] text-white' : 'text-gray-500 hover:bg-gray-50'
                   }`}
@@ -552,7 +747,7 @@ export function TasksPage() {
               </Tooltip>
               <Tooltip text={s.calendarView}>
                 <button
-                  onClick={() => setView('calendar')}
+                  data-task-view="calendar" onClick={() => setView('calendar')}
                   className={`flex items-center gap-1 px-2 py-1.5 md:px-3 md:py-2 text-[12px] md:text-sm font-medium transition-colors ${
                     view === 'calendar' ? 'bg-[#1e3a5f] text-white' : 'text-gray-500 hover:bg-gray-50'
                   }`}
@@ -585,6 +780,27 @@ export function TasksPage() {
             {s.addTask}
           </button>
         </div>
+
+        {/* The filters that are ON, each with its own ×, and Clear all. */}
+        {activeChips.length > 0 && (
+          <div className="flex items-center gap-1.5 flex-wrap" data-filter-chips={activeChips.length}>
+            {activeChips.map(c => (
+              <span key={c.key} data-filter-chip={c.key}
+                className="inline-flex items-center gap-1 ps-2.5 pe-1 py-1 rounded-full bg-[#1e3a5f]/[.07] border border-[#1e3a5f]/20 text-[12px] font-semibold text-[#1e3a5f]">
+                {c.label}
+                <button type="button" data-filter-chip-x={c.key} onClick={c.clear}
+                  title={s.tpRemoveFilter} aria-label={s.tpRemoveFilter}
+                  className="w-5 h-5 rounded-full flex items-center justify-center hover:bg-[#1e3a5f]/15">
+                  <X size={12} />
+                </button>
+              </span>
+            ))}
+            <button type="button" data-filter-clear-all onClick={clearAllFilters}
+              className="text-[12px] font-bold text-gray-500 hover:text-[#1e3a5f] underline underline-offset-2 px-1">
+              {s.tpClearAll}
+            </button>
+          </div>
+        )}
 
         {/* Advanced filters panel */}
         {showFilters && (
@@ -640,12 +856,12 @@ export function TasksPage() {
                 className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs bg-white focus:outline-none" />
             </div>
             <label className="flex items-center gap-1.5 text-xs text-gray-600 cursor-pointer">
-              <input type="checkbox" checked={filterOverdue} onChange={e => setFilterOverdue(e.target.checked)} className="rounded" />
+              <input type="checkbox" data-filter-overdue checked={filterOverdue} onChange={e => setFilterOverdue(e.target.checked)} className="rounded" />
               {s.overdueOnly}
             </label>
             {hasAdvancedFilters && (
               <button onClick={clearAdvancedFilters} className="text-xs text-gray-400 hover:text-gray-600 underline">
-                Clear
+                {s.tpClearAll}
               </button>
             )}
           </div>
@@ -856,8 +1072,10 @@ export function TasksPage() {
           <TaskCalendar
             events={calendarEvents}
             todayLabel={s.today}
-            printTitle={`${s.pageTasks} — ${projectName}`}
+            printTitle={`${s.pageTasks} — ${scope === 'all' ? allWsWords : projectName}`}
             rtl={!!s.isRtl}
+            maxPerDay={OFFICE_DAY_CAP}
+            words={calendarWordsOf(s)}
           />
         )}
 
@@ -869,19 +1087,51 @@ export function TasksPage() {
           </div>
         ) : (
           <div className="space-y-2">
-            {filtered.map(a => {
-              const apt = apartments.find(ap => ap.id === a.apartmentId);
+            {[...openRows, 'divider' as const, ...doneRows].map(item => {
+              if (item === 'divider') {
+                // Done below the line, newest first — open work is never
+                // buried under a month of finished reports.
+                return doneRows.length ? (
+                  <div key="__done-divider" data-done-divider={doneRows.length}
+                    className="flex items-center gap-2 pt-3 pb-1">
+                    <span className="h-px flex-1 bg-green-200" />
+                    <span className="inline-flex items-center gap-1 text-[12px] font-black uppercase tracking-wider text-green-700">
+                      <CheckCircle2 size={14} />{s.tpDoneDivider.replace('{n}', String(doneRows.length))}
+                    </span>
+                    <span className="h-px flex-1 bg-green-200" />
+                  </div>
+                ) : null;
+              }
+              const a = item;
+              const m = metaOf(a);
+              const apt = m.apt;
               const stage = stages.find(s => s.id === a.stageId);
               const contractor = contractors.find(c => c.id === a.contractorId);
               const dueBadge = getDueBadge(a.dueDate);
-              const isEditing = editingId === a.id;
+              // A task from another workspace is edited THERE (editThere).
+              const isEditing = editingId === a.id && !m.foreign;
+              const wsName = wsShort(m.pid);
 
               return (
                 <div
-                  key={a.id}
+                  key={`${m.pid}:${a.id}`}
+                  data-task-row={a.id} data-task-ws={m.pid} data-task-foreign={m.foreign ? '1' : undefined}
+                  data-task-done={a.completedAt ? '1' : '0'}
                   className={`bg-white border rounded-xl overflow-hidden transition-all ${a.completedAt ? 'border-green-200 opacity-80' : 'border-gray-200'}`}
                 >
                   <div className="flex items-start gap-3 p-4">
+                    {m.foreign ? (
+                      // Ticked off where it lives — the closing rules (the
+                      // stage ticks, the late-close day) run in its own
+                      // workspace, so the tick here only says how it stands.
+                      <Tooltip text={fillWs(s.tpForeignStatus, wsName)} side="right">
+                        <span className="mt-0.5 flex-shrink-0 p-1.5 -m-1.5 sm:p-0 sm:m-0" data-foreign-status>
+                          {a.completedAt
+                            ? <CheckCircle2 size={20} className="text-green-500" />
+                            : <div className="w-5 h-5 rounded-full border-2 border-dashed border-gray-300" />}
+                        </span>
+                      </Tooltip>
+                    ) : (
                     <Tooltip text={a.completedAt ? s.markIncomplete : s.markComplete} side="right">
                       <button
                         onClick={() => updateContractorAssignment(a.id, { completedAt: a.completedAt ? null : new Date().toISOString() })}
@@ -893,9 +1143,17 @@ export function TasksPage() {
                         }
                       </button>
                     </Tooltip>
+                    )}
 
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap mb-1">
+                        {scope === 'all' && (
+                          <span data-task-ws-chip={m.pid}
+                            className="text-[11px] font-black px-2 py-0.5 rounded-full text-white"
+                            style={{ backgroundColor: projectColor(projects, m.pid) }}>
+                            {wsName}
+                          </span>
+                        )}
                         {contractor && (
                           <span
                             className="text-xs font-semibold px-2 py-0.5 rounded-full"
@@ -912,8 +1170,8 @@ export function TasksPage() {
                                 {generalBuildingsText(a.general) ? ` · ${generalBuildingsText(a.general)}` : ''}
                                 <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200">{s.generalJob}</span>
                               </span>
-                            : <button type="button" data-open-task={a.id} onClick={() => openInWindow(a)}
-                                title={s.openInWindow}
+                            : <button type="button" data-open-task={a.id} onClick={() => openInWindow(a, m.pid)}
+                                title={m.foreign ? fillWs(s.tpOpenThere, wsName) : s.openInWindow}
                                 className="inline-flex items-center gap-1 text-[#1e3a5f] hover:underline underline-offset-2 text-left rtl:text-right">
                                 {a.buildingId} · {s.aptPrefix} {aptLabel(apt)}
                               </button>}
@@ -928,8 +1186,9 @@ export function TasksPage() {
                           </span>
                         )}
                       </div>
-                      <p className={`text-sm ${a.completedAt ? 'line-through text-gray-400' : 'text-gray-600'} ${a.apartmentId ? 'cursor-pointer hover:text-[#1e3a5f]' : ''}`}
-                        data-task-text onClick={() => openInWindow(a)} title={a.apartmentId ? s.openInWindow : undefined}>
+                      <p className={`text-sm ${a.completedAt ? 'line-through text-gray-400' : 'text-gray-600'} ${a.apartmentId || m.foreign ? 'cursor-pointer hover:text-[#1e3a5f]' : ''}`}
+                        data-task-text onClick={() => openInWindow(a, m.pid)}
+                        title={m.foreign ? fillWs(s.tpOpenThere, wsName) : a.apartmentId ? s.openInWindow : undefined}>
                         <Translated text={a.taskDescription} to={s.isRtl ? 'he' : 'en'} />
                       </p>
                       {/* A general job collects the apartments actually visited
@@ -938,7 +1197,7 @@ export function TasksPage() {
                         <p data-general-visits className="text-xs text-amber-700 mt-1">
                           <span className="font-bold">{s.visitedLabel}:</span>{' '}
                           {a.visits!.map(v => {
-                            const va = apartments.find(x => x.id === v.apartmentId);
+                            const va = aptIn(m.pid, v.apartmentId);
                             const st = stages.find(x => x.id === v.stageId);
                             return `${va ? aptLabel(va) : v.apartmentId}${st ? ` (${getStageName(st, s.isRtl)})` : ''}`;
                           }).join(' · ')}
@@ -1001,10 +1260,10 @@ export function TasksPage() {
                     </div>
 
                     <div className="flex items-center gap-1 flex-shrink-0">
-                      <Tooltip text={isEditing ? s.cancel : s.editTask}>
+                      <Tooltip text={m.foreign ? fillWs(s.tpOpenThere, wsName) : isEditing ? s.cancel : s.editTask}>
                         <button
                           data-edit-task={a.id}
-                          onClick={() => isEditing ? setEditingId(null) : startEdit(a)}
+                          onClick={() => m.foreign ? editThere(a, m.pid) : isEditing ? setEditingId(null) : startEdit(a)}
                           className={`p-2.5 sm:p-1.5 rounded-lg transition-colors ${isEditing ? 'bg-[#1e3a5f]/10 text-[#1e3a5f]' : 'text-gray-400 hover:bg-gray-100'}`}
                         >
                           <Edit2 size={14} />
@@ -1012,7 +1271,7 @@ export function TasksPage() {
                       </Tooltip>
                       {/* Recorded on the wrong apartment (owner, 2026-10-05) —
                           a general job has no apartment to move from. */}
-                      {a.apartmentId && !a.general && (
+                      {a.apartmentId && !a.general && !m.foreign && (
                         <Tooltip text={currentProjectId === 'general' ? s.mvActionJob : s.mvAction}>
                           <button
                             data-task-move={a.id}
@@ -1024,7 +1283,7 @@ export function TasksPage() {
                           </button>
                         </Tooltip>
                       )}
-                      <Tooltip text={s.deleteTask}>
+                      {!m.foreign && <Tooltip text={s.deleteTask}>
                         <button
                           data-task-delete={a.id}
                           onClick={() => setDeletingTaskId(a.id)}
@@ -1032,7 +1291,7 @@ export function TasksPage() {
                         >
                           <Trash2 size={14} />
                         </button>
-                      </Tooltip>
+                      </Tooltip>}
                     </div>
                   </div>
 

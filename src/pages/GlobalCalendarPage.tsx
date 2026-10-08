@@ -2,7 +2,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { CalendarDays } from 'lucide-react';
 import { useStore, loadAllProjectsTaskData } from '../data/store';
-import { TaskCalendar, CalendarEvent } from '../components/tasks/TaskCalendar';
+import { TaskCalendar, CalendarEvent, calendarWordsOf, OFFICE_DAY_CAP } from '../components/tasks/TaskCalendar';
 import { ContractorAssignment, Apartment, aptLabel, projectShortName } from '../types';
 import { daysOf } from '../data/taskDays';
 import { fsListen, isFirebaseConfigured, projectCollection } from '../data/firebase';
@@ -90,6 +90,10 @@ export function GlobalCalendarPage() {
           color: stage?.color ?? (contractor ? (CAT_COLORS[contractor.category] ?? '#6b7280') : '#6b7280'),
           node: stage ? { stageName: stage.name, stageColor: stage.color } : undefined,
           completed: !!a.completedAt,
+          // One worker's done tasks in one workspace fold into one chip a day
+          // (owner, 2026-10-08: "I don't see what was done, what was not").
+          groupKey: `${a.contractorId}|${d.projectId}`,
+          groupLabel: `${contractor?.name ?? s.unknownUser} · ${projectName(d.projectId)}`,
           onClick: () => {
             if (d.projectId !== currentProjectId) setCurrentProject(d.projectId);
             navigate('/tasks');
@@ -149,7 +153,7 @@ export function GlobalCalendarPage() {
       </div>
 
       <TaskCalendar events={events} todayLabel={s.today} rtl={!!s.isRtl}
-        printTitle="All workspaces" />
+        printTitle="All workspaces" maxPerDay={OFFICE_DAY_CAP} words={calendarWordsOf(s)} />
     </div>
   );
 }
