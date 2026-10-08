@@ -1432,6 +1432,16 @@ export interface ContractorAssignment {
    */
   stagesUnfinished?: string[];
   /**
+   * The apartment's stage marks the moment the worker STARTED this task
+   * ("I'm going to work here", owner 2026-10-08) — so that if he picked the
+   * wrong apartment by mistake and moves the task to the right one, the
+   * apartment he moved it FROM goes back to exactly how it stood before he
+   * touched it that day. Only the stages this task touched are put back.
+   * `marksBeforeAt` is when the snapshot was taken.
+   */
+  marksBefore?: Record<string, StageMark>;
+  marksBeforeAt?: string;
+  /**
    * EVERY stage this task is for (locked answer 7: one picker, several
    * stages at once). `stageId` stays the FIRST of them so every reader
    * written for one stage — the notebook bar's colour, sorting, the
