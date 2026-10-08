@@ -30,6 +30,67 @@ export interface WhatsNewEntry {
 
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    date: '2027-01-25',
+    title: 'Stages that follow the work, a worker who can fix his own mistake, and a busy day in one bar',
+    items: [
+      {
+        title: 'The square shows the last stage done',
+        body: 'A building square and the window’s stage now show the last stage that was finished, not the '
+          + 'next one to do. Sold/Start ticks itself the moment any later stage is done or started. The '
+          + 'stage list is one line in order, with small arrows between the stages.',
+        demo: 'tap',
+      },
+      {
+        title: 'Wrong apartment? The worker fixes it',
+        body: 'A worker who started work on the wrong apartment can move it himself (“Wrong apartment? Move '
+          + 'it”). The apartment he moved away from goes back exactly as it was before he started there. '
+          + 'Starting now asks “What are you doing here today?” and reads his picks and the apartment back '
+          + 'before anything is saved. Sold/Start is never offered.',
+        demo: 'tap',
+      },
+      {
+        title: 'A busy day is one bar',
+        body: 'When one person has four or more small tasks on the same day in one workspace, the notebook '
+          + 'shows one bar (“5 tasks · 4 done · 1 open”). Press it to see every task beside a small picture of '
+          + 'the building, with the apartments lit. A right-click on a bar no longer asks to take it off.',
+        demo: 'list',
+      },
+      {
+        title: 'Calendars and the Tasks page fold what is done',
+        body: 'Calendars show open work first and fold a person’s finished tasks into one green chip that '
+          + 'opens. The Tasks page can show this workspace or all of them, shows its filters as chips, and '
+          + 'lists open tasks first, then the done ones.',
+        demo: 'list',
+      },
+      {
+        title: 'The apartment window',
+        body: 'A closed task is a green card saying who closed it and when. Each photo appears once, with NEW '
+          + 'on the ones nobody has looked at. The Drive and Zoho rows fold away. The folder status no longer '
+          + 'says “no plan” while a plan is showing.',
+        demo: 'tap',
+      },
+      {
+        title: 'Who did what',
+        body: 'A new widget lists finished work as sentences, newest first, from every workspace — “Igor '
+          + 'finished Drilling in 27, 26, 25 · A2” — with the apartments as links and the photos under each '
+          + 'line.',
+        demo: 'sparkle',
+      },
+      {
+        title: 'The board',
+        body: 'The board’s 100% is what used to read 75%. The “Live from site” photos widget shows every '
+          + 'photo again. Stage settings save themselves. Pressing an import shows the jobs it brought in.',
+        demo: 'zoom',
+      },
+      {
+        title: 'The plan reader',
+        body: 'The address and phone under the fields are read from the title block on the right of the '
+          + 'sheet. Nothing is offered unless it can show you where on the plan it came from.',
+        demo: 'pin',
+      },
+    ],
+  },
+  {
     date: '2027-01-24',
     title: 'Each person’s day as one story, and Drilling before Piping',
     items: [

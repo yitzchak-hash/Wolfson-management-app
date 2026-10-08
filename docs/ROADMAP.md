@@ -68,4 +68,7 @@ asks for it. ☑ done · ☐ next · ✎ awaiting Yitzchak's word. (Standing ord
 `planphone.mjs` stale locator · `round39-probe` asserts the deleted "I did
 work here" filter · `boardsize.mjs` left-edge auto-pan · `gapboard.mjs` ·
 `round22.mjs` (Goals fixture intercepts the week plus) · `stripsrow-probe`
-(2) · `round28.mjs` group-window section.
+(2) · `round27.mjs` search-to-notebook drag · `round23.mjs` unit-card
+timeout · `round33.mjs` (a `data-map-project` hook removed 09-03) ·
+`round40-probe` "a passed stage is crossed off" (Ready to start is a marker
+under the set model). `round28.mjs` is green again (10-08).

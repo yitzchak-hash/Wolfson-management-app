@@ -37,6 +37,49 @@ un-ticked, one history line) · A1 12 still has the moved report's stages done (
 Esther unticked Wall/Outdoor there herself on 10-06, so they now read "Wall Units") · the "Skipped a stage"
 widget only reads old "X → Y" records (**Done** 10-06 — retired).
 
+### Video 2 — Recording 2026-10-08 115349 ([feedback doc](2026-10-08-115349.md))
+| # | Time | Ask | Status | Proof |
+|---|------|-----|--------|-------|
+| V2-1 | 0:18 | Anything done after Sold/Start ticks Sold/Start off | Done | `isStartStage` rule · impliedone-test · 11 live units backfilled, read back |
+| V2-2 | 0:51 | A unit shows the last stage done, not the next | Done | `lastDoneHeadline` · stagescope-test, bubbles-probe · 60 live units re-derived |
+| V2-3 | 0:33 | No "still to do / done" headings — one line with tiny arrows | Done | StagePicker `data-stage-flow` |
+| V2-4 | 1:09 | A done task must look done | Done | green card + "Done · day · time · who" · drawer-r48 53/53 |
+| V2-5 | 1:36 | Sold/Start shouldn't need a click once work happened | Done | same as V2-1 |
+| V2-6 | 1:46 | No repeated "new from the site" block — a NEW badge in place | Done | drawer-r48 |
+| V2-7 | 2:16 | Many small tasks fold into one popup with the building picture | Done | TaskBundle · notebook-r48 64/64 |
+| V2-8 | 2:46 | Job Board duplicate stages | Done (his) | he hid them himself |
+| V2-9 | 3:16 | Settings → Stages saves by itself | Done | board-r48 65/65 |
+| V2-10 | 3:42 | An import opens its jobs as tiles | Done | ImportBatchWindow · board-r48 |
+| V2-11 | 4:00 | Show the person and what he did on a bar — give me previews | Waiting | "Notebook Card Options" A–D, awaiting his pick |
+| V2-12 | 4:48 | Live photos widget empty | Done | cause: its "Only these jobs" held 3,520 Job Board ids; field removed, stored list ignored · board-r48, sitephotos-probe 25/25 |
+| V2-13 | 5:18 | The board's 75% should be 100% | Done | boardZoom.ts · board.mjs, board-r48 |
+| V2-14 | 5:32 | Calendars: see what was and wasn't done | Done | TaskCalendar folding · notebook-r48 |
+| V2-15 | 5:46 | Tasks page: what's filtered, where are his done tasks | Done | scope switch + filter chips + Done divider · notebook-r48 |
+| V2-16 | 6:28 | "Upgrade this whole thing" | Partly | this round's bundles / calendars / Tasks page / Who did what; more on his word |
+| V2-17 | 6:44 | Right-click on a bar opened the remove ask and the browser menu | Done | notebook-r48 |
+| V2-18 | 6:52 | "On the plan" garbage under Address | Done | title-block only, label's own column · planhonest, planread-test |
+| V2-19 | 7:01 | The address from the right side, AI on Opus 5.5 high | Done | api/geocode planRead (needs the Anthropic key in Vercel) |
+| V2-20 | 7:06 | The box picker read "Floor" | Done | `LABEL_ONLY` |
+| V2-21 | 7:28 | Zoho and Drive collapsible | Done | LinkSection · drawer-r48 |
+| V2-22 | 7:40 | Status says "no plan" beside a plan | Done | `folderIssues` · drawer-r48 |
+| V2-23 | 8:10 | Worker list: today, past due, future, then done | Done | portalOrder.ts · portalorder-test 14/14, portal-r48 51/51 |
+| V2-24 | 9:04 | No Job Board on the building map | Done | portal-r48 |
+| V2-25 | 9:24 | Worker calendar shows his jobs without "+22" | Done | portal-r48 |
+| V2-26 | 10:00 | Smaller messages, "Send a note or message to the office" | Done | portal-r48 |
+| V2-27 | 10:10 | Mark up out of the plans header | Done | portal-r48 |
+| V2-28 | 10:16 | The plan clean and fitted, small Mark up and Download on it | Done | portal-r48 |
+| V2-29 | 10:36 | "Task:" on one line | Done | portal-r48 |
+| V2-30 | 10:42 | Date, address and Waze on one line | Done | portal-r48 |
+| V2-31 | 11:14 | No Sold/Start for the worker | Done | portal-r48 |
+| V2-32 | 11:44 | Map lights only open work | Done | portal-r48 |
+| V2-33 | 12:18 | "What are you doing here today?" | Done | portal-r48 (three languages) |
+| V2-34 | 12:26 | "Are you sure" naming his picks | Done | portal-r48 |
+| V2-35 | 13:36 | A "who did what" widget with links and pictures | Done | workdone-test 25/25, whodidwhat-probe 37/37 |
+
+Seen, not said (video 2): a fresh worker phone could crash when his record arrived late (**Done** — the
+"link not found" check sits below every hook) · a task due today showed as late from midnight (**Done** —
+`isLate`) · films in Live from site drew as broken pictures (**Done** — a playable film draws its own frame).
+
 ## From chat
 
 | # | Date | Ask | Status | Proof |
@@ -68,3 +111,4 @@ widget only reads old "X → Y" records (**Done** 10-06 — retired).
 | C-25 | 2026-10-06 | Question 5 (the "Next:" cue) — "I don't understand" | Waiting | re-asked in plain words |
 | C-26 | 2026-10-06 | Remove A1 floor 10's empty square | Done | see seen-not-said |
 | C-27 | 2026-10-06 | Retire the "Skipped a stage" widget | Done | retired; no board had a copy |
+| C-28 | 2026-10-08 | A worker moves his own mistaken apartment; the old apartment goes back to how it was before he touched it that day | Done | `marksBefore` · taskmove-test (8 revert checks), movetask, portal-r48 |

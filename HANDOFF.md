@@ -46,7 +46,7 @@ day still stands, after the numbered list.)
 3. `npx tsc --noEmit -p .` and `npx vite build`. 4. The audits:
    `node scratchpad/loopaudit.mjs`, `backupaudit.mjs`, `navaudit.mjs`, `apilimit.mjs`.
 5. A What's New entry (`src/data/whatsNew.tsx`, dates run AHEAD of the clock;
-   newest is `2027-01-24` — the next entry must be a later date (an older
+   newest is `2027-01-25` — the next entry must be a later date (an older
    entry lower down also wears `2026-12-20`; the marker compares only the TOP
    entry's date, so never reuse a date that appears anywhere in the file)). 6. A CLAUDE.md
    round record. 7. A line in `docs/CRM-CHECKLIST.md`, tick `docs/ROADMAP.md`, date a line in `docs/DECISIONS.md` when he decided something. 8. Rewrite THIS file.
@@ -64,7 +64,38 @@ with starred recommendations is published first; the owner says "approved" /
 "all yes" / answers by number; then it is built. Never build a redesign
 unasked.
 
-## Where things stand (2026-10-06, latest — his seven answers built; PENDING HIS WORD: the "Next:" cue, re-asked in plain words)
+## Where things stand (2026-10-08, latest — the second recording built; PENDING HIS WORD: which notebook bar look, A–D)
+Last commits, newest first (see `git log`):
+- **2026-10-08 — the second screen recording ("Recording 2026-10-08 115349",
+  14:01) plus one chat ask.** Feedback doc `docs/feedback/2026-10-08-115349.md`
+  (36 rows V2-1…V2-36), ledger row 2, master checklist V2 + C-28. The Drive
+  folder holds two recordings; nothing newer.
+  - Lead (this session): Sold/Start follows the work (`isStartStage`); a
+    building unit headlines its LAST stage done (`lastDoneHeadline`; the Job
+    Board keeps next-to-do); the stage panel is one ordered line with arrows;
+    the worker's mistaken apartment goes back to how it was that morning
+    (`marksBefore`); the plan reader runs Opus 5.5 high effort with the title
+    block enlarged, reads only the title block and the label's column;
+    widgets in Hebrew draw from the left edge. Production backfill (60 units,
+    11 Sold/Start ticks) written and read back; backup in the session
+    scratchpad `prod/backup-08-…`.
+  - Five helpers in worktrees, all merged: "Who did what" widget; the
+    apartment window (green done cards, each photo once, Drive/Zoho fold,
+    honest folder status); notebook bundles + calendar folding + Tasks page
+    scope; the board (100% = old 75%, Live-from-site cause = a saved "Pick
+    all" of 3,520 Job Board ids, stages autosave, import window); the
+    worker's phone (list order, map, today/confirm/no Sold/Start, self-move,
+    task sheet, calendar folding, two crash/late bugs).
+  - Published "Notebook Card Options" (https://claude.ai/artifact/3xWjboquCAgbwBGfXkdL5E,
+    copy in docs/artifacts) — four looks A–D for his pick; sample families
+    renamed to names no real record carries.
+  - Waiting on him: the bar look (A–D) and the three optional extras on that
+    page; whether to close Igor's two open overdue reports on A2 15/16; the
+    "Next:" cue (likely answered by the last-done headline); the plan reader
+    needs ANTHROPIC_API_KEY in Vercel for Opus 5.5 (health says
+    `planReader`).
+
+## Where things stand (2026-10-06 — his seven answers built; PENDING HIS WORD: the "Next:" cue, re-asked in plain words)
 Last commits, newest first (see `git log`):
 - **2026-10-06, latest — his answers to the seven questions.** The Drive
   folder still holds only the one recording (no new video). Built: the DAY
