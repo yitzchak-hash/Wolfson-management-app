@@ -2776,6 +2776,33 @@ export interface MainUiStrings {
   setPdfHint: string;
   saveChangesBtn: string;
   driveFolder: string;
+  // ── The apartment window, round 48 (owner's screen recording, 2026-10-08) ──
+  /** The bold word on a closed task's badge — "Done · Tue 6 Oct · 14:49 · Igor". */
+  taskDoneWord: string;
+  /** A closed task's picture count. {n} is the number. */
+  photoCountOne: string;
+  photoCountMany: string;
+  /** The small badge on a photo nobody in the office has looked at yet. */
+  photoNewBadge: string;
+  photoNewTitle: string;
+  /** The tab header's link that clears every NEW badge at once. {n} is the count. */
+  markAllReviewedN: string;
+  /** The section a new site photo sits in when it has no Drive folder of its own. */
+  fromTheSite: string;
+  /** A collapsed link section's one-line summary. */
+  linkLinked: string;
+  linkNotLinked: string;
+  linkFoldToggle: string;
+  /** The Drive folder's status line. */
+  folderNotReachable: string;
+  folderNoPhotos: string;
+  folderNoPlansFolder: string;
+  folderNoPlanPdf: string;
+  folderComplete: string;
+  folderStatusBtn: string;
+  folderChecking: string;
+  folderCheckAgain: string;
+  folderCheckBtn: string;
   connectedUnit: string;
   linkedToApt: string;
   noConnection: string;
@@ -3655,6 +3682,25 @@ export const DEFAULT_MAIN_UI_STRINGS: MainUiStrings = {
   setPdfHint: 'Set the Drive folder in Settings below to auto-detect Plans PDF.',
   saveChangesBtn: 'Save Changes',
   driveFolder: 'Google Drive Folder',
+  taskDoneWord: 'Done',
+  photoCountOne: '1 photo',
+  photoCountMany: '{n} photos',
+  photoNewBadge: 'NEW',
+  photoNewTitle: 'New from the site — opening it marks it reviewed',
+  markAllReviewedN: 'Mark all reviewed ({n})',
+  fromTheSite: 'From the site',
+  linkLinked: 'linked',
+  linkNotLinked: 'not linked',
+  linkFoldToggle: 'Show or hide',
+  folderNotReachable: 'folder not reachable',
+  folderNoPhotos: 'no Photos folder',
+  folderNoPlansFolder: 'no Engineered Plans folder',
+  folderNoPlanPdf: 'no plan PDF inside it',
+  folderComplete: 'Folder complete',
+  folderStatusBtn: 'Status',
+  folderChecking: 'Checking…',
+  folderCheckAgain: 'Check it again',
+  folderCheckBtn: 'Check Drive folder',
   connectedUnit: 'Connected Unit (buyer-merged apartments)',
   linkedToApt: 'Linked to Apt',
   noConnection: '— No connection —',
@@ -4523,6 +4569,25 @@ export const HEBREW_MAIN_UI_STRINGS: MainUiStrings = {
   setPdfHint: 'הגדר תיקיית Drive בהגדרות למטה לזיהוי אוטומטי של PDF תוכניות.',
   saveChangesBtn: 'שמור שינויים',
   driveFolder: 'תיקיית Google Drive',
+  taskDoneWord: 'בוצע',
+  photoCountOne: 'תמונה אחת',
+  photoCountMany: '{n} תמונות',
+  photoNewBadge: 'חדש',
+  photoNewTitle: 'חדש מהשטח — פתיחה מסמנת אותה כנבדקה',
+  markAllReviewedN: 'סמן הכול כנבדק ({n})',
+  fromTheSite: 'מהשטח',
+  linkLinked: 'מקושר',
+  linkNotLinked: 'לא מקושר',
+  linkFoldToggle: 'הצג או הסתר',
+  folderNotReachable: 'אין גישה לתיקייה',
+  folderNoPhotos: 'אין תיקיית Photos',
+  folderNoPlansFolder: 'אין תיקיית Engineered Plans',
+  folderNoPlanPdf: 'אין בה קובץ PDF של תוכנית',
+  folderComplete: 'התיקייה תקינה',
+  folderStatusBtn: 'מצב',
+  folderChecking: 'בודק…',
+  folderCheckAgain: 'לבדוק שוב',
+  folderCheckBtn: 'בדיקת תיקיית Drive',
   connectedUnit: 'יחידה מקושרת (דירות משולבות)',
   linkedToApt: 'מקושר לדירה',
   noConnection: '— אין חיבור —',
