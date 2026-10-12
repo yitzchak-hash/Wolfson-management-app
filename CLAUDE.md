@@ -9871,3 +9871,29 @@ calendar with bar/bundle/band/+/drag/scope, the phone in Russian).
 Re-encoded: `notebook-r48` §3 and `round49-probe` §5 (they asserted the old
 calendar's fold chips and the + that went to the Tasks page). Standing
 pre-existing red: `round22.mjs` (identical without the diff).
+
+---
+
+# v2 — the full menu inside a group (2026-10-12)
+
+The owner: inside a group, multi-select and right-click "the whole full menu
+is not coming up … I have to first put it back on the board and then do
+that." Two faults in `BinBoard.tsx`, both fixed:
+- **No Ctrl/Shift-click.** `startDrag` now toggles the job (or node) in the
+  selection on Ctrl/⌘/Shift and returns before the lock rule, so a locked job
+  can still be picked. A plain click still selects just the one.
+- **A thin job menu.** It now carries the "N selected" header
+  (`data-group-menu-count`), Open, Arrange, **Move to** every other group
+  (`otherGroups` — every `type:'bin'` node, deduped by `binKeyOf`, the four
+  built-ins first; `data-group-move-to=<key>`), Put back on the board
+  (tracked), Lock / Unlock, Hide / Show on the wallboard, and **Move to Trash**
+  (`data-group-move-trash`) — or, inside Trash, Delete forever behind a
+  confirm. `fileJobsInto(ids, key, at?)` is the board's `fileInBin`: one
+  `content` undo step, a group's `stageId` written through `updateApartment`,
+  the selection cleared, a `data-group-filed` note for 2.6s.
+- The menu (`data-group-menu=<kind>`) is placed by its MEASURED size in a
+  callback ref (left/top written there, never in the style prop, so a
+  re-render cannot undo them), `max-height: calc(100vh − 16px)` + scroll.
+Harness: `scratchpad/groupmenu-probe.mjs` (22). Its manner: undoing a content
+step raises the "Yes, do it" ask — press it, or the undo never runs.
+

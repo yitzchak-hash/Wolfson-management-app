@@ -30,6 +30,20 @@ export interface WhatsNewEntry {
 
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    date: '2027-01-31',
+    title: 'The full menu inside a group',
+    items: [
+      {
+        title: 'Move jobs between groups without the board',
+        body: 'Inside a group, Ctrl-click or Shift-click picks several jobs, the same as on the board. Right-click '
+          + 'any of them for the whole menu: move them straight to another group (a group that stands for a stage '
+          + 'sets that stage too), Move to Trash, put them back on the board, lock them, or hide them from the '
+          + 'wallboard. Ctrl+Z puts them back where they were.',
+        demo: 'list',
+      },
+    ],
+  },
+  {
     date: '2027-01-30',
     title: 'One calendar, and time off',
     items: [

@@ -64,7 +64,29 @@ with starred recommendations is published first; the owner says "approved" /
 "all yes" / answers by number; then it is built. Never build a redesign
 unasked.
 
-## Where things stand (2026-10-12, latest — "all stars, build it": Calendar and Time Off BUILT)
+## Where things stand (2026-10-12, latest — the full menu inside a group)
+His message: "in the groups, I'm trying to multiple select or right click the
+job and the whole full menu is not coming up … I want to move stuff to trash
+or to different folders and I can't. I have to first put it back on the board
+and then do that."
+- **Two faults**: the group window had NO Ctrl/Shift-click (only the lasso
+  could pick several), and its job menu offered only Arrange / Put back /
+  Open (and Delete forever in Trash).
+- **Built in `BinBoard.tsx`**: Ctrl/⌘/Shift-click toggles a job in the
+  selection (before the lock rule — a locked job can be picked); the job
+  menu now has the "N selected" header, Open, Arrange, **Move to** every
+  other group (board order, colour dot; a group with a stage sets it),
+  Put back on the board, Lock / Unlock, Hide / Show on the wallboard and
+  **Move to Trash** (filing, nothing deleted; Delete forever inside Trash
+  now asks first). `fileJobsInto` mirrors the board's `fileInBin` as one
+  content undo step; a small note says where the jobs went. The menu is
+  placed by its measured size and scrolls if taller than the screen.
+- Probe: `scratchpad/groupmenu-probe.mjs` (22). groupparity, arrange,
+  groupboard, groupink and the four audits green.
+- **The reply he saw**: the two causes, what the menu now holds, how to try
+  it, the link, "✅ Nothing needed from you".
+
+## Where things stand (2026-10-12 — "all stars, build it": Calendar and Time Off BUILT)
 His message: "all stars, build it" — every starred answer on the "Calendar and
 Time Off" page (https://claude.ai/artifact/4mBwAn56xN8qCrieBbwMVj).
 - **Time off**: `src/data/timeOff.ts` (pure, timeoff-test 18), one shared list

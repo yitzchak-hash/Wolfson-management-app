@@ -171,3 +171,4 @@ rewritten).
 | C-37 | 2026-10-12 | Answer 3: tick Registers back on A2 9 | Done | production, read back (done, headline Registers); one "Office" history line |
 | C-38 | 2026-10-12 | A way to mark a worker on vacation from the notebook, seen on the notebook — add it to the plan | Done | built on "all stars": name → Time off…, right-click → Off this day, the band · timeoff-test (18) · timeoff-probe (44) |
 | C-39 | 2026-10-12 | "all stars, build it" — every starred answer on Calendar and Time Off | Done | timeoff-probe (44); notebook-r48 and round49 re-encoded to the one calendar |
+| C-40 | 2026-10-12 | "in the groups … multiple select or right click the job and the whole full menu is not coming up … move stuff to trash or to different folders" | Done | Ctrl/Shift-click in the group; job menu with Move to (every group), Move to Trash, Put back, Lock, Wallboard; groupmenu-probe (22) |

@@ -6,6 +6,12 @@ have them). The v2 rebuild's original design record is the root
 `DECISIONS.md`; the rules and traps behind each decision are in `CLAUDE.md`
 by round. (Standing order 6, 2026-09-23.)_
 
+## 2026-10-12 (the group window's menu)
+- Inside a group a job is filed straight into another group or into Trash
+  from the right-click menu — the same rules as the board (content undo step,
+  a group with a stage sets it, Trash is filing). Ctrl/Shift-click picks
+  several, as on the board. "Delete forever" in Trash now asks first.
+
 ## 2026-10-12 ("all stars, build it" — Calendar and Time Off)
 Every starred answer on the plan page, built the same day:
 1. The calendar is a **month grid of small tiles** (look A) with a multi-day

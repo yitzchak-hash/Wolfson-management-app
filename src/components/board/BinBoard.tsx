@@ -2,13 +2,13 @@ import React, { useMemo, useRef, useState, useCallback, useEffect, useLayoutEffe
 import { useDeleteImpactLine } from '../ui/DeleteImpact';
 import {
   X, Undo2, Trash2, Search, StickyNote, Square, LayoutGrid, Settings2, Plus, ArrowDownUp,
-  Pencil, Highlighter, Eraser,
+  Pencil, Highlighter, Eraser, Lock, Unlock, Tv, FolderInput,
 } from 'lucide-react';
 import { useStore } from '../../data/store';
 import { progressOf } from '../../data/stageMarks';
 import { useBoardTrack } from '../../data/useBoardUndo';
 import {
-  Apartment, CanvasElement, binLabelOf, binKeyOf, BIN_META, relativeTime,
+  Apartment, CanvasElement, binLabelOf, binKeyOf, BIN_META, BIN_KINDS, BinKind, relativeTime,
 } from '../../types';
 import { getBoardTheme } from '../../data/boardThemes';
 import { arrangeGrid } from '../../data/arrangeGrid';
@@ -476,6 +476,23 @@ export function BinBoard({ bin, onClose, onOpenJob, highlightJobId, onRestored }
     if (eraseMode) { startEraseAt(e); e.stopPropagation(); return; }
     // Still the tail of the gesture that opened this window — see `settling`.
     if (settling()) return;
+    /**
+     * Ctrl / ⌘ / Shift + click adds to (or takes out of) the selection — the
+     * main board's own gesture. The group window never had it, so a
+     * selection of two scattered jobs could only be made with a lasso, and
+     * "I'm trying to multiple select" got nowhere. Before the lock rule: a
+     * locked job can be picked, only not moved.
+     */
+    if (e.ctrlKey || e.metaKey || e.shiftKey) {
+      e.stopPropagation();
+      setMenu(null);
+      setSelected(prev => {
+        const next = new Set(prev);
+        if (next.has(id)) next.delete(id); else next.add(id);
+        return next;
+      });
+      return;
+    }
     // The main board's lock rule holds inside a group window too.
     if (kind === 'el' && nodes.find(n => n.id === id)?.locked) return;
     if (kind === 'job' && items.find(a => a.id === id)?.boardLocked) return;
@@ -581,6 +598,64 @@ export function BinBoard({ bin, onClose, onOpenJob, highlightJobId, onRestored }
    */
   const track = useBoardTrack();
   const things = (n: number) => `${n} ${n === 1 ? 'thing' : 'things'}`;
+
+  /**
+   * Every OTHER group on the board, in the board's own order — the four that
+   * ship first, then the ones made by hand or by the import. A job is moved
+   * straight from one group to another from in here; it used to have to be
+   * put back on the board first and filed again from there.
+   */
+  const otherGroups = useMemo(() => {
+    const seen = new Set<string>([binKey]);
+    const all = canvasElements.filter(e => e.type === 'bin');
+    const rank = (e: CanvasElement) => {
+      const i = e.binKind ? BIN_KINDS.indexOf(e.binKind) : -1;
+      return i === -1 ? BIN_KINDS.length : i;
+    };
+    return [...all].sort((a, b) => rank(a) - rank(b)).filter(e => {
+      const k = binKeyOf(e);
+      if (seen.has(k)) return false;
+      seen.add(k);
+      return true;
+    });
+  }, [canvasElements, binKey]);
+  const trashGroup = otherGroups.find(g => binKeyOf(g) === 'trash');
+  const [filedNote, setFiledNote] = useState<string | null>(null);
+  useEffect(() => {
+    if (!filedNote) return;
+    const t = window.setTimeout(() => setFiledNote(null), 2600);
+    return () => window.clearTimeout(t);
+  }, [filedNote]);
+
+  /**
+   * File jobs from THIS group into another — the main board's `fileInBin`,
+   * the same rules: it is a CONTENT step (a group's jobs leave and join
+   * totals), a group that stands for a stage sets that stage, and Trash is
+   * filing, never destroying.
+   */
+  function fileJobsInto(ids: string[], key: string, at?: CanvasElement) {
+    const jobIds = ids.filter(id => items.some(j => j.id === id));
+    if (!jobIds.length) return;
+    const where = at ? binLabelOf(at) : (BIN_META[key as BinKind]?.label ?? key);
+    const stageId = at?.stageId;
+    const stageWord = stageId ? stages.find(st => st.id === stageId)?.name : undefined;
+    track({
+      weight: 'content',
+      label: `Moved ${things(jobIds.length)} from ${binLabelOf(bin)} to ${where}`,
+      explain: `${things(jobIds.length)} go back from ${where} into ${binLabelOf(bin)}`
+        + `${stageWord ? `, and the stage goes back to whatever it was before “${stageWord}”` : ''}. `
+        + 'Nothing is deleted either way.',
+    }, () => {
+      jobIds.forEach(id => moveToBin(id, key));
+      if (stageId && currentUser) {
+        jobIds.forEach(id => updateApartment(id, { currentStageId: stageId }, currentUser));
+      }
+    });
+    setSelected(new Set());
+    setMenu(null);
+    setFiledNote(stageWord ? `Moved ${things(jobIds.length)} to ${where} · stage set to ${stageWord}`
+      : `Moved ${things(jobIds.length)} to ${where}`);
+  }
 
   function endDrag(job?: Apartment, e?: React.PointerEvent) {
     setGuides([]);
@@ -1761,12 +1836,29 @@ export function BinBoard({ bin, onClose, onOpenJob, highlightJobId, onRestored }
         </div>
       </div>
 
+      {filedNote && (
+        <div data-group-filed
+          className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[90] bg-[#1e3a5f] text-white text-[12.5px] font-semibold px-3.5 py-2 rounded-xl shadow-xl pointer-events-none">
+          {filedNote}
+        </div>
+      )}
+
       {/* Right-click, inside a group as well as outside it. */}
       {menu && (
         <>
           <div className="fixed inset-0 z-[88]" onClick={() => setMenu(null)} onContextMenu={e => { e.preventDefault(); setMenu(null); }} />
-          <div className="fixed z-[89] bg-white rounded-xl shadow-2xl border border-gray-100 py-1.5 min-w-[186px]"
-            style={{ left: Math.min(menu.x, window.innerWidth - 210), top: Math.min(menu.y, window.innerHeight - 280) }}>
+          {/* Placed by its MEASURED size, not a guess: the job menu now
+              carries every group, and a fixed 280px allowance let it run off
+              the bottom of the screen exactly when a low tile was pressed. */}
+          <div data-group-menu={menu.kind}
+            className="fixed z-[89] bg-white rounded-xl shadow-2xl border border-gray-100 py-1.5 min-w-[200px] max-w-[280px]"
+            style={{ maxHeight: 'calc(100vh - 16px)', overflowY: 'auto' }}
+            ref={el => {
+              if (!el) return;
+              const r = el.getBoundingClientRect();
+              el.style.left = `${Math.max(8, Math.min(menu.x, window.innerWidth - r.width - 8))}px`;
+              el.style.top = `${Math.max(8, Math.min(menu.y, window.innerHeight - r.height - 8))}px`;
+            }}>
             {menu.kind === 'canvas' && (
               <>
                 <MenuItem icon={StickyNote} label="Sticky note"
@@ -1799,9 +1891,27 @@ export function BinBoard({ bin, onClose, onOpenJob, highlightJobId, onRestored }
                   onClick={() => { menu.ids.forEach(deleteCanvasElement); setSelected(new Set()); setMenu(null); }} />
               </>
             )}
-            {menu.kind === 'job' && (
+            {menu.kind === 'job' && (() => {
+              const jobs = items.filter(j => menu.ids.includes(j.id));
+              const ids = jobs.map(j => j.id);
+              const n = jobs.length;
+              const anyUnlocked = jobs.some(j => !j.boardLocked);
+              const anyShown = jobs.some(j => j.showOnTv !== false);
+              return (
               <>
-                {menu.ids.length > 1 && (
+                {n > 1 && (
+                  <div data-group-menu-count
+                    className="px-3 pt-0.5 pb-1.5 mb-1 border-b border-gray-100 text-[10.5px] font-bold uppercase tracking-wide text-gray-400">
+                    {n} selected
+                  </div>
+                )}
+                <MenuItem icon={Search} label="Open the job"
+                  onClick={() => {
+                    const j = items.find(x => x.id === menu.ids[0]);
+                    if (j) onOpenJob(j);
+                    setMenu(null);
+                  }} />
+                {n > 1 && (
                   /* The approved Arrange, inside the group — pairs with
                      Ctrl+A: select all the jobs, right-click, Arrange, and
                      they lay into the tidy grid on the group's own surface,
@@ -1831,23 +1941,72 @@ export function BinBoard({ bin, onClose, onOpenJob, highlightJobId, onRestored }
                       setMenu(null);
                     }} />
                 )}
-                <MenuItem icon={Undo2} label="Put back on the board"
-                  onClick={() => { menu.ids.forEach(id => moveToBin(id, null)); setMenu(null); }} />
-                <MenuItem icon={Search} label="Open the job"
+                <div className="h-px bg-gray-100 my-1" />
+                {otherGroups.filter(g => binKeyOf(g) !== 'trash').length > 0 && (
+                  <div className="px-3 pt-1 pb-0.5 text-[10px] font-bold uppercase tracking-wide text-gray-400">
+                    Move to
+                  </div>
+                )}
+                {otherGroups.filter(g => binKeyOf(g) !== 'trash').map(g => (
+                  <button key={g.id} data-group-move-to={binKeyOf(g)}
+                    onClick={() => fileJobsInto(ids, binKeyOf(g), g)}
+                    className="w-full flex items-center gap-2 px-3 py-1.5 text-[12.5px] text-left text-gray-700 hover:bg-gray-50">
+                    <FolderInput size={13} className="flex-shrink-0" />
+                    <span className="w-2.5 h-2.5 rounded-full flex-shrink-0"
+                      style={{ backgroundColor: g.color || (g.binKind ? BIN_META[g.binKind].color : '#64748b') }} />
+                    <span className="truncate">{binLabelOf(g)}</span>
+                  </button>
+                ))}
+                <MenuItem icon={Undo2} label={n > 1 ? `Put back on the board (${n})` : 'Put back on the board'}
                   onClick={() => {
-                    const j = items.find(x => x.id === menu.ids[0]);
-                    if (j) onOpenJob(j);
+                    track({
+                      weight: 'content',
+                      label: `Took ${things(n)} out of ${binLabelOf(bin)}`,
+                      explain: `${things(n)} go back into ${binLabelOf(bin)} and come off the main board. Nothing is deleted either way.`,
+                    }, () => ids.forEach(id => moveToBin(id, null)));
+                    onRestored?.(ids);
+                    setSelected(new Set());
                     setMenu(null);
                   }} />
-                {bin.binKind === 'trash' && (
-                  <>
-                    <div className="h-px bg-gray-100 my-1" />
-                    <MenuItem icon={Trash2} danger label="Delete forever"
-                      onClick={() => { menu.ids.forEach(deleteApartment); setMenu(null); }} />
-                  </>
+                <div className="h-px bg-gray-100 my-1" />
+                <MenuItem icon={anyUnlocked ? Lock : Unlock} label={anyUnlocked ? 'Lock in place' : 'Unlock'}
+                  onClick={() => {
+                    if (currentUser) {
+                      track({ weight: 'arrange', label: anyUnlocked ? `Locked ${things(n)}` : `Unlocked ${things(n)}` }, () => {
+                        ids.forEach(id => updateApartment(id, { boardLocked: anyUnlocked ? true : undefined }, currentUser));
+                      });
+                    }
+                    setMenu(null);
+                  }} />
+                <MenuItem icon={Tv} label={anyShown ? 'Hide from the wallboard' : 'Show on the wallboard'}
+                  onClick={() => {
+                    if (currentUser) {
+                      track({ weight: 'arrange', label: anyShown ? `Hid ${things(n)} from the wallboard` : `Showed ${things(n)} on the wallboard` }, () => {
+                        ids.forEach(id => updateApartment(id, { showOnTv: anyShown ? false : undefined }, currentUser));
+                      });
+                    }
+                    setMenu(null);
+                  }} />
+                <div className="h-px bg-gray-100 my-1" />
+                {binKey !== 'trash' ? (
+                  <MenuItem icon={Trash2} danger data-group-move-trash
+                    label={n > 1 ? `Move to Trash (${n})` : 'Move to Trash'}
+                    onClick={() => fileJobsInto(ids, 'trash', trashGroup)} />
+                ) : (
+                  <MenuItem icon={Trash2} danger label={n > 1 ? `Delete forever (${n})` : 'Delete forever'}
+                    onClick={() => {
+                      if (window.confirm(n > 1
+                        ? `Delete these ${n} jobs forever? This cannot be undone.`
+                        : 'Delete this job forever? This cannot be undone.')) {
+                        ids.forEach(deleteApartment);
+                        setSelected(new Set());
+                      }
+                      setMenu(null);
+                    }} />
                 )}
               </>
-            )}
+              );
+            })()}
           </div>
         </>
       )}
@@ -1865,11 +2024,12 @@ export function BinBoard({ bin, onClose, onOpenJob, highlightJobId, onRestored }
   );
 }
 
-function MenuItem({ icon: Icon, label, onClick, danger }: {
+function MenuItem({ icon: Icon, label, onClick, danger, ...rest }: {
   icon: React.ElementType; label: string; onClick: () => void; danger?: boolean;
+  [data: `data-${string}`]: unknown;
 }) {
   return (
-    <button onClick={onClick}
+    <button onClick={onClick} {...rest}
       className={`w-full flex items-center gap-2 px-3 py-1.5 text-[12.5px] text-left hover:bg-gray-50 ${
         danger ? 'text-red-600' : 'text-gray-700'}`}>
       <Icon size={13} /> {label}
