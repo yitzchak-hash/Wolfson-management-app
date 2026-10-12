@@ -8,7 +8,9 @@ import { useStore } from '../../data/store';
 import { peekTaskFocus, takeTaskFocus } from '../../data/taskFocus';
 import { TaskDaysPicker, daysFields } from '../tasks/TaskDaysPicker';
 import { StagePairPill, StagePairPicker, stagePairStrings } from '../tasks/StagePair';
-import { daysOf } from '../../data/taskDays';
+import { daysOf, dayIso } from '../../data/taskDays';
+import { notFinishedPlan, notFinishedLine, needsNewDay } from '../../data/notFinished';
+import { NotFinishedSheet, unfinishedWords } from '../tasks/NotFinishedSheet';
 import { usePhone, useMedia } from '../../data/usePhone';
 import { VoiceRecorderButton, VoiceMemoPlayer } from '../ui/VoiceMemo';
 import { MessageBox, memoFile } from '../ui/MessageBox';
@@ -287,6 +289,9 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
    * live task, the standing re-resolve rule.
    */
   const [movingTaskId, setMovingTaskId] = useState<string | null>(null);
+  /** The office's "Not finished" on a task card (owner, 2026-10-11): the same three questions the worker answers. */
+  const [nfTaskId, setNfTaskId] = useState<string | null>(null);
+  const [nfText, setNfText] = useState('');
   const [deletingTaskId, setDeletingTaskId] = useState<string | null>(null);
   // Another apartment in the same window: a pending move or delete was about the old one.
   useEffect(() => { setMovingTaskId(null); setDeletingTaskId(null); }, [apartment?.id]);
@@ -1575,6 +1580,46 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
         <ContractorStatusPanel apartment={apartment} onClose={() => setShowContractorStatus(false)} />
       )}
 
+      {/* "Not finished" for the office — the worker phoned it in. */}
+      {nfTaskId && apartment && (() => {
+        const t = contractorAssignments.find(x => x.id === nfTaskId);
+        if (!t || t.completedAt) return null;
+        const close = () => { setNfTaskId(null); setNfText(''); };
+        return (
+          <NotFinishedSheet
+            lang={ui.isRtl ? 'he' : 'en'}
+            office
+            today={dayIso(new Date())}
+            aptLabel={aptLabel(apartment)}
+            stages={taskStageIds(t).map(id => stages.find(st => st.id === id)).filter((st): st is NonNullable<typeof st> => !!st)
+              .map(st => ({ id: st.id, name: getStageName(st, ui.isRtl), color: st.color }))}
+            composer={<MessageBox hook="nf-office-message" value={nfText} onChange={setNfText} rows={2}
+              lang={ui.isRtl ? 'he' : 'en'} />}
+            onClose={close}
+            onSubmit={(fin, next) => {
+              const plan = notFinishedPlan(t, {
+                today: dayIso(new Date()), next, finishedIds: fin,
+                by: currentUser?.name || 'Office', at: new Date().toISOString(),
+              });
+              updateContractorAssignment(t.id, { days: plan.days, dueDate: plan.dueDate, unfinished: plan.unfinished });
+              if (Object.keys(plan.marks).length && currentUser) {
+                setApartmentMarks(apartment.id, { ...(apartment.stageMarks ?? {}), ...plan.marks }, currentUser);
+              }
+              const last = plan.unfinished[plan.unfinished.length - 1];
+              const line = notFinishedLine(last, id => stages.find(st => st.id === id)?.name ?? id);
+              if (currentUser) {
+                addContractorNote({
+                  assignmentId: t.id, apartmentId: apartment.id, contractorId: t.contractorId,
+                  authorType: 'office', authorId: currentUser.id, authorName: currentUser.name,
+                  text: [line, nfText.trim()].filter(Boolean).join('\n'),
+                });
+              }
+              onToast(unfinishedWords(ui.isRtl ? 'he' : 'en').officeBtn + ' ✓');
+              close();
+            }}
+          />
+        );
+      })()}
       {/* Move a task to another apartment / delete one, saying what goes
           with it. Both portal themselves above the panel (z-[130]/[140]). */}
       {movingTaskId && (() => {
@@ -2586,6 +2631,20 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                                     <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${badge.cls}`}>
                                       {badge.text}
                                     </span>
+                                  )}
+                                  {!a.completedAt && (a.unfinished?.length ?? 0) > 0 && (
+                                    <span data-task-unfinished className="inline-flex items-center gap-0.5 text-[10px] font-bold px-1.5 py-0.5 rounded-full"
+                                      style={{ backgroundColor: needsNewDay(a) ? '#f59e0b' : '#fef3c7', color: needsNewDay(a) ? '#fff' : '#92400e' }}>
+                                      <Clock size={9} />
+                                      {needsNewDay(a) ? unfinishedWords(ui.isRtl ? 'he' : 'en').needs : unfinishedWords(ui.isRtl ? 'he' : 'en').tag}
+                                    </span>
+                                  )}
+                                  {!a.completedAt && !a.problem && !a.general && (
+                                    <button type="button" data-office-not-finished={a.id}
+                                      onClick={() => { setNfText(''); setNfTaskId(a.id); }}
+                                      className="inline-flex items-center gap-0.5 text-[10px] font-bold px-1.5 py-0.5 rounded-full border border-amber-300 text-amber-800 bg-white hover:bg-amber-50">
+                                      <Clock size={9} /> {unfinishedWords(ui.isRtl ? 'he' : 'en').officeBtn}
+                                    </button>
                                   )}
                                   {/* The tiny green "Done Oct 6" is the badge on top now. */}
                                   {(a.attachments?.length ?? 0) > 0 && (

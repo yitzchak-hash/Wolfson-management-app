@@ -50,6 +50,9 @@ asks for it. ☑ done · ☐ next · ✎ awaiting Yitzchak's word. (Standing ord
   apartment goes back to how it was that morning; the "Who did what"
   widget; the worker's phone, notebook, calendars, Tasks page, window and
   board fixes (see `docs/feedback/2026-10-08-115349.md`).
+- ☑ 2026-10-12: "Not finished today" — the worker's button beside Close
+  job, the three questions, the morning question, "needs a new day" on the
+  notebook, and the office's own button in the apartment window.
 
 ## Next (in order)
 - ☐ Watch on production: the foreign photo listener (no Firebase in the

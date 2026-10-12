@@ -46,7 +46,7 @@ day still stands, after the numbered list.)
 3. `npx tsc --noEmit -p .` and `npx vite build`. 4. The audits:
    `node scratchpad/loopaudit.mjs`, `backupaudit.mjs`, `navaudit.mjs`, `apilimit.mjs`.
 5. A What's New entry (`src/data/whatsNew.tsx`, dates run AHEAD of the clock;
-   newest is `2027-01-26` — the next entry must be a later date (an older
+   newest is `2027-01-27` — the next entry must be a later date (an older
    entry lower down also wears `2026-12-20`; the marker compares only the TOP
    entry's date, so never reuse a date that appears anywhere in the file)). 6. A CLAUDE.md
    round record. 7. A line in `docs/CRM-CHECKLIST.md`, tick `docs/ROADMAP.md`, date a line in `docs/DECISIONS.md` when he decided something. 8. Rewrite THIS file.
@@ -64,7 +64,31 @@ with starred recommendations is published first; the owner says "approved" /
 "all yes" / answers by number; then it is built. Never build a redesign
 unasked.
 
-## Where things stand (2026-10-08, latest — his five answers built; nothing pending from him)
+## Where things stand (2026-10-12, latest — "Not finished today" built; nothing pending from him)
+His ask (chat): a worker started a one-day Thursday job and did not finish —
+"he can click on something where it will say I didn't finish today… what do
+you think". I proposed the design with five starred answers; he said
+"build it".
+- **`src/data/notFinished.ts`** (pure, `notfinished-test.mjs` 24) +
+  **`NotFinishedSheet.tsx`**: what he finished (multi-stage only → done, the
+  rest pending), what's left (message box), when he's back (Tomorrow = next
+  working day / Pick a day / I don't know yet). The task stays open; today +
+  the come-back day join `days`; `unfinished[]` keeps every report; an
+  English line + his words go to the office as a task message.
+- Portal: the button beside Close job; the MORNING QUESTION at the top of his
+  list ("Did you finish A3 12 yesterday?" Yes → closing screen, No → the
+  sheet); amber tag on cards. Notebook tile: `data-bar-unfinished` /
+  `data-bar-needs-day`. Drawer: the office's own "Not finished" on each open
+  task card (messages the worker).
+- `notfinished-probe.mjs` 30/30 in Russian; regressions green.
+- Worth watching on production: the morning question appears for EVERY
+  open job whose last day has passed — old overdue office tasks included
+  (three at a time). If that is too much for the workers, the easy narrowing
+  is "only jobs whose last day was in the last week".
+- **The reply he saw**: what was built in plain words, how it behaves on a
+  Thursday, the link, "✅ Nothing needed from you".
+
+## Where things stand (2026-10-08 — his five answers built)
 His message: "One, I want to do A. Two, a 3 a 4 use the existing key with a
 stronger model and reasoning 5 leave it." No new recording in the Drive
 folder (still two).

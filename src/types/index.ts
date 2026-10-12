@@ -1444,6 +1444,14 @@ export interface ContractorAssignment {
   marksBefore?: Record<string, StageMark>;
   marksBeforeAt?: string;
   /**
+   * "Not finished today" (owner, 2026-10-11): every time the worker (or the
+   * office for him) said the job was not finished on a day. The task stays
+   * OPEN; the day he worked and the day he is coming back are added to
+   * `days`. `next: null` is "I don't know yet" — the job then needs a new
+   * day from the office until a later day is added (derived, never a flag).
+   */
+  unfinished?: UnfinishedReport[];
+  /**
    * EVERY stage this task is for (locked answer 7: one picker, several
    * stages at once). `stageId` stays the FIRST of them so every reader
    * written for one stage — the notebook bar's colour, sorting, the
@@ -1506,6 +1514,20 @@ export function workAtLabel(lang: PortalLang | 'en' | 'he' | 'ru' | undefined, w
   if (lang === 'he') return `עבודה בבניינים של ${workspace}`;
   if (lang === 'ru') return `Работа в ${workspace}`;
   return `Work at ${workspace}`;
+}
+
+/** One "Not finished today" report on a task (see `ContractorAssignment.unfinished`). */
+export interface UnfinishedReport {
+  /** When it was said (ISO time). */
+  at: string;
+  /** Who said it — the worker's name, or the office user's. */
+  by: string;
+  /** The day that was worked and not finished (yyyy-MM-dd). */
+  day: string;
+  /** The day he is coming back, or null for "I don't know yet". */
+  next: string | null;
+  /** The stages he finished that day (crossed off); the task's others went half done. */
+  finished?: string[];
 }
 
 export interface ContractorNote {

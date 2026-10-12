@@ -3,7 +3,9 @@ import { useParams } from 'react-router-dom';
 import { useStore, loadAllProjectsTaskData, loadProjectSnapshot, ensureProjectSnapshot, startForeignSync, stopForeignSync } from '../data/store';
 import { ContractorAssignment, ContractorPhoto, Contractor, Apartment, Project, StageNote, StageNoteEntry, Stage, DEFAULT_CONTRACTOR_UI_STRINGS, HEBREW_CONTRACTOR_UI_STRINGS, RUSSIAN_CONTRACTOR_UI_STRINGS, PortalLang, stageNameIn, aptLabel, workAtLabel, projectColor, projectName, projectShortName } from '../types';
 import { transcribeMemo } from '../data/transcribe';
-import { daysOf, futureDaysOf } from '../data/taskDays';
+import { daysOf, futureDaysOf, dayIso, parseDay } from '../data/taskDays';
+import { notFinishedPlan, notFinishedLine, morningAskDay, needsNewDay, daysBetween } from '../data/notFinished';
+import { NotFinishedSheet, unfinishedWords } from '../components/tasks/NotFinishedSheet';
 import { PlanPinOverlay } from '../components/apartment/PlanPinOverlay';
 import { printSheet, printEsc } from '../data/printing';
 import { format as fmtRaw, parseISO, isToday, differenceInCalendarDays, startOfDay, startOfWeek, addDays as addDaysFns } from 'date-fns';
@@ -785,6 +787,12 @@ export function ContractorPortal() {
    * the finish-early ask and completion run.
    */
   const [closing, setClosing] = useState(false);
+  /**
+   * "Not finished today" (owner, 2026-10-11): the second button beside
+   * Close job. The job stays open; the screen asks what he finished, what is
+   * left and when he is coming back (NotFinishedSheet).
+   */
+  const [notFinishedOpen, setNotFinishedOpen] = useState(false);
   /** The closing screen's own comment (decision 9) — one message, sent with
    *  the photos when the job is closed. Separate from the composer's text. */
   const [closingComment, setClosingComment] = useState('');
@@ -1447,10 +1455,30 @@ export function ContractorPortal() {
     });
   }
 
-  function handleSendNote() {
-    if (!selectedAssignment || (!noteText.trim() && noteAttachments.length === 0)) return;
+  /** The write behind "Send to the office" on the not-finished screen. */
+  function submitNotFinished(task: ContractorAssignment, finishedIds: string[], next: string | null) {
+    const today = dayIso(new Date());
+    const plan = notFinishedPlan(task, {
+      today, next, finishedIds, by: contractor?.name ?? 'Worker', at: new Date().toISOString(),
+    });
+    useStore.getState().updateContractorAssignment(task.id, {
+      days: plan.days, dueDate: plan.dueDate, unfinished: plan.unfinished,
+    });
+    const apt = getApt(task.apartmentId);
+    if (apt && Object.keys(plan.marks).length) {
+      useStore.getState().setApartmentMarks(apt.id, { ...(apt.stageMarks ?? {}), ...plan.marks }, workerUser(), { quiet: true });
+    }
+    // The office hears it the way it hears any message from site: the line
+    // the app writes is English (a stored record), his own words follow it.
+    const last = plan.unfinished[plan.unfinished.length - 1];
+    handleSendNote(notFinishedLine(last, id => getStage(id)?.name ?? id));
+    setNotFinishedOpen(false);
+  }
+
+  function handleSendNote(prefix?: string) {
+    if (!selectedAssignment || (!noteText.trim() && noteAttachments.length === 0 && !prefix)) return;
     const apt = getApt(selectedAssignment.apartmentId);
-    const text = noteText.trim();
+    const text = [prefix, noteText.trim()].filter(Boolean).join('\n');
     const base = {
       assignmentId: selectedAssignment.id,
       apartmentId: selectedAssignment.apartmentId,
@@ -1507,9 +1535,13 @@ export function ContractorPortal() {
    * setClosing(true) beside setSelectedAssignment would be undone right here.
    */
   const arriveClosingRef = useRef(false);
+  /** The morning question's "No, not finished" — arrive on the not-finished sheet. */
+  const arriveNotFinishedRef = useRef(false);
   useEffect(() => {
-    if (arriveClosingRef.current) { arriveClosingRef.current = false; setClosing(true); return; }
+    if (arriveClosingRef.current) { arriveClosingRef.current = false; setNotFinishedOpen(false); setClosing(true); return; }
+    if (arriveNotFinishedRef.current) { arriveNotFinishedRef.current = false; setClosing(false); setNotFinishedOpen(true); return; }
     setClosing(false);
+    setNotFinishedOpen(false);
   }, [selectedAssignment?.id]);
 
   // The moment the closing screen opens, remember which media already existed
@@ -1955,6 +1987,47 @@ export function ContractorPortal() {
           </button>
         ) : null;
       })()}
+      {/* THE MORNING QUESTION (owner, 2026-10-11): a job whose last day has
+          passed and that nobody said anything about — "Did you finish A3 12
+          yesterday?". Yes goes to the closing screen; No asks the three
+          not-finished questions. Answering either way ends the question. */}
+      {activeTab === 'tasks' && (() => {
+        const todayIso = dayIso(new Date());
+        const UW = unfinishedWords(readLang);
+        const rows = [
+          ...assignments.map(a => ({ a, apt: getApt(a.apartmentId), projectId: currentProjectId })),
+          ...otherTasks.map(r => ({ a: r.a, apt: r.apt, projectId: r.projectId })),
+        ].map(r => ({ ...r, day: morningAskDay(r.a, todayIso) }))
+          .filter((r): r is typeof r & { day: string } => !!r.day)
+          .sort((x, y) => y.day.localeCompare(x.day))
+          .slice(0, 3);
+        if (!rows.length) return null;
+        return (
+          <div className="px-3 pt-3 space-y-2 flex-shrink-0 max-w-2xl mx-auto w-full" data-morning-list>
+            {rows.map(({ a, apt, projectId, day }) => {
+              const when = daysBetween(day, todayIso) === 1 ? UW.yesterday : UW.on(format(parseDay(day), 'EEEE d MMM'));
+              const label = a.general ? workAtLabel(readLang, projectName(projects.find(p => p.id === projectId), readLang === 'he', projectId)) : `${apt?.buildingId && apt.buildingId !== 'G' ? `${apt.buildingId} ` : ''}${aptLabel(apt)}`;
+              return (
+                <div key={a.id} data-morning-ask={a.id} className="rounded-2xl border-2 border-amber-300 bg-amber-50 px-4 py-3 shadow-sm">
+                  <div className="font-extrabold text-[15px] text-amber-900 leading-snug">{UW.ask(label, when)}</div>
+                  <div className="mt-2.5 grid grid-cols-2 gap-2">
+                    <button type="button" data-morning-yes
+                      onClick={() => { arriveClosingRef.current = true; openTask(projectId, a); }}
+                      className="py-2.5 rounded-xl text-[14px] font-bold text-white bg-emerald-600 active:bg-emerald-700">
+                      {UW.yes}
+                    </button>
+                    <button type="button" data-morning-no
+                      onClick={() => { arriveNotFinishedRef.current = true; openTask(projectId, a); }}
+                      className="py-2.5 rounded-xl text-[14px] font-bold text-amber-900 bg-white border-2 border-amber-400">
+                      {UW.no}
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        );
+      })()}
       {activeTab === 'tasks' && (
       <div className="bg-white border-b border-gray-100 px-3 py-2.5 flex gap-2 overflow-x-auto flex-shrink-0 edge-fade">
         {filterOptions.map(({ key, label, color }) => (
@@ -2285,6 +2358,12 @@ export function ContractorPortal() {
                             <span className="text-xs px-2 py-0.5 rounded-full font-medium"
                               style={{ backgroundColor: stage.color + '22', color: stage.color }}>
                               {stageNameIn(stage, readLang)}
+                            </span>
+                          )}
+                          {!isDone && (a.unfinished?.length ?? 0) > 0 && (
+                            <span data-task-unfinished className="inline-flex items-center gap-1 text-[10.5px] font-bold px-2 py-0.5 rounded-full"
+                              style={{ backgroundColor: '#fef3c7', color: '#92400e' }}>
+                              <Clock size={10} /> {needsNewDay(a) ? unfinishedWords(readLang).needs : unfinishedWords(readLang).tag}
                             </span>
                           )}
                         </div>
@@ -2871,8 +2950,8 @@ export function ContractorPortal() {
         const starredFileId = apt?.plansPdfLink ? extractFileId(apt.plansPdfLink) : null;
         const plansPdfFileId = starredFileId ?? (apt ? autoPlanFor[apt.id] ?? null : null);
         const planIsGuess = !starredFileId && !!plansPdfFileId;
-        const composerNode = (
-          <div data-composer-block>
+        const notePreview = (
+          <>
 {noteAttachments.length > 0 && (
                     <div className="mt-3 flex flex-wrap gap-2">
                       {noteAttachments.map((att, idx) => (
@@ -2909,6 +2988,11 @@ export function ContractorPortal() {
                       ))}
                     </div>
                   )}
+          </>
+        );
+        const composerNode = (
+          <div data-composer-block>
+{notePreview}
 
                   {/* The composer — WhatsApp's way (owner, 2026-09-03): the
                       paperclip at the start, the box saying "Your message"
@@ -2920,7 +3004,7 @@ export function ContractorPortal() {
                     className="mt-2"
                     value={noteText}
                     onChange={setNoteText}
-                    onSend={handleSendNote}
+                    onSend={() => handleSendNote()}
                     hasPending={noteAttachments.length > 0}
                     onAttach={handleNoteFiles}
                     onMemo={handleNoteVoiceMemo}
@@ -3428,8 +3512,21 @@ export function ContractorPortal() {
                     {w('Choose the apartment you are working in', 'בחר את הדירה שבה אתה עובד', 'Выберите квартиру, где вы работаете')}
                   </button>
                   ) : (
-                  /* One button. Pressing it opens the closing screen —
-                     it never sits greyed-out wondering why. */
+                  /* Close job — and beside it, for an ordinary job, "Not
+                     finished today" (owner, 2026-10-11): the job stays open
+                     and moves to the day he is coming back. */
+                  <div className={!(a.problem && isLiveProblem(a)) ? 'grid grid-cols-2 gap-2' : ''}>
+                  {!(a.problem && isLiveProblem(a)) && (
+                    <button
+                      data-not-finished-btn
+                      onClick={() => setNotFinishedOpen(true)}
+                      className="w-full py-3.5 rounded-xl text-[15px] font-bold transition-all active:scale-[0.98] flex items-center justify-center gap-2"
+                      style={{ backgroundColor: '#fffbeb', color: '#b45309', border: '2px solid #f59e0b' }}
+                    >
+                      <Clock size={18} />
+                      {unfinishedWords(readLang).btn}
+                    </button>
+                  )}
                   <button
                     data-close-job
                     onClick={() => setClosing(true)}
@@ -3443,6 +3540,7 @@ export function ContractorPortal() {
                       ? (s.closeProblemBtn || (w('Close problem', 'סגירת הבעיה', 'Закрыть проблему')))
                       : (s.closeJobBtn || (w('Close job', 'סגירת עבודה', 'Закрыть работу')))}
                   </button>
+                  </div>
                   )
                 )}
               </div>
@@ -3459,6 +3557,34 @@ export function ContractorPortal() {
                 a photos-optional worker sees no demand, no counter, and is
                 never locked out. The finish-early ask still fires on the
                 final press when the task has days left. */}
+            {notFinishedOpen && !a.completedAt && (
+              <NotFinishedSheet
+                lang={readLang}
+                today={dayIso(new Date())}
+                aptLabel={apt ? aptLabel(apt) : a.buildingId}
+                stages={taskStageIds(a).map(id => getStage(id)).filter((x): x is Stage => !!x)
+                  .map(st => ({ id: st.id, name: stageNameIn(st, readLang), color: st.color }))}
+                composer={(
+                  <div>
+                    {notePreview}
+                    <MessageBox
+                      className="mt-2"
+                      value={noteText}
+                      onChange={setNoteText}
+                      onAttach={handleNoteFiles}
+                      onMemo={handleNoteVoiceMemo}
+                      lang={readLang}
+                      rows={2}
+                      hook="nf-message"
+                      placeholder={s.yourMessage || (w('Your message', 'ההודעה שלך', 'Ваше сообщение'))}
+                    />
+                  </div>
+                )}
+                onSubmit={(fin, next) => submitNotFinished(a, fin, next)}
+                onClose={() => setNotFinishedOpen(false)}
+              />
+            )}
+
             {closing && !a.completedAt && (
               <div data-closing-panel className="fixed inset-0 z-[60] bg-white flex flex-col">
                 <div className="flex items-center gap-3 px-4 py-3.5 flex-shrink-0 text-white"

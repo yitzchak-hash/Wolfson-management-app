@@ -13,6 +13,8 @@ import {
 import { daysOf, dayNumberOf, workingRun } from '../../data/taskDays';
 import { progressOf, StageProgress, taskStageIds } from '../../data/stageMarks';
 import { familyNameFromFolderName } from '../../data/driveApi';
+import { needsNewDay, unfinishedOn } from '../../data/notFinished';
+import { unfinishedWords } from '../tasks/NotFinishedSheet';
 import { rowNumOf } from '../../data/floorRows';
 
 /** "Floor 5" in the reader's language — the floor number as the diagram prints it. */
@@ -2153,6 +2155,27 @@ function TaskBar({ bar, z, size, strip, readOnly, isRtl, lang, onOpen, onDropTo,
     </span>
   ) : null;
 
+  /**
+   * "Not finished" (owner, 2026-10-11): the worker said on one of these days
+   * that he did not finish — an amber tag on that stretch; when he did not
+   * know when he is coming back, "needs a new day" until the office drags the
+   * tile to a later day (derived — nothing to clear).
+   */
+  const nfDay = !bar.done && bar.days.some(d => unfinishedOn(bar.task, d));
+  const nfNeeds = !bar.done && needsNewDay(bar.task) && bar.days.includes(bar.task.unfinished![bar.task.unfinished!.length - 1].day);
+  const nfTag = (nfDay || nfNeeds) ? (
+    <span data-bar-unfinished data-bar-needs-day={nfNeeds ? '1' : undefined}
+      className="flex-shrink-0 inline-flex items-center rounded-full whitespace-nowrap" style={{
+        marginInlineStart: strip ? Math.max(3, z(4)) : undefined,
+        padding: `0 ${Math.max(3, z(5))}px`,
+        fontSize: Math.max(z(6.5), size - z(2.5)), fontWeight: 800, lineHeight: 1.35,
+        backgroundColor: nfNeeds ? '#f59e0b' : '#fef3c7', color: nfNeeds ? '#fff' : '#92400e',
+        border: '1px solid #f59e0b',
+      }}>
+      {nfNeeds ? unfinishedWords(lang).needs : unfinishedWords(lang).tag}
+    </span>
+  ) : null;
+
   const title = `${bar.label}${bar.desc ? ` — ${bar.desc}` : ''}\n${bar.done ? 'Done — kept on the sheet as the record'
     : bar.foreign ? `${bar.workspace ?? bar.label} — click to open · drag to move · X takes it off`
     : 'Click to open · drag to move · pull the right edge for more days'}`;
@@ -2225,8 +2248,9 @@ function TaskBar({ bar, z, size, strip, readOnly, isRtl, lang, onOpen, onDropTo,
             </button>
           )}
         </div>
-        {(pills.length > 0 || bar.done) && (
+        {(pills.length > 0 || bar.done || nfTag) && (
           <div className="flex items-center flex-wrap min-w-0" style={{ gap: Math.max(2, z(3)), marginTop: Math.max(2, z(4)) }}>
+            {nfTag}
             {pills.map(st => (
               <StagePill key={st.id} data-bar-stage={st.id} name={stName(st)} color={st.color}
                 avail={tileW - padX * 2} size={size} z={z} />
@@ -2344,10 +2368,12 @@ function TaskBar({ bar, z, size, strip, readOnly, isRtl, lang, onOpen, onDropTo,
               }}>{bar.workspace}</span>
             )}
             {strip && doneTag('start')}
+            {strip && nfTag}
           </div>
           {!strip && (sub || bar.workspace || bar.building || bar.done) && (
             <div className="flex items-center min-w-0" style={{ fontSize: Math.max(z(7), size - z(2)), fontWeight: 600, color: '#64748b' }}>
               {doneTag('end')}
+              {!strip && nfTag}
               {chip(false)}
               <span className="truncate min-w-0">
                 {bar.workspace && <span data-bar-workspace style={{ color: '#7c3aed', fontWeight: 700 }}>{bar.workspace}{sub ? ' · ' : ''}</span>}

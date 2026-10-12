@@ -6,6 +6,26 @@ have them). The v2 rebuild's original design record is the root
 `DECISIONS.md`; the rules and traps behind each decision are in `CLAUDE.md`
 by round. (Standing order 6, 2026-09-23.)_
 
+## 2026-10-12 ("build it" — a job that is not finished in a day)
+- **"Not finished today" sits beside Close job** on the worker's phone. It asks
+  three things in his language: what he finished today (only when the task has
+  more than one stage — those are crossed off, the rest go half done), what is
+  left (the message box, with the mic and files), and when he is coming back —
+  Tomorrow (the next working day, so Thursday says Sunday), Pick a day, or
+  I don't know yet. The job stays open; the day he worked and the come-back day
+  are added to the task, and the office gets it as a message in the task, which
+  rings like any worker message. Pictures are not asked for.
+- **"I don't know yet"** leaves the job on today with an amber "needs a new
+  day" tag on the notebook tile and the cards; dragging the tile to a later day
+  is the answer and the tag goes by itself.
+- **The morning question**: a job whose last day has passed and nobody said
+  anything about asks at the top of his list — "Did you finish A3 12
+  yesterday?" — Yes opens the closing screen, No opens the three questions.
+  At most three at a time.
+- **The office has the same button** ("Not finished") on each open task card
+  in the apartment window, for when the worker phones it in; it messages the
+  worker.
+
 ## 2026-10-08 (his answers to the five questions)
 - **The notebook bar is look A, "a small board tile"** ("One, I want to do A").
   Every task on the weekly notebook is the Job Board's own tile made small: a

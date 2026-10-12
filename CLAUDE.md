@@ -9615,3 +9615,53 @@ floor, given at least 8s. `PLAN_READ_MODEL_OPENAI` overrides the list. The
 answer names `model`; `health` lists `planModels`. An Anthropic key, if ever
 set, still wins. `scratchpad/planread-test.mjs` stubs fetch and proves the
 order, the step-down, the remembered start, the floor and the override.
+
+---
+
+# v2 — "Not finished today" (2026-10-12, "build it")
+
+## The model: the task stays open and carries the days
+`ContractorAssignment.unfinished?: UnfinishedReport[]` (`{at, by, day, next,
+finished?}`) rides `contractorAssignments` — no new store key. The arithmetic
+is PURE in `src/data/notFinished.ts` (offline test
+`scratchpad/notfinished-test.mjs`):
+- `notFinishedPlan(task, {today, next, finishedIds, by, at})` → the task's
+  `days` (today + the come-back day added; `dueDate` = the last day — the
+  standing invariant, written TOGETHER with `days` so the hand-typed-dueDate
+  collapse never fires) and the marks for the set model (the stages he
+  finished → done, the task's other stages → pending, the orange clock).
+  Hosts merge the marks over `apartment.stageMarks` and write through
+  `setApartmentMarks` — it takes the FULL map.
+- `needsNewDay(task)` is DERIVED: the last report said "I don't know yet"
+  and no day after that report's day has been added. Dragging the notebook
+  tile to a later day meets it — there is no flag to clear.
+- `morningAskDay(task, today)`: an open, non-problem, non-general task
+  whose last day has passed with no report on or after it.
+- `notFinishedLine` is the ENGLISH line written into the task's messages
+  (the stored-record rule); screens translate it.
+
+## The screens
+- `src/components/tasks/NotFinishedSheet.tsx` — one sheet for the phone and
+  the office (`office` switches "you" → "he"), portalled z-[130]/[140],
+  sealed, capture-phase Escape; the host supplies the composer.
+  `unfinishedWords(lang)` holds the tag / button / morning words (en/he/ru).
+  Hooks: `data-not-finished` · `data-nf-stage` · `data-nf-when=tomorrow|pick|unknown`
+  · `data-nf-date` · `data-nf-send`. The Tomorrow button names the weekday
+  when the next working day is not tomorrow (Thursday → Sunday).
+- Portal: `data-not-finished-btn` beside Close job (non-problem tasks; a
+  general job keeps its own footer); the composer is the standing
+  `handleNoteFiles` / `handleNoteVoiceMemo` machinery; `handleSendNote(prefix)`
+  sends the English line + his words as ONE contractor note (rings the
+  office). The morning cards (`data-morning-ask`, `data-morning-yes|no`,
+  max three) use `arriveClosingRef` / `arriveNotFinishedRef` through
+  `openTask` — the selection effect resets BOTH screens on any other
+  selection. Cards wear `data-task-unfinished`.
+- Notebook tile: `data-bar-unfinished` on a stretch holding a report day;
+  `data-bar-needs-day` (solid amber) while `needsNewDay`.
+- Drawer: `data-office-not-finished=<taskId>` on each open non-problem,
+  non-general task card; writes the same plan attributed to the office user
+  and an OFFICE note (rings the worker by push).
+
+Harness: `scratchpad/notfinished-probe.mjs` (30 — Russian phone, Thursday-style
+come-back day, marks, the message, morning No/Yes, needs-a-new-day on card and
+tile, the office's button).

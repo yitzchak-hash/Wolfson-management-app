@@ -30,6 +30,32 @@ export interface WhatsNewEntry {
 
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    date: '2027-01-27',
+    title: 'Not finished today',
+    items: [
+      {
+        title: 'A worker can say he did not finish',
+        body: 'Beside Close job there is now “Not finished today”. It asks what he finished (when the task has '
+          + 'more than one stage), what is left, and when he is coming back — tomorrow, a day he picks, or '
+          + '“I don’t know yet”. The job stays open, the days go on the task and the office gets a message.',
+        demo: 'tap',
+      },
+      {
+        title: 'The morning question',
+        body: 'A job whose day has passed with nothing said asks the worker at the top of his list: “Did you '
+          + 'finish A3 12 yesterday?” Yes goes to closing it, No asks the same three questions.',
+        demo: 'tap',
+      },
+      {
+        title: '“Needs a new day”',
+        body: 'When the worker does not know when he is coming back, the job wears an amber “needs a new day” '
+          + 'on the notebook until the office drags it to a day. The office has the same “Not finished” button '
+          + 'on each task in the apartment window.',
+        demo: 'list',
+      },
+    ],
+  },
+  {
     date: '2027-01-26',
     title: 'The notebook in board tiles',
     items: [

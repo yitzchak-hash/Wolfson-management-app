@@ -117,3 +117,4 @@ Seen, not said (video 2): a fresh worker phone could crash when his record arriv
 | C-31 | 2026-10-08 | "Next:" cue: settled by the last-done headline | Done | nothing to build |
 | C-32 | 2026-10-08 | Plan reader: the existing key, a stronger model and reasoning | Done | gpt-6.1-sol → gpt-6-sol → gpt-5.5 at high effort, gpt-4o floor · planread-test |
 | C-33 | 2026-10-08 | The stronger shared app key: leave it | Done | nothing changed |
+| C-34 | 2026-10-12 | A worker who did not finish a one-day job can say so ("I didn't finish today" next to Close job) — built on all the starred answers | Done | notfinished-test (24) · notfinished-probe (30) |
