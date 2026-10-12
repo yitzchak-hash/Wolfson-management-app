@@ -80,6 +80,54 @@ Seen, not said (video 2): a fresh worker phone could crash when his record arriv
 "link not found" check sits below every hook) · a task due today showed as late from midnight (**Done** —
 `isLate`) · films in Live from site drew as broken pictures (**Done** — a playable film draws its own frame).
 
+### Video 3 — Screen Recording 2026-10-11 115320 ([feedback doc](2026-10-11-115320.md))
+| # | Time | Ask | Status | Proof |
+|---|------|-----|--------|-------|
+| V3-1 | 0:00 | Busy-day popup rows: the stage bubbles, ticked or not | Done | TaskBundle `data-bundle-stage[data-state]` · round49-probe |
+| V3-2 | 0:12 | Up to three even thumbnails under the bubbles | Done | `data-bundle-row-photos` · round49-probe |
+| V3-3 | 0:25 | A "+" when there are more, not the words | Done | `data-bundle-thumb-more`; "working here today" no longer shown · round49-probe |
+
+### Video 4 — Screen Recording 2026-10-11 115854 ([feedback doc](2026-10-11-115854.md))
+| # | Time | Ask | Status | Proof |
+|---|------|-----|--------|-------|
+| V4-1 | 0:04 | "15 out of 4 days" | Done | day count on its own line, address isolated · round49-probe |
+| V4-2 | 0:17 | Stage pills cut off | Done | pills wrap · round49-probe |
+| V4-3 | 0:25 | "A2 · N apartments", Wolfson on top | Done | `data-bundle-bld` · round49-probe, notebooktile-probe |
+| V4-4 | 0:54 | Two rows always in Active jobs | Done | the app's service account is not activity · activitytouches-test |
+| V4-5 | 1:00 | "More tiles, not tiles" | Waiting | asked him |
+| V4-6 | 1:09 | General notes newest on top | Done | round49-probe, round40-probe |
+| V4-7 | 1:15 | "Why two dates?" | Answered | a typed date + the sign-off |
+| V4-8 | 1:23 | Drive / Zoho folded by default | Done | LinkSection · drawer-r48 |
+| V4-9 | 1:29 | "What is this building thing?" | Answered | the Drive folder's own title |
+| V4-10 | 1:39 | Bigger notes box, a line between notes | Done | `data-general-notes-box` · round49-probe |
+| V4-11 | 2:18 | Done card: worker on top, one plain sentence | Done | `data-task-done-who` / `-sentence` · drawer-r48, round49-probe |
+| V4-12 | 3:13 | Changing a finished task's stage carries its pictures and ticks | Done | `saveTaskEdit` · round49-probe |
+| V4-13 | 3:57 | Notes / edit form / card disagree about what a task was | Done | `recordStageIds` everywhere · round49-probe |
+
+### Video 5 — Screen Recording 2026-10-11 120334 ([feedback doc](2026-10-11-120334.md))
+| # | Time | Ask | Status | Proof |
+|---|------|-----|--------|-------|
+| V5-1 | 0:18 | The calendar shows every workspace | Done | `data-calendar-scope` · round49-probe |
+| V5-2 | 0:12 | Click a day to add | Done | `data-cal-add` → Tasks add form on that date · round49-probe |
+| V5-3 | 0:08 | A notebook-like calendar | Partly | plan page first (a big slice) |
+| V5-4 | 0:33 | Tasks page: bubbles, not arrows | Done | StagePairPill · round49-probe |
+| V5-5 | 0:48 | Tasks page in plain English | Done | `data-task-plain` · round49-probe |
+| V5-6 | 0:54 | Calm "Is this the right plan? Yes" → "Plan approved by …" | Done | `data-plan-auto-yes`, `data-plan-approved` (read live) · round43-probe |
+| V5-7 | 1:16 | The studio for the plan sketcher | Withdrawn | "forget that last thing" |
+| V5-8 | 1:44 | "Why this and this?" (Pin, Layers) | Done | Layers hidden on a plan with none · round43-probe; Pin explained |
+
+### Video 6 — Screen Recording 2026-10-11 120729 ([feedback doc](2026-10-11-120729.md))
+| # | Time | Ask | Status | Proof |
+|---|------|-----|--------|-------|
+| V6-1 | 0:26 | A new task starts on the next stage to do, not a finished one | Done | `nextStageToDo` · multiday, round49-probe |
+| V6-2 | 1:23 | "Finished Drilling · doing Piping, Concealed Units, Fans" | Done | `data-bundle-row-plain` · round49-probe |
+
+Seen, not said (videos 3–6): the busy-day tile counted only each task's first stage (**Done**) · a voice
+memo drawn as a grey file card in the Photos tab, and counted as a photo (**Done**) · thread pictures
+read "tap to open" while loading (left as a loading state) · four closed tasks in production whose
+report and stages differ (A3 12, A3 17, A2 9, A2 27 — the display now reads the report; no data was
+rewritten).
+
 ## From chat
 
 | # | Date | Ask | Status | Proof |

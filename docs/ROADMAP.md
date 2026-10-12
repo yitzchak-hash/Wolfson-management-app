@@ -53,8 +53,16 @@ asks for it. ☑ done · ☐ next · ✎ awaiting Yitzchak's word. (Standing ord
 - ☑ 2026-10-12: "Not finished today" — the worker's button beside Close
   job, the three questions, the morning question, "needs a new day" on the
   notebook, and the office's own button in the apartment window.
+- ☑ 2026-10-12 (the four recordings of 11 Oct): the busy-day popup as bubbles
+  and pictures; finished tasks read by what was reported; editing one moves its
+  pictures and ticks; new tasks start on the next stage; Drive/Zoho folded;
+  notes newest first; plain sentences on the done card and the Tasks page;
+  the calm plan question and "approved by"; the calendar on every workspace
+  with a "+" per day (see `docs/feedback/2026-10-11-*.md`).
 
 ## Next (in order)
+- ✎ The calendar redesign "more like the notebook" — a plan page first.
+- ✎ "More tiles, not tiles" (video 4, 1:00) — waiting for his word on what it means.
 - ☐ Watch on production: the foreign photo listener (no Firebase in the
   container), the plan pane's Windows scrollbar re-fit, the Leads folder
   discovery, TikTok's player protocol end to end.

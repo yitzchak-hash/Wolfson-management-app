@@ -186,8 +186,12 @@ const closeDrawer = async page => {
     document.querySelector('.drawer-panel [data-link-section="drive"] [data-link-summary]')?.textContent?.trim() ?? '');
   await page.waitForTimeout(1200);
   check((await driveSum()).includes('Probe Job One - 101'), 'its folded line names the folder by its title', await driveSum());
+  check(await page.locator('.drawer-panel [data-collapse-drive]').getAttribute('aria-expanded') === 'false',
+    'folded by default (owner, 2026-10-11) — one line until somebody opens it');
+  await page.locator('.drawer-panel [data-collapse-drive]').click();
+  await page.waitForTimeout(250);
   check(await page.locator('.drawer-panel [data-collapse-drive]').getAttribute('aria-expanded') === 'true',
-    'open by default, so nothing changed for anybody who never folds it');
+    'one press opens it');
   const labelsShown = await page.evaluate(() =>
     [...document.querySelectorAll('.drawer-panel [data-link-section="drive"] label')]
       .filter(l => getComputedStyle(l).display !== 'none').length);
@@ -242,13 +246,11 @@ const closeDrawer = async page => {
     'pressing the Drive line folds the field away');
   const openHref = await page.locator('.drawer-panel [data-link-open="drive"]').getAttribute('href').catch(() => null);
   check(!!openHref && openHref.includes('F-job2'), 'the folded line keeps a one-press way into the folder', openHref);
-  await page.locator('.drawer-panel [data-collapse-zoho]').click();
-  await page.waitForTimeout(300);
   check(await page.locator('.drawer-panel [data-collapse-zoho]').getAttribute('aria-expanded') === 'false',
-    'the Zoho line folds too');
+    'the Zoho line is folded by default too');
   check(await page.locator('.drawer-panel [data-link-open="zoho"]').count() === 0, 'with no open-arrow when nothing is linked');
   const stored = await page.evaluate(() => [localStorage.getItem('drawer_fold_drive'), localStorage.getItem('drawer_fold_zoho')]);
-  check(stored[0] === '0' && stored[1] === '0', 'both choices are kept on this machine', JSON.stringify(stored));
+  check(stored[0] === '0' && stored[1] === null, 'the Drive choice is kept on this machine; Zoho was never touched', JSON.stringify(stored));
   if (process.env.SHOTS) await page.locator('.drawer-panel').screenshot({ path: `${process.env.SHOTS}/r48-folded.png` });
   await closeDrawer(page);
   await page.locator('[data-node-id="G-r48a"]').dblclick();
@@ -321,6 +323,8 @@ const closeDrawer = async page => {
       { id: 'P3', assignmentId: 'T-DONE', contractorId: 'C-pw', apartmentId: 'A1-53', filename: 'drill-3.jpg', fileType: 'image', mimeType: 'image/jpeg', driveFileId: 'IMG-3', dataUrl: '', uploadedAt: iso(at(2, 14, 44)), reviewedAt: iso(at(1, 8, 0)), reviewedBy: 'Office Probe' },
       // Firebase Storage only — never on the Drive listing.
       { id: 'P4', assignmentId: 'T-DONE', contractorId: 'C-pw', apartmentId: 'A1-53', filename: 'concealed.png', fileType: 'image', mimeType: 'image/png', storageUrl: PNG, stageId: 's2', dataUrl: '', uploadedAt: iso(at(2, 14, 46)) },
+      // A voice memo whose record says "file" — drawn as a memo, never a grey file card.
+      { id: 'P5', assignmentId: 'T-DONE', contractorId: 'C-pw', apartmentId: 'A1-53', filename: 'memo-0930.m4a', fileType: 'file', mimeType: 'application/octet-stream', storageUrl: 'data:audio/mp4;base64,AAAA', dataUrl: '', uploadedAt: iso(at(2, 14, 47)), reviewedAt: iso(at(1, 8, 0)), reviewedBy: 'Office Probe' },
     ],
     activityLogs: [
       { id: 'L-1', userId: 'C-pw', userName: 'Probe Worker', buildingId: 'A1', apartmentId: 'A1-53', apartmentNumber: '53',
@@ -364,7 +368,7 @@ const closeDrawer = async page => {
     return {
       done: el.getAttribute('data-task-done'),
       bg: cs.backgroundColor, border: cs.borderTopColor, opacity: cs.opacity,
-      badge: el.querySelector('[data-task-done-badge]')?.textContent?.trim() ?? null,
+      badge: el.querySelector('[data-task-done-badge]') ? `${el.querySelector('[data-task-done-badge]').textContent.trim()} · ${el.querySelector('[data-task-done-who]')?.textContent?.trim() ?? ''}` : null,
       badgeWeight: el.querySelector('[data-task-done-badge]') ? getComputedStyle(el.querySelector('[data-task-done-badge]')).fontWeight : null,
       strike: text ? getComputedStyle(text).textDecorationLine : null,
       stages: [...el.querySelectorAll('[data-task-done-stage]')].map(p => ({ id: p.getAttribute('data-task-done-stage'), half: p.hasAttribute('data-half'), text: p.textContent.trim() })),
@@ -410,10 +414,11 @@ const closeDrawer = async page => {
       queueBlock: /new from the site/i.test(root.textContent),
       markAll: root.querySelector('[data-photos-mark-all]')?.textContent?.trim() ?? null,
       counts: { 'IMG-1': count('IMG-1'), 'IMG-2': count('IMG-2'), 'IMG-3': count('IMG-3'), P4: count('P4') },
-      drillTiles: drill ? [...drill.querySelectorAll('[data-photo-tile]')].map(t => [t.getAttribute('data-photo-tile'), !!t.querySelector('[data-photo-new]')]) : [],
+      drillTiles: drill ? [...drill.querySelectorAll('[data-photo-tile]')].filter(t => !t.querySelector('[data-photo-memo]')).map(t => [t.getAttribute('data-photo-tile'), !!t.querySelector('[data-photo-new]')]) : [],
       p4Section: tiles.find(t => t.getAttribute('data-photo-tile') === 'P4')?.closest('[data-photo-section]')?.getAttribute('data-photo-section') ?? null,
       p4New: !!tiles.find(t => t.getAttribute('data-photo-tile') === 'P4')?.querySelector('[data-photo-new]'),
       newBadges: root.querySelectorAll('[data-photo-new]').length,
+      memo: !!root.querySelector('[data-photo-tile="P5"] [data-photo-memo]'),
     };
   });
   let ph = await tab();
@@ -423,6 +428,7 @@ const closeDrawer = async page => {
     'inside Drilling, the two unreviewed ones wear NEW and the reviewed one does not', JSON.stringify(ph.drillTiles));
   check(ph.p4Section === 'Concealed Units Installed' && ph.p4New,
     'a site photo Drive does not carry sits in its stage\'s section, still NEW', `${ph.p4Section} new=${ph.p4New}`);
+  check(ph.memo, 'a voice memo is drawn as a memo tile, not a grey file card');
   check(ph.markAll === 'Mark all reviewed (3)', 'the header row keeps "Mark all reviewed (3)"', ph.markAll);
   if (process.env.SHOTS) await page.locator('.drawer-panel').screenshot({ path: `${process.env.SHOTS}/r48-photos.png` });
   const photoRec = id => page.evaluate(id => {

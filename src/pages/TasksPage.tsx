@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { useStore, loadProjectSnapshot } from '../data/store';
 import { rememberReturn } from '../data/unitTravel';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { rememberTaskFocus } from '../data/taskFocus';
 import { VoiceMemoPlayer } from '../components/ui/VoiceMemo';
 import { MessageBox, memoFile } from '../components/ui/MessageBox';
@@ -16,8 +16,8 @@ import { DeleteTaskDialog } from '../components/tasks/DeleteTaskDialog';
 import { placeLabel } from '../data/taskMove';
 import { TaskCalendar, CalendarEvent, calendarWordsOf, OFFICE_DAY_CAP } from '../components/tasks/TaskCalendar';
 import { TaskDaysPicker, daysFields, taskWrites, splitStringsOf, TaskSplit } from '../components/tasks/TaskDaysPicker';
-import { StagePairPicker, StagePairPill, stagePairStrings } from '../components/tasks/StagePair';
-import { taskStageIds } from '../data/stageMarks';
+import { StagePairPicker, StagePairPill, stagePairStrings, taskPlainSentence } from '../components/tasks/StagePair';
+import { taskStageIds, nextStageToDo } from '../data/stageMarks';
 import {
   Apartment, ContractorAssignment, ContractorCategory, TaskAttachment, TaskPriority, getStageName, aptLabel,
   isCountableApartment, generalBuildingsText, projectShortName, projectColor,
@@ -157,6 +157,21 @@ export function TasksPage() {
   /** Every day the new task will cover — the shared multi-day block. */
   const [addDays, setAddDays] = useState<string[]>([]);
   const [addDaysEpoch, setAddDaysEpoch] = useState(0);
+  // The calendar's "+" on a day lands here with that day: the add form opens
+  // on it (owner's recording, 2026-10-11).
+  const location = useLocation();
+  // Handled once per history entry (a ref, never by rewriting the entry —
+  // its state also carries the workspace stamp the Back button reads).
+  const addDateDone = useRef('');
+  useEffect(() => {
+    const d = (location.state as { addDate?: string } | null)?.addDate;
+    if (!d || addDateDone.current === location.key) return;
+    addDateDone.current = location.key;
+    setAddForm(f => ({ ...f, dueDate: d }));
+    setAddDaysEpoch(e => e + 1);
+    setShowAdd(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.key]);
   const [addAttachments, setAddAttachments] = useState<TaskAttachment[]>([]);
   const [addUploadProgress, setAddUploadProgress] = useState<number | null>(null);
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
@@ -921,8 +936,10 @@ export function TasksPage() {
                 value={addForm.aptId}
                 onChange={e => {
                   const apt = apartments.find(a => a.id === e.target.value);
-                  setAddForm(f => ({ ...f, aptId: e.target.value, stageId: apt?.currentStageId ?? '' }));
-                  setAddIds(apt?.currentStageId ? [apt.currentStageId] : []);
+                  // The next stage still to do — not the finished headline (owner, 2026-10-11).
+                  const first = apt ? nextStageToDo(apt, [...stages].sort((x, y) => x.order - y.order), { tipusStages: tipusStagesTP }) : '';
+                  setAddForm(f => ({ ...f, aptId: e.target.value, stageId: first }));
+                  setAddIds(first ? [first] : []);
                 }}
                 className="col-span-2 border border-blue-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30 bg-white"
               >
@@ -1191,6 +1208,11 @@ export function TasksPage() {
                         title={m.foreign ? fillWs(s.tpOpenThere, wsName) : a.apartmentId ? s.openInWindow : undefined}>
                         <Translated text={a.taskDescription} to={s.isRtl ? 'he' : 'en'} />
                       </p>
+                      {contractor && (
+                        <p data-task-plain className="text-[12px] text-gray-500 mt-0.5">
+                          {taskPlainSentence(a, stages, contractor.name, s.isRtl)}
+                        </p>
+                      )}
                       {/* A general job collects the apartments actually visited
                           under it — each one is also an ordinary stage report. */}
                       {a.general && (a.visits?.length ?? 0) > 0 && (

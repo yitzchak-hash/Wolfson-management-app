@@ -6,7 +6,7 @@ import { VoiceMemoPlayer } from '../ui/VoiceMemo';
 import { MessageBox, memoFile } from '../ui/MessageBox';
 import { Translated } from '../ui/Translated';
 import { transcribeMemo } from '../../data/transcribe';
-import { stageStateOf } from '../../data/stageMarks';
+import { stageStateOf, taskStageIds, recordStageIds } from '../../data/stageMarks';
 import { format } from 'date-fns';
 import {
   isUploadBackendConfigured, extractFolderId,
@@ -169,8 +169,8 @@ export function StageNotesSection({ apartmentId, stages, currentUser, onSaved }:
   /** Who is on this stage — forgiving on READ (see the drawer's stage-worker rule). */
   function getAssignment(stageId: string) {
     const mine = contractorAssignments.filter(a => a.apartmentId === apartmentId);
-    return mine.find(a => a.stageId === stageId && !a.completedAt)
-      ?? mine.find(a => a.stageId === stageId)
+    return mine.find(a => taskStageIds(a).includes(stageId) && !a.completedAt)
+      ?? mine.find(a => recordStageIds(a).includes(stageId))
       ?? (apt?.currentStageId === stageId ? mine.find(a => !a.stageId && !a.completedAt) : undefined);
   }
   /** Strict on WRITE: only a task genuinely on this stage is re-pointed. */
@@ -206,7 +206,7 @@ export function StageNotesSection({ apartmentId, stages, currentUser, onSaved }:
       noteId: note?.id, officeOnly: e.officeOnly,
     }));
     const stageTaskIds = new Set(contractorAssignments
-      .filter(a => a.apartmentId === apartmentId && (a.stageId === stageId || (!a.stageId && stageId === sortedStages[0]?.id)))
+      .filter(a => a.apartmentId === apartmentId && (recordStageIds(a).includes(stageId) || (!recordStageIds(a).length && stageId === sortedStages[0]?.id)))
       .map(a => a.id));
     const workers: Bullet[] = contractorNotes
       .filter(n => stageTaskIds.has(n.assignmentId) && n.authorType === 'contractor')
@@ -368,7 +368,7 @@ export function StageNotesSection({ apartmentId, stages, currentUser, onSaved }:
 
                 {/* Tasks and photos on this stage — the record, folded small under the bullets. */}
                 {(() => {
-                  const stageTasks = contractorAssignments.filter(a => a.apartmentId === apartmentId && a.stageId === stage.id);
+                  const stageTasks = contractorAssignments.filter(a => a.apartmentId === apartmentId && recordStageIds(a).includes(stage.id));
                   if (!stageTasks.length) return null;
                   return (
                     <div className="space-y-1">

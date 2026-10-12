@@ -12,7 +12,7 @@ import { format, parseISO, differenceInCalendarDays, startOfDay } from 'date-fns
 import { findOrCreateFolderViaBackend, uploadFileViaResumableSession, shareFileToDrive, isUploadBackendConfigured, extractFolderId } from '../../data/driveApi';
 import { TaskDaysPicker, daysFields, taskWrites, splitStringsOf, TaskSplit } from '../tasks/TaskDaysPicker';
 import { StagePairPicker, StagePairPill, stagePairStrings, StagePairValue } from '../tasks/StagePair';
-import { taskStageIds } from '../../data/stageMarks';
+import { taskStageIds, nextStageToDo } from '../../data/stageMarks';
 
 const CAT_COLORS: Record<ContractorCategory, string> = {
   drywall: '#f59e0b', ac: '#3b82f6', general: '#10b981',
@@ -63,8 +63,13 @@ export function QuickAddTaskPanel({ apartment, onClose, currentUser, onToast }: 
   // The stage the task is ON (defaults to the job's stage; any stage allowed,
   // even one not reached — locked answer 10) and where the job goes when it
   // is closed. Picking a FROM stage never moves the job.
-  const [pair, setPair] = useState<StagePairValue>({ from: apartment.currentStageId ?? '', to: '', ids: apartment.currentStageId ? [apartment.currentStageId] : [] });
   const tipusStagesQA = useStore(st => st.boardSettings[st.currentProjectId]?.tipusStages);
+  // The NEXT stage still to do, never the finished headline (owner, 2026-10-11).
+  const [pair, setPair] = useState<StagePairValue>(() => {
+    const sorted = [...stages].sort((x, y) => x.order - y.order);
+    const n = nextStageToDo(apartment, sorted, { tipusStages: tipusStagesQA });
+    return { from: n, to: '', ids: n ? [n] : [] };
+  });
   const [split, setSplit] = useState<TaskSplit | null>(null);
   const [priority, setPriority] = useState('');
   const [showForm, setShowForm] = useState(true);

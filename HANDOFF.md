@@ -46,7 +46,7 @@ day still stands, after the numbered list.)
 3. `npx tsc --noEmit -p .` and `npx vite build`. 4. The audits:
    `node scratchpad/loopaudit.mjs`, `backupaudit.mjs`, `navaudit.mjs`, `apilimit.mjs`.
 5. A What's New entry (`src/data/whatsNew.tsx`, dates run AHEAD of the clock;
-   newest is `2027-01-27` — the next entry must be a later date (an older
+   newest is `2027-01-28` — the next entry must be a later date (an older
    entry lower down also wears `2026-12-20`; the marker compares only the TOP
    entry's date, so never reuse a date that appears anywhere in the file)). 6. A CLAUDE.md
    round record. 7. A line in `docs/CRM-CHECKLIST.md`, tick `docs/ROADMAP.md`, date a line in `docs/DECISIONS.md` when he decided something. 8. Rewrite THIS file.
@@ -64,7 +64,38 @@ with starred recommendations is published first; the owner says "approved" /
 "all yes" / answers by number; then it is built. Never build a redesign
 unasked.
 
-## Where things stand (2026-10-12, latest — "Not finished today" built; nothing pending from him)
+## Where things stand (2026-10-12, latest — the four recordings of 11 Oct built; TWO QUESTIONS OPEN)
+After "Not finished today" shipped, re-listing the Drive folder found four
+new recordings from 11 Oct (0:38, 4:34, 1:55, 1:43). Each has a feedback doc
+(`docs/feedback/2026-10-11-*.md`), ledger rows 3–6, checklist V3–V6.
+- **The root cause he kept circling** ("finished here but not here", A2 9):
+  a task made for Concealed Units + Fans that Igor closed as Registers.
+  `recordStageIds` makes every screen read a finished task by what was
+  reported; editing one's stages moves its pictures and ticks. Four such
+  tasks in production (A3 12, A3 17, A2 9, A2 27) — display fixed, records
+  untouched. A2 9's Registers tick itself was un-ticked by hand on 8 Oct
+  ("Yitzchak") and is left as it stands.
+- Built: busy-day popup rows as bubbles + plain line + three thumbs with
+  "+N"; the tile names buildings with apartment counts, pills wrap, every
+  stage counted; "2 days" on its own line (a Hebrew address had turned it
+  into "15\4 days"); the app's service account out of Active jobs; Drive /
+  Zoho folded by default; notes newest first in a roomier box; the done card
+  leads with the worker and a sentence; the Tasks page in plain words with
+  bubbles; new tasks start on the next stage to do (`nextStageToDo`); the
+  calm "Is this the right plan? Yes" + "Plan approved by" (approver read
+  LIVE — the stale prop hid it, caught by round43-probe); Layers hidden on a
+  plan with none; the calendar on every workspace with a "+" per day; a
+  voice memo in the Photos tab is a memo tile and not counted as a photo.
+- **Waiting on him**: (1) "more tiles, not tiles" (video 4 at 1:00, pointer on
+  the Active jobs widget) — unclear; (2) the calendar "more like the
+  notebook" — a big slice, a plan page first if he wants it.
+- Probes: round49-probe (28), round43 (+5), drawer-r48 (+memo, folded),
+  re-encoded notebooktile, multiday, round40. Standing red unchanged:
+  round40's "a passed stage is crossed off".
+- **The reply he saw**: the four transcripts, the END RESULT bullets per ask,
+  the two questions, the link, and a one-liner that two answers are wanted.
+
+## Where things stand (2026-10-12 — "Not finished today" built)
 His ask (chat): a worker started a one-day Thursday job and did not finish —
 "he can click on something where it will say I didn't finish today… what do
 you think". I proposed the design with five starred answers; he said

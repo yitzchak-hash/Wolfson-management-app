@@ -855,6 +855,9 @@ export interface Apartment {
    */
   driveFolderName?: string;
   plansPdfLink?: string; // Google Drive link to the Engineering Plans PDF
+  /** Who confirmed the plan is the right one, and when (owner, 2026-10-11: "Plan approved by …"). */
+  plansApprovedBy?: string;
+  plansApprovedAt?: string;
   /**
    * The ONE punch-list PDF the background pin filer keeps in Drive
    * (Annotated Plans/Pins) — remembered so every later filing updates it in
@@ -2431,6 +2434,12 @@ export interface MainUiStrings {
   stageLeaveAlone: string;
   /** The red bubble on the plan bar when the shown plan was picked by the app, not a person. */
   planAutoPicked: string;
+  /** The calm question over a guessed plan, its answers, and the line once somebody said yes. */
+  planAutoAsk: string;
+  planAutoYes: string;
+  planAutoOther: string;
+  planApprovedBy: string;
+  photoTabMemo: string;
   stageDifferentLabel: string;
   splitAskLabel: string;
   splitTwoLabel: string;
@@ -3301,6 +3310,9 @@ export interface MainUiStrings {
   nbBundleFloor: string;
   /** The bundle tile's last line — "See all {n}". */
   nbBundleSeeAll: string;
+  /** "9 apartments" — a bundle names each building with its count (owner, 2026-10-11). */
+  nbBundleUnits: string;
+  nbBundleUnit: string;
   calFoldDone: string;
   calMore: string;
   calDoneWord: string;
@@ -3401,6 +3413,11 @@ export const DEFAULT_MAIN_UI_STRINGS: MainUiStrings = {
   stageNotReached: 'not reached yet',
   stageLeaveAlone: 'Leave the stage alone',
   planAutoPicked: 'Latest-activity plan, auto-selected — star the right one',
+  planAutoAsk: 'Is this the right plan?',
+  planAutoYes: 'Yes',
+  planAutoOther: 'Choose another',
+  planApprovedBy: 'Plan approved by {who}',
+  photoTabMemo: 'Voice memo',
   stageDifferentLabel: 'Different stages for this stretch',
   splitAskLabel: 'One task, or two?',
   splitTwoLabel: 'Two tasks — each stretch is its own',
@@ -4233,6 +4250,8 @@ export const DEFAULT_MAIN_UI_STRINGS: MainUiStrings = {
   nbBundleFloors: 'Floors {range}',
   nbBundleFloor: 'Floor {n}',
   nbBundleSeeAll: 'See all {n}',
+  nbBundleUnits: '{n} apartments',
+  nbBundleUnit: '1 apartment',
   calFoldDone: '{n} done',
   calMore: '+{n} more',
   calDoneWord: 'done',
@@ -4333,6 +4352,11 @@ export const HEBREW_MAIN_UI_STRINGS: MainUiStrings = {
   stageNotReached: 'טרם הגיעו',
   stageLeaveAlone: 'להשאיר את השלב',
   planAutoPicked: 'תוכנית עם הפעילות האחרונה נבחרה אוטומטית — סמנו בכוכב את הנכונה',
+  planAutoAsk: 'זו התוכנית הנכונה?',
+  planAutoYes: 'כן',
+  planAutoOther: 'לבחור אחרת',
+  planApprovedBy: 'התוכנית אושרה על ידי {who}',
+  photoTabMemo: 'הודעה קולית',
   stageDifferentLabel: 'שלבים אחרים למקטע הזה',
   splitAskLabel: 'משימה אחת או שתיים?',
   splitTwoLabel: 'שתי משימות — לכל מקטע משלו',
@@ -5165,6 +5189,8 @@ export const HEBREW_MAIN_UI_STRINGS: MainUiStrings = {
   nbBundleFloors: 'קומות {range}',
   nbBundleFloor: 'קומה {n}',
   nbBundleSeeAll: 'הצג את כל {n}',
+  nbBundleUnits: '{n} דירות',
+  nbBundleUnit: 'דירה אחת',
   calFoldDone: '{n} בוצעו',
   calMore: '+{n} נוספות',
   calDoneWord: 'בוצע',

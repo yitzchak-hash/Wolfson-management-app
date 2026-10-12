@@ -1,8 +1,8 @@
 import React from 'react';
-import { ArrowRight, Check } from 'lucide-react';
+import { Check } from 'lucide-react';
 import type { ContractorAssignment, Stage, Apartment } from '../../types';
 import { getStageName } from '../../types';
-import { stageSetOf, stageStateOf, isWorkStage, taskStageIds, SetContext } from '../../data/stageMarks';
+import { stageSetOf, stageStateOf, isWorkStage, taskStageIds, recordStageIds, SetContext } from '../../data/stageMarks';
 
 /**
  * WHICH STAGES A TASK IS FOR — the set model (locked answer 7, 2026-09-22):
@@ -108,36 +108,67 @@ export function StagePairPicker({ stages, currentStageId, value, onChange, strin
  * Draws nothing when the task carries no stage.
  */
 export function StagePairPill({ task, stages, isRtl, size = 'sm', className = '' }: {
-  task: Pick<ContractorAssignment, 'stageId' | 'stageWhenDone' | 'stageIds'>;
+  task: Pick<ContractorAssignment, 'stageId' | 'stageWhenDone' | 'stageIds' | 'stagesWorked' | 'stagesUnfinished' | 'completedAt'>;
   stages: Stage[];
   isRtl?: boolean;
   size?: 'xs' | 'sm';
   className?: string;
 }) {
-  const ids = taskStageIds(task);
+  // BUBBLES, never an arrow (owner's recording, 2026-10-11: "we don't have
+  // these arrows any more — we should have the bubbles"). A finished task's
+  // bubbles are the stages its close names, each with a tick; an old task
+  // that still carries a "then" stage says it in words.
+  const ids = recordStageIds(task);
   const picked = ids.map(id => stages.find(s => s.id === id)).filter((s): s is Stage => !!s);
-  const to = !task.stageIds && task.stageWhenDone ? stages.find(s => s.id === task.stageWhenDone) : undefined;
+  const to = !task.stageIds && task.stageWhenDone && task.stageWhenDone !== task.stageId
+    ? stages.find(s => s.id === task.stageWhenDone) : undefined;
   if (!picked.length && !to) return null;
   const fs = size === 'xs' ? 'text-[10px]' : 'text-[11px]';
+  const half = new Set(task.stagesUnfinished ?? []);
   return (
     <span data-stage-pill className={`inline-flex items-center gap-1 flex-wrap ${fs} font-semibold ${className}`}>
-      {picked.map(st => (
-        <span key={st.id} className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md"
-          style={{ backgroundColor: st.color + '20', color: st.color }}>
-          {getStageName(st, !!isRtl)}
-        </span>
-      ))}
-      {to && (
-        <>
-          <ArrowRight size={11} className={`text-gray-400 flex-shrink-0 ${isRtl ? 'rotate-180' : ''}`} />
-          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md"
-            style={{ backgroundColor: to.color + '20', color: to.color }}>
-            {getStageName(to, !!isRtl)}
+      {picked.map(st => {
+        const done = !!task.completedAt && !half.has(st.id);
+        return (
+          <span key={st.id} data-stage-bubble={st.id} data-done={done ? '1' : undefined}
+            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full border"
+            style={{ backgroundColor: done ? '#dcfce7' : st.color + '1f', borderColor: done ? '#86efac' : st.color + '66', color: done ? '#166534' : '#1f2937' }}>
+            {done
+              ? <Check size={11} strokeWidth={3.5} className="flex-shrink-0" style={{ color: '#16a34a' }} />
+              : <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: st.color }} />}
+            {getStageName(st, !!isRtl)}
           </span>
-        </>
+        );
+      })}
+      {to && (
+        <span className="text-gray-500 font-medium">
+          {isRtl ? 'ואז' : 'then'} {getStageName(to, !!isRtl)}
+        </span>
       )}
     </span>
   );
+}
+
+/**
+ * One plain sentence for a task (owner's recording, 2026-10-11: "explain it
+ * in plain English, like a normal CRM"): "Igor is doing Piping, Concealed
+ * Units and Fans — due Sun 11 Oct", "Igor finished Registers on Mon 5 Oct".
+ */
+export function taskPlainSentence(task: Pick<ContractorAssignment, 'stageId' | 'stageIds' | 'stagesWorked' | 'stagesUnfinished' | 'completedAt' | 'dueDate'>,
+  stages: Stage[], who: string, isRtl?: boolean): string {
+  const he = !!isRtl;
+  const names = recordStageIds(task).map(id => stages.find(s => s.id === id)).filter((s): s is Stage => !!s).map(st => getStageName(st, he));
+  const list = (xs: string[]) => xs.length <= 1 ? (xs[0] ?? '') : `${xs.slice(0, -1).join(', ')} ${he ? 'ו' : 'and '}${xs[xs.length - 1]}`;
+  const day = (iso: string) => {
+    const d = new Date(iso.length === 10 ? `${iso}T12:00:00` : iso);
+    return Number.isNaN(d.getTime()) ? '' : d.toLocaleDateString(he ? 'he-IL' : 'en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
+  };
+  const what = names.length ? list(names) : (he ? 'את המשימה' : 'the task');
+  if (task.completedAt) {
+    return he ? `${who} סיים ${what} ב${day(task.completedAt)}` : `${who} finished ${what} on ${day(task.completedAt)}`;
+  }
+  const due = task.dueDate ? (he ? ` — עד ${day(task.dueDate)}` : ` — due ${day(task.dueDate)}`) : '';
+  return he ? `${who} עושה ${what}${due}` : `${who} is doing ${what}${due}`;
 }
 
 /** The picker's strings, read off the admin strings object. */

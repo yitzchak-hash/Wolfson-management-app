@@ -15,12 +15,13 @@ import { ChevronDown, ChevronRight, ExternalLink } from 'lucide-react';
  * Open or closed is remembered per MACHINE (localStorage, `drawer_fold_<id>`):
  * how much of the window you want on screen is about the screen you are at,
  * not the office's data, so it stays out of the store and the backups.
- * Absent means open, which is how every window looked before this existed.
+ * Absent means FOLDED (owner's recording, 2026-10-11: "by default these
+ * should be closed") — a press opens it, and that choice is remembered.
  */
 const KEY = (id: string) => `drawer_fold_${id}`;
 
 function readOpen(id: string): boolean {
-  try { return localStorage.getItem(KEY(id)) !== '0'; } catch { return true; }
+  try { return localStorage.getItem(KEY(id)) === '1'; } catch { return false; }
 }
 
 export function LinkSection({

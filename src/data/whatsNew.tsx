@@ -30,6 +30,41 @@ export interface WhatsNewEntry {
 
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    date: '2027-01-28',
+    title: 'Plain words, and the right stage',
+    items: [
+      {
+        title: 'A busy day reads at a glance',
+        body: 'Open a day with many small tasks: every apartment shows its stage bubbles — ticked, half done or '
+          + 'still open — one line in plain words (“Finished Drilling · doing Piping and Fans”) and up to three '
+          + 'pictures, with a “+” when there are more.',
+        demo: 'tap',
+      },
+      {
+        title: 'A finished task says what was really done',
+        body: 'The card, the notes, the edit form and the notebook all read a finished task by what the worker '
+          + 'reported. Change its stage in the edit form and its pictures and ticks move with it.',
+        demo: 'list',
+      },
+      {
+        title: 'New tasks start on the next stage',
+        body: 'A new task opens on the next stage still to do — never on one already finished.',
+        demo: 'list',
+      },
+      {
+        title: '“Is this the right plan?”',
+        body: 'When the app picked a plan by itself it now asks calmly. Press Yes and the plan reads '
+          + '“Plan approved by” with your name.',
+        demo: 'tap',
+      },
+      {
+        title: 'Every workspace on the calendar',
+        body: 'The calendar shows the work of all three workspaces, and each day has a “+” to add a task on it.',
+        demo: 'list',
+      },
+    ],
+  },
+  {
     date: '2027-01-27',
     title: 'Not finished today',
     items: [

@@ -6,6 +6,7 @@ import { useStore, loadProjectSnapshot } from '../../data/store';
 import { searchJobs } from '../../data/searchIndex';
 import { TaskDaysPicker, taskWrites, splitStringsOf, TaskSplit } from '../tasks/TaskDaysPicker';
 import { StagePairPicker, stagePairStrings, StagePairValue } from '../tasks/StagePair';
+import { nextStageToDo } from '../../data/stageMarks';
 import {
   isUploadBackendConfigured, extractFolderId, findOrCreateFolderViaBackend, uploadFileViaBackend, shareFileToDrive,
 } from '../../data/driveApi';
@@ -99,6 +100,10 @@ export function PlannerTaskDialog({
   const [genWs, setGenWs] = useState('');
   const [q, setQ] = useState('');
   const jobStage = picked?.job.currentStageId ?? job?.currentStageId ?? '';
+  // A new task starts on the NEXT stage still to do — the headline of a
+  // building unit is its last stage DONE (owner's recording, 2026-10-11).
+  const nextJob = picked?.job ?? job;
+  const tipusAll = useStore(st => st.boardSettings);
 
   const stagesFor = (pid: string) => allStages
     .filter(st => st.active && (pid === 'general' ? st.projectId === 'general' : !st.projectId))
@@ -146,8 +151,11 @@ export function PlannerTaskDialog({
   }, [whoQ, active]);
 
   // ── The stage pair, what, days ────────────────────────────────────────
-  const [pair, setPair] = useState<StagePairValue>({ from: jobStage, to: '', ids: jobStage ? [jobStage] : [] });
-  useEffect(() => { setPair({ from: jobStage, to: '', ids: jobStage ? [jobStage] : [] }); }, [jobStage]);
+  const startStage = nextJob
+    ? nextStageToDo(nextJob, stageList, { tipusStages: tipusAll[picked?.projectId ?? currentProjectId]?.tipusStages })
+    : jobStage;
+  const [pair, setPair] = useState<StagePairValue>({ from: startStage, to: '', ids: startStage ? [startStage] : [] });
+  useEffect(() => { setPair({ from: startStage, to: '', ids: startStage ? [startStage] : [] }); }, [startStage]);
   const dialogBoardSettings = useStore(st => st.boardSettings);
   const [task, setTask] = useState('');
   const [files, setFiles] = useState<File[]>([]);

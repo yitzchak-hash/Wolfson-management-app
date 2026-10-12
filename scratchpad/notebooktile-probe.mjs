@@ -221,7 +221,7 @@ const tile = id => page.evaluate(id => {
   });
   check(bun?.n === '5', '6 · Monday’s five singles are one bundle', bun?.n);
   check(/A2/.test(bun?.text ?? '') && /A3/.test(bun?.text ?? ''), '6 · it names BOTH buildings', bun?.text);
-  check(/A2 · Floors 3–4/.test(bun?.text ?? '') && /A3 · Floor 6/.test(bun?.text ?? ''), '6 · each with its own floors', bun?.text);
+  check(/A2 · \d+ apartments?/.test(bun?.text ?? '') && /A3 · \d+ apartments?/.test(bun?.text ?? ''), '6 · each building with its own apartment count', bun?.text);
   check(bun?.stages.join('|') === 'Drilling 3|Piping 2', '6 · a pill per stage with its count', bun?.stages.join('|'));
   check(/See all 5/.test(bun?.seeAll ?? ''), '6 · and "See all 5 ›"', bun?.seeAll);
   check(bun?.shareW === '80%', '6 · the done share is 4 of 5', bun?.shareW);

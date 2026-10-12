@@ -116,13 +116,14 @@ const problemTask = (contractorId, aptId, bld, desc, extra = {}) => ({
   await page.keyboard.press('Enter');
   await page.waitForTimeout(600);
   const gnBullets = await page.locator('[data-general-bullets] [data-general-bullet]').allInnerTexts();
-  check(gnBullets.length === 2 && gnBullets[0].includes('Gate code 4321') && /Esther|Avi|·/.test(gnBullets[0]),
-    'two sent lines stand as two bullets with a sign-off', gnBullets.join(' | '));
+  // Newest on top (owner, 2026-10-11).
+  check(gnBullets.length === 2 && gnBullets[0].includes('Dog in the yard') && gnBullets[1].includes('Gate code 4321') && /Esther|Avi|·/.test(gnBullets[0]),
+    'two sent lines stand as two bullets with a sign-off, newest on top', gnBullets.join(' | '));
   check(await page.locator('[data-general-notes-box] [data-composer-input]').inputValue() === '', 'the box clears after Send');
   let gnApt = (await store(page)).apartments.find(a => a.id === 'A1-47');
   check(gnApt?.noteEntries?.length === 2 && gnApt.generalNotes === 'Gate code 4321\nDog in the yard — call first',
     'the record carries the entries AND the flat text (search and reports keep reading it)', gnApt?.generalNotes);
-  await page.locator('[data-general-bullet]').first().locator('[data-note-remove]').evaluate(b => b.click());
+  await page.locator('[data-general-bullet]', { hasText: 'Gate code 4321' }).locator('[data-note-remove]').evaluate(b => b.click());
   await page.waitForTimeout(500);
   gnApt = (await store(page)).apartments.find(a => a.id === 'A1-47');
   check(await page.locator('[data-general-bullet]').count() === 1 && gnApt?.generalNotes === 'Dog in the yard — call first',

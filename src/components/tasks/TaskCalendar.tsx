@@ -135,6 +135,8 @@ export function TaskCalendar({
   words,
   maxPerDay,
   onMore,
+  onAddDay,
+  addDayTitle,
 }: {
   events: CalendarEvent[];
   /** date-fns locale for the month title — the worker's phone reads its own language. */
@@ -164,6 +166,9 @@ export function TaskCalendar({
    * "+N" opened only the next hidden task, which read as doing nothing.
    */
   onMore?: (date: string, events: CalendarEvent[]) => void;
+  /** A "+" on every day — the notebook's manner (owner's recording, 2026-10-11: "click here and add something"). */
+  onAddDay?: (date: string) => void;
+  addDayTitle?: string;
 }) {
   const [month, setMonth] = useState(() => startOfMonth(new Date()));
   /** The day list open over the calendar — a whole day, or one folded group. */
@@ -341,7 +346,13 @@ export function TaskCalendar({
                  SQUARES read as a calendar. From sm up the week row grows to
                  fit its busiest day instead, so one job shows full size. */
             >
-              <div className="flex items-center justify-center">
+              <div className="flex items-center justify-center relative group/day">
+                {onAddDay && (
+                  <button type="button" data-cal-add={key} onClick={() => onAddDay(key)} title={addDayTitle}
+                    className="absolute end-0 top-0 w-5 h-5 rounded-full flex items-center justify-center text-[13px] font-bold text-[#1e3a5f] bg-sky-50 border border-sky-200 opacity-60 hover:opacity-100 group-hover/day:opacity-100">
+                    +
+                  </button>
+                )}
                 <span
                   className={`text-[11px] font-medium w-5 h-5 flex items-center justify-center rounded-full ${
                     isToday

@@ -6,6 +6,29 @@ have them). The v2 rebuild's original design record is the root
 `DECISIONS.md`; the rules and traps behind each decision are in `CLAUDE.md`
 by round. (Standing order 6, 2026-09-23.)_
 
+## 2026-10-12 (the four recordings of 11 Oct)
+- **A finished task is read by what was REPORTED**, not by what it was made
+  for: a task made for Concealed Units + Fans that Igor closed as Registers
+  is Registers on the card, in the notes, in the edit form and on the
+  notebook. Four such tasks exist in production; the display changed, the
+  records did not.
+- **Editing a finished task's stages moves its pictures and its ticks** to
+  the new stage ("so that the pictures also move with that, to that bubble").
+- **A new task starts on the next stage still to do**, never on one already
+  finished ("why do we need the 'on Drilling'?").
+- **Drive and Zoho sections open folded** ("by default these should be
+  closed"); **general notes newest on top**, in a roomier box with a faint
+  line between notes.
+- **Plain words everywhere**: the done card leads with the worker and says
+  what he finished and how many photos he sent; the Tasks page says who is
+  doing what; the busy-day popup says "Finished Drilling · doing Piping…";
+  stages are bubbles, never arrows.
+- **The guessed plan asks calmly** — "Is this the right plan? Yes · Choose
+  another" — and Yes records who approved it ("Plan approved by …").
+- **The calendar shows every workspace** and a "+" on each day adds a task;
+  the full notebook-style redesign gets a plan page first.
+- **The app's own Drive account is not activity** in Active jobs.
+
 ## 2026-10-12 ("build it" — a job that is not finished in a day)
 - **"Not finished today" sits beside Close job** on the worker's phone. It asks
   three things in his language: what he finished today (only when the task has

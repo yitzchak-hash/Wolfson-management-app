@@ -1,13 +1,16 @@
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { X, Check, Layers, Circle } from 'lucide-react';
+import { X, Check, Layers, Circle, Clock, Play } from 'lucide-react';
 import {
   Apartment, ContractorAssignment, Stage, MainUiStrings, aptLabel, getStageName,
   DEFAULT_MAIN_UI_STRINGS, HEBREW_MAIN_UI_STRINGS,
 } from '../../types';
 import { useStore, loadProjectSnapshot } from '../../data/store';
 import { buildFloorRows, positionMap, rowCells, rowPillLabel } from '../../data/floorRows';
-import { taskStageIds } from '../../data/stageMarks';
+import { recordStageIds } from '../../data/stageMarks';
+import { photoSrcOf } from '../../data/photoSrc';
+import { shotKindOf } from '../../data/sitePhotos';
+import { MediaViewer, ViewerItem } from '../ui/MediaViewer';
 import { emWidth } from '../diagram/BuildingDiagram';
 
 /**
@@ -31,7 +34,7 @@ export type BundleWords = Pick<MainUiStrings,
   'nbBundleTasks' | 'nbBundleDone' | 'nbBundleOpen' | 'nbBundleHint' | 'nbBundleList'
   | 'nbBundleBuilding' | 'nbBundleNoBuilding' | 'nbBundleDoneAt' | 'nbBundleOpenWord'
   | 'nbBundleLegendDone' | 'nbBundleLegendOpen' | 'nbBundleOpenUnit' | 'nbBundleClose' | 'nbBundleNoStage'
-  | 'nbBundleFloors' | 'nbBundleFloor' | 'nbBundleSeeAll'>;
+  | 'nbBundleFloors' | 'nbBundleFloor' | 'nbBundleSeeAll' | 'nbBundleUnits' | 'nbBundleUnit'>;
 
 const RUSSIAN_BUNDLE_WORDS: BundleWords = {
   nbBundleTasks: '{n} задач',
@@ -51,6 +54,8 @@ const RUSSIAN_BUNDLE_WORDS: BundleWords = {
   nbBundleFloors: 'этажи {range}',
   nbBundleFloor: 'этаж {n}',
   nbBundleSeeAll: 'Показать все {n}',
+  nbBundleUnits: '{n} кв.',
+  nbBundleUnit: '1 кв.',
 };
 
 export function bundleWords(lang?: string): BundleWords {
@@ -83,7 +88,7 @@ export interface BundleInfo {
    * floors as the diagram prints them (owner, 2026-10-08: a bundle across two
    * buildings names BOTH). Empty on the Job Board.
    */
-  buildings?: { id: string; floors: string[] }[];
+  buildings?: { id: string; floors: string[]; units?: number }[];
   /** How many of the bundle's tasks are on each stage, in the workspace's order. */
   stages?: { stage: Stage; count: number }[];
 }
@@ -115,13 +120,15 @@ export function inkOf(hex: string): string {
  * the card's inner width in the same local pixels the type is set in; 0
  * means "not measured yet", which draws at the full size for one frame.
  */
-export function StagePill({ name, color, count, avail, size, z, ...rest }: {
+export function StagePill({ name, color, count, avail, size, z, wrap, ...rest }: {
   name: string;
   color: string;
   count?: number;
   avail: number;
   size: number;
   z: (n: number) => number;
+  /** Wrap onto a second line rather than cut the name (the bundle tile — owner, 2026-10-11: "things are getting cut off"). */
+  wrap?: boolean;
 } & React.HTMLAttributes<HTMLSpanElement>) {
   const text = count ? `${name} ${count}` : name;
   const pad = Math.max(4, z(6));
@@ -131,9 +138,9 @@ export function StagePill({ name, color, count, avail, size, z, ...rest }: {
   const fit = avail > 0 ? Math.floor(((avail - pad * 2) / Math.max(0.1, emWidth(text) * 1.05)) * 10) / 10 : max;
   const fs = Math.max(min, Math.min(max, fit));
   return (
-    <span {...rest} className="inline-block rounded-full whitespace-nowrap overflow-hidden" title={text}
+    <span {...rest} className={wrap ? 'inline-block rounded-lg break-words' : 'inline-block rounded-full whitespace-nowrap overflow-hidden'} title={text}
       style={{
-        maxWidth: '100%', textOverflow: 'ellipsis', padding: `${Math.max(1, z(1))}px ${pad}px`,
+        maxWidth: '100%', textOverflow: wrap ? undefined : 'ellipsis', padding: `${Math.max(1, z(1))}px ${pad}px`,
         fontSize: fs, fontWeight: 700, lineHeight: 1.35,
         backgroundColor: alpha(color, 0.15), color: inkOf(color),
       }}>{text}</span>
@@ -259,9 +266,10 @@ export function BundleBar({ bundle, height, z, size, strip, words, onOpen, id, o
   const small = Math.max(z(7), size - z(1.5));
   const padX = Math.max(4, z(7));
   const shadow = Math.max(3, z(6));
-  const where = (bundle.buildings ?? [])
-    .map(b => [b.id, floorsText(b.floors, words)].filter(Boolean).join(' · '))
-    .filter(Boolean).join(' · ');
+  // The workspace on top, then each building with how many apartments
+  // (owner's recording, 2026-10-11: "just say A2 — number of apartments, A3 —
+  // number of apartments, and Wolfson on top"). Floors live in the window.
+  const where = (bundle.buildings ?? []).filter(b => b.id);
   return (
     // The wrapper keeps room for the stacked-paper shadow, so the next lane
     // and the next square never sit under it — and it is what gets measured.
@@ -279,13 +287,18 @@ export function BundleBar({ bundle, height, z, size, strip, words, onOpen, id, o
         <span data-bundle-count className="block" style={{ fontSize: size + z(3), fontWeight: 800, color: '#0f172a', lineHeight: 1.1 }}>{head}</span>
         <span className="block break-words" style={{ fontSize: small, color: '#64748b', marginTop: Math.max(1, z(1)), lineHeight: 1.25 }}>
           <b data-bundle-ws-name style={{ color: '#7c3aed', fontWeight: 700 }}>{bundle.workspace}</b>
-          {where ? ` ${where}` : ''}
+          {where.map(b => (
+            <span key={b.id} data-bundle-bld={b.id} className="block whitespace-nowrap">
+              <b style={{ color: '#334155' }}>{b.id}</b>
+              {b.units ? <> · {b.units === 1 ? words.nbBundleUnit : fill(words.nbBundleUnits, { n: b.units })}</> : null}
+            </span>
+          ))}
         </span>
         {!!bundle.stages?.length && (
           <span className="flex flex-wrap" style={{ gap: Math.max(2, z(3)), marginTop: Math.max(2, z(4)) }}>
             {bundle.stages.map(({ stage, count }) => (
               <StagePill key={stage.id} data-bundle-stage={stage.id} name={stage.name} color={stage.color} count={count}
-                avail={w - padX * 2 - Math.max(4, z(6))} size={size} z={z} />
+                avail={w - padX * 2 - Math.max(4, z(6))} size={size} z={z} wrap />
             ))}
           </span>
         )}
@@ -424,6 +437,23 @@ export function BundlePopup({ bundle, person, personColor, dayLabel, stages, wor
     () => (pid === currentProjectId ? liveApts : loadProjectSnapshot(pid).apartments),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [pid, currentProjectId, liveApts, snapTick]);
+  // The workspace's pictures and films from site — each row shows its own.
+  const livePhotos = useStore(st => st.contractorPhotos);
+  const photosByTask = useMemo(() => {
+    const all = pid === currentProjectId ? livePhotos : (loadProjectSnapshot(pid).photos ?? []);
+    const ids = new Set(bundle.items.map(it => it.taskId));
+    const m = new Map<string, typeof all>();
+    for (const p of all) {
+      if (!ids.has(p.assignmentId) || !shotKindOf(p)) continue;
+      const list = m.get(p.assignmentId) ?? [];
+      list.push(p);
+      m.set(p.assignmentId, list);
+    }
+    for (const list of m.values()) list.sort((a, b) => (a.uploadedAt ?? '').localeCompare(b.uploadedAt ?? ''));
+    return m;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pid, currentProjectId, livePhotos, snapTick, bundle.items]);
+  const [viewer, setViewer] = useState<{ items: ViewerItem[]; index: number } | null>(null);
 
   // An apartment with any open task stays amber — the eye goes to what is left.
   const lit = useMemo(() => {
@@ -502,30 +532,135 @@ export function BundlePopup({ bundle, person, personColor, dayLabel, stages, wor
             <h4 className="m-0 mb-2 text-[11px] font-black uppercase tracking-wider text-gray-400">{words.nbBundleList}</h4>
             <ul className="m-0 p-0 list-none flex flex-col gap-1">
               {bundle.items.map(it => {
-                const ids = taskStageIds(it.task);
-                const names = ids.map(stageName).filter(Boolean);
+                /*
+                 * The owner's ask (recording 2026-10-11): no sentence of stage
+                 * names and app words — the stages as BUBBLES, ticked or not,
+                 * and under them up to three pictures from site, the last a
+                 * "+N" when there are more. Only words the OFFICE wrote stay.
+                 */
+                const t = it.task;
+                const ids = recordStageIds(t);
+                const unfinished = new Set(t.stagesUnfinished ?? (t.stagesFinished === false ? ids : []));
+                const apt = apartments.find(a => a.id === it.jobId);
+                const stateOf = (id: string): 'done' | 'half' | 'open' => {
+                  if (t.completedAt) return unfinished.has(id) ? 'half' : 'done';
+                  const mark = apt?.stageMarks?.[id];
+                  return mark === 'done' ? 'done' : mark === 'pending' ? 'half' : 'open';
+                };
+                const media = photosByTask.get(it.taskId) ?? [];
+                const shown = media.length > 3 ? media.slice(0, 2) : media;
+                const more = media.length > 3 ? media.length - 2 : 0;
+                const officeWords = !t.stageReport && t.taskDescription?.trim() ? t.taskDescription.trim() : '';
+                const openViewer = (index: number) => setViewer({
+                  index,
+                  items: media.map(p => {
+                    const film = shotKindOf(p) === 'video';
+                    const filename = p.filename || (film ? 'video.mp4' : 'photo.jpg');
+                    return {
+                      fileId: p.driveFileId, filename, mimeType: p.mimeType,
+                      src: film ? (p.storageUrl || p.dataUrl || undefined) : (photoSrcOf(p, 1600) || undefined),
+                      when: p.uploadedAt ? new Date(p.uploadedAt).toLocaleString() : undefined,
+                      note: it.label,
+                    };
+                  }),
+                });
                 return (
                   <li key={it.taskId}>
-                    <button type="button" data-bundle-row={it.taskId} data-bundle-row-done={it.done ? '1' : '0'}
+                    <div role="button" tabIndex={0} data-bundle-row={it.taskId} data-bundle-row-done={it.done ? '1' : '0'}
                       onClick={() => onOpenItem(it)}
+                      onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpenItem(it); } }}
                       title={it.jobId ? words.nbBundleOpenUnit : undefined}
-                      className="w-full text-start flex items-start gap-2 px-2.5 py-2 rounded-lg border hover:bg-slate-50 transition-colors"
+                      className="w-full text-start flex items-start gap-2 px-2.5 py-2 rounded-lg border hover:bg-slate-50 transition-colors cursor-pointer"
                       style={{ borderColor: it.done ? '#bbf7d0' : '#fde68a', backgroundColor: it.done ? '#f0fdf4' : '#fffbeb' }}>
                       {it.done
                         ? <Check size={16} strokeWidth={3} className="flex-shrink-0 mt-0.5" style={{ color: DONE_GREEN }} />
                         : <Circle size={15} strokeWidth={2.5} className="flex-shrink-0 mt-0.5" style={{ color: OPEN_AMBER }} />}
                       <span className="flex-1 min-w-0">
                         <span className="block text-[13.5px] font-extrabold text-[#1e3a5f] break-words">{it.label}</span>
-                        <span className="block text-[11.5px] text-slate-500 break-words">
-                          {names.length ? names.join(' · ') : words.nbBundleNoStage}
-                          {it.task.taskDescription?.trim() ? ` — ${it.task.taskDescription.trim()}` : ''}
+                        <span className="flex flex-wrap gap-1 mt-1" data-bundle-row-stages>
+                          {ids.length === 0 && <span className="text-[11.5px] text-slate-500">{words.nbBundleNoStage}</span>}
+                          {ids.map(id => {
+                            const st = stages.find(x => x.id === id);
+                            if (!st) return null;
+                            const state = stateOf(id);
+                            return (
+                              <span key={id} data-bundle-stage={id} data-state={state}
+                                className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11.5px] font-bold border"
+                                style={{
+                                  backgroundColor: state === 'done' ? '#dcfce7' : alpha(st.color, 0.12),
+                                  borderColor: state === 'done' ? '#86efac' : alpha(st.color, 0.45),
+                                  color: state === 'done' ? '#166534' : inkOf(st.color),
+                                }}>
+                                {state === 'done'
+                                  ? <Check size={12} strokeWidth={3.5} style={{ color: DONE_GREEN }} />
+                                  : state === 'half'
+                                    ? <Clock size={11} strokeWidth={2.75} style={{ color: '#d97706' }} />
+                                    : <span className="w-2 h-2 rounded-full" style={{ backgroundColor: st.color }} />}
+                                {stageName(id)}
+                              </span>
+                            );
+                          })}
                         </span>
+                        {(() => {
+                          // Where the apartment stands, in plain words (owner's recording,
+                          // 2026-10-11: "currently finished Drilling, doing Piping,
+                          // Concealed Units, Fans — that's how it should read").
+                          const named = ids.map(stageName).filter(Boolean);
+                          const join = (xs: string[]) => xs.length <= 1 ? (xs[0] ?? '') : `${xs.slice(0, -1).join(', ')} ${isRtl ? 'ו' : 'and '}${xs[xs.length - 1]}`;
+                          let line = '';
+                          if (t.completedAt) {
+                            line = named.length ? (isRtl ? `סיים ${join(named)}` : `Finished ${join(named)}`) : '';
+                          } else {
+                            const doneIds = stages.filter(st => apt?.stageMarks?.[st.id] === 'done' && !ids.includes(st.id));
+                            const last = doneIds.length ? getStageName(doneIds[doneIds.length - 1], isRtl) : '';
+                            const doing = named.length ? (isRtl ? `עושה ${join(named)}` : `doing ${join(named)}`) : '';
+                            line = [last ? (isRtl ? `סיים ${last}` : `Finished ${last}`) : '', doing].filter(Boolean).join(' · ');
+                            if (line && !last) line = line.charAt(0).toUpperCase() + line.slice(1);
+                          }
+                          return line ? <span data-bundle-row-plain className="block text-[12px] text-slate-700 mt-1">{line}</span> : null;
+                        })()}
+                        {officeWords && (
+                          <span className="block text-[11.5px] text-slate-500 break-words mt-0.5" data-bundle-row-words>{officeWords}</span>
+                        )}
+                        {media.length > 0 && (
+                          <span className="grid grid-cols-3 gap-1.5 mt-1.5" style={{ maxWidth: 3 * 64 + 12 }} data-bundle-row-photos={media.length}>
+                            {shown.map((p, i) => {
+                              const film = shotKindOf(p) === 'video';
+                              const thumb = film ? (p.driveFileId ? photoSrcOf(p, 200) : '') : photoSrcOf(p, 200);
+                              return (
+                                <button type="button" key={p.id} data-bundle-thumb
+                                  onClick={e => { e.stopPropagation(); openViewer(i); }}
+                                  className="relative aspect-square w-full rounded-md overflow-hidden bg-slate-200 border border-white shadow-sm">
+                                  {thumb
+                                    ? <img src={thumb} alt="" loading="lazy" className="w-full h-full object-cover" />
+                                    : film && (p.storageUrl || p.dataUrl)
+                                      ? <video src={p.storageUrl || p.dataUrl} muted preload="metadata" className="w-full h-full object-cover" />
+                                      : null}
+                                  {film && (
+                                    <span className="absolute inset-0 flex items-center justify-center">
+                                      <span className="w-6 h-6 rounded-full bg-black/55 flex items-center justify-center">
+                                        <Play size={12} className="text-white" fill="white" />
+                                      </span>
+                                    </span>
+                                  )}
+                                </button>
+                              );
+                            })}
+                            {more > 0 && (
+                              <button type="button" data-bundle-thumb-more={more}
+                                onClick={e => { e.stopPropagation(); openViewer(2); }}
+                                className="aspect-square w-full rounded-md flex items-center justify-center text-[15px] font-black text-[#1e3a5f] bg-slate-100 border border-slate-200">
+                                +{more}
+                              </button>
+                            )}
+                          </span>
+                        )}
                       </span>
                       <span className="flex-shrink-0 text-[11.5px] font-bold whitespace-nowrap mt-0.5"
                         style={{ color: it.done ? DONE_GREEN : '#b45309' }}>
                         {it.done ? fill(words.nbBundleDoneAt, { time: timeOf(it.task.completedAt) }).trim() : words.nbBundleOpenWord}
                       </span>
-                    </button>
+                    </div>
                   </li>
                 );
               })}
@@ -543,6 +678,7 @@ export function BundlePopup({ bundle, person, personColor, dayLabel, stages, wor
           </div>
         </div>
       </div>
+      {viewer && <MediaViewer items={viewer.items} initialIndex={viewer.index} onClose={() => setViewer(null)} lang={isRtl ? 'he' : 'en'} />}
     </div>,
     document.body,
   );

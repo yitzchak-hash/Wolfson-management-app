@@ -144,6 +144,13 @@ export function touchesOf(src: TouchSources, now: number, days: number): Touch[]
       if (!f) continue;
       const list = f.touches?.length ? f.touches : (f.at ? [{ at: f.at, name: f.name ?? '', who: f.who, removed: f.removed }] : []);
       for (const t of list) {
+        // The app's OWN uploads (its service account copying a worker's
+        // pictures into Drive) are not somebody working on the job — they
+        // already count as the photo itself, and a parent folder linked to a
+        // whole building collected every one of them and sat on top of the
+        // list for ever (owner's recording, 2026-10-11: "these two are just
+        // constantly over here… it's not true").
+        if (isAppAccount(t.who)) continue;
         const verb = t.removed ? 'removed' : t.added ? 'added' : 'changed';
         // With a name: "Moshe · Drive · added X". Without one, Drive itself
         // is the who: "Drive · added X" — never "Drive · Drive · X".
@@ -219,4 +226,9 @@ export function bookedThisWeek(assignments: ContractorAssignment[], contractors:
     if (!cur || hit < cur.day) out.set(a.apartmentId, { who, day: hit });
   }
   return out;
+}
+
+/** A Google service account — the app itself, never a person. */
+export function isAppAccount(who?: string): boolean {
+  return !!who && /gserviceaccount\.com/i.test(who);
 }

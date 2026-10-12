@@ -143,6 +143,20 @@ export function taskStageIds(t: Pick<ContractorAssignment, 'stageId' | 'stageIds
 }
 
 /**
+ * The stages a task's RECORD is about (owner's recordings, 2026-10-11): an
+ * open task is about the stages it was made for; a CLOSED one is about the
+ * stages the close says were worked (`stagesWorked`) whenever the close
+ * named them. The two can disagree — Igor's A2 9 report was saved on
+ * Concealed Units + Fans while he started and closed it on Registers — and
+ * every screen that shows a closed task (the notes tab, the notebook, the
+ * bundle window) must tell the same story the done card tells.
+ */
+export function recordStageIds(t: Pick<ContractorAssignment, 'stageId' | 'stageIds' | 'stagesWorked' | 'completedAt'>): string[] {
+  if (t.completedAt && t.stagesWorked?.length) return t.stagesWorked;
+  return taskStageIds(t);
+}
+
+/**
  * The HEADLINE — the one word an apartment's cell prints (locked answer 3):
  * the stage being worked NOW; else the half-done one; else the NEXT to do
  * in the order. With everything done, the last MARKER in the list ("Job
@@ -491,4 +505,21 @@ export function customReach(stage: Stage): { apartments: number; tipus: string[]
     tipus: stage.onTipus ?? [],
     buildings: stage.onBuildings ?? [],
   };
+}
+
+/**
+ * The stage a NEW task should start on: the first stage of the apartment's
+ * set that is not done yet (owner's recording, 2026-10-11 — a task the
+ * office wrote as "please do piping, mapuchim and concealed units" was filed
+ * "on Drilling", the stage he had already finished, because every task form
+ * pre-picked the apartment's headline, and a building unit's headline is now
+ * its LAST STAGE DONE). Falls back to the headline when everything is done.
+ */
+export function nextStageToDo(apt: AptLike, sortedStages: Stage[], ctx?: SetContext): string {
+  const set = stageSetOf(apt, sortedStages, ctx);
+  for (const st of set) {
+    const state = stageStateOf(apt, st.id, sortedStages);
+    if (state !== 'done' && state !== 'off') return st.id;
+  }
+  return apt.currentStageId ?? '';
 }

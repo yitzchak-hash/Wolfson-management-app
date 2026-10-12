@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { CalendarDays } from 'lucide-react';
-import { useStore } from '../data/store';
+import { useStore, loadAllProjectsTaskData } from '../data/store';
 import { TaskCalendar, CalendarEvent, calendarWordsOf, OFFICE_DAY_CAP } from '../components/tasks/TaskCalendar';
 import { aptLabel, projectColor, projectShortName } from '../types';
 import { daysOf } from '../data/taskDays';
@@ -18,9 +18,20 @@ const CAT_COLORS: Record<string, string> = { drywall: '#f59e0b', ac: '#3b82f6', 
 export function ProjectCalendarPage() {
   const {
     contractorAssignments, apartments, contractors, projects, stages,
-    currentProjectId, mainUiStrings: s,
+    currentProjectId, mainUiStrings: s, setCurrentProject,
   } = useStore();
+  const snapshotTick = useStore(st => st.snapshotTick);
   const navigate = useNavigate();
+  /**
+   * ALL the work by default (owner's recording, 2026-10-11: "I want to see
+   * all the work here, not just the Job Board's — the other two workspaces
+   * too"). The other workspaces come from this machine's copies, kept fresh
+   * by the live foreign sync. Per machine, like the Tasks page's switch.
+   */
+  const [scope, setScope] = useState<'here' | 'all'>(() => {
+    try { return localStorage.getItem('calendar_scope') === 'here' ? 'here' : 'all'; } catch { return 'all'; }
+  });
+  const pickScope = (v: 'here' | 'all') => { setScope(v); try { localStorage.setItem('calendar_scope', v); } catch { /* private mode */ } };
 
   const [filterContractorId, setFilterContractorId] = useState('');
   const [showCompleted, setShowCompleted] = useState(true);
@@ -63,8 +74,35 @@ export function ProjectCalendarPage() {
         } : undefined,
       });
     }
+    if (scope === 'all') {
+      for (const ws of loadAllProjectsTaskData()) {
+        if (ws.projectId === currentProjectId) continue;
+        const proj = projects.find(p => p.id === ws.projectId);
+        const short = projectShortName(proj, !!s.isRtl, proj?.name ?? ws.projectId);
+        for (const a of ws.assignments) {
+          if (!a.dueDate) continue;
+          if (filterContractorId && a.contractorId !== filterContractorId) continue;
+          if (!showCompleted && a.completedAt) continue;
+          const apt = ws.apartments.find(ap => ap.id === a.apartmentId);
+          const contractor = contractors.find(c => c.id === a.contractorId);
+          for (const day of daysOf(a)) out.push({
+            id: `${ws.projectId}:${a.id}:${day}`,
+            date: day,
+            title: a.taskDescription,
+            subtitle: `${short}${apt ? ` · ${apt.buildingId} · ${aptLabel(apt)}` : ''}`,
+            color: projectColor(projects, ws.projectId),
+            completed: !!a.completedAt,
+            groupKey: `${a.contractorId}|${ws.projectId}`,
+            groupLabel: `${contractor?.name ?? s.unknownUser} · ${short}`,
+            onClick: () => { setCurrentProject(ws.projectId); navigate('/tasks'); },
+          });
+        }
+      }
+    }
     return out;
-  }, [contractorAssignments, apartments, contractors, stages, filterContractorId, showCompleted, navigate, currentProjectId, wsShort, s.unknownUser]);
+    // snapshotTick: another workspace's copy landing must redraw it.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [contractorAssignments, apartments, contractors, stages, filterContractorId, showCompleted, navigate, currentProjectId, wsShort, s.unknownUser, scope, snapshotTick, projects]);
 
   return (
     <div className="p-4 md:p-6 w-full">
@@ -109,13 +147,24 @@ export function ProjectCalendarPage() {
           {s.statusCompleted}
         </button>
 
+        <div className="flex rounded-lg border border-gray-200 overflow-hidden mb-0.5" data-calendar-scope={scope}>
+          {(['here', 'all'] as const).map(v => (
+            <button key={v} type="button" data-calendar-scope-pick={v} onClick={() => pickScope(v)}
+              className={`px-3 py-1.5 text-xs font-semibold ${scope === v ? 'bg-[#1e3a5f] text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>
+              {(v === 'here' ? s.tpScopeHere : s.tpScopeAll).replace(/\s*\(\{n\}\)\s*/, '').trim()}
+            </button>
+          ))}
+        </div>
+
         <span className="text-xs text-gray-400 pb-2 ml-auto">
           {events.length} · {s.navTasks}
         </span>
       </div>
 
       <TaskCalendar events={events} todayLabel={s.today} rtl={!!s.isRtl}
-        printTitle={projectName} maxPerDay={OFFICE_DAY_CAP} words={calendarWordsOf(s)} />
+        printTitle={projectName} maxPerDay={OFFICE_DAY_CAP} words={calendarWordsOf(s)}
+        onAddDay={date => navigate('/tasks', { state: { addDate: date } })}
+        addDayTitle={s.isRtl ? 'הוספת משימה ביום הזה' : 'Add a task on this day'} />
     </div>
   );
 }

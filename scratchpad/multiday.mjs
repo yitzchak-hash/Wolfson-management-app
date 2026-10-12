@@ -82,7 +82,10 @@ check(await page.locator('[data-task-dialog] [data-stage-pair]').count() === 1
   'it asks which stages the task is for (one picker, the job\'s own stages)');
 
 // ── 2 · fill it: when-done stage, the one text box, three days ──────────────
-await page.locator('[data-task-dialog] [data-stage-pick="S-done"]').click();
+// A new task opens on the job's NEXT stage to do (owner, 2026-10-11) — here
+// the only one, so it is already picked; pressing it would un-pick it.
+check(await page.locator('[data-task-dialog] [data-stage-pick="S-done"]').getAttribute('data-on') !== null,
+  'the next stage to do arrives already picked');
 await page.fill('[data-task-dialog] textarea', 'Close the ceiling in both bedrooms');
 await page.locator('[data-task-dialog] button[aria-label="One day more"]').first().click();
 await page.locator('[data-task-dialog] button[aria-label="One day more"]').first().click();

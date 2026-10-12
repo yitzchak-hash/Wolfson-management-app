@@ -800,7 +800,7 @@ function PlanEditor({
   touchScale = 1, chooseSaveFolder = false, sheetOverlay,
   tabStrip, initialWork, workRef, onOpenPlanNewTab, onUnsavedChange,
   onClose, onToast, onPickPlan, onStartMarkup, onSavedToDrive,
-  onPreviewPlan, onStarPlan, starredPlanId, starAuto, autoPlanNote,
+  onPreviewPlan, onStarPlan, starredPlanId, starAuto, autoPlanNote, autoPlanYesLabel, autoPlanOtherLabel, onConfirmAutoPlan, approvedNote,
 }: {
   planFileId: string;
   /**
@@ -920,6 +920,12 @@ function PlanEditor({
    * worker is sent out on it. Absent = somebody chose.
    */
   autoPlanNote?: string;
+  /** The guessed plan's answers (owner, 2026-10-11: "Is this the right plan? Yes"). */
+  autoPlanYesLabel?: string;
+  autoPlanOtherLabel?: string;
+  onConfirmAutoPlan?: () => void;
+  /** "Plan approved by Esther" once somebody confirmed it. */
+  approvedNote?: string;
   onClose: () => void;
   onToast?: (msg: string, kind?: 'success' | 'error') => void;
   onPickPlan?: (p: PlanChoice) => void;
@@ -4150,21 +4156,39 @@ function PlanEditor({
 
           {/* The shown plan is the app's GUESS — say so, in red, where the
               eye goes for Plans and Layers. */}
+          {/* The guessed plan asks, calmly (owner, 2026-10-11: "less red,
+              less scary — is this the right plan? Yes — then plan approved
+              by …"). Yes stars it; "choose another" opens the chooser. */}
           {autoPlanNote && (
-            <button data-plan-auto-warning onClick={() => setShowPlans(true)}
-              title={autoPlanNote}
-              className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11.5px] font-bold text-white max-w-[260px]"
-              style={{ backgroundColor: '#dc2626', boxShadow: '0 0 0 2px rgba(220,38,38,.25)' }}>
-              <span className="w-4 h-4 rounded-full bg-white text-red-600 flex items-center justify-center text-[11px] font-black flex-shrink-0">!</span>
+            <span data-plan-auto-warning className="flex items-center gap-1 ps-2.5 pe-1 py-0.5 rounded-full text-[11.5px] font-semibold max-w-[320px]"
+              style={{ backgroundColor: 'rgba(255,255,255,.14)', color: '#fff' }}>
               <span className="truncate">{autoPlanNote}</span>
-            </button>
+              {onConfirmAutoPlan && (
+                <button type="button" data-plan-auto-yes onClick={onConfirmAutoPlan}
+                  className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-white text-[#1e3a5f] hover:bg-sky-50 flex-shrink-0">
+                  {autoPlanYesLabel || 'Yes'}
+                </button>
+              )}
+              <button type="button" data-plan-auto-other onClick={() => setShowPlans(true)}
+                className="px-2 py-0.5 rounded-full text-[11px] font-semibold text-white/85 hover:bg-white/10 flex-shrink-0">
+                {autoPlanOtherLabel || 'Choose another'}
+              </button>
+            </span>
+          )}
+          {!autoPlanNote && approvedNote && (
+            <span data-plan-approved className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold text-emerald-100 max-w-[260px]"
+              style={{ backgroundColor: 'rgba(22,163,74,.28)' }}>
+              <Check size={12} className="flex-shrink-0" /><span className="truncate">{approvedNote}</span>
+            </span>
           )}
 
           {/* The gap the owner drew: Plans belongs with the sheet you are
               choosing, the rest belongs at the far end. */}
           {twoRow && <div className="flex-1" />}
 
-          <button onClick={() => setShowLayers(v => !v)}
+          {/* No layers of its own and no markup yet = nothing to switch
+              (owner, 2026-10-11: "I don't know why we need this"). */}
+          {(layers.length > 0 || inkLayers.length > 0) && <button onClick={() => setShowLayers(v => !v)}
             disabled={isImagePlan}
             title={isImagePlan
               ? 'A picture has no layers of its own'
@@ -4175,7 +4199,7 @@ function PlanEditor({
             {layers.length > 0 && (
               <span className="text-[9.5px] font-bold px-1 rounded-full bg-white/20">{layers.length}</span>
             )}
-          </button>
+          </button>}
 
           <button data-plan-download onClick={() => { setDlMode('download'); setDlMarkup(true); setDlStep('what'); }} title={s.dlTitle}
             className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[12px] font-semibold text-white/85 hover:bg-white/10">

@@ -5,7 +5,7 @@ import { createServer } from 'vite';
 let fails = 0;
 const check = (ok, l, extra = '') => { console.log(`${ok ? 'PASS' : 'FAIL'} ${l}${extra ? ' — ' + extra : ''}`); if (!ok) fails++; };
 const server = await createServer({ server: { middlewareMode: true }, logLevel: 'silent' });
-const { touchesOf, foldByJob, rankJobs, bookedThisWeek, copiedIn } = await server.ssrLoadModule('/src/data/activityTouches.ts');
+const { touchesOf, foldByJob, rankJobs, bookedThisWeek, copiedIn, isAppAccount } = await server.ssrLoadModule('/src/data/activityTouches.ts');
 
 const NOW = Date.parse('2026-09-07T12:00:00.000Z');
 const ago = (h) => new Date(NOW - h * 3600000).toISOString();
@@ -76,6 +76,14 @@ check(foldByJob(touches, NOW, 30, 'notebook').size === 1, 'the Notebook chip kee
 // Booked this week (Sun 6 Sep – Sat 12 Sep around the 7th)
 const bk = bookedThisWeek(src.assignments, src.contractors, NOW);
 check(bk.get('C')?.who === 'Yossi' && bk.get('C')?.day === '2026-09-08' && !bk.has('A'), 'C is booked this week (Yossi, Monday); A\'s task is closed so it is not', JSON.stringify([...bk]));
+
+// The app's own service account copying a worker's photos into Drive is not
+// somebody working on the job (owner's recording, 2026-10-11).
+const svc = touchesOf({ ...src, drive: { FA: { at: ago(0.2), name: 'x.jpg', who: 'wolfson-drive-uploader@proj.iam.gserviceaccount.com',
+  touches: [{ at: ago(0.2), name: 'x.jpg', who: 'wolfson-drive-uploader@proj.iam.gserviceaccount.com' }, { at: ago(0.3), name: 'q.pdf', who: 'Moshe' }] } } }, NOW, 30)
+  .filter(t => t.jobId === 'A' && t.kind === 'drive');
+check(svc.length === 1 && svc[0].who === 'Moshe', 'the app\'s own Drive uploads are not activity; a person\'s change still is', JSON.stringify(svc.map(t => t.who)));
+check(isAppAccount('x@y.iam.gserviceaccount.com') && !isAppAccount('Moshe') && !isAppAccount(undefined), 'isAppAccount');
 
 await server.close();
 console.log(fails ? `\n${fails} FAILED` : '\nALL PASS');

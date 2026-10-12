@@ -10,7 +10,11 @@ ask built or answered) · **not this app** (a recording of another project — r
 
 | # | File | Drive id | Length | Status | Feedback doc |
 |---|------|----------|--------|--------|--------------|
-| 1 | Recording 2026-10-05 161656.mp4 (255.6 MB, 1920×1032, 30 fps) | `13UzMSOoZvfNIEcbMTlTou3rlL8Kt3AgP` | 7:57 | open (built; the "Next:" cue asked again) | [2026-10-05-161656.md](2026-10-05-161656.md) |
-| 2 | Recording 2026-10-08 115349.mp4 (377.7 MB, 1918×1078) | `1mXL9Ar00bQ-lATsxCZtZPomZa7qJdgQU` | 14:01 | open (built; the notebook card look waits for his pick) | [2026-10-08-115349.md](2026-10-08-115349.md) |
+| 1 | Recording 2026-10-05 161656.mp4 (255.6 MB, 1920×1032, 30 fps) | `13UzMSOoZvfNIEcbMTlTou3rlL8Kt3AgP` | 7:57 | done (the "Next:" cue settled 2026-10-08) | [2026-10-05-161656.md](2026-10-05-161656.md) |
+| 2 | Recording 2026-10-08 115349.mp4 (377.7 MB, 1918×1078) | `1mXL9Ar00bQ-lATsxCZtZPomZa7qJdgQU` | 14:01 | done (his pick A built) | [2026-10-08-115349.md](2026-10-08-115349.md) |
+| 3 | Screen Recording 2026-10-11 115320.mp4 | `1g4mAigUatvsMe642EgpDwJvFhhNm5uoZ` | 0:38 | done | [2026-10-11-115320.md](2026-10-11-115320.md) |
+| 4 | Screen Recording 2026-10-11 115854.mp4 | `1qCrfzvlG4eHs6QIIUJKQUhAp8DP5AQa-` | 4:34 | open (one ask waits for his word) | [2026-10-11-115854.md](2026-10-11-115854.md) |
+| 5 | Screen Recording 2026-10-11 120334.mp4 | `1dlswvi0o__JprF7JcVvbtwukjarQgUYF` | 1:55 | open (the calendar redesign waits for a plan) | [2026-10-11-120334.md](2026-10-11-120334.md) |
+| 6 | Screen Recording 2026-10-11 120729.mp4 | `1FPELWebt6VHzgLIBDEB1mfPnujgl46nW` | 1:43 | done | [2026-10-11-120729.md](2026-10-11-120729.md) |
 
-Folder last listed: 2026-10-08 (two files).
+Folder last listed: 2026-10-12.

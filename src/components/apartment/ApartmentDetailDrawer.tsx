@@ -32,10 +32,11 @@ import { DeleteImpact } from '../ui/DeleteImpact';
 import { LinkField } from '../ui/LinkField';
 import { LinkSection } from './LinkSection';
 import { photoSrcOf } from '../../data/photoSrc';
+import { shotKindOf } from '../../data/sitePhotos';
 import { printSheet, printEsc } from '../../data/printing';
 import { PlanAddressSuggest } from './PlanAddressSuggest';
 import { StagePicker } from './StagePicker';
-import { isWorkStage, progressOf, taskStageIds } from '../../data/stageMarks';
+import { isWorkStage, progressOf, taskStageIds, recordStageIds } from '../../data/stageMarks';
 import { ProblemForm } from './ProblemForm';
 import { ProblemBand } from './ProblemBand';
 import { problemState } from '../../data/problems';
@@ -106,6 +107,9 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
     contractorNotes, addContractorNote } = useStore();
   const isGeneralProject = currentProjectId === 'general';
   const tipusim = useStore(st => st.boardSettings[st.currentProjectId]?.tipusim ?? EMPTY_TIPUSIM);
+  // Who approved the plan, read LIVE — the board hands the drawer the record
+  // captured at open, so an approval pressed a moment ago would not show.
+  const plansApprovedBy = useStore(st => st.apartments.find(a => a.id === apartment?.id)?.plansApprovedBy);
   const backendConfigured = isUploadBackendConfigured();
 
   /**
@@ -926,13 +930,43 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
       priority: task.priority ?? '',
     });
     setDrawerEditAttachments(task.attachments ?? []);
-    setDrawerEditIds(taskStageIds(task));
+    // A finished task shows the stages its close says were worked — the same
+    // story its done card tells (owner's recording, 2026-10-11).
+    setDrawerEditIds(recordStageIds(task));
     setDrawerEditDays(daysOf(task));
     setDrawerDaysEpoch(e => e + 1);
   }
 
   function saveTaskEdit() {
     if (!drawerEditingTaskId) return;
+    const before = contractorAssignments.find(x => x.id === drawerEditingTaskId);
+    // A FINISHED task re-pointed at other stages takes its record with it:
+    // the close's stages, the pictures filed under the old stage, and the
+    // apartment's ticks (owner's recording, 2026-10-11: "the pictures also
+    // move with that bubble").
+    if (before?.completedAt && apartment) {
+      const oldIds = recordStageIds(before);
+      const nextIds = drawerEditIds;
+      const changed = oldIds.join('|') !== nextIds.join('|');
+      if (changed && nextIds.length) {
+        const unfinished = (before.stagesUnfinished ?? []).filter(id => nextIds.includes(id));
+        updateContractorAssignment(before.id, { stagesWorked: nextIds, stagesUnfinished: unfinished });
+        for (const p of contractorPhotos.filter(ph => ph.assignmentId === before.id)) {
+          if (!p.stageId || !nextIds.includes(p.stageId)) updateContractorPhoto(p.id, { stageId: nextIds[0] });
+        }
+        const marks = { ...(apartment.stageMarks ?? {}) };
+        const others = contractorAssignments.filter(x => x.id !== before.id && x.apartmentId === apartment.id && x.completedAt);
+        for (const id of oldIds) {
+          if (nextIds.includes(id) || marks[id] !== 'done') continue;
+          if (!others.some(o => recordStageIds(o).includes(id))) marks[id] = 'todo';
+        }
+        for (const id of nextIds) {
+          if (marks[id] === 'off') continue;
+          marks[id] = unfinished.includes(id) ? 'pending' : 'done';
+        }
+        if (currentUser) setApartmentMarks(apartment.id, marks, currentUser);
+      }
+    }
     updateContractorAssignment(drawerEditingTaskId, {
       taskDescription: drawerEditFields.taskDescription,
       // The whole run, not just the last day — the model's standing rule.
@@ -1215,7 +1249,7 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
     if (!currentUser) return;
     const link = `https://drive.google.com/file/d/${file.id}/view`;
     setPlansPdfLink(link);
-    updateApartment(apartment!.id, { plansPdfLink: link }, currentUser);
+    updateApartment(apartment!.id, { plansPdfLink: link, plansApprovedBy: currentUser.name, plansApprovedAt: new Date().toISOString() }, currentUser);
     onToast(ui.planStarredToast);
   }
 
@@ -1460,7 +1494,12 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
               onStarPlan={starPlan}
               starredPlanId={shownStarId}
               starAuto={autoPlan && !starredPlanId}
-              autoPlanNote={autoPlan ? ui.planAutoPicked : undefined}
+              autoPlanNote={autoPlan ? ui.planAutoAsk : undefined}
+              autoPlanYesLabel={ui.planAutoYes}
+              autoPlanOtherLabel={ui.planAutoOther}
+              onConfirmAutoPlan={autoPlan && detectedPdfId ? () => starPlan({ id: detectedPdfId }) : undefined}
+              approvedNote={!autoPlan && starredPlanId && fileId === starredPlanId && plansApprovedBy
+                ? ui.planApprovedBy.replace('{who}', plansApprovedBy) : undefined}
               /*
                 Plans is the chooser now, so what it picks has to land back
                 here. The rule the chip row carried is kept exactly: only an
@@ -2078,7 +2117,9 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                   const rows: NoteRow[] = [
                     ...entries.map<NoteRow>(e => ({ kind: 'text', id: e.id, at: e.at, who: e.byName, text: e.text })),
                     ...aptFiles.map<NoteRow>(f => ({ kind: 'file', id: f.id, at: f.uploadedAt, who: f.uploadedByName, file: f })),
-                  ].sort((x, y) => x.at.localeCompare(y.at));
+                  // Newest on top (owner's recording, 2026-10-11: "this should be
+                  // on top, not top to bottom").
+                  ].sort((x, y) => y.at.localeCompare(x.at));
                   const when = (iso: string) => { try { return format(new Date(iso), 'd MMM'); } catch { return ''; } };
                   const whenLong = (iso: string) => { try { return format(new Date(iso), 'd MMM · HH:mm'); } catch { return ''; } };
                   const openLightbox = (f: typeof aptFiles[number]) => {
@@ -2092,11 +2133,13 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                     setLightbox({ items, index: Math.max(0, items.findIndex(it => it.filename === f.filename && it.fileId === (f.driveFileId ?? ''))) });
                   };
                   return (
-                    <div className="border rounded-xl px-3 pt-3 pb-3 space-y-3 bg-white" style={{ borderColor: '#e5e7eb' }}>
+                    <div className="border rounded-xl px-3 pt-2 pb-3 space-y-3" style={{ borderColor: '#d8dee8', backgroundColor: '#fbfcfe' }} data-general-notes-box>
                       {rows.length > 0 && (
-                        <ul className="space-y-1.5" data-general-bullets>
+                        // Room to read, and a quiet line between notes so one ends
+                        // where the next begins (owner's recording, 2026-10-11).
+                        <ul className="divide-y divide-gray-200/80 max-h-[320px] min-h-[96px] overflow-y-auto" data-general-bullets>
                           {rows.map(r => (
-                            <li key={r.id} data-general-bullet className="group/gn flex items-start gap-2 text-[13px] leading-snug text-gray-800">
+                            <li key={r.id} data-general-bullet className="group/gn flex items-start gap-2 text-[13px] leading-snug text-gray-800 py-2">
                               <span className="w-1.5 h-1.5 rounded-full mt-2 flex-shrink-0" style={{ backgroundColor: '#1e3a5f' }} />
                               <div className="min-w-0 flex-1">
                                 {r.kind === 'text' ? (
@@ -2507,7 +2550,7 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                       .filter((s): s is NonNullable<typeof s> => !!s);
                     const movedTo = done && a.stageWhenDone && !workedIds.includes(a.stageWhenDone)
                       ? stages.find(s => s.id === a.stageWhenDone) : undefined;
-                    const photoCount = done ? contractorPhotos.filter(p => p.assignmentId === a.id).length : 0;
+                    const photoCount = done ? contractorPhotos.filter(p => p.assignmentId === a.id && !!shotKindOf(p)).length : 0;
                     return (
                       <div key={a.id} data-task-card={a.id} data-task-lit={litTaskId === a.id ? '1' : undefined}
                         data-task-done={done ? '1' : undefined}
@@ -2531,20 +2574,40 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                             }
                           </button>
                           <div className="flex-1 min-w-0">
-                            {done && (
-                              <div className="mb-1.5">
-                                <span data-task-done-badge
-                                  className="inline-flex items-center gap-1.5 px-2 py-1 rounded-full text-[11.5px] font-bold text-white max-w-full"
-                                  style={{ backgroundColor: '#16a34a' }}>
-                                  <CheckCircle2 size={13} className="flex-shrink-0" />
-                                  <span className="min-w-0 truncate">
-                                    {ui.taskDoneWord} · {closedWhen(a.completedAt!)} · {closerOf(a)}
-                                  </span>
-                                </span>
-                              </div>
-                            )}
+                            {done && (() => {
+                              // Who first, then one plain sentence (owner's recording,
+                              // 2026-10-11: "Igor should be on top… say Igor finished
+                              // this task on Monday… and uploaded four photos — talk
+                              // like a good CRM").
+                              const who = closerOf(a);
+                              const he = ui.isRtl;
+                              const d = new Date(a.completedAt!);
+                              const day = (() => { try { return format(d, 'EEEE d MMM', he ? { locale: heLocale } : undefined); } catch { return ''; } })();
+                              const time = (() => { try { return format(d, 'HH:mm'); } catch { return ''; } })();
+                              const fin = doneStages.filter(st => !unfinishedIds.includes(st.id)).map(st => getStageName(st, he));
+                              const half = doneStages.filter(st => unfinishedIds.includes(st.id)).map(st => getStageName(st, he));
+                              const list = (xs: string[]) => xs.length <= 1 ? (xs[0] ?? '') : `${xs.slice(0, -1).join(', ')} ${he ? 'ו' : 'and '}${xs[xs.length - 1]}`;
+                              const what = fin.length ? list(fin) : (he ? 'את המשימה' : 'the task');
+                              const sentence = he
+                                ? `${who} סיים ${what} ב${day} בשעה ${time}${half.length ? `, והשאיר ${list(half)} בחצי` : ''}${photoCount ? ` ושלח ${photoCount === 1 ? 'תמונה אחת' : `${photoCount} תמונות`}` : ''}.`
+                                : `${who} finished ${what} on ${day} at ${time}${half.length ? `, and left ${list(half)} half done` : ''}${photoCount ? ` and sent ${photoCount === 1 ? 'one photo' : `${photoCount} photos`}` : ''}.`;
+                              return (
+                                <div className="mb-1.5">
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <span data-task-done-who className="text-[14px] font-extrabold text-[#1e3a5f]">{who}</span>
+                                    <span data-task-done-badge
+                                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold text-white"
+                                      style={{ backgroundColor: '#16a34a' }}>
+                                      <CheckCircle2 size={12} className="flex-shrink-0" />
+                                      {ui.taskDoneWord} · {closedWhen(a.completedAt!)}
+                                    </span>
+                                  </div>
+                                  <p data-task-done-sentence className="m-0 mt-1 text-[13px] leading-snug text-gray-800">{sentence}</p>
+                                </div>
+                              );
+                            })()}
                             <div className="flex items-center gap-1.5 flex-wrap mb-0.5">
-                              {contractor && (
+                              {contractor && !done && (
                                 <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full"
                                   style={{ backgroundColor: (CAT_COLORS[contractor.category] ?? '#888') + '22', color: CAT_COLORS[contractor.category] ?? '#888' }}>
                                   {contractor.name}
@@ -3075,8 +3138,12 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                       </h4>
                       <div className="grid grid-cols-3 gap-1.5">
                         {g.tiles.map(t => {
-                          const isImg = t.mimeType.startsWith('image/');
-                          const isVid = t.mimeType.startsWith('video/');
+                          // The kind by the file's NAME (Drive's mime lies) — a
+                          // memo drawn as a grey file card read as a broken file.
+                          const kind = mediaKindOf(t.filename, t.mimeType);
+                          const isImg = kind === 'image';
+                          const isVid = kind === 'video';
+                          const isMemo = kind === 'audio';
                           return (
                             <div
                               key={t.key}
@@ -3101,6 +3168,14 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                                     </span>
                                   </div>
                                   <span className="absolute bottom-0.5 inset-x-0 text-center text-white text-[9px] opacity-70 truncate px-1">{t.filename}</span>
+                                </div>
+                              ) : isMemo ? (
+                                <div data-photo-memo className="w-full h-full flex flex-col items-center justify-center px-1 text-white"
+                                  style={{ background: 'linear-gradient(135deg, #1e3a5f, #2c4f78)' }}>
+                                  <span className="w-9 h-9 rounded-full flex items-center justify-center" style={{ backgroundColor: 'rgba(255,255,255,.16)' }}>
+                                    <Mic size={18} />
+                                  </span>
+                                  <span className="text-[11px] font-bold mt-1.5">{ui.photoTabMemo}</span>
                                 </div>
                               ) : (
                                 <div className="w-full h-full flex flex-col items-center justify-center bg-blue-50 px-1">

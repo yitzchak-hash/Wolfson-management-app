@@ -177,14 +177,15 @@ const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromi
       { id: 'PDF-new', name: 'Ground floor rev B.pdf', mimeType: 'application/pdf', modifiedTime: '2026-09-10T10:00:00.000Z' },
     ],
   };
-  const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+  const fetched = [];
+  const mk = async () => {
+    const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
   await ctx.route('**/api/**', r => r.fulfill({ json: {} }));
   await ctx.route('**/api/drive-files', r => {
     const body = r.request().postDataJSON();
     if (body.metaOnly) return r.fulfill({ json: { folder: { id: body.folderId, name: body.folderId === 'F-root' ? 'Planned, Family - 2' : 'Engineered Plans', mimeType: FOLDER }, files: [] } });
     return r.fulfill({ json: { files: LISTING[body.folderId] ?? [] } });
   });
-  const fetched = [];
   await ctx.route('**/api/drive-fetch', r => { fetched.push(r.request().postDataJSON()?.fileId); r.fulfill({ body: PLAN, contentType: 'application/pdf' }); });
   await ctx.route('**/api/share', r => r.fulfill({ json: { ok: true } }));
   await ctx.route('**drive.google.com/**', r => r.abort());
@@ -203,6 +204,9 @@ const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromi
       canvasElements: [],
     }));
   }, [USER]);
+    return ctx;
+  };
+  const ctx = await mk();
   const page = await ctx.newPage();
   page.on('pageerror', e => { console.log('PAGE ERROR', e.message); fails++; });
   await page.goto('http://localhost:5174/jobs');
@@ -228,6 +232,31 @@ const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromi
   await page.waitForTimeout(600);
   check(await page.locator('[data-plan-auto-warning]').count() === 0, 'and the red bubble is gone — a person chose');
   await ctx.close();
+
+  // The calm question (owner, 2026-10-11 video 5): "Is this the right plan? Yes",
+  // then "Plan approved by …".
+  const ctx2 = await mk();
+  const p2 = await ctx2.newPage();
+  await p2.goto('http://localhost:5174/jobs');
+  await p2.waitForTimeout(2500);
+  await p2.locator('[data-node-id="G-plan"]').dblclick();
+  await p2.locator('[data-plan-auto-yes]').first().waitFor({ state: 'visible', timeout: 15000 }).catch(() => {});
+  const ask = await p2.locator('[data-plan-auto-warning]').first().innerText().catch(() => '');
+  check(/Is this the right plan\?/.test(ask) && /Yes/.test(ask), 'the bubble asks "Is this the right plan? Yes"', ask.replace(/\n/g, ' '));
+  const askBg = await p2.locator('[data-plan-auto-warning]').first().evaluate(e => getComputedStyle(e).backgroundColor).catch(() => '');
+  check(!/rgb\(2[0-5]\d, [0-9]{1,2}, [0-9]{1,2}\)/.test(askBg), 'and it is not red', askBg);
+  await p2.locator('[data-plan-auto-yes]').first().click();
+  await p2.waitForTimeout(900);
+  const rec = await p2.evaluate(() => JSON.parse(localStorage.getItem('general_app_data')).apartments[0]);
+  check(!!rec.plansPdfLink && rec.plansPdfLink.includes('PDF-new') && !!rec.plansApprovedBy,
+    'Yes stars the shown plan and records who approved it', `${rec.plansPdfLink} · ${rec.plansApprovedBy}`);
+  await p2.locator('[data-plan-approved]').first().waitFor({ state: 'visible', timeout: 5000 }).catch(() => {});
+  const appr = await p2.locator('[data-plan-approved]').first().innerText().catch(() => '');
+  check(/approved by/i.test(appr), 'the plan then says "Plan approved by …"', appr);
+  check(await p2.locator('[data-plan-auto-warning]').count() === 0, 'and the question is gone');
+  check(await p2.locator(`button[title="Show or hide the plan's own layers"]`).count() === 0,
+    'a plan with no layers of its own (and no markup) offers no Layers button');
+  await ctx2.close();
 }
 
 // ─────────────────────────── C · the office rings ───────────────────────────

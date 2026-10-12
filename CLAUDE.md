@@ -9665,3 +9665,89 @@ is PURE in `src/data/notFinished.ts` (offline test
 Harness: `scratchpad/notfinished-probe.mjs` (30 — Russian phone, Thursday-style
 come-back day, marks, the message, morning No/Yes, needs-a-new-day on card and
 tile, the office's button).
+
+---
+
+# v2 — the four recordings of 11 Oct (2026-10-12): read what was reported, start on what is next
+
+## `recordStageIds(t)` — a finished task is what was REPORTED (stageMarks.ts)
+A closed task's stages are `stagesWorked` when the close named them, else
+`taskStageIds`. Igor closed a task made for Concealed Units + Fans as
+Registers: the done card read the report, while the Notes tab, the edit form
+and the notebook read what the task was made for — "finished here but not
+here". Every reader of a CLOSED task goes through `recordStageIds` (the notes
+tab's bullets and task list, the stage's worker lookup for closed tasks, the
+notebook tile's `stagesOn`, the busy-day popup, the drawer editor's seed); an
+OPEN task still reads `taskStageIds`. Four closed tasks in production carry
+the split (A3 12, A3 17, A2 9, A2 27) — display only, no record rewritten.
+
+**Editing a finished task's stages** (`saveTaskEdit` in the drawer) writes
+`stagesWorked` (+ a filtered `stagesUnfinished`), retags that task's photos to
+the first new stage, and moves the unit's marks through `setApartmentMarks`:
+a stage dropped goes back to to-do unless another closed task explains it; a
+stage added goes done (or pending when it was left unfinished); `off` is
+never touched.
+
+## `nextStageToDo(apt, sortedStages, ctx)` — a new task's default stage
+A building unit's headline is its LAST stage done, so defaulting a new task to
+the headline made a Piping task "on Drilling". Every task form (quick-add, the
+Tasks page, the notebook's dialog) now defaults to the first stage of the
+set that is neither done nor off, else the headline.
+
+## The busy-day bundle, in plain words (TaskBundle.tsx)
+- The tile: the workspace name on top, then one `data-bundle-bld` line per
+  building, "A2 · 3 apartments" (`nbBundleUnits` / `nbBundleUnit`, three
+  languages); stage pills WRAP (`StagePill wrap`), never cut; the count is
+  every stage of every task, not each task's first.
+- The popup's rows: `data-bundle-stage[data-state=done|half|open]` bubbles
+  (a closed task: half when left unfinished, else done; an open one: the
+  unit's own mark), one `data-bundle-row-plain` line ("Finished X · doing A,
+  B and C"), only the office's own words (`data-bundle-row-words` — a
+  stage report's "… working here today" is never shown), up to three
+  thumbnails (`data-bundle-row-photos`; two plus `data-bundle-thumb-more`
+  when more) opening the `MediaViewer`, rendered inside the popup's portal.
+- The notebook tile's day count is its own line (`data-bar-days-count`) and
+  the address is a `<bdi dir="auto">`: a Hebrew address and "2 days" on one
+  line were reordered by the browser into "15\4 days".
+
+## The window
+- `LinkSection` (Drive / Zoho) is FOLDED unless this machine opened it
+  (`drawer_fold_<id>` === '1').
+- General notes: newest first, a light `data-general-notes-box`, a divider
+  between notes.
+- The done card leads with `data-task-done-who`, then the badge, then
+  `data-task-done-sentence` ("Igor finished Registers on Monday 5 Oct at 16:29
+  and sent 4 photos."). Its photo count counts pictures and films only
+  (`shotKindOf`) — a memo is not a photo.
+- The Photos tab decides a tile's kind with `mediaKindOf` (never the raw
+  mime); a voice memo is a navy `data-photo-memo` tile (`photoTabMemo`), not
+  a grey file card.
+- **The guessed plan asks calmly**: `PlanAnnotator` takes `autoPlanNote` +
+  `autoPlanYesLabel` / `autoPlanOtherLabel` / `onConfirmAutoPlan`
+  (`data-plan-auto-warning` → `data-plan-auto-yes` / `data-plan-auto-other`)
+  and `approvedNote` (`data-plan-approved`). `starPlan` writes
+  `Apartment.plansApprovedBy` / `plansApprovedAt`. **The approver is read
+  LIVE from the store**, not off the `apartment` prop — the board hands the
+  drawer the record captured at open, so the line never appeared after Yes
+  (round43-probe caught it).
+- Layers renders only when the plan has layers of its own or ink layers.
+
+## Elsewhere
+- `StagePairPill` draws bubbles (done ticked), never arrows; a legacy
+  `stageWhenDone` reads "then X". `taskPlainSentence` gives the Tasks page's
+  `data-task-plain` line.
+- `ProjectCalendarPage`: `data-calendar-scope` (here | all, default all,
+  `calendar_scope` per machine) plots every workspace from
+  `loadAllProjectsTaskData()` in its colour; `TaskCalendar.onAddDay` draws a
+  `data-cal-add` "+" per day → `/tasks` with `state.addDate`, which opens the
+  add form on that date once (`addDateDone` ref — the history state is never
+  rewritten, it carries the workspace stamp).
+- `isAppAccount(who)` (activityTouches.ts): a `gserviceaccount.com` editor is
+  the app's own uploads, never activity.
+
+Harness: `scratchpad/round49-probe.mjs` (28) · round43-probe grew the calm
+plan question, the live approver and the hidden Layers · drawer-r48 grew the
+memo tile and the folded-by-default rule · re-encoded: notebooktile-probe
+(apartment counts), multiday (the next stage arrives picked), round40-probe
+(notes newest first). Standing reds unchanged: round40's "a passed stage is
+crossed off".

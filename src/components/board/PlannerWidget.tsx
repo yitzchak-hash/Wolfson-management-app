@@ -11,7 +11,7 @@ import {
   announceNotebookDrag, quickBoxHover, quickBoxTake,
 } from '../../data/rotaDrop';
 import { daysOf, dayNumberOf, workingRun } from '../../data/taskDays';
-import { progressOf, StageProgress, taskStageIds } from '../../data/stageMarks';
+import { progressOf, StageProgress, taskStageIds, recordStageIds } from '../../data/stageMarks';
 import { familyNameFromFolderName } from '../../data/driveApi';
 import { needsNewDay, unfinishedOn } from '../../data/notFinished';
 import { unfinishedWords } from '../tasks/NotFinishedSheet';
@@ -928,7 +928,7 @@ export function PlannerWidget({
       const tail = head ? (apt?.displayName?.trim() || '') : '';
       const noName = !!building && !!apt && (!apt.displayName?.trim() || apt.displayName.trim() === String(apt.apartmentNumber ?? '').trim());
       const stl = stagesFor(pid);
-      const stagesOn = taskStageIds(a).map(id => stl.find(st => st.id === id)).filter((x): x is Stage => !!x);
+      const stagesOn = recordStageIds(a).map(id => stl.find(st => st.id === id)).filter((x): x is Stage => !!x);
       // A report the worker started himself carries words the APP wrote
       // ("Drilling — working here today"); the stage pills already say that.
       const rawDesc = (a.taskDescription ?? '').trim();
@@ -1008,18 +1008,25 @@ export function PlannerWidget({
         // Where the flats are — every building named, each with its floors —
         // and how many tasks sit on each stage, in the workspace's own order.
         const byBld = new Map<string, string[]>();
+        const unitsBy = new Map<string, Set<string>>();
         for (const bar of items) {
           if (!bar.building) continue;
           const fl = byBld.get(bar.building) ?? [];
           if (bar.floorNo) fl.push(bar.floorNo);
           byBld.set(bar.building, fl);
+          const us = unitsBy.get(bar.building) ?? new Set<string>();
+          if (bar.jobId) us.add(bar.jobId);
+          unitsBy.set(bar.building, us);
         }
         const stageCount = new Map<string, { stage: Stage; count: number }>();
+        // Every stage a task is on counts (owner's recording, 2026-10-11: a
+        // task on Piping + Concealed Units + Fans read "Piping 1" alone).
         for (const bar of items) {
-          const st = bar.stagesOn[0] ?? bar.stageFrom;
-          if (!st) continue;
-          const hit = stageCount.get(st.id);
-          if (hit) hit.count++; else stageCount.set(st.id, { stage: st, count: 1 });
+          const sts = bar.stagesOn.length ? bar.stagesOn : (bar.stageFrom ? [bar.stageFrom] : []);
+          for (const st of sts) {
+            const hit = stageCount.get(st.id);
+            if (hit) hit.count++; else stageCount.set(st.id, { stage: st, count: 1 });
+          }
         }
         const drop = new Set(items);
         const kept = list.filter(bar => !drop.has(bar));
@@ -1035,7 +1042,7 @@ export function PlannerWidget({
             workspace: proj ? projectShortName(proj, LT === 'he-IL', proj.name) : wsPid,
             color: projectColor(projects, wsPid), done: bundleItems.filter(it => it.done).length,
             day: first.days[0],
-            buildings: [...byBld.entries()].sort((x, y) => x[0].localeCompare(y[0])).map(([id, floors]) => ({ id, floors })),
+            buildings: [...byBld.entries()].sort((x, y) => x[0].localeCompare(y[0])).map(([id, floors]) => ({ id, floors, units: unitsBy.get(id)?.size ?? 0 })),
             stages: [...stageCount.values()].sort((x, y) => x.stage.order - y.stage.order),
           },
         });
@@ -2203,8 +2210,11 @@ function TaskBar({ bar, z, size, strip, readOnly, isRtl, lang, onOpen, onDropTo,
     // Each piece stays whole ("Floor 1" never splits); only the address wraps.
     if (bar.building) whereBits.push(<span key="b" data-bar-building className="whitespace-nowrap" style={{ fontWeight: 700, color: '#334155' }}>{bar.building}</span>);
     if (bar.floorNo) whereBits.push(<span key="f" className="whitespace-nowrap">{floorWord(lang, bar.floorNo)}</span>);
-    if (bar.address) whereBits.push(<span key="a">{bar.address}</span>);
-    if (total > 1) whereBits.push(<span key="d" className="whitespace-nowrap">{words3(`${total} days`, `${total} ימים`, `${total} дн.`)}</span>);
+    // A Hebrew address keeps its OWN direction (<bdi>): set beside "2 days"
+    // the browser reordered the two into "2 · 15\4 days" (owner's recording,
+    // 2026-10-11: "I don't know what 15 out of 4 days is"). The day count is
+    // its own line now, never glued to the address.
+    if (bar.address) whereBits.push(<bdi key="a" dir="auto">{bar.address}</bdi>);
     const showWhere = !!bar.workspace || whereBits.length > 0;
     return (
       <div
@@ -2299,9 +2309,16 @@ function TaskBar({ bar, z, size, strip, readOnly, isRtl, lang, onOpen, onDropTo,
             <span className="break-words min-w-0">
               {bar.workspace && <b data-bar-workspace style={{ color: '#7c3aed', fontWeight: 700 }}>{bar.workspace}</b>}
               {whereBits.map((node, i) => (
-                <React.Fragment key={i}>{bar.workspace || i > 0 ? ' · ' : ''}{node}</React.Fragment>
+                <React.Fragment key={i}>{bar.workspace || i > 0 ? ' · ' : ''}<bdi>{node}</bdi></React.Fragment>
               ))}
             </span>
+          </div>
+        )}
+        {total > 1 && (
+          <div data-bar-days-count={total} className="flex items-center whitespace-nowrap"
+            style={{ fontSize: small, color: '#6b7280', gap: Math.max(2, z(3)), marginTop: Math.max(1, z(2)), lineHeight: 1.25 }}>
+            <CalendarDays size={Math.max(8, Math.round(z(10)))} className="flex-shrink-0" style={{ color: '#94a3b8' }} />
+            {words3(`${total} days`, `${total} ימים`, `${total} дн.`)}
           </div>
         )}
         {editable && (
