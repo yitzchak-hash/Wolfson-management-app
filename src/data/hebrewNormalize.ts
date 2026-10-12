@@ -130,3 +130,21 @@ export function digitsOf(raw: string): string {
 export function hasHebrew(raw: string): boolean {
   return /[֐-׿]/.test(raw ?? '');
 }
+
+/**
+ * A Hebrew query SPELLED in Latin letters, letter by letter: "אא" → "aa",
+ * "כהן" → "khn". The owner typed "אא" for a job called "AA …" and the
+ * search found nothing (recording, 2026-10-12) — the keyboard-layout swap
+ * reads those keys as "tt", and the sound key drops vowels, so neither door
+ * led to "AA". This one does: the letters a Hebrew speaker would use to
+ * write the Latin name.
+ */
+const HE_SPELL: Record<string, string> = {
+  'א': 'a', 'ב': 'b', 'ג': 'g', 'ד': 'd', 'ה': 'h', 'ו': 'v', 'ז': 'z', 'ח': 'ch', 'ט': 't',
+  'י': 'y', 'כ': 'k', 'ך': 'k', 'ל': 'l', 'מ': 'm', 'ם': 'm', 'נ': 'n', 'ן': 'n', 'ס': 's',
+  'ע': 'a', 'פ': 'p', 'ף': 'f', 'צ': 'tz', 'ץ': 'tz', 'ק': 'k', 'ר': 'r', 'ש': 'sh', 'ת': 't',
+};
+export function spellHebrew(raw: string): string {
+  return [...raw].map(ch => HE_SPELL[ch] ?? ch).join('');
+}
+

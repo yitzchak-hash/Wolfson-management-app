@@ -141,6 +141,17 @@ Seen, not said (video 2): a fresh worker phone could crash when his record arriv
 Seen, not said (video 7): a right-click on a worker's name opened the board's menu (**Done** — it opens
 his own menu) · the Tasks page read "G · Apt <name>" for a Job Board job (**Done**).
 
+### Video 8 — Recording 2026-10-12 144059 ([feedback doc](2026-10-12-144059.md))
+| # | Time | Ask | Status | Proof |
+|---|------|-----|--------|-------|
+| V8-1 | 0:32 | "אא" finds the "AA …" job | Done | `spellHebrew` · searchindex-test |
+| V8-2 | 0:38 | AI search as a fallback (Opus 5.5) | Waiting | needs his word + an Anthropic key |
+| V8-3 | 1:39 | Two bars over a previewed plan, not three | Done | planarrows-probe |
+| V8-4 | 1:53 | A React error after a double-click | Answered | not reproduced (planarrows-probe); copy the details next time |
+| V8-5 | 2:30 | The plan freezes / jumps while zooming | Done (lessened) | 16 MP cap, 280ms settle |
+| V8-6 | 2:51 | Arrows on hover to walk the folder's plans | Done | `data-plan-prev/next` · planarrows-probe |
+| V8-7 | 2:55 | Keep the folder's plans ready, drop them when closed | Done | `prefetchPlans` from the preview |
+
 Seen, not said (videos 3–6): the busy-day tile counted only each task's first stage (**Done**) · a voice
 memo drawn as a grey file card in the Photos tab, and counted as a photo (**Done**) · thread pictures
 read "tap to open" while loading (left as a loading state) · four closed tasks in production whose

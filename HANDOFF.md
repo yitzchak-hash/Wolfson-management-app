@@ -64,7 +64,18 @@ with starred recommendations is published first; the owner says "approved" /
 "all yes" / answers by number; then it is built. Never build a redesign
 unasked.
 
-## Where things stand (2026-10-12, latest — recording 14:17 worked: a calmer notebook)
+## Where things stand (2026-10-12, latest — recording 14:40 worked: plans and search)
+A second new recording, "Recording 2026-10-12 144059" (3:40), ledger row 8, feedback doc
+`docs/feedback/2026-10-12-144059.md`, checklist V8-1…V8-7.
+- Built: "אא" finds "AA …" (`spellHebrew`); two bars over a previewed plan; hover arrows walking the
+  folder's plans with background prefetch; viewer raster 16 MP + 280ms settle.
+- Waiting on him: the AI search fallback ("Opus 5.5") — needs an Anthropic key in Vercel; and the
+  office's "list of who's waiting for Geves" seen in the chat on screen.
+- Not reproduced: the React error he saw before recording (asked him to press Copy next time).
+- Probes: planarrows-probe (11) new; planbrowser, planviewer, planzoom, planlayers, round43,
+  drawer-r48, plantabs, gsearch, searchtile, searchindex-test, hebnorm-test green.
+
+## Where things stand (2026-10-12 — recording 14:17 worked: a calmer notebook)
 After shipping the group-window menu (884be8b, live), the folder held a NEW recording,
 "Recording 2026-10-12 141731" (3:54) — logged as ledger row 7, feedback doc
 `docs/feedback/2026-10-12-141731.md`, checklist V7-1…V7-12, all Done/Answered.

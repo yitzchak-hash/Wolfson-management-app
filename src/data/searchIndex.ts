@@ -32,7 +32,7 @@ import {
   PlanAnnotation, PlanPin, OfficeNoteFile, Contractor, Stage,
   aptLabel, binKeyOf, binLabelOf,
 } from '../types';
-import { normalizeText, tokenize, soundKeys, digitsOf } from './hebrewNormalize';
+import { normalizeText, tokenize, soundKeys, digitsOf, hasHebrew, spellHebrew } from './hebrewNormalize';
 import { layoutSwap } from './translit';
 import { isLiveProblem } from './problems';
 import { progressOf } from './stageMarks';
@@ -705,6 +705,11 @@ export function searchIndex(index: Index, rawQuery: string, opts: SearchOpts = {
     const swapped = normalizeText(layoutSwap(text)).trim();
     const variants = [q];
     if (swapped !== q && swapped.replace(/[^\p{L}]/gu, '').length >= 2) variants.push(swapped);
+    // A Hebrew query spelled in Latin letters — "אא" finds "AA …".
+    if (hasHebrew(text)) {
+      const spelled = normalizeText(spellHebrew(text)).trim();
+      if (spelled !== q && spelled.replace(/[^\p{L}]/gu, '').length >= 2 && !variants.includes(spelled)) variants.push(spelled);
+    }
     const short = q.length < 3;
     const digitsOnly = /^\d+$/.test(q);
 

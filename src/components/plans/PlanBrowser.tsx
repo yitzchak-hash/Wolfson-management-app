@@ -267,8 +267,12 @@ export function PlanBrowser({
   /** `starredId` is the app's latest-activity guess, not a person's star. */
   starAuto?: boolean;
   onStar: (file: TileFile) => void;
-  /** Open this sheet in the pane, from THIS folder (named so Back can say where it goes). */
-  onPreview: (file: TileFile, folderName: string) => void;
+  /**
+   * Open this sheet in the pane, from THIS folder (named so Back can say
+   * where it goes) — with the folder's other sheets, so the pane can walk
+   * them with its arrows and keep them downloaded while it does.
+   */
+  onPreview: (file: TileFile, folderName: string, sheets: TileFile[]) => void;
   /**
    * Anything that is NOT a markable plan — a film, a picture, a memo, a
    * spreadsheet — opens in the host's full media viewer instead. Without
@@ -391,7 +395,10 @@ export function PlanBrowser({
               const open = film && onOpenMedia
                 ? () => onOpenMedia(tile, all)
                 : f.viewable
-                  ? () => onPreview(f, folder.name)
+                  ? () => onPreview(f, folder.name, all.filter(x => {
+                      const k = mediaKindOf(x.name, x.mimeType);
+                      return x.viewable && k !== 'image' && k !== 'video';
+                    }))
                   : onOpenMedia ? () => onOpenMedia(tile, all) : undefined;
               return (
                 <FileTile

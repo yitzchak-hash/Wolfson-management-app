@@ -9924,3 +9924,22 @@ owner's recording ("we're trying to declutter this thing").
 Harness: `scratchpad/round50-probe.mjs` (21). Re-encoded to the ruling: notebooktile-probe,
 notebooklabel-probe, round49-probe.
 
+---
+
+# v2 — the recording of 12 Oct 14:40: plans you walk through (2026-10-12)
+
+- **Two bars over a previewed plan.** The drawer's separate preview strip is gone: `data-preview-back`
+  (folder name, then a thin white line) leads `planControls()`'s first bar and `data-preview-star`
+  sits before Mark up (its words only from `xl`). Three navy rows read "way too weird".
+- **`PlanBrowser.onPreview(file, folderName, sheets)`** hands over the folder's sheets (viewable,
+  not picture/film). The drawer's preview draws `data-plan-prev` / `data-plan-next` arrows and a
+  `data-plan-sheet-count` "n / N" on hover (`group/pane`; the touch rule shows them) and
+  `prefetchPlans()` the others nearest-first — the plan cache's ref count already drops every copy
+  when the last viewer closes.
+- **Viewer raster cap 16 MP** (`MAX_PIXELS`, was 32) and the raster settles **280ms** after a
+  zoom (was 170) — pdf.js draws on the main thread, so the cap is the freeze.
+- **`spellHebrew()`** (hebrewNormalize): a Hebrew query is also searched spelled in Latin letters
+  ("אא" → "aa"), added as a variant in `searchIndex` beside the keyboard-layout swap.
+- The AI search fallback he asked for is NOT built — waiting on his word (needs an Anthropic key).
+Harnesses: `scratchpad/planarrows-probe.mjs` (11, keyed 5174) · searchindex-test grew the "אא" case.
+

@@ -6,6 +6,14 @@ have them). The v2 rebuild's original design record is the root
 `DECISIONS.md`; the rules and traps behind each decision are in `CLAUDE.md`
 by round. (Standing order 6, 2026-09-23.)_
 
+## 2026-10-12 (recording 14:40 — plans and search)
+- The plan preview keeps two bars: back-to-folder (and a thin line) leads the first bar, the
+  main-plan star sits before Mark up.
+- Hover arrows walk the folder's sheets; the folder's sheets prefetch while one is open; the plan
+  cache drops them when the last viewer closes.
+- The viewer's raster cap is 16 MP and it waits 280ms after zooming before redrawing.
+- Search tries a Hebrew query spelled in Latin letters.
+
 ## 2026-10-12 (recording 14:17 — declutter)
 - Notebook tiles: a building unit is "3/14 — family" (building digits / apartment). The floor, the
   address and the building chip are OFF the tile (supersedes 2026-10-05 "the building leads as a chip"

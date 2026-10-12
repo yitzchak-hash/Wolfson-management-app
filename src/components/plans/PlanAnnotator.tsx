@@ -1037,7 +1037,8 @@ function PlanEditor({
   const drawnAt = useRef<{ page: number; s: number } | null>(null);
   useEffect(() => {
     if (Math.abs(scale - raster) < 0.001) return;
-    const t = setTimeout(() => setRaster(scale), 170);
+    // 280ms: a run of wheel notches is ONE redraw, not one per pause.
+    const t = setTimeout(() => setRaster(scale), 280);
     return () => clearTimeout(t);
   }, [scale, raster]);
   /** Is the SHEET wider than it is tall? Decides the turn-your-phone hint. */
@@ -1596,7 +1597,10 @@ function PlanEditor({
      * AREA, because an A0 sheet at 400% times three is a canvas the browser
      * simply refuses to allocate, and a refused canvas is a blank plan.
      */
-    const MAX_PIXELS = 32e6;
+    // 16 MP, not 32 (owner's recording, 2026-10-12: a heavy commercial
+    // sheet at 200% "freezing a bit … jumpy"): pdf.js draws on the main
+    // thread, and halving the pixels halves every redraw a zoom asks for.
+    const MAX_PIXELS = 16e6;
     const want = Math.min(Math.max(window.devicePixelRatio || 1, 2), 3);
     const area = vp.width * vp.height;
     const dpr = Math.max(1, Math.min(want, Math.sqrt(MAX_PIXELS / Math.max(1, area))));

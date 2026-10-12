@@ -30,6 +30,29 @@ export interface WhatsNewEntry {
 
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    date: '2027-02-02',
+    title: 'Plans you can walk through',
+    items: [
+      {
+        title: 'Arrows between the plans in a folder',
+        body: 'Open a plan from a job\'s Drive folder and hover over it: arrows on the left and right walk '
+          + 'the folder\'s other plans, with "3 / 13" under them. The folder\'s plans download in the '
+          + 'background while you look, so the next one is ready, and they are dropped when you close.',
+        demo: 'list',
+      },
+      {
+        title: 'Two bars, not three',
+        body: 'Back-to-folder and "Make this the main plan" now sit in the plan\'s own top bar.',
+        demo: 'list',
+      },
+      {
+        title: 'Search reads Hebrew letters as English',
+        body: 'Typing "אא" now finds a job called "AA …". Big plans also redraw with less work when you zoom.',
+        demo: 'list',
+      },
+    ],
+  },
+  {
     date: '2027-02-01',
     title: 'A calmer notebook, a readable calendar',
     items: [

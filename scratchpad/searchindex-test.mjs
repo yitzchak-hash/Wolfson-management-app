@@ -17,6 +17,7 @@ const apartments = [
   job('G-8', 'Thrown away', { boardBin: 'trash' }),
   job('G-9', 'Done one', { boardBin: 'done', currentStageId: 'st-1' }),
   job('G-10', 'Nameless', { driveFolderName: 'Potentials - Shwartz, Moshe' }),
+  job('G-11', 'AA Example - Commercial Project'),
 ];
 const stages = [{ id: 'st-1', name: 'Concealed Units', nameHe: 'יחידות סמויות', color: '#000', order: 1, active: true, createdAt: t, updatedAt: t },
   { id: 'st-2', name: 'Piping', color: '#000', order: 2, active: true, createdAt: t, updatedAt: t }];
@@ -35,6 +36,7 @@ r = names('cohen');
 check(r[0] === 'job:Cohen', '"cohen" exact');
 r = names('כהן'); check(r.includes('job:Cohen'), 'Hebrew finds Cohen (sound)', r.join(' | '));
 r = names('artzi'); check(r.includes('job:ארצי'), 'English finds ארצי', r.join(' | '));
+r = names('אא'); check(r[0] === 'job:AA Example - Commercial Project', '"אא" (Hebrew letters for AA) finds the AA job first (owner, 2026-10-12)', r.join(' | '));
 r = names('david'); check(r[0] === 'job:Cohen', 'a first name only in the folder title finds the job', r.join(' | '));
 let hit = X.searchIndex(idx, 'david', { projectId: 'general' })[0];
 check(hit.why && (hit.why.field === 'first' || hit.why.field === 'folder') && hit.why.text.includes('Cohen, David'), 'why says the folder title', JSON.stringify(hit.why));

@@ -236,3 +236,6 @@ Legend: ☑ shipped · ☐ decided, not built · ◐ built in part · ✎ needs 
 - ☑ Notebook decluttered: units read "3/14 — family", no floor / address / building lines on tiles, an all-done busy day is green and says its count once, a finished tile has no day count, the strip runs orange → green, the task's words on hover (2026-10-12, recording 14:17)
 - ☑ The worker's name sits in the middle of its notebook row; right-click on it opens his menu (2026-10-12)
 - ☑ Calendar tiles a size up, the worker leading each tile in his colour; the Tasks page names a Job Board job by its name (2026-10-12)
+- ☑ The plan preview: arrows on hover walk the folder's plans, the folder's plans download in the background and are dropped on close; back and "main plan" ride the first bar (two bars) (2026-10-12)
+- ☑ Search: a Hebrew-typed query is also tried spelled in Latin letters ("אא" finds "AA …") (2026-10-12)
+- ✎ AI search fallback when nothing is found ("powered by Opus 5.5") — needs his word and an Anthropic key (2026-10-12)

@@ -42,6 +42,7 @@ import { ProblemBand } from './ProblemBand';
 import { problemState } from '../../data/problems';
 import { PlanPinOverlay } from './PlanPinOverlay';
 import { PlanBrowser, Crumb, TileFile } from '../plans/PlanBrowser';
+import { prefetchPlans } from '../../data/planCache';
 import { cachedPlanAspect, measurePlanAspect } from '../../data/planAspect';
 // Lazy, deliberately. The markup studio carries pdf.js — about a megabyte of
 // PDF engine — and nobody should pay for that on the login screen. It arrives
@@ -356,7 +357,22 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
    * nothing persisted. `plansFolderName` names the Engineered Plans crumb.
    */
   const [browsePath, setBrowsePath] = useState<Crumb[] | null>(null);
-  const [browsePreview, setBrowsePreview] = useState<{ file: TileFile; folderName: string } | null>(null);
+  const [browsePreview, setBrowsePreview] = useState<{ file: TileFile; folderName: string; sheets?: TileFile[] } | null>(null);
+  /**
+   * The folder's other sheets come down in the background while one is open
+   * (owner's recording, 2026-10-12: "they should stick to the cache while we
+   * work, so they're ready to view without having to wait") — nearest first,
+   * through the plan cache's one-at-a-time pump. The cache drops every copy
+   * when the last plan viewer closes, which is the "click it off" half.
+   */
+  useEffect(() => {
+    const list = browsePreview?.sheets ?? [];
+    if (list.length < 2) return;
+    const at = Math.max(0, list.findIndex(x => x.id === browsePreview!.file.id));
+    const order = list.map((x, i) => ({ id: x.id, d: Math.abs(i - at) }))
+      .filter(x => x.d > 0).sort((a, b) => a.d - b.d).map(x => x.id);
+    prefetchPlans(order);
+  }, [browsePreview]);
   const [plansFolderName, setPlansFolderName] = useState('');
   /**
    * The plan pane is sized TO THE SHEET, not to whatever is left over.
@@ -1269,8 +1285,34 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
       <>
       <div className="flex items-center gap-1.5 min-w-0 px-2.5 py-1.5 flex-shrink-0"
         style={{ backgroundColor: '#1e3a5f' }}>
+        {browsePreview && (
+          <>
+            <Tooltip text={ui.planBackTo.replace('{folder}', browsePreview.folderName)}>
+              <button data-preview-back onClick={() => setBrowsePreview(null)}
+                className="flex items-center gap-0.5 px-1 py-1 min-h-[30px] rounded-lg text-[11px] font-bold text-white/90 hover:bg-white/15 flex-shrink-0 max-w-[30%]">
+                {ui.isRtl ? <ChevronRight size={14} className="flex-shrink-0" /> : <ChevronLeft size={14} className="flex-shrink-0" />}
+                <span className="truncate">{browsePreview.folderName}</span>
+              </button>
+            </Tooltip>
+            <span aria-hidden="true" className="self-stretch w-px my-1 flex-shrink-0" style={{ backgroundColor: 'rgba(255,255,255,.25)' }} />
+          </>
+        )}
         <span ref={setViewerBarSlot} className="flex items-center gap-1.5 min-w-0" />
         <div className="flex-1" />
+        {browsePreview && (() => {
+          const starred = starredPlanId === browsePreview.file.id;
+          return (
+            <button data-preview-star data-starred={starred ? '1' : '0'}
+              onClick={() => starPlan(browsePreview.file)}
+              disabled={starred}
+              title={starred ? ui.planIsMain : ui.planMakeMain}
+              className={`flex items-center gap-1 px-2 py-1 min-h-[30px] rounded-lg text-[11px] font-bold flex-shrink-0 ${
+                starred ? 'bg-amber-400 text-white' : 'text-white/90 hover:bg-white/15'}`}>
+              <Star size={13} fill={starred ? 'currentColor' : 'none'} />
+              <span className="hidden xl:inline">{starred ? ui.planIsMain : ui.planMakeMain}</span>
+            </button>
+          );
+        })()}
         {/* The PLANS folder, not the job folder — an architect opening the
             drawing wants the folder the sheets are in. */}
         {planSet.plansFolderId && (
@@ -1344,7 +1386,6 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
     // Back returns to the same folder at the same scroll.
     if (browsing) {
       const backTo = browsePath && (shownPlanId ?? detectedPdfId) ? () => setBrowsePath(null) : undefined;
-      const previewStarred = !!browsePreview && starredPlanId === browsePreview.file.id;
       return frame(
         <>
           <div className="absolute inset-0 flex flex-col min-h-0">
@@ -1355,7 +1396,7 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
               onPath={setBrowsePath}
               starredId={shownStarId}
               onStar={starPlan}
-              onPreview={(file, folderName) => setBrowsePreview({ file, folderName })}
+              onPreview={(file, folderName, sheets) => setBrowsePreview({ file, folderName, sheets })}
               onOpenMedia={(file, all) => {
                 // Every openable file in the folder rides along, so the
                 // arrows walk the site's pictures and films in order. A
@@ -1383,27 +1424,36 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
             />
           </div>
           {browsePreview && fileId && (
-            <div data-plan-preview={fileId} className="absolute inset-0 flex flex-col min-h-0 z-[1]"
+            <div data-plan-preview={fileId} className="group/pane absolute inset-0 flex flex-col min-h-0 z-[1]"
               style={{ backgroundColor: '#f8fafc' }}>
-              {/* The preview's own strip: back to the folder, and the star. */}
-              <div className="flex items-center gap-1.5 min-w-0 px-2 py-1 flex-shrink-0" style={{ backgroundColor: '#16304f' }}>
-                <button data-preview-back onClick={() => setBrowsePreview(null)}
-                  className="flex items-center gap-0.5 px-1.5 py-1 min-h-[30px] rounded-lg text-[11px] font-bold text-white/90 hover:bg-white/15 min-w-0">
-                  {ui.isRtl ? <ChevronRight size={14} className="flex-shrink-0" /> : <ChevronLeft size={14} className="flex-shrink-0" />}
-                  <span className="truncate">{ui.planBackTo.replace('{folder}', browsePreview.folderName)}</span>
-                </button>
-                <div className="flex-1" />
-                <button data-preview-star data-starred={previewStarred ? '1' : '0'}
-                  onClick={() => starPlan(browsePreview.file)}
-                  disabled={previewStarred}
-                  title={previewStarred ? ui.planIsMain : ui.planMakeMain}
-                  className={`flex items-center gap-1 px-2 py-1 min-h-[30px] rounded-lg text-[11px] font-bold ${
-                    previewStarred ? 'bg-amber-400 text-white' : 'text-white/90 hover:bg-white/15'}`}>
-                  <Star size={13} fill={previewStarred ? 'currentColor' : 'none'} />
-                  {previewStarred ? ui.planIsMain : ui.planMakeMain}
-                </button>
-              </div>
+              {/* Back and the star now ride the plan's own first bar
+                  (owner, 2026-10-12: "I just hate that there's three rows
+                  here … two rows, not three"). */}
               {sheet(fileId)}
+              {(() => {
+                // Left and right ARROWS walk the folder's sheets, shown on
+                // hover (owner, 2026-10-12: "upon hovering left and right I
+                // want to see arrows to move between the plans in the folder").
+                const list = browsePreview.sheets ?? [];
+                if (list.length < 2) return null;
+                const at = list.findIndex(x => x.id === browsePreview.file.id);
+                const go = (d: number) => {
+                  const nx = list[(at + d + list.length) % list.length];
+                  if (nx) setBrowsePreview({ ...browsePreview, file: nx });
+                };
+                const arrow = (side: 'prev' | 'next') => (
+                  <button key={side} {...{ [side === 'prev' ? 'data-plan-prev' : 'data-plan-next']: '' }}
+                    onClick={() => go(side === 'prev' ? -1 : 1)}
+                    title={side === 'prev' ? (list[(at - 1 + list.length) % list.length]?.name ?? '') : (list[(at + 1) % list.length]?.name ?? '')}
+                    className="pane-arrow absolute top-1/2 -translate-y-1/2 z-[3] w-9 h-14 rounded-xl flex items-center justify-center text-white opacity-0 group-hover/pane:opacity-100 transition-opacity"
+                    style={{ [side === 'prev' ? 'left' : 'right']: 8, backgroundColor: 'rgba(30,58,95,.78)' }}>
+                    {side === 'prev' ? <ChevronLeft size={22} /> : <ChevronRight size={22} />}
+                  </button>
+                );
+                return <>{arrow('prev')}{arrow('next')}
+                  <span data-plan-sheet-count className="absolute bottom-2 left-1/2 -translate-x-1/2 z-[3] px-2 rounded-full text-[11px] font-bold text-white opacity-0 group-hover/pane:opacity-100 transition-opacity pointer-events-none"
+                    style={{ backgroundColor: 'rgba(30,58,95,.78)', marginBottom: 40 }}>{at + 1} / {list.length}</span></>;
+              })()}
             </div>
           )}
         </>,
