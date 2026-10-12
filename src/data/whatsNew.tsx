@@ -30,6 +30,19 @@ export interface WhatsNewEntry {
 
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    date: '2027-01-29',
+    title: 'Active jobs as tiles',
+    items: [
+      {
+        title: 'Every active job is a small tile',
+        body: 'The Active jobs widget now draws each job as a small board tile: the name in full, who did what '
+          + 'and when, who is booked this week, and the coloured squares for the kinds of work. Two sit side by '
+          + 'side; the pencil sets how many, or brings back the old one-line list.',
+        demo: 'list',
+      },
+    ],
+  },
+  {
     date: '2027-01-28',
     title: 'Plain words, and the right stage',
     items: [

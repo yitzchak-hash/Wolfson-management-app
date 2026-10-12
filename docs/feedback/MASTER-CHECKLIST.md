@@ -94,7 +94,7 @@ Seen, not said (video 2): a fresh worker phone could crash when his record arriv
 | V4-2 | 0:17 | Stage pills cut off | Done | pills wrap · round49-probe |
 | V4-3 | 0:25 | "A2 · N apartments", Wolfson on top | Done | `data-bundle-bld` · round49-probe, notebooktile-probe |
 | V4-4 | 0:54 | Two rows always in Active jobs | Done | the app's service account is not activity · activitytouches-test |
-| V4-5 | 1:00 | "More tiles, not tiles" | Waiting | asked him |
+| V4-5 | 1:00 | "More tiles, not tiles" | Done | his answer (a): Active jobs rows are small board tiles, 2 across by default, "One line each" in the pencil keeps the old rows · activejobs-probe |
 | V4-6 | 1:09 | General notes newest on top | Done | round49-probe, round40-probe |
 | V4-7 | 1:15 | "Why two dates?" | Answered | a typed date + the sign-off |
 | V4-8 | 1:23 | Drive / Zoho folded by default | Done | LinkSection · drawer-r48 |
@@ -109,7 +109,7 @@ Seen, not said (video 2): a fresh worker phone could crash when his record arriv
 |---|------|-----|--------|-------|
 | V5-1 | 0:18 | The calendar shows every workspace | Done | `data-calendar-scope` · round49-probe |
 | V5-2 | 0:12 | Click a day to add | Done | `data-cal-add` → Tasks add form on that date · round49-probe |
-| V5-3 | 0:08 | A notebook-like calendar | Partly | plan page first (a big slice) |
+| V5-3 | 0:08 | A notebook-like calendar | Waiting | plan page "Calendar and Time Off" published 2026-10-12 (his "yes, draw the plan"); awaiting his answers |
 | V5-4 | 0:33 | Tasks page: bubbles, not arrows | Done | StagePairPill · round49-probe |
 | V5-5 | 0:48 | Tasks page in plain English | Done | `data-task-plain` · round49-probe |
 | V5-6 | 0:54 | Calm "Is this the right plan? Yes" → "Plan approved by …" | Done | `data-plan-auto-yes`, `data-plan-approved` (read live) · round43-probe |
@@ -166,3 +166,7 @@ rewritten).
 | C-32 | 2026-10-08 | Plan reader: the existing key, a stronger model and reasoning | Done | gpt-6.1-sol → gpt-6-sol → gpt-5.5 at high effort, gpt-4o floor · planread-test |
 | C-33 | 2026-10-08 | The stronger shared app key: leave it | Done | nothing changed |
 | C-34 | 2026-10-12 | A worker who did not finish a one-day job can say so ("I didn't finish today" next to Close job) — built on all the starred answers | Done | notfinished-test (24) · notfinished-probe (30) |
+| C-35 | 2026-10-12 | Answer 1: "a" — Active jobs as small tiles | Done | see V4-5 |
+| C-36 | 2026-10-12 | Answer 2: yes, draw the calendar plan | Done | "Calendar and Time Off" artifact |
+| C-37 | 2026-10-12 | Answer 3: tick Registers back on A2 9 | Done | production, read back (done, headline Registers); one "Office" history line |
+| C-38 | 2026-10-12 | A way to mark a worker on vacation from the notebook, seen on the notebook — add it to the plan | Waiting | drawn in the same plan (section C, questions 7–14) |

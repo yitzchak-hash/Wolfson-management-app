@@ -75,7 +75,7 @@ const txt = (await node.innerText()).replace(/\s+/g, ' ');
 check(/\b3\b/.test(await node.locator('[data-active-count]').innerText()), 'the widget counts the three jobs that moved in Drive — the grouped one included', await node.locator('[data-active-count]').innerText());
 check(/Beta job.*Moshe · Drive · added plan-v2\.pdf/.test(txt) && /Alpha job.*Drive · changed kitchen\.jpg/.test(txt) && !/Quiet job/.test(txt),
   'rows say what moved in Drive, newest first; the quiet job stays off', txt.slice(0, 200));
-check(/Grouped job.*Old clients · Moshe · Drive · removed old-quote\.pdf/.test(txt), 'a job filed in a group appears, labelled with its group — and a proposal REMOVED from its folder is its newest touch', txt.slice(0, 300));
+check(/Grouped job.*Old clients.*Moshe · Drive · removed old-quote\.pdf/.test(txt), 'a job filed in a group appears, labelled with its group — and a proposal REMOVED from its folder is its newest touch', txt.slice(0, 300));
 check(!/Binned job/.test(txt), 'a job in Trash never appears, whatever moved in its folder');
 check(!/Swept job/.test(txt), 'a job the sweep merely copied in today is not "activity"');
 check(txt.indexOf('Beta job') < txt.indexOf('Alpha job'), 'yesterday\'s plan outranks the two-day-old photo');

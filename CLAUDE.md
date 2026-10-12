@@ -9751,3 +9751,28 @@ memo tile and the folded-by-default rule · re-encoded: notebooktile-probe
 (apartment counts), multiday (the next stage arrives picked), round40-probe
 (notes newest first). Standing reds unchanged: round40's "a passed stage is
 crossed off".
+
+## His three answers (2026-10-12): Active jobs as tiles, a plan, a tick back
+- **`ActiveTile`** (module level in insightWidgets.tsx): each active job is a
+  small board tile — a white card framed in the job's stage colour
+  (`data-active-tile`), the name taking the full width and wrapping
+  (`data-active-name`, never beside a badge — "Messaged job" broke as
+  "Messa-ged"), the stage and group line, `data-active-row` (who · what ·
+  when), the booked chip, and a bottom row of the open-task badge
+  (`data-active-pending`), the Drive light and the heat squares. It opens the
+  job and drags onto a notebook day (`usePlannerDrag`). `data.look === 'list'`
+  keeps the old MiniJob rows; `data.across` (1–4, default 2) is the column
+  count (`data-active-tiles[data-across]`) — WidgetSurface MAGNIFIES a
+  stretched widget, so width can never buy columns; the count is a setting
+  (the tap-in board's precedent). The 40-row cap holds (activecap: 998
+  elements for 40 tiles). Probe: `activejobs-probe` grew 7 checks;
+  `driveactivity-probe` reads the group on its own line.
+- **"Calendar and Time Off"** — the plan page for the notebook-like calendar
+  and a worker's time off set from the notebook (`scratchpad/calendar-timeoff-plan.html`,
+  copy in docs/artifacts). Proposed storage: time off belongs to the PERSON
+  (the notebook's person keys `c:` / `u:` / `n:`), one shared list, so every
+  notebook, the calendar, the task form and the phone read it. Build only on
+  his answers.
+- **A2 9's Registers ticked back** in production (`tickreg.py` in the session
+  scratchpad: backup, precondition on the update time, one commit with an
+  Office `stage_marks` history line, read back).

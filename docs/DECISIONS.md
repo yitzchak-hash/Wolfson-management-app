@@ -6,6 +6,18 @@ have them). The v2 rebuild's original design record is the root
 `DECISIONS.md`; the rules and traps behind each decision are in `CLAUDE.md`
 by round. (Standing order 6, 2026-09-23.)_
 
+## 2026-10-12 (his three answers)
+- **Active jobs draws small board tiles** ("a"): a white card in the stage's
+  colour, the name wrapping, who did what and when, the booked worker, the
+  heat squares. Two across by default; the pencil has Tiles across (1–4) and
+  a "One line each" look that keeps the old rows. Stretching the widget makes
+  the tiles bigger, not more of them.
+- **The calendar gets a plan first** ("yes, draw the plan"), and **time off
+  for a worker, set from the notebook**, is drawn into the same plan: "Calendar
+  and Time Off", fourteen starred questions. Nothing built until he answers.
+- **A2 9's Registers ticked back** ("tick it back") — production, one Office
+  history line.
+
 ## 2026-10-12 (the four recordings of 11 Oct)
 - **A finished task is read by what was REPORTED**, not by what it was made
   for: a task made for Concealed Units + Fans that Igor closed as Registers

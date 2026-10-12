@@ -46,7 +46,7 @@ day still stands, after the numbered list.)
 3. `npx tsc --noEmit -p .` and `npx vite build`. 4. The audits:
    `node scratchpad/loopaudit.mjs`, `backupaudit.mjs`, `navaudit.mjs`, `apilimit.mjs`.
 5. A What's New entry (`src/data/whatsNew.tsx`, dates run AHEAD of the clock;
-   newest is `2027-01-28` — the next entry must be a later date (an older
+   newest is `2027-01-29` — the next entry must be a later date (an older
    entry lower down also wears `2026-12-20`; the marker compares only the TOP
    entry's date, so never reuse a date that appears anywhere in the file)). 6. A CLAUDE.md
    round record. 7. A line in `docs/CRM-CHECKLIST.md`, tick `docs/ROADMAP.md`, date a line in `docs/DECISIONS.md` when he decided something. 8. Rewrite THIS file.
@@ -64,7 +64,28 @@ with starred recommendations is published first; the owner says "approved" /
 "all yes" / answers by number; then it is built. Never build a redesign
 unasked.
 
-## Where things stand (2026-10-12, latest — the four recordings of 11 Oct built; TWO QUESTIONS OPEN)
+## Where things stand (2026-10-12, latest — his three answers; THE CALENDAR + TIME OFF PLAN AWAITS HIS ANSWERS)
+His message: "1 a, 2 yes draw the plan, 3 tick it back and uh, also add a some
+sort of way to add a vacation for a worker from the notebook. So that I can
+see on the notebook that he's on vacation. Add that to the plan."
+- **1a built**: Active jobs draws small board tiles (`ActiveTile`), 2 across,
+  pencil: Tiles across 1–4 and a "One line each" look.
+- **3 done in production**: A2 9 Registers ticked back, headline Registers,
+  one Office history line (backup `prod/backup-tickreg-*.json`).
+- **2 + vacation drawn**: "Calendar and Time Off"
+  (https://claude.ai/artifact/4mBwAn56xN8qCrieBbwMVj) — A the calendar as
+  tiles with multi-day bars and a + per day, B the + opening the notebook's
+  task form (an away worker greyed and asked about), C time off from the
+  worker's name on the notebook with the booked-task ask, D his phone. 14
+  starred questions. **Build only on his answers** ("all stars, build it" or
+  numbers).
+- Also this round: the voice memo in the Photos tab is a memo tile and no
+  longer counts as a photo; the calm plan question's "approved by" now reads
+  the approver live (it never appeared after Yes — round43 caught it).
+- **The reply he saw**: the three answers as done/drawn, the plan link, the
+  questions summary, the link, and a one-liner that the plan needs his answers.
+
+## Where things stand (2026-10-12 — the four recordings of 11 Oct built)
 After "Not finished today" shipped, re-listing the Drive folder found four
 new recordings from 11 Oct (0:38, 4:34, 1:55, 1:43). Each has a feedback doc
 (`docs/feedback/2026-10-11-*.md`), ledger rows 3–6, checklist V3–V6.
@@ -86,9 +107,7 @@ new recordings from 11 Oct (0:38, 4:34, 1:55, 1:43). Each has a feedback doc
   LIVE — the stale prop hid it, caught by round43-probe); Layers hidden on a
   plan with none; the calendar on every workspace with a "+" per day; a
   voice memo in the Photos tab is a memo tile and not counted as a photo.
-- **Waiting on him**: (1) "more tiles, not tiles" (video 4 at 1:00, pointer on
-  the Active jobs widget) — unclear; (2) the calendar "more like the
-  notebook" — a big slice, a plan page first if he wants it.
+- His answers came the same day (see the entry above).
 - Probes: round49-probe (28), round43 (+5), drawer-r48 (+memo, folded),
   re-encoded notebooktile, multiday, round40. Standing red unchanged:
   round40's "a passed stage is crossed off".

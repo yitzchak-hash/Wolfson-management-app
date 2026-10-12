@@ -80,8 +80,47 @@ check(text.indexOf('Messaged job') < text.indexOf('Edited job') && text.indexOf(
 check(/message from site/.test(text) && /edited the job/.test(text) && /made a task/.test(text), 'each row says who did what');
 check(/Only looked at.*Probe · opened the job/.test(text), 'opening a job counts (the approved rule), credited to who opened it');
 check(!/Old photo job/.test(text) && !/Quiet job/.test(text), 'a photo from 40 days ago is outside the window; a quiet job is not listed');
+await page.evaluate(id => window.__store.getState().updateCanvasElement(id, { w: 360, h: 300 }), await node.getAttribute('data-node-id'));
+await page.waitForTimeout(400);
 await node.screenshot({ path: `${SCRATCH}/activejobs-node.png` });
 void rows;
+
+// ── The tiles (owner, 2026-10-12: "more tiles" — answer a) ──────────────
+const tiles = node.locator('[data-active-tile]');
+check(await tiles.count() === 4, 'every active job is a small tile', String(await tiles.count()));
+const grid = await node.locator('[data-active-tiles]').evaluate(g => ({
+  across: g.getAttribute('data-across'), cols: getComputedStyle(g).gridTemplateColumns.split(' ').length,
+}));
+check(grid.across === '2' && grid.cols === 2, 'two tiles side by side by default', JSON.stringify(grid));
+const look = await tiles.first().evaluate(t => {
+  const name = t.querySelector('[data-active-name]');
+  const cs = getComputedStyle(t);
+  return { border: cs.borderTopWidth, bg: cs.backgroundColor, nameCut: name.scrollWidth > name.clientWidth + 1,
+    row: !!t.querySelector('[data-active-row]'), heat: !!t.querySelector('[data-active-heat]') };
+});
+check(parseFloat(look.border) >= 1 && look.bg === 'rgb(255, 255, 255)', 'a white card in a frame, the board tile made small', JSON.stringify(look));
+check(!look.nameCut && look.row && look.heat, 'the name wraps rather than being cut; who did what and the heat ride on the tile', JSON.stringify(look));
+await tiles.filter({ hasText: 'Tasked job' }).first().evaluate(b => b.click());
+await page.waitForTimeout(900);
+check(await page.locator('.drawer-panel').count() > 0, 'a tile opens the job');
+await page.keyboard.press('Escape');
+await page.waitForTimeout(700);
+const elId = await node.getAttribute('data-node-id');
+await page.evaluate(id => {
+  const st = window.__store.getState();
+  const el = st.canvasElements.find(e => e.id === id);
+  st.updateCanvasElement(id, { data: { ...(el.data || {}), across: 3 } });
+}, elId);
+await page.waitForTimeout(500);
+check(await node.locator('[data-active-tiles]').evaluate(g => getComputedStyle(g).gridTemplateColumns.split(' ').length) === 3, 'the pencil\'s "tiles across" sets three');
+await page.evaluate(id => {
+  const st = window.__store.getState();
+  const el = st.canvasElements.find(e => e.id === id);
+  st.updateCanvasElement(id, { data: { ...(el.data || {}), look: 'list' } });
+}, elId);
+await page.waitForTimeout(500);
+check(await node.locator('[data-active-tiles]').count() === 0 && await node.locator('[data-active-row]').count() === 4,
+  'and "one line each" brings the old rows back');
 
 // The count opens the list.
 await node.locator('button[data-active-count]').evaluate(b => b.click());

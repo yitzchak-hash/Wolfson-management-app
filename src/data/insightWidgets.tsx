@@ -9,7 +9,10 @@ import {
 } from '../types';
 import { WidgetCtx, WidgetDef, Frame, d, isSampleCtx } from './widgets';
 import { MiniJob } from '../components/board/MiniJob';
-import { PlannerData } from '../components/board/PlannerWidget';
+import { PlannerData, tint } from '../components/board/PlannerWidget';
+import { DriveStatus } from '../components/ui/DriveStatus';
+import { usePlannerDrag } from './plannerDrop';
+import { anyRota } from './rotaDrop';
 import { soundScore } from './hebrewSearch';
 import { useStore } from './store';
 import { useDriveActivity, useDriveActivityBusy, refreshDriveActivity } from './driveActivity';
@@ -296,6 +299,72 @@ const FILTERS: { id: TouchFilter; label: string }[] = [
  */
 const ACTIVE_ROW_CAP = 40;
 
+/**
+ * ONE active job as a small board tile (owner, 2026-10-12: "more tiles" —
+ * answer a). A white card in a frame of the job's stage colour, the board
+ * tile's own idiom made small: the name wrapping (never cut short), the
+ * group it is filed in, who did what last and when, the worker booked this
+ * week, the kind squares with the count, the open-task badge and the Drive
+ * light. It opens the job on a click and drags onto a notebook day, like
+ * every other thing that stands for a job. Module level — a component
+ * declared in a render body is a new type every render.
+ */
+function ActiveTile({ job, stage, pending, group, h, booked, onOpen }: {
+  job: Apartment;
+  stage?: { color: string; name: string };
+  pending: number;
+  group: string | null;
+  h: { last: { kind: TouchKind; who: string; what: string; at: string }; kinds: TouchKind[]; count: number };
+  booked?: { who: string; day: string };
+  onOpen: (id: string) => void;
+}) {
+  const name = job.displayName?.trim() || job.address?.trim() || 'Job';
+  const planner = usePlannerDrag(job.id, { label: name });
+  const frame = stage?.color ?? '#cbd5e1';
+  return (
+    <button type="button" data-no-drag data-el-action data-active-tile={job.id}
+      {...planner.handlers}
+      onClick={() => onOpen(job.id)}
+      title={`Open ${name}${anyRota() ? ' · drag it onto a day' : ''}`}
+      className="group/at relative text-left flex flex-col gap-[3px] min-w-0 rounded-lg px-2 pt-1.5 pb-1.5 bg-white hover:shadow-md transition-shadow"
+      style={{ ...planner.style, border: `1.5px solid ${frame}`, boxShadow: '0 1px 2px rgba(15,23,42,.06)' }}>
+      <span className="absolute inset-x-0 top-0 h-[3px] rounded-t-md" style={{ backgroundColor: tint(frame, 0.55) }} />
+      {/* The name takes the tile's whole width — a badge beside it squeezed
+          "Messaged job" into "Messa-ged". The badge and the Drive light ride
+          on the bottom row instead. */}
+      <span className="block min-w-0 font-bold text-[11.5px] leading-tight text-slate-800 group-hover/at:text-[#1e3a5f] line-clamp-2 break-words" data-active-name>{name}</span>
+      {(stage || group) && (
+        <span className="flex items-center gap-1 min-w-0 text-[9px] text-slate-500">
+          {stage && <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: stage.color }} />}
+          <span className="truncate">{[stage?.name, group].filter(Boolean).join(' · ')}</span>
+        </span>
+      )}
+      <span className="text-[9.5px] leading-snug text-slate-600 line-clamp-3 break-words" data-active-row={job.id} data-active-kind={h.last.kind}>
+        <b className="text-slate-800">{h.last.who}</b> · {h.last.what} · <span className="text-slate-400 whitespace-nowrap">{relativeTime(h.last.at)}</span>
+      </span>
+      {booked && (
+        <span className="self-start text-[8.5px] font-bold px-1.5 rounded-full bg-emerald-50 text-emerald-700" data-active-booked
+          title={`${booked.who} is booked on this job on ${booked.day}`}>{booked.who} · {niceShort(booked.day)}</span>
+      )}
+      <span className="mt-auto flex items-center gap-1 min-w-0 pt-0.5">
+        {pending > 0 && (
+          <span className="flex-shrink-0 px-1 rounded-full text-[8.5px] font-bold tabular-nums" data-active-pending
+            style={{ backgroundColor: 'rgba(217,119,6,.14)', color: '#b45309' }}
+            title={`${pending} task${pending === 1 ? '' : 's'} still open`}>{pending}</span>
+        )}
+        <span className="flex-shrink-0 scale-90"><DriveStatus job={job} /></span>
+        <span className="ms-auto flex-shrink-0 flex items-center gap-0.5" title={h.kinds.map(k => KIND_STYLE[k].label).join(' · ')}>
+          {h.kinds.map(k => (
+            <span key={k} className="inline-grid place-items-center rounded text-[7px] font-black text-white"
+              style={{ width: 11, height: 11, backgroundColor: KIND_STYLE[k].bg }} data-active-square={k}>{KIND_STYLE[k].letter}</span>
+          ))}
+          <span className="text-[8.5px] text-slate-400 ms-0.5 tabular-nums" data-active-heat>{h.count}</span>
+        </span>
+      </span>
+    </button>
+  );
+}
+
 function ActiveJobs({ c, el }: { c: WidgetCtx; el: CanvasElement }) {
   const storeNotes = useStore(s => s.contractorNotes);
   const storePins = useStore(s => s.planPins);
@@ -349,6 +418,15 @@ function ActiveJobs({ c, el }: { c: WidgetCtx; el: CanvasElement }) {
   const title = `Active · last ${days} days`;
   const setData = (patch: Record<string, unknown>) => c.update({ data: { ...d(el), ...patch } });
   const readOnly = !!c.readOnly || sample;
+  /** Small board tiles unless the pencil asks for the old one-line rows. */
+  const tiles = d(el).look !== 'list';
+  /**
+   * How many tiles side by side. A widget MAGNIFIES as a whole when its box is
+   * stretched (WidgetSurface draws at its natural width and scales), so a wider
+   * widget gives bigger tiles, never more of them — the count is a setting,
+   * the tap-in board's precedent.
+   */
+  const across = Math.max(1, Math.min(4, Number(d(el).across) || 2));
 
   return (
     <Frame title={title} icon={Activity} tone="#16a34a">
@@ -392,7 +470,20 @@ function ActiveJobs({ c, el }: { c: WidgetCtx; el: CanvasElement }) {
         </div>
         <Scroll>
           {list.length === 0 && <Empty>Nothing happened on any job in the last {days} days{filter !== 'all' ? ` (${FILTERS.find(f => f.id === filter)?.label.toLowerCase()})` : ''}</Empty>}
-          {shown.map(j => {
+          {tiles && shown.length > 0 && (
+            <div className="grid gap-1.5" data-active-tiles data-across={across} style={{ gridTemplateColumns: `repeat(${across}, minmax(0, 1fr))` }}>
+              {shown.map(j => {
+                const st = c.stages.find(x => x.id === j.currentStageId);
+                return (
+                  <ActiveTile key={j.id} job={j} h={fold.get(j.id)!} group={groupOf(j)} booked={booked.get(j.id)}
+                    pending={c.assignments.filter(a => a.apartmentId === j.id && !a.completedAt).length}
+                    stage={st ? { color: st.color, name: getStageName(st, !!c.isRtl) } : undefined}
+                    onOpen={c.openJob} />
+                );
+              })}
+            </div>
+          )}
+          {!tiles && shown.map(j => {
             const h = fold.get(j.id)!;
             const grp = groupOf(j);
             const bk = booked.get(j.id);

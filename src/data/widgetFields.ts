@@ -293,6 +293,15 @@ export const WIDGET_FIELDS: Record<string, WidgetField[]> = {
       key: 'filter', label: 'Showing', kind: 'select',
       options: [{ value: 'all', label: 'Everything' }, { value: 'office', label: 'Office' }, { value: 'site', label: 'Site' }, { value: 'drive', label: 'Drive' }, { value: 'notebook', label: 'Notebook' }],
     },
+    {
+      key: 'look', label: 'Look', kind: 'select',
+      options: [{ value: '', label: 'Small tiles' }, { value: 'list', label: 'One line each' }],
+    },
+    {
+      key: 'across', label: 'Tiles across', kind: 'select',
+      options: [{ value: '1', label: '1' }, { value: '2', label: '2' }, { value: '3', label: '3' }, { value: '4', label: '4' }],
+      hint: 'Stretching the widget makes the tiles bigger; this decides how many sit side by side.',
+    },
   ],
   'nobody-booked': [
     title(),

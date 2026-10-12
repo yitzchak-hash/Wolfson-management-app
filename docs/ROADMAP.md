@@ -59,10 +59,11 @@ asks for it. ☑ done · ☐ next · ✎ awaiting Yitzchak's word. (Standing ord
   notes newest first; plain sentences on the done card and the Tasks page;
   the calm plan question and "approved by"; the calendar on every workspace
   with a "+" per day (see `docs/feedback/2026-10-11-*.md`).
+- ☑ 2026-10-12 (his answers): Active jobs as small tiles; A2 9 Registers
+  ticked back.
 
 ## Next (in order)
-- ✎ The calendar redesign "more like the notebook" — a plan page first.
-- ✎ "More tiles, not tiles" (video 4, 1:00) — waiting for his word on what it means.
+- ✎ The calendar "more like the notebook" + time off for a worker — the "Calendar and Time Off" plan page is published; build on his answers.
 - ☐ Watch on production: the foreign photo listener (no Firebase in the
   container), the plan pane's Windows scrollbar re-fit, the Leads folder
   discovery, TikTok's player protocol end to end.
