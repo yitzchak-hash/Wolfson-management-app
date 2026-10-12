@@ -266,10 +266,17 @@ export function BundleBar({ bundle, height, z, size, strip, words, onOpen, id, o
   const small = Math.max(z(7), size - z(1.5));
   const padX = Math.max(4, z(7));
   const shadow = Math.max(3, z(6));
-  // The workspace on top, then each building with how many apartments
-  // (owner's recording, 2026-10-11: "just say A2 — number of apartments, A3 —
-  // number of apartments, and Wolfson on top"). Floors live in the window.
-  const where = (bundle.buildings ?? []).filter(b => b.id);
+  /**
+   * The tile says the count, the workspace and the stages — nothing else
+   * (owner's recording, 2026-10-12: "I don't need to see the number of
+   * apartments and the buildings in here, I just need to see 15 tasks,
+   * Wolfson, and the list of them … I don't need to see 24 twice"). The
+   * building lines ran past the tile's edge on a narrow day; the buildings
+   * and floors live in the window. A day where everything is done wears the
+   * done tile's green, so finished work reads the same everywhere.
+   */
+  const allDone = n > 0 && open === 0;
+  const plain = (t: string) => fill(t, { n: '' }).replace(/\s+/g, ' ').trim();
   return (
     // The wrapper keeps room for the stacked-paper shadow, so the next lane
     // and the next square never sit under it — and it is what gets measured.
@@ -277,8 +284,8 @@ export function BundleBar({ bundle, height, z, size, strip, words, onOpen, id, o
       <button {...common}
         className="block w-full text-left rounded-lg min-w-0 hover:brightness-[.98]"
         style={{
-          backgroundColor: '#ffffff',
-          border: `${Math.max(2, z(3))}px solid #1e3a5f`,
+          backgroundColor: allDone ? '#f0fdf4' : '#ffffff',
+          border: `${Math.max(2, z(3))}px solid ${allDone ? DONE_GREEN : '#1e3a5f'}`,
           padding: `${Math.max(3, z(5))}px ${padX}px ${Math.max(3, z(6))}px`,
           boxShadow: `${shadow / 2}px ${shadow / 2}px 0 -1px #fff, ${shadow / 2}px ${shadow / 2}px 0 0 #94a3b8, ${shadow}px ${shadow}px 0 -1px #fff, ${shadow}px ${shadow}px 0 0 #94a3b8`,
           cursor: 'pointer',
@@ -287,12 +294,6 @@ export function BundleBar({ bundle, height, z, size, strip, words, onOpen, id, o
         <span data-bundle-count className="block" style={{ fontSize: size + z(3), fontWeight: 800, color: '#0f172a', lineHeight: 1.1 }}>{head}</span>
         <span className="block break-words" style={{ fontSize: small, color: '#64748b', marginTop: Math.max(1, z(1)), lineHeight: 1.25 }}>
           <b data-bundle-ws-name style={{ color: '#7c3aed', fontWeight: 700 }}>{bundle.workspace}</b>
-          {where.map(b => (
-            <span key={b.id} data-bundle-bld={b.id} className="block whitespace-nowrap">
-              <b style={{ color: '#334155' }}>{b.id}</b>
-              {b.units ? <> · {b.units === 1 ? words.nbBundleUnit : fill(words.nbBundleUnits, { n: b.units })}</> : null}
-            </span>
-          ))}
         </span>
         {!!bundle.stages?.length && (
           <span className="flex flex-wrap" style={{ gap: Math.max(2, z(3)), marginTop: Math.max(2, z(4)) }}>
@@ -308,12 +309,12 @@ export function BundleBar({ bundle, height, z, size, strip, words, onOpen, id, o
         </span>
         <span className="block" style={{ fontSize: small, marginTop: Math.max(2, z(3)), color: '#64748b', lineHeight: 1.25 }}>
           <b data-bundle-done-txt className="inline-flex items-center" style={{ color: '#15803d', gap: 2 }}>
-            <Check size={Math.max(8, Math.round(z(9)))} strokeWidth={3.5} />{doneTxt}
+            <Check size={Math.max(8, Math.round(z(9)))} strokeWidth={3.5} />{allDone ? plain(words.nbBundleDone) : doneTxt}
           </b>
           {open > 0 && <> · {fill(words.nbBundleOpen, { n: open })}</>}
         </span>
         <span data-bundle-see-all className="block" style={{ fontSize: small, fontWeight: 700, color: '#2b86b8', marginTop: Math.max(1, z(2)) }}>
-          {fill(words.nbBundleSeeAll, { n })} ›
+          {plain(words.nbBundleSeeAll)} ›
         </span>
       </button>
     </div>

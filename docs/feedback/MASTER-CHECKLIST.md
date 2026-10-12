@@ -122,6 +122,25 @@ Seen, not said (video 2): a fresh worker phone could crash when his record arriv
 | V6-1 | 0:26 | A new task starts on the next stage to do, not a finished one | Done | `nextStageToDo` · multiday, round49-probe |
 | V6-2 | 1:23 | "Finished Drilling · doing Piping, Concealed Units, Fans" | Done | `data-bundle-row-plain` · round49-probe |
 
+### Video 7 — Recording 2026-10-12 141731 ([feedback doc](2026-10-12-141731.md))
+| # | Time | Ask | Status | Proof |
+|---|------|-----|--------|-------|
+| V7-1 | 0:05 | Busy-day tile: no apartment counts / building lines | Done | round50-probe; notebooktile, round49 re-encoded |
+| V7-2 | 0:32 | Don't say the count twice | Done | "✓ done", "See all ›" · round50-probe |
+| V7-3 | 0:36 | All done = green, like a done tile | Done | round50-probe |
+| V7-4 | 0:44 | The strip runs orange → green towards finished | Done | `towardDone` · round50-probe |
+| V7-5 | 1:15 | The worker's name in the middle of its row | Done | round50-probe |
+| V7-6 | 1:23 | A finished tile without "N days" | Done | round50-probe |
+| V7-7 | 1:25 | No address on notebook tiles | Done | notebooktile-probe, round49-probe |
+| V7-8 | 1:45 | "3/14" instead of "A3 · Floor 4" | Done | notebooklabel-probe, notebooktile-probe |
+| V7-9 | 2:12 | The task's words on hover only | Done | round50-probe |
+| V7-10 | 3:03 | Calendar text a size up | Done | round50-probe |
+| V7-11 | 3:15 | Calendar: which worker, at a glance | Done | `data-cal-worker` · round50-probe |
+| V7-12 | 2:55 | Calendar "too subtle — leave it" | Answered | left as he said |
+
+Seen, not said (video 7): a right-click on a worker's name opened the board's menu (**Done** — it opens
+his own menu) · the Tasks page read "G · Apt <name>" for a Job Board job (**Done**).
+
 Seen, not said (videos 3–6): the busy-day tile counted only each task's first stage (**Done**) · a voice
 memo drawn as a grey file card in the Photos tab, and counted as a photo (**Done**) · thread pictures
 read "tap to open" while loading (left as a loading state) · four closed tasks in production whose

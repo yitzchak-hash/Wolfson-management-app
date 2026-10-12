@@ -39,7 +39,9 @@ import { printTable } from '../data/printing';
 
 const COLS = 'repeat(6, minmax(0, 1fr)) minmax(0, 0.62fr)';
 const z = (n: number) => n;
-const SIZE = 11;
+// The calendar's type is a size up from the notebook's (owner's recording,
+// 2026-10-12: "the text is too small here").
+const SIZE = 13;
 
 interface CalTask {
   key: string;
@@ -582,17 +584,17 @@ function CalTile({ it, place, lang, isRtl, held, handlers, awayWord }: {
       style={{
         ...place, touchAction: 'pan-y',
         backgroundColor: ct.done ? '#f0fdf4' : '#fff',
-        border: `1.5px solid ${frame}`,
+        border: `2px solid ${frame}`,
         opacity: held ? 0.45 : 1,
         boxShadow: '0 1px 2px rgba(15,23,42,.06)',
       }}>
       <div className="flex items-start gap-1 min-w-0">
-        <span className="font-extrabold text-[11.5px] leading-tight text-slate-800 break-words min-w-0 flex-1" data-cal-label>
+        <span className="font-extrabold text-[13.5px] leading-tight text-slate-800 break-words min-w-0 flex-1" data-cal-label>
           {ct.label}
         </span>
         {ct.done && (
-          <span className="flex-shrink-0 inline-flex items-center gap-0.5 rounded-full px-1 text-[9px] font-extrabold text-white" style={{ backgroundColor: '#16a34a' }}>
-            <Check size={9} strokeWidth={3.5} />{doneWord}
+          <span className="flex-shrink-0 inline-flex items-center gap-0.5 rounded-full px-1.5 text-[11px] font-extrabold text-white" style={{ backgroundColor: '#16a34a' }}>
+            <Check size={11} strokeWidth={3.5} />{doneWord}
           </span>
         )}
       </div>
@@ -603,18 +605,22 @@ function CalTile({ it, place, lang, isRtl, held, handlers, awayWord }: {
           ))}
         </div>
       )}
-      <div className="flex items-center gap-1 mt-0.5 min-w-0 text-[10px] font-semibold text-slate-500">
-        <span className="flex-shrink-0 px-1 rounded text-white text-[9px] font-extrabold" style={{ backgroundColor: ct.wsColor }}>{ct.ws}</span>
-        {ct.building && <span className="flex-shrink-0 px-1 rounded bg-[#1e3a5f] text-white text-[9px] font-black">{ct.building}</span>}
+      {/* WHO, first and in his own colour (owner's recording, 2026-10-12:
+          "it's very hard to see which worker we're talking about here") —
+          a dot and grey text at the end of the line was the whole problem. */}
+      <div className="flex items-center flex-wrap gap-1 mt-1 min-w-0 text-[12px] font-semibold text-slate-500">
         {ct.worker && (
-          <span className="truncate min-w-0 inline-flex items-center gap-0.5">
-            <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: wColor }} />{ct.worker.name}
+          <span data-cal-worker={ct.worker.name} className="flex-shrink-0 max-w-full truncate rounded-full px-2 text-[12px] font-extrabold text-white leading-[1.45]"
+            style={{ backgroundColor: wColor }}>
+            {ct.worker.name}
           </span>
         )}
-        {ct.days.length > 1 && <span className="flex-shrink-0">· {ct.days.length} {lang === 'he' ? 'ימים' : 'days'}</span>}
+        <span className="flex-shrink-0 px-1.5 rounded text-white text-[11px] font-extrabold" style={{ backgroundColor: ct.wsColor }}>{ct.ws}</span>
+        {ct.building && <span className="flex-shrink-0 px-1.5 rounded bg-[#1e3a5f] text-white text-[11px] font-black">{ct.building}</span>}
+        {ct.days.length > 1 && <span className="flex-shrink-0">{ct.days.length} {lang === 'he' ? 'ימים' : 'days'}</span>}
       </div>
       {it.away && (
-        <span data-cal-away-tag className="inline-block mt-0.5 rounded-full px-1.5 text-[9.5px] font-extrabold"
+        <span data-cal-away-tag className="inline-block mt-0.5 rounded-full px-1.5 text-[11px] font-extrabold"
           style={{ backgroundColor: '#fff1f2', color: '#be123c', border: '1px solid #fda4af' }}>⚠ {awayWord}</span>
       )}
     </div>

@@ -112,20 +112,16 @@ const store = (page, k = 'wolfson_app_data') => page.evaluate(k => JSON.parse(lo
   await page.goto(`${APP}/jobs`);
   await page.waitForSelector('[data-task-bundle]', { timeout: 15000 }).catch(() => {});
   await page.waitForTimeout(800);
-  const bld = await page.locator('[data-bundle-bld]').allTextContents();
-  check(bld.some(t => /A3.*3 apartments/.test(t)) && bld.some(t => /A2 · 1 apartment$/.test(t)), 'the tile names each building with its apartment count', JSON.stringify(bld));
-  const wsFirst = await page.evaluate(() => {
-    const ws = document.querySelector('[data-bundle-ws-name]'); const b1 = document.querySelector('[data-bundle-bld]');
-    return !!ws && !!b1 && (ws.compareDocumentPosition(b1) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0;
-  });
-  check(wsFirst, 'the workspace sits above the buildings');
+  // Owner, 2026-10-12: the building lines came OFF the tile again.
+  check(await page.locator('[data-bundle-bld]').count() === 0, 'the tile carries no building lines (owner, 2026-10-12)');
+  check(await page.locator('[data-bundle-ws-name]').count() > 0, 'the workspace is on the tile');
   const cut = await page.evaluate(() => [...document.querySelectorAll('[data-task-bundle] [data-bundle-stage]')].filter(p => p.scrollWidth > p.clientWidth + 1).length);
   check(cut === 0, 'no stage name in the tile is cut off', String(cut));
   const counts = await page.locator('[data-task-bundle] [data-bundle-stage]').allTextContents();
   check(counts.some(t => /Fans\s*4/.test(t)), 'every stage of every task is counted (Fans 4, not just the first)', JSON.stringify(counts));
   check(await page.locator('[data-task-bar="T2D"] [data-bar-days-count="2"]').count() === 1, 'the two-day tile says "2 days" on its own line');
-  const bdi = await page.evaluate(() => !!document.querySelector('[data-task-bar="T2D"] bdi[dir="auto"]'));
-  check(bdi, 'the Hebrew address keeps its own direction');
+  const addr = await page.evaluate(() => !!document.querySelector('[data-task-bar="T2D"] bdi[dir="auto"]'));
+  check(!addr, 'no address on the tile (owner, 2026-10-12: "it just makes clutter")');
 
   await page.locator('[data-task-bundle]').first().click();
   await page.waitForSelector('[data-bundle-popup]');

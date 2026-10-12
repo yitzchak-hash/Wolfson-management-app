@@ -554,7 +554,11 @@ export function TasksPage() {
       const stage = stages.find(st => st.id === a.stageId);
       const where = a.general
         ? `${wsShort(a.general.projectId)}${generalBuildingsText(a.general) ? ` · ${generalBuildingsText(a.general)}` : ''}`
-        : `${a.buildingId} · ${s.aptPrefix} ${aptLabel(apt)}`;
+        : a.buildingId === 'G'
+          // A Job Board job is a client, not an apartment: "G · Apt <name>"
+          // read as a code. Its own name is the label.
+          ? aptLabel(apt)
+          : `${a.buildingId} · ${s.aptPrefix} ${aptLabel(apt)}`;
       return daysOf(a).map(day => {
         const pill = dayNumberOf(a.days, day);
         return {
@@ -1190,7 +1194,7 @@ export function TasksPage() {
                             : <button type="button" data-open-task={a.id} onClick={() => openInWindow(a, m.pid)}
                                 title={m.foreign ? fillWs(s.tpOpenThere, wsName) : s.openInWindow}
                                 className="inline-flex items-center gap-1 text-[#1e3a5f] hover:underline underline-offset-2 text-left rtl:text-right">
-                                {a.buildingId} · {s.aptPrefix} {aptLabel(apt)}
+                                {a.buildingId === 'G' ? aptLabel(apt) : <>{a.buildingId} · {s.aptPrefix} {aptLabel(apt)}</>}
                               </button>}
                         </span>
                         {(stage || a.stageWhenDone) && (

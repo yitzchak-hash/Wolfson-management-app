@@ -96,8 +96,8 @@ await page.waitForTimeout(800);
   })));
   check(bars.length === 2, '1 · two bars drawn', JSON.stringify(bars.map(b => b.id)));
   const b9 = bars.find(b => b.id === 'T-9'), b12 = bars.find(b => b.id === 'T-12');
-  check(!!b9 && b9.label.startsWith('9') && /Aharonov/.test(b9.label), '1 · bar 1 leads with the apartment number and family', b9?.label);
-  check(!!b12 && b12.label.startsWith('12') && /Weinstein/.test(b12.label), '1 · bar 2 leads with ITS number and family', b12?.label);
+  check(!!b9 && b9.label.startsWith('1/9') && /Aharonov/.test(b9.label), '1 · bar 1 leads with building/apartment ("1/9") and family', b9?.label);
+  check(!!b12 && b12.label.startsWith('1/12') && /Weinstein/.test(b12.label), '1 · bar 2 leads with ITS building/apartment and family', b12?.label);
   check(b9 && b12 && b9.label !== b12.label, '1 · the two bars no longer read the same');
   check(b9?.ws === 'Wolfson' && b12?.ws === 'Wolfson', '1 · the workspace is a tag AFTER the unit', `${b9?.ws}/${b12?.ws}`);
   check(b9?.labelClipped === false && b12?.labelClipped === false, '1 · neither unit name is cut off', JSON.stringify([b9?.labelClipped, b12?.labelClipped]));
@@ -142,7 +142,7 @@ await page.screenshot({ path: "scratchpad/notebooklabel-tiles.png" });
   });
   check(r.segs === 4 && r.fraction === 0, '3 · a strip-mode bar keeps the four lines and drops the fraction', JSON.stringify(r));
   check(r.h > 0 && r.h < 30, '3 · and stays slim', `${r.h}px`);
-  check(r.label.startsWith('9'), '3 · unit still first', r.label);
+  check(r.label.startsWith('1/9'), '3 · unit still first', r.label);
 }
 
 await page.screenshot({ path: 'scratchpad/notebooklabel.png' });

@@ -233,3 +233,6 @@ Legend: ☑ shipped · ☐ decided, not built · ◐ built in part · ✎ needs 
 - ☑ Active jobs shows each job as a small board tile (stage-colour frame, wrapped name, who did what and when, booked worker, heat), 2 across by default, Tiles across 1–4 and "One line each" in the pencil (owner, 2026-10-12: "a")
 - ☑ Time off for anyone on the notebook (vacation / sick / reserve duty / other + note), set from the name or a square's right-click; a striped band on the notebook, the calendar and his phone; booked tasks listed with Move / Keep; the task form warns (2026-10-12, "all stars")
 - ☑ Inside a group: Ctrl/Shift-click picks several jobs, and right-click gives the full menu — move straight to another group (its stage set too), Move to Trash, put back, lock, wallboard (2026-10-12)
+- ☑ Notebook decluttered: units read "3/14 — family", no floor / address / building lines on tiles, an all-done busy day is green and says its count once, a finished tile has no day count, the strip runs orange → green, the task's words on hover (2026-10-12, recording 14:17)
+- ☑ The worker's name sits in the middle of its notebook row; right-click on it opens his menu (2026-10-12)
+- ☑ Calendar tiles a size up, the worker leading each tile in his colour; the Tasks page names a Job Board job by its name (2026-10-12)

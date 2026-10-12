@@ -14,7 +14,8 @@ ask built or answered) · **not this app** (a recording of another project — r
 | 2 | Recording 2026-10-08 115349.mp4 (377.7 MB, 1918×1078) | `1mXL9Ar00bQ-lATsxCZtZPomZa7qJdgQU` | 14:01 | done (his pick A built) | [2026-10-08-115349.md](2026-10-08-115349.md) |
 | 3 | Screen Recording 2026-10-11 115320.mp4 | `1g4mAigUatvsMe642EgpDwJvFhhNm5uoZ` | 0:38 | done | [2026-10-11-115320.md](2026-10-11-115320.md) |
 | 4 | Screen Recording 2026-10-11 115854.mp4 | `1qCrfzvlG4eHs6QIIUJKQUhAp8DP5AQa-` | 4:34 | done (his answers 2026-10-12) | [2026-10-11-115854.md](2026-10-11-115854.md) |
-| 5 | Screen Recording 2026-10-11 120334.mp4 | `1dlswvi0o__JprF7JcVvbtwukjarQgUYF` | 1:55 | open (the calendar plan is drawn; awaiting his answers) | [2026-10-11-120334.md](2026-10-11-120334.md) |
+| 5 | Screen Recording 2026-10-11 120334.mp4 | `1dlswvi0o__JprF7JcVvbtwukjarQgUYF` | 1:55 | done (the calendar built on his "all stars") | [2026-10-11-120334.md](2026-10-11-120334.md) |
 | 6 | Screen Recording 2026-10-11 120729.mp4 | `1FPELWebt6VHzgLIBDEB1mfPnujgl46nW` | 1:43 | done | [2026-10-11-120729.md](2026-10-11-120729.md) |
+| 7 | Recording 2026-10-12 141731.mp4 (113.6 MB, 1920×1032) | `1wKWxTZKD159GuDBupBWy59A_zMlvGgXB` | 3:54 | done | [2026-10-12-141731.md](2026-10-12-141731.md) |
 
 Folder last listed: 2026-10-12.

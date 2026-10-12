@@ -9897,3 +9897,30 @@ that." Two faults in `BinBoard.tsx`, both fixed:
 Harness: `scratchpad/groupmenu-probe.mjs` (22). Its manner: undoing a content
 step raises the "Yes, do it" ask — press it, or the undo never runs.
 
+---
+
+# v2 — the recording of 12 Oct 14:17: a calmer notebook (2026-10-12)
+
+Supersedes the 2026-10-05 building-chip rule and the 2026-10-11 bundle building lines, by the
+owner's recording ("we're trying to declutter this thing").
+- **A building unit's notebook label is "3/14 — family"** — built in `barsByRow` (`bNum` = the
+  building id's digits, `aNum` = the apartment number, the family when it is a real name). The
+  floor, the address and the building chip are gone from tiles, strips and the two-line bar; the
+  purple workspace tag stays. `bar.building/floorNo/address/where` are still computed (nothing
+  reads them on the tile now).
+- **The task's words are a hover card** (`data-bar-desc`, `hidden group-hover/bar:block`, absolute
+  under the tile) so the tile's height — and the lanes measured from it — never move. The tile's
+  z sits in a class (`z-[3] hover:z-[30]`), never inline, or the card paints under the next tile.
+- **`towardDone(i, n)`**: done/doing strip segments run orange (#f97316) → green (#16a34a) along
+  the bar; pending stays orange, problem red, to-do grey.
+- **A finished tile has no "N days"**; a **busy day where all is done** wears `DONE_GREEN` frame +
+  `#f0fdf4`, its done line reads "✓ done" and "See all ›" carries no number (`plain()` fills the
+  preset strings with an empty `{n}`). The building lines (`data-bundle-bld`) are gone.
+- **The person's name cell** is `align-items: center` and takes `onContextMenu` → the same
+  `setNameMenu` — stopPropagation keeps the board's node menu out of it.
+- **Calendar**: `SIZE` 13, label 13.5px, the worker a `data-cal-worker` chip in `personColor`
+  leading the bottom line, frame 2px.
+- **Tasks page**: a `buildingId === 'G'` row reads `aptLabel(apt)` alone, never "G · Apt <name>".
+Harness: `scratchpad/round50-probe.mjs` (21). Re-encoded to the ruling: notebooktile-probe,
+notebooklabel-probe, round49-probe.
+

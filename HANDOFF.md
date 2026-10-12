@@ -64,7 +64,21 @@ with starred recommendations is published first; the owner says "approved" /
 "all yes" / answers by number; then it is built. Never build a redesign
 unasked.
 
-## Where things stand (2026-10-12, latest — the full menu inside a group)
+## Where things stand (2026-10-12, latest — recording 14:17 worked: a calmer notebook)
+After shipping the group-window menu (884be8b, live), the folder held a NEW recording,
+"Recording 2026-10-12 141731" (3:54) — logged as ledger row 7, feedback doc
+`docs/feedback/2026-10-12-141731.md`, checklist V7-1…V7-12, all Done/Answered.
+- Notebook: "3/14 — family", no floor/address/building on tiles, all-done busy day green and the
+  count said once, finished tile without "N days", strip orange → green, the task's words on hover,
+  the worker's name centred, right-click on the name opens his menu.
+- Calendar: a size up, the worker a coloured chip leading each tile. Tasks page: no "G · Apt".
+- Probes: round50-probe (21) new; notebooktile / notebooklabel / round49 re-encoded; groupmenu,
+  notebookbars, multiday, notebook-r48, timeoff, notebook2way, foreigndrop, portal-r48,
+  taskbubbles and the four audits green; round22 red as before.
+- **The reply he saw**: the group-menu fix, then the recording's asks one by one, the link,
+  "✅ Nothing needed from you".
+
+## Where things stand (2026-10-12 — the full menu inside a group)
 His message: "in the groups, I'm trying to multiple select or right click the
 job and the whole full menu is not coming up … I want to move stuff to trash
 or to different folders and I can't. I have to first put it back on the board

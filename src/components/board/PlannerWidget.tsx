@@ -21,6 +21,19 @@ import { useTimeOff, saveTimeOff } from '../../data/useTimeOff';
 import { TimeOffDialog } from './TimeOffDialog';
 
 /** "Floor 5" in the reader's language — the floor number as the diagram prints it. */
+/**
+ * The strip's colour heads from orange to green along the bar, so a strip
+ * reads as "how far towards finished" instead of a row of stage colours
+ * (owner's recording, 2026-10-12: "this should be orange, this should be
+ * green … a gradient like the rest of them, to go towards finished").
+ */
+function towardDone(i: number, n: number): string {
+  const t = n <= 1 ? 1 : i / (n - 1);
+  const a = [249, 115, 22], b = [22, 163, 74];
+  const c = a.map((v, k) => Math.round(v + (b[k] - v) * t));
+  return `rgb(${c[0]}, ${c[1]}, ${c[2]})`;
+}
+
 function floorWord(lang: string | undefined, n: string): string {
   return lang === 'he' ? `קומה ${n}` : lang === 'ru' ? `этаж ${n}` : `Floor ${n}`;
 }
@@ -910,7 +923,18 @@ export function PlannerWidget({
         ? (projects.find(p => p.id === a.general!.projectId)?.name ?? a.general.projectId)
           + (generalBuildingsText(a.general) ? ` · ${generalBuildingsText(a.general)}` : '')
         : null;
-      const label = generalName ?? (apt ? (aptLabel(apt) || apt.address?.trim() || 'Job') : 'Job');
+      /**
+       * A building unit reads "3/14 — family" — building / apartment, the
+       * office's own shorthand (owner's recording, 2026-10-12: "A3 · Floor 4,
+       * unnecessary … we should just have 3/14, like that"). The floor and the
+       * address left the tile with it: "no need for addresses here, it just
+       * makes clutter".
+       */
+      const bNum = apt && apt.buildingId && apt.buildingId !== 'G' ? (apt.buildingId.replace(/\D/g, '') || apt.buildingId) : '';
+      const aNum = String(apt?.apartmentNumber ?? '').trim();
+      const fam0 = apt?.displayName?.trim() && apt.displayName.trim() !== aNum ? apt.displayName.trim() : '';
+      const unitLabel = bNum && aNum ? (fam0 ? `${bNum}/${aNum} — ${fam0}` : `${bNum}/${aNum}`) : '';
+      const label = generalName ?? (apt ? (unitLabel || aptLabel(apt) || apt.address?.trim() || 'Job') : 'Job');
       // WHERE the job is, on the bar itself (owner, 2026-10-05: "this is all
       // A3 … but I don't see the addresses, I don't see anything"): the
       // building leads as a chip, and the floor — printed the way the
@@ -1705,18 +1729,29 @@ export function PlannerWidget({
                         e.stopPropagation();
                         setNameMenu({ pid, x: e.clientX, y: e.clientY });
                       }}
+                      // A right-click on the name is the same menu (owner's
+                      // recording, 2026-10-12: right-clicking "Igor" opened the
+                      // BOARD's node menu — Bring to front, Duplicate, Delete —
+                      // over the notebook, never his time off).
+                      onContextMenu={ro ? undefined : e => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        setNameMenu({ pid, x: e.clientX, y: e.clientY });
+                      }}
                       style={{
                         backgroundColor: tint(person.color, 0.10),
                         paddingTop: squished ? 1 : z(4), paddingBottom: squished ? 1 : z(4),
                         transition: 'padding 160ms ease',
-                        alignItems: squished ? 'center' : 'flex-start',
+                        // The name sits in the MIDDLE of its row (owner, 2026-10-12:
+                        // "can we have the name in the middle") — at the top of a
+                        // tall row it read as belonging to the week above.
+                        alignItems: 'center',
                       }}>
                       <span className="rounded-full flex-shrink-0"
                         style={{
                           backgroundColor: person.color,
                           width: squished ? z(4.5) : z(6), height: squished ? z(4.5) : z(6),
                           opacity: squished ? 0.55 : 1,
-                          marginTop: squished ? 0 : z(4),
                         }} />
                       <span className="truncate font-bold"
                         style={{
@@ -2295,20 +2330,12 @@ function TaskBar({ bar, z, size, strip, readOnly, isRtl, lang, onOpen, onDropTo,
   const pair = bar.stageFrom || bar.stageTo
     ? `${bar.stageFrom ? getStageName(bar.stageFrom, isRtl) : ''}${bar.stageTo ? ` → ${getStageName(bar.stageTo, isRtl)}` : ''}`
     : '';
-  const sub = [bar.where, pair, bar.desc].filter(Boolean).join(' · ');
+  const sub = [pair, bar.desc].filter(Boolean).join(' · ');
   const early = bar.done && (bar.task.completedAt ?? '').slice(0, 10) < bar.days[bar.days.length - 1];
   const doneWord = early
     ? (lang === 'he' ? 'הסתיים מוקדם' : lang === 'ru' ? 'закончено раньше' : 'finished early')
     : (lang === 'he' ? 'בוצע' : lang === 'ru' ? 'готово' : 'done');
 
-  /** The building, as a small navy chip — where the job is, at a glance (owner, 2026-10-05: "this is all A3 … I don't see the addresses"). */
-  const chip = (lead: boolean) => bar.building ? (
-    <span data-bar-building className="flex-shrink-0 rounded tabular-nums" style={{
-      fontSize: Math.max(z(7), size - z(2)), fontWeight: 900, lineHeight: 1.15,
-      backgroundColor: '#1e3a5f', color: '#fff', padding: `0 ${Math.max(2, z(3))}px`,
-      marginInlineEnd: Math.max(3, z(lead ? 4 : 3)),
-    }}>{bar.building}</span>
-  ) : null;
   /** The record: a green tag, and a stretch whose days ran PAST the close says "finished early". */
   const doneTag = (side: 'start' | 'end') => bar.done ? (
     <span data-bar-done className="flex-shrink-0 inline-flex items-center rounded-full" style={{
@@ -2380,14 +2407,9 @@ function TaskBar({ bar, z, size, strip, readOnly, isRtl, lang, onOpen, onDropTo,
     const thenStage = bar.stageTo && !pills.some(st => st.id === bar.stageTo!.id) ? bar.stageTo : undefined;
     const total = daysOf(bar.task).length;
     const whereBits: React.ReactNode[] = [];
-    // Each piece stays whole ("Floor 1" never splits); only the address wraps.
-    if (bar.building) whereBits.push(<span key="b" data-bar-building className="whitespace-nowrap" style={{ fontWeight: 700, color: '#334155' }}>{bar.building}</span>);
-    if (bar.floorNo) whereBits.push(<span key="f" className="whitespace-nowrap">{floorWord(lang, bar.floorNo)}</span>);
-    // A Hebrew address keeps its OWN direction (<bdi>): set beside "2 days"
-    // the browser reordered the two into "2 · 15\4 days" (owner's recording,
-    // 2026-10-11: "I don't know what 15 out of 4 days is"). The day count is
-    // its own line now, never glued to the address.
-    if (bar.address) whereBits.push(<bdi key="a" dir="auto">{bar.address}</bdi>);
+    // Only the workspace rides the pin line now (owner, 2026-10-12): the
+    // building and apartment are in the name ("3/14"), and the floor and the
+    // address were clutter. The window still says all of it.
     const showWhere = !!bar.workspace || whereBits.length > 0;
     return (
       <div
@@ -2395,10 +2417,10 @@ function TaskBar({ bar, z, size, strip, readOnly, isRtl, lang, onOpen, onDropTo,
         {...handlers}
         {...noMenu}
         data-no-drag data-el-action data-task-bar={bar.taskId} data-bar-days={bar.len} data-bar-look="tile"
-        className="group/bar relative rounded-lg min-w-0 flex-shrink-0"
+        className="group/bar relative rounded-lg min-w-0 flex-shrink-0 z-[3] hover:z-[30]"
         title={title}
         style={{
-          position: 'relative', zIndex: 3,
+          position: 'relative',
           width: n > 1 ? `calc(${n * 100}% + ${(n - 1) * 5}px)` : '100%',
           backgroundColor: bar.done ? '#f0fdf4' : '#ffffff',
           border: `${Math.max(2, z(3))}px solid ${frame}`,
@@ -2454,8 +2476,14 @@ function TaskBar({ bar, z, size, strip, readOnly, isRtl, lang, onOpen, onDropTo,
             {words3('then', 'ואז', 'затем')} {stName(thenStage)}
           </div>
         )}
+        {/* What has to be done shows ON HOVER only (owner, 2026-10-12:
+            "upon hovering, only upon hovering, we should show what needs to be
+            done") — a card under the tile, so the tile's height never moves. */}
         {bar.desc && (
-          <div data-bar-desc className="break-words" style={{ fontSize: small, color: '#334155', marginTop: Math.max(2, z(3)), lineHeight: 1.25 }}>
+          <div data-bar-desc className="hidden group-hover/bar:block absolute left-0 right-0 top-full break-words rounded-md pointer-events-none"
+            style={{ fontSize: small, color: '#0f172a', marginTop: 2, lineHeight: 1.3, zIndex: 40,
+              backgroundColor: '#fffbeb', border: '1px solid #fcd34d', padding: `${Math.max(2, z(3))}px ${Math.max(3, z(5))}px`,
+              boxShadow: '0 4px 12px rgba(15,23,42,.15)' }}>
             {bar.desc}
           </div>
         )}
@@ -2463,9 +2491,9 @@ function TaskBar({ bar, z, size, strip, readOnly, isRtl, lang, onOpen, onDropTo,
           <div data-bar-strip aria-hidden="true" className="pointer-events-none flex items-center"
             style={{ gap: Math.max(3, z(5)), marginTop: Math.max(2, z(4)) }}>
             <div className="flex-1 flex" style={{ gap: Math.max(1, z(2)), height: Math.max(3, z(4)) }}>
-              {bar.progress.rows.map(r => (
+              {bar.progress.rows.map((r, i) => (
                 <span key={r.stage.id} data-bar-strip-seg={r.state} className="flex-1 rounded-sm h-full" style={{
-                  backgroundColor: r.state === 'done' || r.state === 'doing' ? r.stage.color
+                  backgroundColor: r.state === 'done' || r.state === 'doing' ? towardDone(i, bar.progress!.rows.length)
                     : r.state === 'pending' ? '#f97316' : r.state === 'problem' ? '#dc2626' : '#e5e7eb',
                   opacity: r.state === 'doing' ? 0.55 : 1,
                 }} />
@@ -2487,7 +2515,7 @@ function TaskBar({ bar, z, size, strip, readOnly, isRtl, lang, onOpen, onDropTo,
             </span>
           </div>
         )}
-        {total > 1 && (
+        {total > 1 && !bar.done && (
           <div data-bar-days-count={total} className="flex items-center whitespace-nowrap"
             style={{ fontSize: small, color: '#6b7280', gap: Math.max(2, z(3)), marginTop: Math.max(1, z(2)), lineHeight: 1.25 }}>
             <CalendarDays size={Math.max(8, Math.round(z(10)))} className="flex-shrink-0" style={{ color: '#94a3b8' }} />
@@ -2547,7 +2575,6 @@ function TaskBar({ bar, z, size, strip, readOnly, isRtl, lang, onOpen, onDropTo,
               building, the done tag and the workspace ride line two. A
               strip is ONE line, so there they share it and give way first. */}
           <div className="flex items-center min-w-0" style={{ fontSize: size, fontWeight: 800, color: '#1e3a5f', lineHeight: 1.2 }}>
-            {strip && chip(true)}
             <span data-bar-label className="truncate min-w-0" style={{ flex: '0 1 auto' }} title={bar.label}>{bar.label}</span>
             {bar.workspace && strip && (
               // flexShrink 20: the tag gives way (to nothing) before the unit
@@ -2564,7 +2591,6 @@ function TaskBar({ bar, z, size, strip, readOnly, isRtl, lang, onOpen, onDropTo,
             <div className="flex items-center min-w-0" style={{ fontSize: Math.max(z(7), size - z(2)), fontWeight: 600, color: '#64748b' }}>
               {doneTag('end')}
               {!strip && nfTag}
-              {chip(false)}
               <span className="truncate min-w-0">
                 {bar.workspace && <span data-bar-workspace style={{ color: '#7c3aed', fontWeight: 700 }}>{bar.workspace}{sub ? ' · ' : ''}</span>}
                 {sub}{n > 1 ? ` · ${n} days` : ''}
@@ -2589,9 +2615,9 @@ function TaskBar({ bar, z, size, strip, readOnly, isRtl, lang, onOpen, onDropTo,
           className="pointer-events-none absolute flex items-center"
           style={{ left: Math.max(4, z(6)), right: Math.max(4, z(6)), bottom: Math.max(2, z(2)), gap: Math.max(3, z(4)), height: Math.max(3, z(4)) }}>
           <div className="flex-1 flex h-full" style={{ gap: Math.max(1, z(2)) }}>
-            {bar.progress.rows.map(r => (
+            {bar.progress.rows.map((r, i) => (
               <span key={r.stage.id} data-bar-strip-seg={r.state} className="flex-1 rounded-sm h-full" style={{
-                backgroundColor: r.state === 'done' || r.state === 'doing' ? r.stage.color
+                backgroundColor: r.state === 'done' || r.state === 'doing' ? towardDone(i, bar.progress!.rows.length)
                   : r.state === 'pending' ? '#f97316' : r.state === 'problem' ? '#dc2626' : '#e5e7eb',
                 opacity: r.state === 'doing' ? 0.55 : 1,
               }} />

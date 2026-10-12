@@ -137,9 +137,9 @@ const tile = id => page.evaluate(id => {
   check(r?.bg === 'rgb(255, 255, 255)' && r?.frame === 'rgb(8, 145, 178)', '1 · a white card framed in its stage’s colour (Drilling)', `${r?.bg} · ${r?.frame}`);
   check(r?.pills.length === 1 && r.pills[0].text === 'Drilling' && r.pills[0].ws === 'nowrap' && r.pills[0].fs >= 6.5,
     '1 · the stage is one pill on one line, never below 6.5', JSON.stringify(r?.pills));
-  check(/23/.test(r?.label ?? '') && /no name yet/.test(r?.label ?? ''), '1 · a unit with no family says so quietly', r?.label);
-  check(r?.desc === 'Check the sleeves', "1 · the office's own words are on the tile", r?.desc);
-  check(/A3/.test(r?.text ?? '') && /Floor 6/.test(r?.text ?? '') && /Wolfson/.test(r?.text ?? ''), '1 · the pin line says where: Wolfson · A3 · Floor 6 (as the diagram prints it)', r?.text);
+  check(/^3\/23/.test(r?.label ?? '') && /no name yet/.test(r?.label ?? ''), '1 · the unit reads "3/23" (building/apartment) and says quietly it has no family', r?.label);
+  check(r?.desc === 'Check the sleeves', "1 · the office's own words ride the tile's hover card", r?.desc);
+  check(/Wolfson/.test(r?.text ?? '') && !/Floor 6/.test(r?.text ?? ''), '1 · the pin line keeps the workspace; the floor left it (owner, 2026-10-12)', r?.text);
 }
 
 // ── 2 · a report the app wrote shows no words of its own ────────────────────
@@ -155,7 +155,7 @@ const tile = id => page.evaluate(id => {
   check(r?.label === 'Rimonim, Ofira · VRF job', '3 · "VRF job" reads "Rimonim, Ofira · VRF job"', r?.label);
   check(r?.then === 'then Installation of Geves', '3 · and "then Installation of Geves" under the pill', r?.then);
   check(r?.pills[0]?.text === 'Installation', '3 · the pill is the stage it is ON', JSON.stringify(r?.pills));
-  check(/7 Kalanit St/.test(r?.text ?? '') && !/Wolfson/.test(r?.text ?? ''), '3 · its pin line is the address', r?.text);
+  check(!/7 Kalanit St/.test(r?.text ?? '') && !/Wolfson/.test(r?.text ?? ''), '3 · no address on the tile (owner, 2026-10-12: "it just makes clutter")', r?.text);
 }
 
 // ── 4 · every unit name whole, every pill whole ─────────────────────────────
@@ -220,10 +220,9 @@ const tile = id => page.evaluate(id => {
     };
   });
   check(bun?.n === '5', '6 · Monday’s five singles are one bundle', bun?.n);
-  check(/A2/.test(bun?.text ?? '') && /A3/.test(bun?.text ?? ''), '6 · it names BOTH buildings', bun?.text);
-  check(/A2 · \d+ apartments?/.test(bun?.text ?? '') && /A3 · \d+ apartments?/.test(bun?.text ?? ''), '6 · each building with its own apartment count', bun?.text);
+  check(/Wolfson/.test(bun?.text ?? '') && !/apartments?/.test(bun?.text ?? '') && !/A2|A3/.test(bun?.text ?? ''), '6 · the count, the workspace and the stages — no building lines (owner, 2026-10-12)', bun?.text);
   check(bun?.stages.join('|') === 'Drilling 3|Piping 2', '6 · a pill per stage with its count', bun?.stages.join('|'));
-  check(/See all 5/.test(bun?.seeAll ?? ''), '6 · and "See all 5 ›"', bun?.seeAll);
+  check(/^See all ›$/.test((bun?.seeAll ?? '').trim()), '6 · and "See all ›" — the count is not said twice', bun?.seeAll);
   check(bun?.shareW === '80%', '6 · the done share is 4 of 5', bun?.shareW);
 }
 

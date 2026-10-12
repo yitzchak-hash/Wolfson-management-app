@@ -6,6 +6,15 @@ have them). The v2 rebuild's original design record is the root
 `DECISIONS.md`; the rules and traps behind each decision are in `CLAUDE.md`
 by round. (Standing order 6, 2026-09-23.)_
 
+## 2026-10-12 (recording 14:17 — declutter)
+- Notebook tiles: a building unit is "3/14 — family" (building digits / apartment). The floor, the
+  address and the building chip are OFF the tile (supersedes 2026-10-05 "the building leads as a chip"
+  and the floor/address pin line). The busy-day tile drops its building lines (supersedes 2026-10-11
+  "A2 · N apartments"); all done = the done tile's green, the count said once.
+- The strip's done segments run orange → green along the bar instead of each stage's colour.
+- The task's own words show on hover only, as a card under the tile.
+- Calendar: a size up; the worker leads each tile in his colour. "Too subtle — leave it."
+
 ## 2026-10-12 (the group window's menu)
 - Inside a group a job is filed straight into another group or into Trash
   from the right-click menu — the same rules as the board (content undo step,

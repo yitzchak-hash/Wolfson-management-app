@@ -30,6 +30,31 @@ export interface WhatsNewEntry {
 
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    date: '2027-02-01',
+    title: 'A calmer notebook, a readable calendar',
+    items: [
+      {
+        title: 'The notebook says less, and says it once',
+        body: 'A unit reads "3/14 — family" (building / apartment); the floor, the address and the building '
+          + 'lines are gone from the tiles. A busy day where everything is done turns green like a done tile, '
+          + 'and says its count once. A finished tile no longer says how many days. The progress strip runs '
+          + 'orange to green as the job heads to finished. What has to be done shows when you hover over a tile.',
+        demo: 'list',
+      },
+      {
+        title: 'The worker\'s name, in the middle — and right-click works on it',
+        body: 'Each worker\'s name sits in the middle of his row, and a right-click on it opens his own menu '
+          + '(Time off…) instead of the board\'s.',
+        demo: 'list',
+      },
+      {
+        title: 'The calendar, a size up',
+        body: 'Bigger writing on every calendar tile, and the worker leads each tile as a chip in his own colour.',
+        demo: 'list',
+      },
+    ],
+  },
+  {
     date: '2027-01-31',
     title: 'The full menu inside a group',
     items: [
