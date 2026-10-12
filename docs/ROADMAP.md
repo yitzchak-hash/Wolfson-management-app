@@ -63,7 +63,7 @@ asks for it. ☑ done · ☐ next · ✎ awaiting Yitzchak's word. (Standing ord
   ticked back.
 
 ## Next (in order)
-- ✎ The calendar "more like the notebook" + time off for a worker — the "Calendar and Time Off" plan page is published; build on his answers.
+- ☑ 2026-10-12 ("all stars"): ONE calendar drawn like the notebook (tiles, bars, bundles, + opens the notebook's form, drag to move) and time off for anyone on the notebook (band, booked-task ask, task-form warning, his phone in his language).
 - ☐ Watch on production: the foreign photo listener (no Firebase in the
   container), the plan pane's Windows scrollbar re-fit, the Leads folder
   discovery, TikTok's player protocol end to end.

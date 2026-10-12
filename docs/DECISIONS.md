@@ -6,6 +6,33 @@ have them). The v2 rebuild's original design record is the root
 `DECISIONS.md`; the rules and traps behind each decision are in `CLAUDE.md`
 by round. (Standing order 6, 2026-09-23.)_
 
+## 2026-10-12 ("all stars, build it" — Calendar and Time Off)
+Every starred answer on the plan page, built the same day:
+1. The calendar is a **month grid of small tiles** (look A) with a multi-day
+   task as **one bar**; done is green with a tick.
+2. The **+ on a day opens the notebook's own task form**, on that day.
+3. **Drag a tile to another day** moves the task by the notebook's rules (the
+   whole task keeps its working-day pattern; one day of a task that has others
+   asks move / add / new).
+4. A **busy day folds into one bundle tile** (4+ single-day tasks of one
+   worker in one workspace), as on the notebook.
+5. The tile's **frame is the stage colour; the small tag is the workspace's**.
+6. **One calendar**: the header and the sidebar open the same page, with
+   This workspace / All workspaces inside it.
+7. Time off is set by **pressing the worker's name on the notebook → Time
+   off…**, and **right-clicking a square → Off this day**.
+8. Kinds **Vacation, Sick, Reserve duty, Other** + a note; vacation blue
+   stripes, sick pink.
+9. Tasks already booked on those days are **listed with Move it to someone
+   else / Keep it on him — nothing moves by itself**; a kept task wears
+   "he's away".
+10. Booking somebody away **warns and asks** (Pick someone else / Add anyway);
+    he is greyed in Who with his kind of time off.
+11. **His phone shows the band** in his language (Отпуск).
+12. **Whole days only.** 13. **The office sets it**; no requests from the
+    phone. 14. **Anyone with a notebook row** can have time off.
+Time off belongs to the person and lives in one shared list.
+
 ## 2026-10-12 (his three answers)
 - **Active jobs draws small board tiles** ("a"): a white card in the stage's
   colour, the name wrapping, who did what and when, the booked worker, the

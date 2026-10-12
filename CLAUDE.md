@@ -126,7 +126,7 @@ src/
     GeneralJobsPage       — free-form canvas for General Jobs project (/jobs route)
     DashboardPage         — summary cards (project-scoped)
     TasksPage             — contractor task management (dedicated page, /tasks route); list + month calendar toggle (project-scoped)
-    GlobalCalendarPage    — /calendar route; month calendar of ALL workspaces' tasks combined, with project/contractor filters
+    CalendarPage          — /calendar (and /project-calendar → it): THE one calendar, drawn like the notebook (2026-10-12)
     AnalyticsDashboard    — stage/building analytics (project-scoped)
     ReportsPage           — CSV export (project-scoped)
     ActivityLogPage       — global change log
@@ -9776,3 +9776,98 @@ crossed off".
 - **A2 9's Registers ticked back** in production (`tickreg.py` in the session
   scratchpad: backup, precondition on the update time, one commit with an
   Office `stage_marks` history line, read back).
+
+---
+
+# v2 — Calendar and Time Off, built (2026-10-12, "all stars, build it")
+
+The plan is the "Calendar and Time Off" artifact (copy
+`docs/artifacts/2026-10-12-calendar-and-time-off.html`); all fourteen starred
+answers locked (DECISIONS.md).
+
+## Time off belongs to the PERSON (`src/data/timeOff.ts`, pure)
+`TimeOff {id, person, from, to, kind, note?, by?, at?}` — `person` is the
+notebook's key (`c:<contractorId>` · `u:<userId>` · `n:<name>`), `to` is the
+LAST day away (inclusive), whole days only. ONE shared list,
+`BoardSetting.timeOff` in the app-wide `__tv` bag (written through
+`setTvSetting` — persisted, synced in `settings/app`, exported, imported:
+no new state key, the backup audit is unchanged). `useTimeOff()` /
+`saveTimeOff()` / `timeOffNow()` in `src/data/useTimeOff.ts`. Helpers:
+`offOn` · `timeOffOf` · `backDay` (= `nextWorkingDay(to)`) · `daysOfTimeOff`
+· `awayOnAny` / `awaySentence` · `bandLine` · `bookedDuring` (OPEN tasks of a
+`c:` person with a day in the range) · `offThisDay` (joins a touching entry of
+the same kind) · `backOnThisDay` (shortens / splits / removes) ·
+`shiftDay` (calendar-day arithmetic in local time — never ms ± a day, the
+clock changes). Colours `TIME_OFF_COLOR` + `hatchOf(kind)`: vacation blue,
+sick pink, reserve green, other grey. Words in en/he/ru (`kindWord`,
+`timeOffWords`). Offline test `scratchpad/timeoff-test.mjs` (18).
+
+## Where it is set and seen
+- **The notebook** (`PlannerWidget`): the person's name cell is a button
+  (`data-person-name`, `data-no-drag data-el-action` — without them the board
+  node captured the press and the click never arrived) → `MiniMenu`
+  ("Time off…" + the person's current entries); a square's right-click
+  (`onContextMenu`, `state === 'on'`, not read-only) → "Off this day" /
+  "Back on this day" / "Time off…". `MiniMenu` / `MenuRow` are module level,
+  portalled, sealed, Escape in the capture phase. The band: an off square is
+  hatched (`data-cell-off`); the FIRST square of each run in the week draws
+  one absolutely placed `data-time-off-band` across the run (`width:
+  calc(n*100% + (n-1)px − 4px)`, z 2), pressing it reopens the entry. **The
+  band takes room through `colFloor`** (seeded `bandH + tileGap` for off
+  columns), never a spacer div: a tile spanning from a non-off day into an
+  off day must sit below the band, and only the per-square stacking knows
+  that — a spacer let Monday's two-day tile lie over Tuesday's band. A row
+  with a band never squishes. A task kept on an away worker carries
+  `TaskBarSeg.away` → `data-bar-away` "⚠ he's away" (in `barsByRow`, so
+  `timeOff` is a dependency).
+- **`TimeOffDialog.tsx`**: from / until / kind chips / note, "back <day>",
+  an overlap warning, and the booked tasks from EVERY workspace (live + the
+  snapshots), each with `data-time-off-move` / `data-time-off-keep` (Keep is
+  where every row starts — nothing moves by itself) and a "who instead"
+  select; Save is disabled until every Move has a name. Moves write
+  `contractorId` through `updateContractorAssignment` /
+  `updateAssignmentInProject`. Shell/Footer/Field are now EXPORTED from
+  PlannerDialogs.
+- **`PlannerTaskDialog`**: an away worker is greyed with his kind as a tag
+  (`data-who-away`); Add runs `tryMake` → `data-away-ask` ("Gadi is on
+  vacation on Wed, Oct 14 (back Sun, Oct 18).") with `data-away-pick-other` /
+  `data-away-add-anyway`. Never refuses. New props: `noPark` (the calendar has
+  no square to park on); the title reads "New task · <day>" when no person.
+- **The worker's phone**: `TaskCalendar.dayBands` (hatched cell +
+  `data-calendar-off-label`, his kind word) on the month; the week view's day
+  card gets `data-week-off` ("Отпуск · до чт, 15 окт. · выходит вс, 18 окт.")
+  and every task on that day `data-week-kept` ("⚠ офис оставил это"). Read
+  only — the office sets it (locked answer 13).
+
+## ONE calendar (`src/pages/CalendarPage.tsx`)
+`/calendar` is the page; `/project-calendar` redirects to it and the sidebar
+links to it; `GlobalCalendarPage` and `ProjectCalendarPage` are DELETED. The
+scope switch (`calendar_scope`, default all) is inside. A month of weeks; each
+week is a background grid of `data-cal-day` columns (borders, today, the drop
+target) under a CSS grid of items with `gridAutoFlow: 'row dense'` — the day
+numbers pinned to row 1, every item placed by column + span only, the browser
+packing the rows. Sorted bands first, then longest first. Items:
+- `data-cal-off` bands per person-run (press → the TimeOffDialog);
+- `CalTile` (`data-cal-task`, `data-cal-days`, `data-cal-ws`, `data-cal-done`,
+  `data-cal-away`) — look A: a white card framed in the first stage's colour
+  (green when done), the name wrapping, stages as wrapping `StagePill`s, the
+  workspace tag, the building chip, the worker's dot, "N days";
+- bundles — 4+ single-day tasks of one worker in one workspace on one day →
+  the notebook's `BundleBar` + `BundlePopup`.
+The + (`data-cal-plus`, hover-revealed; a finger's first tap on the day
+header shows it) opens `PlannerTaskDialog` with no job and nobody chosen.
+A tile press opens the task in its workspace (`rememberTaskFocus` +
+`setPendingFocus({kind:'task'})`, a return ticket for a foreign one); a drag
+(5px slop, `dayAt()` from `elementsFromPoint` over `[data-cal-day]`) moves
+the WHOLE task keeping its working-day pattern (the notebook's `dropBarTo`
+rule), except a single-day stretch of a task with other days, which asks
+`PlannerDayDialog` (move / add / merge / new — "new" opens the task form with
+the job and worker). Done tiles do not drag. Print prints the month as a
+table, days away included. Under 768px the grid scrolls sideways at 760px.
+
+Harness: `scratchpad/timeoff-probe.mjs` (44 — name menu, the form, booked
+Move/Keep, the band's span, right-click on/off, the task form's ask, the one
+calendar with bar/bundle/band/+/drag/scope, the phone in Russian).
+Re-encoded: `notebook-r48` §3 and `round49-probe` §5 (they asserted the old
+calendar's fold chips and the + that went to the Tasks page). Standing
+pre-existing red: `round22.mjs` (identical without the diff).

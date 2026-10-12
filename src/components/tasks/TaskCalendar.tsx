@@ -137,7 +137,13 @@ export function TaskCalendar({
   onMore,
   onAddDay,
   addDayTitle,
+  dayBands,
 }: {
+  /**
+   * Days to wear a striped band (time off — owner, 2026-10-12): the worker's
+   * own days away on his phone, in his own language ("Отпуск").
+   */
+  dayBands?: Record<string, { label: string; bg: string; ink: string }>;
   events: CalendarEvent[];
   /** date-fns locale for the month title — the worker's phone reads its own language. */
   locale?: Locale;
@@ -333,10 +339,13 @@ export function TaskCalendar({
           const folded = allItems.slice(shown.length).reduce((n, it) => n + countOf(it), 0);
           const inMonth = isSameMonth(day, month);
           const isToday = isSameDay(day, today);
+          const band = dayBands?.[key];
           return (
             <div
               key={idx}
               data-calendar-day={key}
+              {...(band ? { 'data-calendar-off': '1' } : {})}
+              style={band ? { backgroundImage: band.bg } : undefined}
               className={`border-b border-r border-gray-50 p-0.5 sm:p-1.5 flex flex-col gap-0.5 sm:gap-1
                 overflow-hidden ${fill ? 'min-h-0' : 'aspect-square sm:aspect-auto sm:min-h-[132px]'} ${
                 idx % 7 === 6 ? 'bg-gray-100/80' : inMonth ? 'bg-white' : 'bg-gray-50/60'
@@ -363,6 +372,10 @@ export function TaskCalendar({
                   {format(day, 'd')}
                 </span>
               </div>
+              {band && (
+                <span data-calendar-off-label className="rounded px-1 text-[9.5px] sm:text-[10.5px] font-extrabold truncate flex-shrink-0"
+                  style={{ backgroundColor: band.ink, color: '#fff' }} title={band.label}>{band.label}</span>
+              )}
               <div className="flex flex-col gap-1 flex-1">
                 {shown.map(it => {
                   if (it.kind === 'fold') {

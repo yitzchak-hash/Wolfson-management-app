@@ -242,56 +242,28 @@ const wdata = page => page.evaluate(() => JSON.parse(localStorage.getItem('wolfs
   await seedCtx(ctx, { active: 'wolfson' });
   const page = await ctx.newPage();
   page.on('pageerror', e => { console.log('PAGE ERROR', e.message); fails++; });
+  // ONE calendar, drawn like the notebook (owner, 2026-10-12 "all stars"):
+  // a busy day of one worker in one workspace is ONE bundle tile.
   await page.goto(`${APP}/calendar`);
-  await page.waitForSelector(`[data-calendar-day="${MON}"]`, { timeout: 15000 }).catch(() => {});
+  await page.waitForSelector('[data-calendar-page]', { timeout: 15000 }).catch(() => {});
   await page.waitForTimeout(700);
-  const mon = await page.evaluate(d => {
-    const cell = document.querySelector(`[data-calendar-day="${d}"]`);
-    const kids = [...cell.querySelectorAll('[data-calendar-ev],[data-calendar-fold]')];
-    return {
-      order: kids.map(k => k.hasAttribute('data-calendar-fold') ? `fold:${k.getAttribute('data-calendar-fold')}` : `ev:${k.getAttribute('data-calendar-ev-done')}`),
-      foldText: cell.querySelector('[data-calendar-fold]')?.textContent ?? '',
-      struck: [...cell.querySelectorAll('*')].some(n => getComputedStyle(n).textDecorationLine.includes('line-through')),
-    };
-  }, MON);
-  check(mon.order.join(',') === 'ev:0,fold:4', '3 · Monday: the open task first, then ONE folded chip of 4', mon.order.join(','));
-  check(/Igor/.test(mon.foldText) && /Wolfson/.test(mon.foldText) && /4 done/.test(mon.foldText) && /✓/.test(mon.foldText),
-    '3 · the chip reads "Igor · Wolfson · 4 done ✓"', mon.foldText);
-  check(!mon.struck, '3 · nothing on the day is struck through');
-  await page.locator(`[data-calendar-day="${MON}"] [data-calendar-fold]`).click();
-  await page.waitForSelector('[data-calendar-daylist]', { timeout: 3000 }).catch(() => {});
-  const fold = await page.evaluate(() => ({
-    n: document.querySelector('[data-calendar-daylist]')?.getAttribute('data-calendar-daylist'),
-    rows: document.querySelectorAll('[data-calendar-daylist-row]').length,
-  }));
-  check(fold.n === '4' && fold.rows === 4, '3 · pressing the chip lists its four tasks', JSON.stringify(fold));
+  const monB = page.locator('[data-task-bundle="5"]');
+  check(await monB.count() === 1, '3 · Monday: Igor’s five tasks are ONE bundle tile');
+  const monTxt = await monB.innerText().catch(() => '');
+  check(/4 done/.test(monTxt) && /1 open/.test(monTxt), '3 · it reads "4 done · 1 open"', monTxt.replace(/\n/g, ' '));
+  check(!(await page.evaluate(() => [...document.querySelectorAll('[data-calendar-page] *')].some(n => getComputedStyle(n).textDecorationLine.includes('line-through')))),
+    '3 · nothing on the calendar is struck through');
+  await monB.click();
+  await page.waitForSelector('[data-bundle-popup]', { timeout: 3000 }).catch(() => {});
+  check(await page.locator('[data-bundle-row]').count() === 5, '3 · pressing it lists its five tasks');
   await page.keyboard.press('Escape');
   await page.waitForTimeout(200);
-  check(await page.locator('[data-calendar-daylist]').count() === 0, '3 · Escape closes the list');
-
-  const tue = await page.evaluate(d => {
-    const cell = document.querySelector(`[data-calendar-day="${d}"]`);
-    return {
-      shown: cell.querySelectorAll('[data-calendar-ev],[data-calendar-fold]').length,
-      more: cell.querySelector('[data-calendar-more]')?.getAttribute('data-calendar-more'),
-      moreText: cell.querySelector('[data-calendar-more]')?.textContent ?? '',
-    };
-  }, TUE);
-  check(tue.shown === 5 && tue.more === '2', '3 · Tuesday’s seven open tasks: five drawn, "+2"', JSON.stringify(tue));
-  check(/\+2 more/.test(tue.moreText), '3 · it says "+2 more"', tue.moreText);
-  await page.locator(`[data-calendar-day="${TUE}"] [data-calendar-more]`).click();
-  await page.waitForSelector('[data-calendar-daylist]', { timeout: 3000 }).catch(() => {});
-  check(await page.locator('[data-calendar-daylist-row]').count() === 7, '3 · "+2 more" opens the whole day as a list');
-  await page.locator('[data-calendar-daylist-row]').first().click();
-  await page.waitForTimeout(1200);
-  check(page.url().includes('/tasks'), '3 · a row in the list keeps its own click (to Tasks)', page.url());
-
-  // The workspace's own calendar folds the same way.
+  if (await page.locator('[data-bundle-popup]').count()) await page.mouse.click(5, 5);
+  check(await page.locator('[data-task-bundle="6"]').count() === 1, '3 · Tuesday: Moti’s six are one bundle');
+  check(await page.locator('[data-cal-task="T-multi"][data-cal-days="2"]').count() === 1, '3 · the two-day task is one bar');
   await page.goto(`${APP}/project-calendar`);
-  await page.waitForSelector(`[data-calendar-day="${MON}"]`, { timeout: 10000 }).catch(() => {});
-  await page.waitForTimeout(500);
-  const pc = await page.evaluate(d => document.querySelector(`[data-calendar-day="${d}"] [data-calendar-fold]`)?.getAttribute('data-calendar-fold'), MON);
-  check(pc === '4', '3 · the project calendar folds too', String(pc));
+  await page.waitForTimeout(800);
+  check(new URL(page.url()).pathname === '/calendar', '3 · the sidebar’s old address is the same calendar');
   await ctx.close();
 }
 

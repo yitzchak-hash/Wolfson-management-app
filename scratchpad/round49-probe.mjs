@@ -200,13 +200,13 @@ const store = (page, k = 'wolfson_app_data') => page.evaluate(k => JSON.parse(lo
   await page.goto(`${APP}/project-calendar`);
   await page.waitForTimeout(1500);
   check(await page.locator('[data-calendar-scope="all"]').count() === 1, 'the calendar opens on every workspace');
-  const any = await page.locator('[data-calendar-day]').evaluateAll(els => els.some(e => /Wolfson/.test(e.textContent)));
-  check(any, 'Wolfson\'s work is on the Job Board\'s calendar');
-  await page.locator(`[data-cal-add="${THU}"]`).first().click();
-  await page.waitForTimeout(900);
-  check(/\/tasks$/.test(new URL(page.url()).pathname), 'the day\'s "+" goes to the Tasks page');
-  const date = await page.locator('input[type="date"]').first().inputValue().catch(() => '');
-  check(date === THU, 'with the add form open on that day', date);
+  check(await page.locator('[data-cal-ws="wolfson"]').count() > 0, 'Wolfson\'s work is on the Job Board\'s calendar');
+  await page.locator(`[data-cal-plus="${THU}"]`).first().click({ force: true });
+  await page.waitForTimeout(600);
+  // The + opens the notebook's own task form now (owner, 2026-10-12, "all stars").
+  check(await page.locator('[data-task-dialog]').count() === 1, 'the day\'s "+" opens the notebook\'s task form');
+  const date = await page.locator('[data-start-day]').first().inputValue().catch(() => '');
+  check(date === THU, 'starting on that day', date);
   await ctx.close();
 }
 

@@ -46,7 +46,7 @@ day still stands, after the numbered list.)
 3. `npx tsc --noEmit -p .` and `npx vite build`. 4. The audits:
    `node scratchpad/loopaudit.mjs`, `backupaudit.mjs`, `navaudit.mjs`, `apilimit.mjs`.
 5. A What's New entry (`src/data/whatsNew.tsx`, dates run AHEAD of the clock;
-   newest is `2027-01-29` — the next entry must be a later date (an older
+   newest is `2027-01-30` — the next entry must be a later date (an older
    entry lower down also wears `2026-12-20`; the marker compares only the TOP
    entry's date, so never reuse a date that appears anywhere in the file)). 6. A CLAUDE.md
    round record. 7. A line in `docs/CRM-CHECKLIST.md`, tick `docs/ROADMAP.md`, date a line in `docs/DECISIONS.md` when he decided something. 8. Rewrite THIS file.
@@ -64,7 +64,29 @@ with starred recommendations is published first; the owner says "approved" /
 "all yes" / answers by number; then it is built. Never build a redesign
 unasked.
 
-## Where things stand (2026-10-12, latest — his three answers; THE CALENDAR + TIME OFF PLAN AWAITS HIS ANSWERS)
+## Where things stand (2026-10-12, latest — "all stars, build it": Calendar and Time Off BUILT)
+His message: "all stars, build it" — every starred answer on the "Calendar and
+Time Off" page (https://claude.ai/artifact/4mBwAn56xN8qCrieBbwMVj).
+- **Time off**: `src/data/timeOff.ts` (pure, timeoff-test 18), one shared list
+  in `boardSettings.__tv.timeOff`, set from the worker's name on the notebook
+  (Time off…) or a square's right-click (Off this day / Back on this day);
+  a striped band with "back <day>"; the form lists every booked task with
+  Move / Keep; a kept task says "he's away"; the task form greys an away
+  worker and asks Pick someone else / Add anyway; his phone shows the band in
+  his language.
+- **One calendar**: `CalendarPage` on `/calendar` (sidebar + header), tiles,
+  multi-day bars, bundles, bands, + → the notebook's task form, drag to move,
+  print. The two old calendar pages are deleted.
+- Probes: `timeoff-probe.mjs` (44) new; notebook-r48 and round49 re-encoded;
+  notebooktile, notebookbars, multiday, foreigndrop, portalround, portal-r48,
+  notebook2way, tvcrash (built) and the four audits green. round22 red as before.
+- Not built (said in the reply): the plan's menu also showed "Change colour"
+  and "Take off the notebook…" beside Time off — those stay in the notebook's
+  pencil, as before.
+- **The reply he saw**: the 14 answers as built, how to try it, the link,
+  "✅ Nothing needed from you".
+
+## Where things stand (2026-10-12 — his three answers; the calendar plan published)
 His message: "1 a, 2 yes draw the plan, 3 tick it back and uh, also add a some
 sort of way to add a vacation for a worker from the notebook. So that I can
 see on the notebook that he's on vacation. Add that to the plan."

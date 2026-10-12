@@ -266,6 +266,14 @@ export interface BoardSetting {
    * saved on purpose.
    */
   autoLayout?: '' | 'hourly' | 'daily';
+  /**
+   * Everybody's TIME OFF — vacation, sick, reserve duty, other — in the
+   * app-wide `__tv` bag (owner, 2026-10-12: "all stars, build it"). It belongs
+   * to the PERSON (the notebook's `c:` / `u:` / `n:` keys), so every notebook,
+   * the calendar, the task form, the wall and the worker's phone read one
+   * list. Whole days. See `src/data/timeOff.ts`.
+   */
+  timeOff?: import('../data/timeOff').TimeOff[];
 }
 
 export type BoardSettingKey = keyof BoardSetting;

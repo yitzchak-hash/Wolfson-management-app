@@ -14,6 +14,8 @@ import { DayStretch, workingRun, stretchDays, nextWorkingDay, parseDay } from '.
 import { RecordedMemo } from '../../data/voiceMemo';
 import { VoiceMemoPlayer } from '../ui/VoiceMemo';
 import { MessageBox, memoFile } from '../ui/MessageBox';
+import { awayOnAny, awaySentence, kindWord, offOn, hatchOf, TIME_OFF_COLOR } from '../../data/timeOff';
+import { useTimeOff } from '../../data/useTimeOff';
 
 /**
  * The two questions the planner has to ask.
@@ -63,8 +65,10 @@ export interface TaskDialogResult {
  * (locked answer 7), so nothing here writes a square.
  */
 export function PlannerTaskDialog({
-  job, jobProjectId, jobs, person, dayIso, contractors, onCancel, onDone,
+  job, jobProjectId, jobs, person, dayIso, contractors, onCancel, onDone, noPark,
 }: {
+  /** The calendar has no squares to park a card on — hide "Just put it on the planner". */
+  noPark?: boolean;
   job?: Apartment;
   /**
    * The workspace `job` lives in — omit for the one you are standing in. A
@@ -204,6 +208,27 @@ export function PlannerTaskDialog({
   const jobKnown = !!picked || !!general;
   const canMake = jobKnown && who.length > 0 && task.trim().length > 0 && allDays.length > 0;
 
+  /**
+   * Somebody picked is away on one of the days (locked answer 10): the form
+   * asks first — "Gadi is on vacation on Tue 13 Oct (back Sun 18)" — with
+   * Pick someone else / Add anyway. It never refuses.
+   */
+  const timeOff = useTimeOff();
+  const lang = isRtl ? 'he' : 'en';
+  const [awayAsk, setAwayAsk] = useState<string | null>(null);
+  const awayOf = (cid: string) => offOn(timeOff, `c:${cid}`, allDays[0] ?? start)
+    ?? awayOnAny(timeOff, `c:${cid}`, allDays)?.off;
+
+  function tryMake() {
+    if (!canMake) return;
+    const hits = who.map(cid => {
+      const hit = awayOnAny(timeOff, `c:${cid}`, allDays);
+      return hit ? awaySentence(active.find(c => c.id === cid)?.name ?? 'He', hit, lang) : null;
+    }).filter((x): x is string => !!x);
+    if (hits.length) { setAwayAsk(hits.join(' ')); return; }
+    void make();
+  }
+
   async function make() {
     if (!canMake) return;
     setBusy(true);
@@ -264,7 +289,8 @@ export function PlannerTaskDialog({
   const dayWord = parseDay(dayIso).toLocaleDateString(isRtl ? 'he-IL' : 'en-US', { weekday: 'long', day: 'numeric', month: 'short' });
   const title = job
     ? `${t('Put', 'לשבץ את')} ${jobTitle} ${t('on', 'אצל')} ${person.name} · ${dayWord}`
-    : `${t('Add a job', 'הוספת עבודה')} · ${person.name} · ${dayWord}`;
+    : person.name ? `${t('Add a job', 'הוספת עבודה')} · ${person.name} · ${dayWord}`
+    : `${t('New task', 'משימה חדשה')} · ${dayWord}`;
 
   return (
     <Shell onCancel={onCancel} title={title}>
@@ -374,14 +400,23 @@ export function PlannerTaskDialog({
           <div className="flex flex-wrap gap-1 mt-1">
             {[...active.filter(c => who.includes(c.id)), ...whoHits.filter(c => !who.includes(c.id))].map(c => {
               const on = who.includes(c.id);
+              const away = awayOf(c.id);
               return (
                 <button key={c.id} data-who-pick={c.id} data-on={on ? '1' : undefined}
+                  {...(away ? { 'data-who-away': away.kind } : {})}
+                  title={away ? kindWord(away.kind, lang) : undefined}
                   onClick={() => setWho(w => (on ? w.filter(x => x !== c.id) : [...w, c.id]))}
                   className={`flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-bold border ${
-                    on ? 'text-white border-transparent' : 'text-gray-700 border-gray-200 hover:bg-gray-50'}`}
+                    on ? 'text-white border-transparent' : away ? 'text-gray-400 border-gray-200' : 'text-gray-700 border-gray-200 hover:bg-gray-50'}`}
                   style={on ? { backgroundColor: '#1e3a5f' } : undefined}>
-                  <span className="w-2 h-2 rounded-full" style={{ backgroundColor: on ? '#fff' : personColor(c.name, c.color) }} />
+                  <span className="w-2 h-2 rounded-full" style={{ backgroundColor: on ? '#fff' : personColor(c.name, c.color), opacity: away && !on ? 0.45 : 1 }} />
                   {c.name}
+                  {away && (
+                    <span className="px-1 rounded text-[9px] font-extrabold uppercase"
+                      style={{ backgroundImage: hatchOf(away.kind), color: TIME_OFF_COLOR[away.kind].ink }}>
+                      {kindWord(away.kind, lang)}
+                    </span>
+                  )}
                 </button>
               );
             })}
@@ -458,7 +493,7 @@ export function PlannerTaskDialog({
       <Footer>
         {/* The no-task escape hatch stays a quiet side button — for the rare
             card that should sit on the sheet with no task behind it yet. */}
-        {picked && !general && (
+        {picked && !general && !noPark && (
           <button data-just-park onClick={() => onDone({ taskIds: [], days: [start], contractorIds: who, jobId: picked.job.id,
               projectId: picked.projectId !== currentProjectId ? picked.projectId : undefined, parked: true })}
             disabled={busy}
@@ -468,7 +503,7 @@ export function PlannerTaskDialog({
             {t('Just put it on the planner', 'רק לשים בלוח')}
           </button>
         )}
-        <button data-add-the-job onClick={make} disabled={busy || !canMake}
+        <button data-add-the-job onClick={tryMake} disabled={busy || !canMake}
           className="px-3 py-1.5 rounded-lg text-[12.5px] font-bold text-white flex items-center gap-1.5
                      disabled:opacity-40"
           style={{ backgroundColor: '#4aa8d8' }}>
@@ -476,6 +511,27 @@ export function PlannerTaskDialog({
           {t('Add the job', 'להוסיף את העבודה')}
         </button>
       </Footer>
+      {awayAsk && (
+        <div data-away-ask className="absolute inset-0 z-40 flex items-center justify-center p-4"
+          style={{ backgroundColor: 'rgba(255,255,255,.88)' }}>
+          <div className="w-full max-w-[360px] rounded-xl border border-amber-200 bg-white p-3 shadow-xl grid gap-2.5">
+            <div className="flex items-start gap-2 text-[13px] font-semibold text-slate-800">
+              <AlertTriangle size={16} className="text-amber-500 flex-shrink-0 mt-0.5" />
+              <span data-away-sentence>{awayAsk}</span>
+            </div>
+            <div className="flex gap-2 justify-end">
+              <button data-away-pick-other onClick={() => setAwayAsk(null)}
+                className="px-3 py-1.5 rounded-lg text-[12.5px] font-bold border border-gray-200 text-gray-700 hover:bg-gray-50">
+                {t('Pick someone else', 'לבחור מישהו אחר')}
+              </button>
+              <button data-away-add-anyway onClick={() => { setAwayAsk(null); void make(); }}
+                className="px-3 py-1.5 rounded-lg text-[12.5px] font-bold text-white" style={{ backgroundColor: '#f59e0b' }}>
+                {t('Add anyway', 'להוסיף בכל זאת')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </Shell>
   );
 }
@@ -852,7 +908,7 @@ export function PlannerOffDialog({ name, jobCount, onCancel, onDone }: {
 
 // ── Shared chrome ────────────────────────────────────────────────────────────
 
-function Shell({ title, children, onCancel, danger }: {
+export function Shell({ title, children, onCancel, danger }: {
   title: string; children: React.ReactNode; onCancel: () => void; danger?: boolean;
 }) {
   useEffect(() => {
@@ -905,7 +961,7 @@ function Shell({ title, children, onCancel, danger }: {
   );
 }
 
-function Footer({ children }: { children: React.ReactNode }) {
+export function Footer({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex gap-2 justify-end mt-3 pt-3 border-t border-gray-100">{children}</div>
   );
@@ -919,7 +975,7 @@ function Footer({ children }: { children: React.ReactNode }) {
  * next button standing in the field, which was the picked row's own clear X:
  * every pick undid itself before the eye could see it.
  */
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+export function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="block">
       <span className="block text-[10.5px] font-bold text-gray-500 mb-1">{label}</span>

@@ -16,6 +16,9 @@ import { familyNameFromFolderName } from '../../data/driveApi';
 import { needsNewDay, unfinishedOn } from '../../data/notFinished';
 import { unfinishedWords } from '../tasks/NotFinishedSheet';
 import { rowNumOf } from '../../data/floorRows';
+import { offOn, hatchOf, bandLine, timeOffOf, timeOffWords, offThisDay, backOnThisDay, kindWord, TimeOff, TIME_OFF_COLOR } from '../../data/timeOff';
+import { useTimeOff, saveTimeOff } from '../../data/useTimeOff';
+import { TimeOffDialog } from './TimeOffDialog';
 
 /** "Floor 5" in the reader's language — the floor number as the diagram prints it. */
 function floorWord(lang: string | undefined, n: string): string {
@@ -888,6 +891,7 @@ export function PlannerWidget({
    * Keyed `${person}|${weekStart}`; lanes assigned greedily so two tasks on
    * the same days stack instead of covering each other.
    */
+  const timeOff = useTimeOff();
   const barsByRow = useMemo(() => {
     const map = new Map<string, TaskBarSeg[]>();
     if (!tasksOn) return map;
@@ -956,6 +960,7 @@ export function PlannerWidget({
           projectId: pid === currentProjectId ? undefined : pid, workspace: a.general ? undefined : ws,
           done: !!a.completedAt, stageFrom: from, stageTo: to, progress,
           foreign: pid !== currentProjectId, lane: 0,
+          away: !a.completedAt && run.days.some(dd => !!offOn(timeOff, `c:${a.contractorId}`, dd)),
         });
         map.set(key, list);
         run = null;
@@ -1064,7 +1069,7 @@ export function PlannerWidget({
     }
     return map;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tasksOn, people, assignments, jobs, projects, currentProjectId, snapTick, weeks, span, stages, allStages, boardSettingsAll, lang]);
+  }, [tasksOn, people, assignments, jobs, projects, currentProjectId, snapTick, weeks, span, stages, allStages, boardSettingsAll, lang, timeOff]);
 
   /**
    * THE FOLD — once per notebook, the old per-day task cards become the
@@ -1113,6 +1118,13 @@ export function PlannerWidget({
   /** The hover plus, and the dialog it opens (scene 3). */
   const [plusCell, setPlusCell] = useState<string | null>(null);
   const [plusAsk, setPlusAsk] = useState<{ person: string; day: string } | null>(null);
+  /**
+   * Time off (owner, 2026-10-12): the name's menu, a square's right-click
+   * menu, and the form itself. One shared list — it belongs to the person.
+   */
+  const [nameMenu, setNameMenu] = useState<{ pid: string; x: number; y: number } | null>(null);
+  const [cellMenu, setCellMenu] = useState<{ pid: string; day: string; x: number; y: number } | null>(null);
+  const [offEdit, setOffEdit] = useState<{ pid: string; initial: Partial<TimeOff> & { from: string; to: string } } | null>(null);
   /** A bar being taken off the sheet — keep the task (dateless) or delete it. */
   const [barAsk, setBarAsk] = useState<TaskBarSeg | null>(null);
 
@@ -1651,7 +1663,12 @@ export function PlannerWidget({
                 const fixedH = barHeight(z, textSize, strips);
                 const tileGap = Math.max(2, z(2));
                 const tileTop = new Map<string, number>();
-                const colFloor = new Array<number>(days.length).fill(0);
+                // Days away this week (time off): the band takes the top of each
+                // such square, so every tile there — and every tile CROSSING
+                // there — starts below it (the per-square stacking rule).
+                const offs = days.map(dt => offOn(timeOff, pid, iso(dt)));
+                const bandH = Math.max(12, z(strips ? 14 : 16));
+                const colFloor = offs.map(o => (o ? bandH + tileGap : 0));
                 for (let l = 0; l < laneCount; l++) {
                   for (const bar of rowBars) {
                     if (bar.lane !== l) continue;
@@ -1663,7 +1680,8 @@ export function PlannerWidget({
                     for (let c = bar.startIdx; c < last; c++) colFloor[c] = bottom;
                   }
                 }
-                const weekEmpty = !rowBars.length && days.every(dt => !(cells[cellKey(pid, iso(dt))]?.length));
+                // A row with a band is never squished — the band IS something to read on it.
+                const weekEmpty = !rowBars.length && offs.every(o => !o) && days.every(dt => !(cells[cellKey(pid, iso(dt))]?.length));
                 const rowLit = hover?.person === pid && days.some(dt => iso(dt) === hover.day);
                 const squished = weekEmpty && !rowLit;
                 return (
@@ -1678,7 +1696,15 @@ export function PlannerWidget({
                     </div>
                   )}
                   <div className="grid gap-px mb-px" style={{ gridTemplateColumns: cols }}>
-                    <div className="flex items-center gap-1 px-1 rounded-l-md min-w-0"
+                    <div className={`flex items-center gap-1 px-1 rounded-l-md min-w-0 ${ro ? '' : 'cursor-pointer hover:brightness-95'}`}
+                      data-person-name={pid}
+                      {...(ro ? {} : { 'data-no-drag': '', 'data-el-action': '' })}
+                      role={ro ? undefined : 'button'}
+                      title={ro ? undefined : 'Time off and more'}
+                      onClick={ro ? undefined : e => {
+                        e.stopPropagation();
+                        setNameMenu({ pid, x: e.clientX, y: e.clientY });
+                      }}
                       style={{
                         backgroundColor: tint(person.color, 0.10),
                         paddingTop: squished ? 1 : z(4), paddingBottom: squished ? 1 : z(4),
@@ -1708,6 +1734,13 @@ export function PlannerWidget({
                       const entries = cells[key] ?? [];
                       const state = personState(pid, day);
                       const lit = hover?.person === pid && hover?.day === day;
+                      const dIdx = days.findIndex(x => iso(x) === day);
+                      const off = offs[dIdx];
+                      // The band's label is drawn ONCE, from the first square of
+                      // each run in this week, laid across the run's squares.
+                      const runStart = !!off && (dIdx === 0 || offs[dIdx - 1]?.id !== off.id);
+                      let runLen = 0;
+                      if (runStart) { while (dIdx + runLen < days.length && offs[dIdx + runLen]?.id === off!.id) runLen++; }
                       return (
                         <div
                           key={day}
@@ -1717,6 +1750,12 @@ export function PlannerWidget({
                           }}
                           className="group/cell relative p-0.5 flex flex-col gap-0.5 items-stretch"
                           data-cell-person={pid} data-cell-day={day}
+                          {...(off ? { 'data-cell-off': off.kind } : {})}
+                          onContextMenu={ro || state !== 'on' ? undefined : e => {
+                            // Right-click a square → "Off this day" (locked answer 7).
+                            e.preventDefault(); e.stopPropagation();
+                            setCellMenu({ pid, day, x: e.clientX, y: e.clientY });
+                          }}
                           onMouseEnter={() => { if (!ro && state === 'on') setPlusCell(key); }}
                           onMouseLeave={() => setPlusCell(c => (c === key ? null : c))}
                           onPointerDown={e => {
@@ -1737,14 +1776,36 @@ export function PlannerWidget({
                             minHeight: squished ? z(12) : z(strips ? 26 : SLOT_H) * rowScale,
                             transition: 'min-height 160ms ease, background-color 150ms ease',
                             backgroundColor: lit ? '#dbeafe'
-                              : state === 'ending' ? '#f1f5f9' : cellBg,
+                              : state === 'ending' ? '#f1f5f9' : off ? TIME_OFF_COLOR[off.kind].bg : cellBg,
                             backgroundImage: state === 'ending'
                               ? 'repeating-linear-gradient(45deg,#e2e8f0 0 5px,transparent 5px 10px)'
-                              : undefined,
+                              : off && !lit ? hatchOf(off.kind) : undefined,
                             outline: lit ? '2px solid #4aa8d8' : '1px solid #eef2f7',
                             outlineOffset: lit ? -2 : -1,
                           }}
                         >
+                          {/* Time off: a band across the run's squares — "Vacation ·
+                              back Sun 18". Every square of the run keeps the same
+                              strip of room at its top, so the band lies over clear
+                              space and the tasks start below it. */}
+                          {off && runStart && (
+                            <button
+                              data-time-off-band={off.kind} data-band-person={pid}
+                              data-no-drag data-el-action
+                              disabled={ro}
+                              onClick={ro ? undefined : e => { e.stopPropagation(); setOffEdit({ pid, initial: off }); }}
+                              title={`${person.name} · ${bandLine(off, lang, true)}${off.note ? ` — ${off.note}` : ''}${ro ? '' : '\nPress to change the dates or remove it'}`}
+                              className="absolute flex items-center rounded-md overflow-hidden whitespace-nowrap text-left"
+                              style={{
+                                top: 2, insetInlineStart: 2, height: bandH, zIndex: 2,
+                                width: `calc(${runLen * 100}% + ${runLen - 1}px - 4px)`,
+                                backgroundColor: TIME_OFF_COLOR[off.kind].ink, color: '#fff',
+                                fontSize: Math.max(z(7), textSize - z(2)), fontWeight: 800,
+                                padding: `0 ${Math.max(3, z(5))}px`, cursor: ro ? 'default' : 'pointer',
+                              }}>
+                              <span className="truncate">{bandLine(off, lang)}</span>
+                            </button>
+                          )}
                           {/* The bars — every task, drawn from the task, spanning
                               its days; lanes keep two tasks on one day apart. A
                               cell a bar passes over leaves that lane's height
@@ -1881,6 +1942,57 @@ export function PlannerWidget({
         </>}
       </div>
 
+      {/* Time off — the name's menu, a square's menu, and the form. */}
+      {nameMenu && createPortal((() => {
+        const who = personOf(nameMenu.pid, contractors, users);
+        const today = iso(new Date());
+        const mine = timeOffOf(timeOff, nameMenu.pid).filter(x => x.to >= today);
+        return (
+          <MiniMenu x={nameMenu.x} y={nameMenu.y} onClose={() => setNameMenu(null)} title={who.name}>
+            <MenuRow hook="data-menu-time-off" onClick={() => {
+              setNameMenu(null);
+              setOffEdit({ pid: nameMenu.pid, initial: { from: today, to: today } });
+            }}>🗓 {lang === 'he' ? 'חופשה / היעדרות…' : lang === 'ru' ? 'Отгул…' : 'Time off…'}</MenuRow>
+            {mine.map(x => (
+              <MenuRow key={x.id} hook="data-menu-time-off-entry" onClick={() => {
+                setNameMenu(null); setOffEdit({ pid: nameMenu.pid, initial: x });
+              }}>
+                <span className="inline-block w-2.5 h-2.5 rounded-sm me-1.5 align-middle" style={{ backgroundImage: hatchOf(x.kind) }} />
+                {kindWord(x.kind, lang)} · {new Date(`${x.from}T00:00:00`).toLocaleDateString(LT, { day: 'numeric', month: 'short' })}
+                {x.to !== x.from ? `–${new Date(`${x.to}T00:00:00`).toLocaleDateString(LT, { day: 'numeric', month: 'short' })}` : ''}
+              </MenuRow>
+            ))}
+          </MiniMenu>
+        );
+      })(), document.body)}
+      {cellMenu && createPortal((() => {
+        const off = offOn(timeOff, cellMenu.pid, cellMenu.day);
+        const by = useStore.getState().currentUser?.name ?? 'Office';
+        return (
+          <MiniMenu x={cellMenu.x} y={cellMenu.y} onClose={() => setCellMenu(null)}
+            title={new Date(`${cellMenu.day}T00:00:00`).toLocaleDateString(LT, { weekday: 'long', day: 'numeric', month: 'short' })}>
+            {off ? (
+              <MenuRow hook="data-menu-back-on-day" onClick={() => {
+                saveTimeOff(backOnThisDay(timeOff, cellMenu.pid, cellMenu.day)); setCellMenu(null);
+              }}>{lang === 'he' ? 'חוזר לעבודה ביום הזה' : lang === 'ru' ? 'Работает в этот день' : 'Back on this day'}</MenuRow>
+            ) : (
+              <MenuRow hook="data-menu-off-day" onClick={() => {
+                saveTimeOff(offThisDay(timeOff, cellMenu.pid, cellMenu.day, 'vacation', by)); setCellMenu(null);
+              }}>{lang === 'he' ? 'לא בעבודה ביום הזה' : lang === 'ru' ? 'Выходной в этот день' : 'Off this day'}</MenuRow>
+            )}
+            <MenuRow hook="data-menu-time-off" onClick={() => {
+              setCellMenu(null);
+              setOffEdit({ pid: cellMenu.pid, initial: off ?? { from: cellMenu.day, to: cellMenu.day } });
+            }}>🗓 {lang === 'he' ? 'חופשה / היעדרות…' : lang === 'ru' ? 'Отгул…' : 'Time off…'}</MenuRow>
+          </MiniMenu>
+        );
+      })(), document.body)}
+      {offEdit && (() => {
+        const who = personOf(offEdit.pid, contractors, users);
+        return <TimeOffDialog person={offEdit.pid} name={who.name} color={who.color}
+          initial={offEdit.initial} onClose={() => setOffEdit(null)} />;
+      })()}
+
       {/* The bundle window — every task in the bundle, and the building lit. */}
       {bundleOpen && liveBundle && (() => {
         const person = personOf(bundleOpen.rowKey.slice(0, bundleOpen.rowKey.indexOf('|')), contractors, users);
@@ -1976,6 +2088,51 @@ export function PlannerWidget({
   );
 }
 
+/**
+ * A small sealed menu at the pointer (portalled to the body — the notebook is
+ * a board node inside a transformed world). A press outside closes it; its
+ * own events never reach the board node underneath (the portal-in-a-node
+ * trap).
+ */
+function MiniMenu({ x, y, title, onClose, children }: {
+  x: number; y: number; title?: string; onClose: () => void; children: React.ReactNode;
+}) {
+  useEffect(() => {
+    const key = (e: KeyboardEvent) => { if (e.key === 'Escape') { e.stopPropagation(); onClose(); } };
+    window.addEventListener('keydown', key, true);
+    return () => window.removeEventListener('keydown', key, true);
+  }, [onClose]);
+  const seal = {
+    onPointerDown: (e: React.PointerEvent) => e.stopPropagation(),
+    onPointerUp: (e: React.PointerEvent) => e.stopPropagation(),
+    onMouseDown: (e: React.MouseEvent) => e.stopPropagation(),
+    onContextMenu: (e: React.MouseEvent) => { e.preventDefault(); e.stopPropagation(); },
+    onWheel: (e: React.WheelEvent) => e.stopPropagation(),
+  };
+  const left = Math.min(x, window.innerWidth - 230);
+  const top = Math.min(y, window.innerHeight - 200);
+  return (
+    <>
+      <div className="fixed inset-0 z-[165]" {...seal} onClick={onClose} />
+      <div data-mini-menu className="fixed z-[166] min-w-[200px] max-w-[260px] rounded-xl bg-white py-1 overflow-hidden"
+        {...seal}
+        style={{ left, top, boxShadow: '0 12px 32px -8px rgba(15,23,42,.35)', border: '1px solid #e2e8f0' }}>
+        {title && <div className="px-3 pt-1 pb-1.5 text-[10.5px] font-extrabold uppercase tracking-wide text-slate-400 truncate">{title}</div>}
+        {children}
+      </div>
+    </>
+  );
+}
+
+function MenuRow({ hook, onClick, children }: { hook: string; onClick: () => void; children: React.ReactNode }) {
+  return (
+    <button {...{ [hook]: '' }} onClick={onClick}
+      className="w-full text-left px-3 py-1.5 text-[12.5px] font-semibold text-slate-700 hover:bg-slate-50 truncate">
+      {children}
+    </button>
+  );
+}
+
 /** The month a date belongs to, as `YYYY-MM`. */
 function monthKey(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
@@ -2043,6 +2200,8 @@ export interface TaskBarSeg {
    * own task fields are its first item's and mean nothing on their own.
    */
   bundle?: BundleInfo;
+  /** The worker has time off on one of this stretch's days and the task was kept on him. */
+  away?: boolean;
 }
 
 /**
@@ -2170,7 +2329,7 @@ function TaskBar({ bar, z, size, strip, readOnly, isRtl, lang, onOpen, onDropTo,
    */
   const nfDay = !bar.done && bar.days.some(d => unfinishedOn(bar.task, d));
   const nfNeeds = !bar.done && needsNewDay(bar.task) && bar.days.includes(bar.task.unfinished![bar.task.unfinished!.length - 1].day);
-  const nfTag = (nfDay || nfNeeds) ? (
+  const nfCore = (nfDay || nfNeeds) ? (
     <span data-bar-unfinished data-bar-needs-day={nfNeeds ? '1' : undefined}
       className="flex-shrink-0 inline-flex items-center rounded-full whitespace-nowrap" style={{
         marginInlineStart: strip ? Math.max(3, z(4)) : undefined,
@@ -2182,6 +2341,20 @@ function TaskBar({ bar, z, size, strip, readOnly, isRtl, lang, onOpen, onDropTo,
       {nfNeeds ? unfinishedWords(lang).needs : unfinishedWords(lang).tag}
     </span>
   ) : null;
+  /**
+   * "He's away" (owner, 2026-10-12, Calendar and Time Off): a task KEPT on a
+   * worker over days he has time off wears this so it cannot be missed.
+   * Nothing moved it — the office chose to keep it.
+   */
+  const awayTag = bar.away ? (
+    <span data-bar-away className="flex-shrink-0 inline-flex items-center rounded-full whitespace-nowrap" style={{
+      marginInlineStart: strip ? Math.max(3, z(4)) : undefined,
+      padding: `0 ${Math.max(3, z(5))}px`,
+      fontSize: Math.max(z(6.5), size - z(2.5)), fontWeight: 800, lineHeight: 1.35,
+      backgroundColor: '#fff1f2', color: '#be123c', border: '1px solid #fda4af',
+    }}>⚠ {timeOffWords(lang).heAway}</span>
+  ) : null;
+  const nfTag = (nfCore || awayTag) ? <>{nfCore}{awayTag}</> : null;
 
   const title = `${bar.label}${bar.desc ? ` — ${bar.desc}` : ''}\n${bar.done ? 'Done — kept on the sheet as the record'
     : bar.foreign ? `${bar.workspace ?? bar.label} — click to open · drag to move · X takes it off`

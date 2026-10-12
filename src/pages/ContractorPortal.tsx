@@ -1,5 +1,7 @@
 import React, { useState, useRef, useMemo, useEffect, lazy, Suspense } from 'react';
 import { useParams } from 'react-router-dom';
+import { useTimeOff } from '../data/useTimeOff';
+import { daysOfTimeOff, kindWord, hatchOf, TIME_OFF_COLOR, bandLine, timeOffWords } from '../data/timeOff';
 import { useStore, loadAllProjectsTaskData, loadProjectSnapshot, ensureProjectSnapshot, startForeignSync, stopForeignSync } from '../data/store';
 import { ContractorAssignment, ContractorPhoto, Contractor, Apartment, Project, StageNote, StageNoteEntry, Stage, DEFAULT_CONTRACTOR_UI_STRINGS, HEBREW_CONTRACTOR_UI_STRINGS, RUSSIAN_CONTRACTOR_UI_STRINGS, PortalLang, stageNameIn, aptLabel, workAtLabel, projectColor, projectName, projectShortName } from '../types';
 import { transcribeMemo } from '../data/transcribe';
@@ -692,6 +694,8 @@ export function ContractorPortal() {
    * office's Hebrew in Russian; the office reads his Russian in its own.
    */
   const readLang: PortalLang = lang ?? (contractorUiStrings.isRtl ? 'he' : 'en');
+  /** Everybody's time off — his own days away draw on his calendar (owner, 2026-10-12). */
+  const timeOffAll = useTimeOff();
   const w = wordsOf(readLang);
   const format = dateFmt(readLang);
   const calLocale = localeOf(readLang);
@@ -2542,6 +2546,23 @@ export function ContractorPortal() {
           const arr = byDay.get(ev.date) ?? [];
           arr.push(ev); byDay.set(ev.date, arr);
         }
+        /**
+         * HIS days away (Calendar and Time Off, scene D): a striped band on
+         * each, in his own language ("Отпуск · до Чт 15"). The office sets
+         * it; the phone only shows it. A task the office KEPT on him over
+         * those days says so.
+         */
+        const offBands: Record<string, { label: string; bg: string; ink: string }> = {};
+        const offFull: Record<string, string> = {};
+        if (contractor) {
+          for (const o of timeOffAll.filter(x => x.person === `c:${contractor.id}`)) {
+            for (const d of daysOfTimeOff(o)) {
+              offBands[d] = { label: kindWord(o.kind, readLang), bg: hatchOf(o.kind), ink: TIME_OFF_COLOR[o.kind].ink };
+              offFull[d] = bandLine(o, readLang, true);
+            }
+          }
+        }
+        const keptWord = timeOffWords(readLang).kept;
         const weekStart = addDaysFns(startOfWeek(new Date()), calWeekOff * 7);
         const weekDays = Array.from({ length: 7 }, (_, i) => addDaysFns(weekStart, i));
         const todayKey = format(new Date(), 'yyyy-MM-dd');
@@ -2578,6 +2599,7 @@ export function ContractorPortal() {
                   todayLabel={s.filterToday}
                   rtl={!!s.isRtl}
                   words={calWords}
+                  dayBands={offBands}
                   fill
                 />
               </div>
@@ -2618,6 +2640,12 @@ export function ContractorPortal() {
                             </span>
                           )}
                         </div>
+                        {offBands[key] && (
+                          <div data-week-off={key} className="px-3 py-1.5 text-[13px] font-extrabold"
+                            style={{ backgroundImage: offBands[key].bg, color: offBands[key].ink }}>
+                            {offFull[key]}
+                          </div>
+                        )}
                         {evs.length === 0 && (
                           <div className="px-3 py-2 text-xs text-gray-300">—</div>
                         )}
@@ -2668,6 +2696,9 @@ export function ContractorPortal() {
                                     <TrText text={ev.title} to={readLang} />
                                   </span>
                                   <span className="block text-xs text-gray-500 truncate">{ev.subtitle}</span>
+                                  {offBands[key] && (
+                                    <span data-week-kept className="block text-[11px] font-bold text-rose-600">⚠ {keptWord}</span>
+                                  )}
                                 </span>
                               </span>
                             </button>

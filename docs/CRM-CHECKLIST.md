@@ -229,6 +229,6 @@ Legend: ☑ shipped · ☐ decided, not built · ◐ built in part · ✎ needs 
 - ☑ The guessed plan asks "Is this the right plan? Yes · Choose another"; Yes records who approved it and the plan says "Plan approved by …" (2026-10-11)
 - ☑ The calendar shows every workspace by default, with a "+" on each day that opens the add form on that date (2026-10-11)
 - ☑ The app's own Drive account no longer shows as activity in Active jobs; a plan with no layers offers no Layers button; a voice memo in the Photos tab is a memo tile, not a file card (2026-10-11)
-- ✎ The calendar "more like the notebook" — a plan page first (2026-10-11)
+- ☑ ONE calendar drawn like the notebook — small tiles, a multi-day task as one bar, busy days folded, time off striped, the notebook's task form on the +, drag a tile to move it; the header and sidebar open the same page (2026-10-12, "all stars")
 - ☑ Active jobs shows each job as a small board tile (stage-colour frame, wrapped name, who did what and when, booked worker, heat), 2 across by default, Tiles across 1–4 and "One line each" in the pencil (owner, 2026-10-12: "a")
-- ✎ Time off for a worker (vacation / sick / reserve duty / other), set from the worker's name on the notebook, shown as a band on the notebook, the calendar, the task form and his phone — planned in "Calendar and Time Off" (2026-10-12)
+- ☑ Time off for anyone on the notebook (vacation / sick / reserve duty / other + note), set from the name or a square's right-click; a striped band on the notebook, the calendar and his phone; booked tasks listed with Move / Keep; the task form warns (2026-10-12, "all stars")

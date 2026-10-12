@@ -32,7 +32,7 @@ function useNavItems() {
      * drawn styles open /goals. The route stands; the rail stays clean.
      */
     { to: '/dashboard',        icon: LayoutDashboard, label: s.navDashboard },
-    { to: '/project-calendar', icon: CalendarDays,    label: s.navCalendar },
+    { to: '/calendar', icon: CalendarDays,    label: s.navCalendar },
     { to: '/tasks',            icon: ClipboardList,   label: s.navTasks },
     { to: '/reports',          icon: FileText,        label: s.navReports },
     { to: '/activity',         icon: Activity,        label: s.navActivity },

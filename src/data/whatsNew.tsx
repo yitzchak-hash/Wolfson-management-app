@@ -30,6 +30,34 @@ export interface WhatsNewEntry {
 
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    date: '2027-01-30',
+    title: 'One calendar, and time off',
+    items: [
+      {
+        title: 'Time off, set from the notebook',
+        body: 'Press a worker\'s name on the weekly notebook and choose Time off: the days, the kind (vacation, '
+          + 'sick, reserve duty, other) and a note. His row wears a striped band with the day he is back. '
+          + 'Right-click a square for "Off this day". Any task already booked on those days is listed, and you '
+          + 'choose for each one: move it to someone else, or keep it on him. Nothing moves by itself.',
+        demo: 'list',
+      },
+      {
+        title: 'The task form warns',
+        body: 'Somebody away is greyed in "Who" with his kind of time off beside the name, and picking him asks '
+          + 'first: "Gadi is on vacation on Tue 13 Oct (back Sun 18)" — pick someone else, or add anyway.',
+        demo: 'list',
+      },
+      {
+        title: 'One calendar, drawn like the notebook',
+        body: 'The header and the sidebar now open the same calendar, with This workspace / All workspaces inside it. '
+          + 'Each task is a small tile; a task over several days is one bar; a busy day folds into one tile; days '
+          + 'away are striped. The + on a day opens the notebook\'s own task form, and a tile can be dragged to '
+          + 'another day. The worker sees his own days away on his phone, in his language.',
+        demo: 'list',
+      },
+    ],
+  },
+  {
     date: '2027-01-29',
     title: 'Active jobs as tiles',
     items: [

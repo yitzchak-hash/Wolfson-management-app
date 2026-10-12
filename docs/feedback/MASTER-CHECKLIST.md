@@ -109,7 +109,7 @@ Seen, not said (video 2): a fresh worker phone could crash when his record arriv
 |---|------|-----|--------|-------|
 | V5-1 | 0:18 | The calendar shows every workspace | Done | `data-calendar-scope` · round49-probe |
 | V5-2 | 0:12 | Click a day to add | Done | `data-cal-add` → Tasks add form on that date · round49-probe |
-| V5-3 | 0:08 | A notebook-like calendar | Waiting | plan page "Calendar and Time Off" published 2026-10-12 (his "yes, draw the plan"); awaiting his answers |
+| V5-3 | 0:08 | A notebook-like calendar | Done | built on his "all stars" (2026-10-12): `CalendarPage` · timeoff-probe (44) |
 | V5-4 | 0:33 | Tasks page: bubbles, not arrows | Done | StagePairPill · round49-probe |
 | V5-5 | 0:48 | Tasks page in plain English | Done | `data-task-plain` · round49-probe |
 | V5-6 | 0:54 | Calm "Is this the right plan? Yes" → "Plan approved by …" | Done | `data-plan-auto-yes`, `data-plan-approved` (read live) · round43-probe |
@@ -169,4 +169,5 @@ rewritten).
 | C-35 | 2026-10-12 | Answer 1: "a" — Active jobs as small tiles | Done | see V4-5 |
 | C-36 | 2026-10-12 | Answer 2: yes, draw the calendar plan | Done | "Calendar and Time Off" artifact |
 | C-37 | 2026-10-12 | Answer 3: tick Registers back on A2 9 | Done | production, read back (done, headline Registers); one "Office" history line |
-| C-38 | 2026-10-12 | A way to mark a worker on vacation from the notebook, seen on the notebook — add it to the plan | Waiting | drawn in the same plan (section C, questions 7–14) |
+| C-38 | 2026-10-12 | A way to mark a worker on vacation from the notebook, seen on the notebook — add it to the plan | Done | built on "all stars": name → Time off…, right-click → Off this day, the band · timeoff-test (18) · timeoff-probe (44) |
+| C-39 | 2026-10-12 | "all stars, build it" — every starred answer on Calendar and Time Off | Done | timeoff-probe (44); notebook-r48 and round49 re-encoded to the one calendar |
