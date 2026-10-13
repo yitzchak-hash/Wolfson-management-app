@@ -64,7 +64,19 @@ with starred recommendations is published first; the owner says "approved" /
 "all yes" / answers by number; then it is built. Never build a redesign
 unasked.
 
-## Where things stand (2026-10-12, latest — recording 14:40 worked: plans and search)
+## Where things stand (2026-10-13, latest — the pin board and Search with AI)
+His message: "build like a board where I can pin jobs on … in a handwriting type of way … drag jobs
+on there … And regarding number one, yeah, I'm adding it now" (number one = the AI search).
+- Built: the `pin-board` widget (cork / whiteboard / chalkboard, handwritten title and notes; jobs
+  pinned by drag from the board, any list or the search; moved about and carried off to the board,
+  another pin board or a notebook day). pinboard-probe (25).
+- Built: "Search with AI" in the header search — works once ANTHROPIC_API_KEY is in Vercel and the
+  site redeploys (health `searchAi` says which). searchai-test (10), searchaiui-probe (10).
+- Not done: the AI row on the search TILE (header search only); the pin board on a phone was not
+  checked (a phone board only navigates).
+- Checklist C-41, C-42, V8-2; ledger row 8 done.
+
+## Where things stand (2026-10-12 — recording 14:40 worked: plans and search)
 A second new recording, "Recording 2026-10-12 144059" (3:40), ledger row 8, feedback doc
 `docs/feedback/2026-10-12-144059.md`, checklist V8-1…V8-7.
 - Built: "אא" finds "AA …" (`spellHebrew`); two bars over a previewed plan; hover arrows walking the
@@ -1056,6 +1068,10 @@ Last commits, newest first (see `git log`):
   `npx vite --port 5173` and `VITE_DRIVE_API_KEY=test npx vite --port 5174`.
 
 ## The last reply the owner saw (so the next one continues it)
+**Newest (2026-10-13, the pin board)**: numbered bullets — the pin board (what it does, where to
+find it in the store), the AI search (built, waits only for the key + redeploy, with the clicks),
+then What I need from you, the link and the bold one-liner.
+
 **Newest (2026-10-08, the second recording)**: the reply opened with the
 full transcript of "Recording 2026-10-08 115349", one heading per minute,
 then the END RESULT line and 38 numbered bullets: his words + video time →

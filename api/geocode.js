@@ -206,6 +206,80 @@ async function translate(req, res, body) {
 }
 
 /**
+ * SEARCH WITH AI — POST /api/geocode with a `searchAi` body (owner,
+ * 2026-10-13). Folded in here for the 12-function limit; key-guarded like the
+ * translator because every call spends the owner's credit.
+ *
+ * Only the words typed into the search box arrive — never a record. The model
+ * turns them into a handful of OTHER strings the office's records might hold
+ * (Hebrew written in English letters and back, spelling variants, the family
+ * name pulled out of a description), and the browser runs each through its
+ * own index. Without a key the branch answers 501 and the button stands down.
+ */
+const SA_CACHE = new Map();
+async function searchAi(req, res, body) {
+  if (!process.env.API_KEY || req.headers['x-api-key'] !== process.env.API_KEY) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+  const viaAnthropic = !!process.env.ANTHROPIC_API_KEY;
+  if (!viaAnthropic && !process.env.OPENAI_API_KEY) {
+    return res.status(501).json({ error: 'AI search is not configured (ANTHROPIC_API_KEY or OPENAI_API_KEY missing)' });
+  }
+  const q = String(body.q || '').trim().slice(0, 200);
+  if (!q) return res.status(400).json({ error: 'Nothing to search for' });
+  const ck = q.toLowerCase();
+  if (SA_CACHE.has(ck)) return res.status(200).json({ terms: SA_CACHE.get(ck), cached: true });
+
+  const system =
+    'You help search the records of an HVAC installation company in Israel. Records are client jobs and ' +
+    'apartments named by family name (English or Hebrew), with addresses, cities, phone numbers, task ' +
+    'descriptions and notes, written in English, Hebrew or Russian. Given what a person typed into the ' +
+    'search box, list up to 8 OTHER short search strings the records might actually contain for the same ' +
+    'thing: the Hebrew written in English letters and the English written in Hebrew letters, common ' +
+    'spelling variants of names (e.g. Yitzchak / Itzhak / יצחק, Tzvi / Zvi / צבי), the family name or ' +
+    'city pulled out of a description, and the plain word for a described thing. Each string is one to ' +
+    'three words. Never repeat the query itself, never invent phone numbers. ' +
+    'Answer with JSON only, exactly: {"terms":["…"]}';
+  try {
+    let text = '';
+    if (viaAnthropic) {
+      const resp = await client().messages.create({
+        model: process.env.SEARCH_AI_MODEL || 'claude-opus-5-5',
+        max_tokens: 1000,
+        // A rewrite, not a reasoning task — thinking would only add waiting.
+        thinking: { type: 'disabled' },
+        system,
+        messages: [{ role: 'user', content: q }],
+      });
+      for (const block of resp.content) if (block.type === 'text') text += block.text;
+    } else {
+      const r = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${process.env.OPENAI_API_KEY}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: process.env.SEARCH_AI_MODEL_OPENAI || 'gpt-4o-mini',
+          temperature: 0,
+          response_format: { type: 'json_object' },
+          messages: [{ role: 'system', content: system }, { role: 'user', content: q }],
+        }),
+      });
+      if (!r.ok) throw new Error(`OpenAI ${r.status}: ${(await r.text()).slice(0, 200)}`);
+      const data = await r.json();
+      text = data?.choices?.[0]?.message?.content ?? '';
+    }
+    const json = text.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '').trim();
+    const parsed = JSON.parse(json);
+    const terms = (Array.isArray(parsed?.terms) ? parsed.terms : [])
+      .map(t => String(t ?? '').trim()).filter(t => t && t.toLowerCase() !== ck).slice(0, 8);
+    if (SA_CACHE.size > 2000) SA_CACHE.delete(SA_CACHE.keys().next().value);
+    SA_CACHE.set(ck, terms);
+    return res.status(200).json({ terms, by: viaAnthropic ? 'anthropic' : 'openai' });
+  } catch (e) {
+    return res.status(502).json({ error: String(e?.message || e) });
+  }
+}
+
+/**
  * THE PLAN READER — POST /api/geocode with a `planRead` body (owner,
  * 2026-09-07: "I want to add an AI API key for the feature that pulls out the
  * client address and phone number, so AI can do it").
@@ -597,6 +671,7 @@ export default async function handler(req, res) {
       planReader: process.env.ANTHROPIC_API_KEY ? 'anthropic' : process.env.OPENAI_API_KEY ? 'openai' : 'none',
       planModels: process.env.ANTHROPIC_API_KEY ? [process.env.PLAN_READ_MODEL || 'claude-opus-5-5']
         : process.env.OPENAI_API_KEY ? openAiPlanModels() : [],
+      searchAi: process.env.ANTHROPIC_API_KEY ? 'anthropic' : process.env.OPENAI_API_KEY ? 'openai' : 'none',
       hasPushKeys: !!(process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY),
       allowedOrigin: process.env.ALLOWED_ORIGIN || '(not set — defaults to *)',
       vercelEnv: process.env.VERCEL_ENV || '(not set)',
@@ -611,6 +686,7 @@ export default async function handler(req, res) {
   if (body.translate) return translate(req, res, body.translate);
   if (body.transcribe) return transcribe(req, res, body.transcribe);
   if (body.planRead) return planRead(req, res, body.planRead);
+  if (body.searchAi) return searchAi(req, res, body.searchAi);
   if (body.push) return push(req, res, body.push);
   const raw = String(body.address || '').trim();
   if (!raw) return res.status(400).json({ error: 'Missing address' });

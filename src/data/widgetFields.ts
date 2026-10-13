@@ -472,6 +472,17 @@ export const WIDGET_FIELDS: Record<string, WidgetField[]> = {
     },
   ],
   'file-tray': [title()],
+  'pin-board': [
+    title(),
+    {
+      key: 'look', label: 'Board', kind: 'select',
+      options: [
+        { value: '', label: 'Cork — pins and paper' },
+        { value: 'white', label: 'Whiteboard — blue marker' },
+        { value: 'chalk', label: 'Chalkboard — white chalk' },
+      ],
+    },
+  ],
   'search-tile': [
     title(),
     {
@@ -1146,6 +1157,7 @@ export const WIDGET_PREVIEW: Record<string, Record<string, unknown>> = {
   // The tile IS the preview; sample keeps the shelf's press from opening the
   // real search window over the store.
   'file-tray': { sample: 1 },
+  'pin-board': { sample: 1, title: 'This week' },
   'search-tile': { sample: 1 },
   // Three real, long-standing TikTok links, so the card plays rather than
   // showing its own paste box — which is what a shopper would otherwise see.

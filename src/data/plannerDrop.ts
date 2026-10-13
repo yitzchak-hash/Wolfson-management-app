@@ -13,7 +13,10 @@
  */
 import React, { useRef, useState } from 'react';
 import { useStore } from './store';
-import { RotaHit, setRotaHover, rotaCellAt, anyRota, anyBoardDrop, boardDropAt, askRotaDrop } from './rotaDrop';
+import {
+  RotaHit, setRotaHover, rotaCellAt, anyRota, anyBoardDrop, boardDropAt, askRotaDrop,
+  anyPinBoard, pinBoardAt, setPinHover,
+} from './rotaDrop';
 import type { PlannerEntry } from '../components/board/PlannerWidget';
 
 export interface DropResult {
@@ -121,7 +124,7 @@ export function dropMessage(r: DropResult): string | null {
  * re-render nothing.
  */
 let dragGhost: HTMLDivElement | null = null;
-function showDragGhost(label: string, x: number, y: number) {
+export function showDragGhost(label: string, x: number, y: number) {
   if (!dragGhost) {
     dragGhost = document.createElement('div');
     dragGhost.style.cssText =
@@ -136,7 +139,7 @@ function showDragGhost(label: string, x: number, y: number) {
   dragGhost.style.left = `${x}px`;
   dragGhost.style.top = `${y}px`;
 }
-function hideDragGhost() {
+export function hideDragGhost() {
   dragGhost?.remove();
   dragGhost = null;
 }
@@ -176,7 +179,7 @@ export function usePlannerDrag(jobId: string, opts?: {
       // ghost card that used to spring up under a scrolling finger is what
       // made a widget "very jumpy" on the tablet. A stylus still drags.
       if (e.pointerType === 'touch') return;
-      if (!enabled || e.button !== 0 || (!anyRota() && !anyBoardDrop())) return;
+      if (!enabled || e.button !== 0 || (!anyRota() && !anyBoardDrop() && !anyPinBoard())) return;
       drag.current = { x: e.clientX, y: e.clientY, live: false };
       (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
     },
@@ -186,7 +189,9 @@ export function usePlannerDrag(jobId: string, opts?: {
       if (!d.live && Math.abs(e.clientX - d.x) < 4 && Math.abs(e.clientY - d.y) < 4) return;
       if (!d.live) { d.live = true; setHeld(true); }
       showDragGhost(opts?.label?.trim() || 'Job', e.clientX, e.clientY);
-      setRotaHover(rotaCellAt(e.clientX, e.clientY));
+      const cellNow = rotaCellAt(e.clientX, e.clientY);
+      setRotaHover(cellNow);
+      setPinHover(cellNow ? null : pinBoardAt(e.clientX, e.clientY)?.key ?? null);
     },
     onPointerUp: (e: React.PointerEvent) => {
       const d = drag.current;
@@ -198,6 +203,7 @@ export function usePlannerDrag(jobId: string, opts?: {
       justDragged.current = true;
       const cell = rotaCellAt(e.clientX, e.clientY);
       setRotaHover(null);
+      setPinHover(null);
       if (cell) {
         /**
          * The PAGE's rule first — the same door a board tile goes through, so
@@ -220,12 +226,20 @@ export function usePlannerDrag(jobId: string, opts?: {
        * really is its empty surface, so a release over a widget or a tile
        * places nothing.
        */
+      // A pin board under the hand pins it — it sits on the board, so it is
+      // asked before the board's empty surface (which would refuse a widget).
+      const pin = pinBoardAt(e.clientX, e.clientY);
+      if (pin) {
+        const pinMsg = pin.place([jobId], opts?.projectId);
+        if (pinMsg) opts?.onToast?.(pinMsg);
+        return;
+      }
       const place = boardDropAt(e.clientX, e.clientY);
       if (!place) return;
       const boardMsg = place([jobId], opts?.projectId);
       if (boardMsg) opts?.onToast?.(boardMsg);
     },
-    onPointerCancel: () => { drag.current = null; setHeld(false); hideDragGhost(); setRotaHover(null); },
+    onPointerCancel: () => { drag.current = null; setHeld(false); hideDragGhost(); setRotaHover(null); setPinHover(null); },
   };
 
   /** See-through while held, so the landing square shows through the hand. */
@@ -235,5 +249,5 @@ export function usePlannerDrag(jobId: string, opts?: {
     touchAction: 'none',
   };
 
-  return { handlers, held, style, draggable: enabled && (anyRota() || anyBoardDrop()) };
+  return { handlers, held, style, draggable: enabled && (anyRota() || anyBoardDrop() || anyPinBoard()) };
 }

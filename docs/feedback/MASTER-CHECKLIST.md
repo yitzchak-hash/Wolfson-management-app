@@ -145,7 +145,7 @@ his own menu) · the Tasks page read "G · Apt <name>" for a Job Board job (**Do
 | # | Time | Ask | Status | Proof |
 |---|------|-----|--------|-------|
 | V8-1 | 0:32 | "אא" finds the "AA …" job | Done | `spellHebrew` · searchindex-test |
-| V8-2 | 0:38 | AI search as a fallback (Opus 5.5) | Waiting | needs his word + an Anthropic key |
+| V8-2 | 0:38 | AI search as a fallback (Opus 5.5) | Done | built 2026-10-13 on his word ("I'm adding it now"); live once ANTHROPIC_API_KEY is in Vercel · searchai-test (10) · searchaiui-probe (10) |
 | V8-3 | 1:39 | Two bars over a previewed plan, not three | Done | planarrows-probe |
 | V8-4 | 1:53 | A React error after a double-click | Answered | not reproduced (planarrows-probe); copy the details next time |
 | V8-5 | 2:30 | The plan freezes / jumps while zooming | Done (lessened) | 16 MP cap, 280ms settle |
@@ -202,3 +202,5 @@ rewritten).
 | C-38 | 2026-10-12 | A way to mark a worker on vacation from the notebook, seen on the notebook — add it to the plan | Done | built on "all stars": name → Time off…, right-click → Off this day, the band · timeoff-test (18) · timeoff-probe (44) |
 | C-39 | 2026-10-12 | "all stars, build it" — every starred answer on Calendar and Time Off | Done | timeoff-probe (44); notebook-r48 and round49 re-encoded to the one calendar |
 | C-40 | 2026-10-12 | "in the groups … multiple select or right click the job and the whole full menu is not coming up … move stuff to trash or to different folders" | Done | Ctrl/Shift-click in the group; job menu with Move to (every group), Move to Trash, Put back, Lock, Wallboard; groupmenu-probe (22) |
+| C-41 | 2026-10-13 | "a board where I can pin jobs on … in a handwriting type of way … drag jobs on there … drag wherever she wants stuff from there to there" | Done | Pin board widget; pinboard-probe (25) |
+| C-42 | 2026-10-13 | "Regarding number one, yeah, I'm adding it now" (the AI search) | Done | built; works the moment the key is in Vercel |

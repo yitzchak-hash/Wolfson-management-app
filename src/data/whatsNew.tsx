@@ -30,6 +30,28 @@ export interface WhatsNewEntry {
 
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    date: '2027-02-03',
+    title: 'A pin board, and search that asks the AI',
+    items: [
+      {
+        title: 'The pin board',
+        body: 'Add "Pin board" from the widget store (Your own lists and tools). Double-click its title to '
+          + 'write it — it comes out in handwriting. Drag a job onto it from the board, any list or the '
+          + 'search and it is pinned where you let go. Drag a pinned job around, or off onto the board, '
+          + 'another pin board or a notebook day. "+ Note" pins a handwritten note. Cork, whiteboard or '
+          + 'chalkboard in its pencil.',
+        demo: 'list',
+      },
+      {
+        title: 'Not finding it? Search with AI',
+        body: 'When the search finds nothing, a purple "Search with AI" row asks the AI for other ways the '
+          + 'name might be written (Hebrew in English letters, other spellings) and runs them through the '
+          + 'same search. Only the words you typed are sent.',
+        demo: 'list',
+      },
+    ],
+  },
+  {
     date: '2027-02-02',
     title: 'Plans you can walk through',
     items: [

@@ -3210,6 +3210,10 @@ export interface MainUiStrings {
   searchRecentTitle: string;
   searchClear: string;
   searchClearPicks: string;
+  searchWhyAi?: string;
+  searchAiBtn?: string;
+  searchAiBusy?: string;
+  searchAiNone?: string;
   searchFooter: string;
   searchHint: string;
   // Reports — column headers
@@ -4159,6 +4163,10 @@ export const DEFAULT_MAIN_UI_STRINGS: MainUiStrings = {
   searchRecentTitle: 'Recent searches',
   searchClear: 'Clear',
   searchClearPicks: 'Forget what I picked before',
+  searchWhyAi: 'AI found it as',
+  searchAiBtn: 'Not finding it? Search with AI',
+  searchAiBusy: 'Asking the AI for other spellings…',
+  searchAiNone: 'The AI tried other spellings too — nothing more.',
   searchFooter: 'Searching every workspace. The ones that are not open show what this machine last saw of them.',
   searchHint: 'Narrow it: stage:piping · needs:piping · doing:piping · done:piping · group:done · worker:moshe · ws:netiv · is:problem · is:pending',
   // Reports — column headers
@@ -5098,6 +5106,10 @@ export const HEBREW_MAIN_UI_STRINGS: MainUiStrings = {
   searchRecentTitle: 'חיפושים אחרונים',
   searchClear: 'לנקות',
   searchClearPicks: 'לשכוח מה בחרתי בעבר',
+  searchWhyAi: 'ה-AI מצא כ',
+  searchAiBtn: 'לא מוצאים? חיפוש עם AI',
+  searchAiBusy: 'שואלים את ה-AI על כתיבים אחרים…',
+  searchAiNone: 'ה-AI ניסה גם כתיבים אחרים — אין עוד תוצאות.',
   searchFooter: 'מחפש בכל סביבות העבודה. סביבה שלא נפתחה במחשב הזה מוצגת לפי מה שנשמר כאן לאחרונה.',
   searchHint: 'לצמצם: stage:piping · needs:piping · doing:piping · done:piping · group:done · worker:moshe · ws:netiv · is:problem · is:pending',
   // Reports — column headers

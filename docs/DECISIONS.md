@@ -56,6 +56,21 @@ Every starred answer on the plan page, built the same day:
     phone. 14. **Anyone with a notebook row** can have time off.
 Time off belongs to the person and lives in one shared list.
 
+## 2026-10-13 (the pin board, and "I'm adding it now")
+- **The pin board** is a widget, not a new kind of board: a cork /
+  whiteboard / chalkboard with a handwritten title (Caveat, Amatic SC for
+  Hebrew). A pinned job is HELD the notebook's way (`inNotebook` = the board's
+  id), so its tile leaves the main board and comes back when it is unpinned or
+  the board is removed; one job is never in two places. A job from another
+  workspace is pinned as a pointer and stays put over there. A job already in
+  a notebook keeps the notebook as its holder.
+- **Pinned cards move inside the cork and carry off it** — to the board, to
+  another pin board, or to a notebook day (released from the pin first, so a
+  cancelled task dialog leaves the job on the board, never nowhere).
+- **The AI search fallback is built** on his Anthropic key: only the typed
+  words are sent; the AI returns other spellings and each runs through the
+  app's own index. One press per question, never automatic.
+
 ## 2026-10-12 (his three answers)
 - **Active jobs draws small board tiles** ("a"): a white card in the stage's
   colour, the name wrapping, who did what and when, the booked worker, the

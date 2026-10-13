@@ -17,6 +17,7 @@ import { isPlannerElement, purgeJobsFromPlanner } from '../data/plannerPurge';
 import {
   rotaCellAt, setRotaHover, anyRota, RotaHit, registerBoardDrop, BoardPlacer,
   registerQuickBox, watchNotebookDrag, registerRotaDropRule, RotaDropRule,
+  pinBoardAt, setPinHover,
 } from '../data/rotaDrop';
 import { placeJobsOnPlanner, dropMessage } from '../data/plannerDrop';
 import { PlannerEntry, personOf, weekStartOf, iso as isoDay } from '../components/board/PlannerWidget';
@@ -4008,6 +4009,9 @@ function isPointerNode(el: CanvasElement | undefined): boolean {
     });
     setHoverBin(overBin?.id ?? null);
     setRotaHover(overCell);
+    // A pin board lights while a JOB hovers it (a pinned card is a job only).
+    setPinHover(drag.kind === 'job' && moved && !overCell
+      ? pinBoardAt(e.clientX, e.clientY)?.key ?? null : null);
     // The quick-assign box lights up while a job hovers it. A boolean write,
     // so React bails when nothing changed.
     setQuickHot(drag.kind === 'job' && overQuickBox(e.clientX, e.clientY));
@@ -4162,6 +4166,10 @@ function isPointerNode(el: CanvasElement | undefined): boolean {
       // would never fire for it anyway, and it is the more specific target.
       const cell = anyRota() ? rotaCellAt(e.clientX, e.clientY) : null;
       const bin = binAt(w0.x, w0.y);
+      // A pin board is a widget, so neither a square nor a bin can sit under
+      // the hand at the same point; asked after both, before plain board.
+      const pin = !cell ? pinBoardAt(e.clientX, e.clientY) : null;
+      setPinHover(null);
       // The quick-assign box outranks everything: it floats OVER the board,
       // so a release on it can never also mean a bin or a square. The job is
       // not moved — the box is a question, not a place.
@@ -4172,6 +4180,13 @@ function isPointerNode(el: CanvasElement | undefined): boolean {
         setQuickAssign({ name: job.displayName || 'this job', job });
       } else if (cell) {
         dropOnRota(cell, drag.ids);
+        setSelectedJobIds(new Set());
+      } else if (pin) {
+        const msg = track({
+          weight: 'arrange',
+          label: drag.ids.length === 1 ? 'Pinned a job' : `Pinned ${drag.ids.length} jobs`,
+        }, () => pin.place(drag.ids));
+        if (msg) setToast(msg);
         setSelectedJobIds(new Set());
       } else if (bin) {
         fileInBin(drag.ids, binKeyOf(bin), bin);
@@ -4250,6 +4265,7 @@ function isPointerNode(el: CanvasElement | undefined): boolean {
     setDrag(null);
     setHoverBin(null);
     setRotaHover(null);
+    setPinHover(null);
   }
 
   function onJobContextMenu(e: React.MouseEvent, job: Apartment) {

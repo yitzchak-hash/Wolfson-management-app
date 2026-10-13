@@ -9943,3 +9943,52 @@ notebooklabel-probe, round49-probe.
 - The AI search fallback he asked for is NOT built — waiting on his word (needs an Anthropic key).
 Harnesses: `scratchpad/planarrows-probe.mjs` (11, keyed 5174) · searchindex-test grew the "אא" case.
 
+
+---
+
+# v2 — the pin board, and Search with AI (2026-10-13)
+
+## The pin board (`src/components/board/PinBoardWidget.tsx`, id `pin-board`)
+A cork / whiteboard / chalkboard (`data.look`: '' | white | chalk) with a
+handwritten title (`data.title`, double-click to write; Caveat + Amatic SC
+for Hebrew, loaded in index.html). `data.pins: PinItem[]` — a job
+(`jobId`, `projectId` for another workspace) or a handwritten note (`text`),
+each at a FRACTION of the cork (`x`, `y`, centre) with a few degrees of `rot`.
+- **A pinned job is HELD the notebook's way**: `inNotebook` = the board's id,
+  so the main board hides its tile and `removeEl` releases it. A job already
+  held by a NOTEBOOK keeps that holder. Pinning clears `boardBin` (it leaves its
+  group, the board drop placer's rule). A foreign job is a pointer — nothing is
+  written on it.
+- **The drop registry** (`rotaDrop.ts`, fifth use): `registerPinBoard(key,
+  probe)` keyed per MOUNTED board · `pinBoardAt(x, y, exceptKey?)` ·
+  `anyPinBoard` · `setPinHover` / `onPinHover` (the cork glows green). Asked by
+  the board's tile drag (`onJobPointerUp`, after squares and before bins, one
+  tracked `arrange` step), by `usePlannerDrag` (every list row and search
+  result, after squares and before the empty board) and by a pinned card
+  carried off another board. The probe needs the point inside the cork AND the
+  cork in `elementsFromPoint`.
+- **A pinned card** carries `data-no-drag data-el-action` and handles its own
+  pointer: a motionless press opens the job (foreign → `openUnit`); a drag
+  inside moves the pin (tracked); a drag off it goes to a notebook square
+  (released from the pin FIRST, so a cancelled task dialog leaves the job on the
+  board), another pin board, or the empty board. `showDragGhost` /
+  `hideDragGhost` are now exported from `plannerDrop.ts` for it.
+- Read-only surfaces (the wall) register no probe; clicks still open jobs.
+Hooks: `data-pin-board` · `data-pin-cork` · `data-pin-title` /
+`data-pin-title-input` · `data-pin-card=<jobId|pinId>` `data-pin-kind` ·
+`data-pin-remove` · `data-pin-add-note` · `data-pin-note-text` /
+`data-pin-note-input`. Probe: `scratchpad/pinboard-probe.mjs` (25). The
+container has no internet, so screenshots here show the serif fallback.
+
+## Search with AI (`src/data/searchAi.ts` + `searchAi` in api/geocode.js)
+A purple `[data-search-ai]` row in the header search once the box holds a
+real question; one press sends ONLY the typed words to the `searchAi` branch
+(key-guarded; Anthropic `claude-opus-5-5`, thinking disabled, env
+`SEARCH_AI_MODEL`; OpenAI `gpt-4o-mini` when it is the only key; 501 without
+either). Up to 8 other spellings come back and each runs through the SAME
+local index with `rank + 1000` (below the typed words' own finds), deduped by
+record, labelled "AI found it as …" (`searchWhyAi`), the spellings listed in
+`[data-search-ai-terms]`. Answers are cached per query (memory +
+`search_ai_cache`, per machine); 501/401 stands the row down for the visit.
+`health` reports `searchAi`. Tests: `searchai-test.mjs` (offline, 10) ·
+`searchaiui-probe.mjs` (keyed 5174, 10).

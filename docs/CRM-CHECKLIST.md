@@ -238,4 +238,5 @@ Legend: ☑ shipped · ☐ decided, not built · ◐ built in part · ✎ needs 
 - ☑ Calendar tiles a size up, the worker leading each tile in his colour; the Tasks page names a Job Board job by its name (2026-10-12)
 - ☑ The plan preview: arrows on hover walk the folder's plans, the folder's plans download in the background and are dropped on close; back and "main plan" ride the first bar (two bars) (2026-10-12)
 - ☑ Search: a Hebrew-typed query is also tried spelled in Latin letters ("אא" finds "AA …") (2026-10-12)
-- ✎ AI search fallback when nothing is found ("powered by Opus 5.5") — needs his word and an Anthropic key (2026-10-12)
+- ☑ AI search fallback: a "Search with AI" row asks for other spellings (only the typed words are sent) and runs them through the same index (2026-10-13)
+- ☑ The pin board widget: handwritten title, jobs pinned by drag from the board / lists / search, moved about and carried off again, handwritten notes, cork / whiteboard / chalkboard (2026-10-13)

@@ -17,6 +17,6 @@ ask built or answered) · **not this app** (a recording of another project — r
 | 5 | Screen Recording 2026-10-11 120334.mp4 | `1dlswvi0o__JprF7JcVvbtwukjarQgUYF` | 1:55 | done (the calendar built on his "all stars") | [2026-10-11-120334.md](2026-10-11-120334.md) |
 | 6 | Screen Recording 2026-10-11 120729.mp4 | `1FPELWebt6VHzgLIBDEB1mfPnujgl46nW` | 1:43 | done | [2026-10-11-120729.md](2026-10-11-120729.md) |
 | 7 | Recording 2026-10-12 141731.mp4 (113.6 MB, 1920×1032) | `1wKWxTZKD159GuDBupBWy59A_zMlvGgXB` | 3:54 | done | [2026-10-12-141731.md](2026-10-12-141731.md) |
-| 8 | Recording 2026-10-12 144059.mp4 (124.4 MB) | `1frNRcbfMQdEoEg03xHuEUh9zbh2nXftR` | 3:40 | open (the AI search fallback waits on his word) | [2026-10-12-144059.md](2026-10-12-144059.md) |
+| 8 | Recording 2026-10-12 144059.mp4 (124.4 MB) | `1frNRcbfMQdEoEg03xHuEUh9zbh2nXftR` | 3:40 | done (AI search built 2026-10-13) | [2026-10-12-144059.md](2026-10-12-144059.md) |
 
 Folder last listed: 2026-10-12.

@@ -61,6 +61,7 @@ asks for it. ☑ done · ☐ next · ✎ awaiting Yitzchak's word. (Standing ord
   with a "+" per day (see `docs/feedback/2026-10-11-*.md`).
 - ☑ 2026-10-12 (his answers): Active jobs as small tiles; A2 9 Registers
   ticked back.
+- ☑ 2026-10-13: the pin board widget; "Search with AI" in the header search.
 
 ## Next (in order)
 - ☑ 2026-10-12 ("all stars"): ONE calendar drawn like the notebook (tiles, bars, bundles, + opens the notebook's form, drag to move) and time off for anyone on the notebook (band, booked-task ask, task-form warning, his phone in his language).

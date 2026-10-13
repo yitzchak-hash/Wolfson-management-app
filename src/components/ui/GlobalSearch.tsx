@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   Search, X, Building2, ClipboardList, FileText, MessageSquare,
-  HardHat, Layers, FolderOpen, StickyNote, PenLine, Crosshair, Clock, Mic, MapPin, Paperclip,
+  HardHat, Layers, FolderOpen, StickyNote, PenLine, Crosshair, Clock, Mic, MapPin, Paperclip, Sparkles,
 } from 'lucide-react';
 import { useSpeechToText } from '../../data/voiceSearch';
 import { usePlannerDrag } from '../../data/plannerDrop';
@@ -16,6 +16,7 @@ import {
   SearchHit, WhyField, WorkspaceSources,
 } from '../../data/searchIndex';
 import { readRecent, writeRecent, rememberQuery, notePick, clearPicks, pickKey } from '../../data/searchMemory';
+import { aiSearchAvailable, aiSearchTerms } from '../../data/searchAi';
 import { useNavigate } from 'react-router-dom';
 
 interface SearchResult {
@@ -175,6 +176,12 @@ export function GlobalSearch({ open, onClose }: GlobalSearchProps) {
   /** A row is being dragged out of the dialog — dim it and free the board. */
   const [dragLive, setDragLive] = useState(false);
   const [results, setResults] = useState<SearchResult[]>([]);
+  /**
+   * The AI's other spellings for THIS query — run through the same index.
+   * Keyed by the query they answer, so typing on simply ignores them.
+   */
+  const [ai, setAi] = useState<{ q: string; terms: string[] } | null>(null);
+  const [aiBusy, setAiBusy] = useState(false);
   const [recent, setRecent] = useState<string[]>([]);
   /**
    * Every OTHER workspace's data, read from its own cache.
@@ -234,9 +241,12 @@ export function GlobalSearch({ open, onClose }: GlobalSearchProps) {
       const found: SearchResult[] = [];
       const widgetNameOf = (id: string) => WIDGET_BY_ID.get(id)?.name;
 
+      // `qq` is the query or one of the AI's other spellings; `shift` puts the
+      // AI's finds below everything the typed words found themselves.
+      let qq = query, shift = 0, aiTerm = '';
       const searchOne = (pid: string, workspace: string, W: WorkspaceSources, bias: number) => {
         const index = workspaceIndex(pid, W);
-        const hits = searchIndex(index, query, { projectId: pid, bias, limit: 30, perKind: 6 });
+        const hits = searchIndex(index, qq, { projectId: pid, bias, limit: 30, perKind: 6 });
         const onBoard = pid === 'general';
         const aptsById = new Map(W.apartments.map(a => [a.id, a]));
         /**
@@ -255,7 +265,10 @@ export function GlobalSearch({ open, onClose }: GlobalSearchProps) {
           ? { label: whyLabelOf(h.why.field, s), text: h.why.text, term: h.why.term }
           : undefined;
         const push = (h: SearchHit, r: Omit<SearchResult, 'id' | 'docId' | 'projectId' | 'rank' | 'why'>) =>
-          found.push({ ...r, id: `${pid}:${h.docId}`, docId: h.docId, projectId: pid, rank: h.rank, why: why(h) });
+          found.push({
+            ...r, id: `${pid}:${h.docId}`, docId: h.docId, projectId: pid, rank: h.rank + shift,
+            why: aiTerm ? { label: s.searchWhyAi ?? 'AI found it as', text: aiTerm, term: aiTerm } : why(h),
+          });
 
         for (const h of hits) {
           switch (h.kind) {
@@ -384,6 +397,7 @@ export function GlobalSearch({ open, onClose }: GlobalSearchProps) {
        * you ranks above what is not, all else equal. A `ws:` word keeps only
        * the workspaces it names.
        */
+      const runAll = () => {
       for (const p of projects) {
         if (!wsMatches(filters, p)) continue;
         const live = p.id === currentProjectId;
@@ -403,7 +417,7 @@ export function GlobalSearch({ open, onClose }: GlobalSearchProps) {
       const aptsOf = (pid: string) =>
         (pid === currentProjectId ? apartments : snaps[pid]?.apartments) ?? [];
       const g = globalIndex(contractors, stages);
-      for (const h of searchIndex(g, query, { projectId: currentProjectId, limit: 8, perKind: 4 })) {
+      for (const h of searchIndex(g, qq, { projectId: currentProjectId, limit: 8, perKind: 4 })) {
         if (h.kind === 'worker') {
           const c = h.rec as Contractor;
           const open = contractorAssignments.filter(a => a.contractorId === c.id && !a.completedAt).length;
@@ -413,7 +427,7 @@ export function GlobalSearch({ open, onClose }: GlobalSearchProps) {
             subtitle: `${c.category} · ${open} open ${open === 1 ? 'task' : 'tasks'} here`,
             focus: { kind: 'contractor', id: c.id },
             projectId: currentProjectId,
-            rank: h.rank,
+            rank: h.rank + shift,
           });
         } else if (h.kind === 'stage') {
           // A stage carrying `projectId: 'general'` is the Job Board's own;
@@ -428,19 +442,32 @@ export function GlobalSearch({ open, onClose }: GlobalSearchProps) {
             subtitle: `${where} · ${n} ${n === 1 ? 'unit' : 'units'} at this stage`,
             focus: { kind: 'stage', id: st.id },
             projectId: pid,
-            rank: h.rank,
+            rank: h.rank + shift,
           });
         }
       }
 
+      };
+      runAll();
+      if (ai && ai.q === query) {
+        for (const t of ai.terms) { qq = t; shift = 1000; aiTerm = t; runAll(); }
+      }
+      // The same record found twice (the typed words and an AI spelling, or
+      // two spellings) is listed once, at its best rank.
+      const best = new Map<string, SearchResult>();
+      for (const r of found) {
+        const was = best.get(r.id);
+        if (!was || r.rank < was.rank) best.set(r.id, r);
+      }
+      const merged = [...best.values()];
       // ONE stable sort over everything — the index already folded the tier,
       // the relevance, the recency and the learned picks into each rank.
-      found.sort((a, b) => a.rank - b.rank);
-      setResults(found.slice(0, 40));
+      merged.sort((a, b) => a.rank - b.rank);
+      setResults(merged.slice(0, 40));
     }, DEBOUNCE_MS);
     return () => clearTimeout(timer);
   }, [query, apartments, contractorAssignments, stageNotes, contractorNotes, contractors, stages,
-      canvasElements, planAnnotations, planPins, officeNoteFiles, projects, currentProjectId, snaps, s]);
+      canvasElements, planAnnotations, planPins, officeNoteFiles, projects, currentProjectId, snaps, s, ai]);
 
   /** Remember what was looked for, newest first and never twice. */
   function remember(q: string) {
@@ -557,6 +584,35 @@ export function GlobalSearch({ open, onClose }: GlobalSearchProps) {
           </button>
         </div>
 
+        {/* The AI fallback: only once the box holds a real question, and only
+            on a machine whose server has the key. One press; the answer is
+            folded into the same list, marked "AI found it as …". */}
+        {queryIsEnough(query) && (aiBusy || aiSearchAvailable()) && !(ai && ai.q === query) && (
+          <button
+            type="button"
+            data-search-ai
+            disabled={aiBusy}
+            onClick={async () => {
+              const q = query;
+              setAiBusy(true);
+              const terms = await aiSearchTerms(q, s.isRtl ? 'he' : 'en');
+              setAiBusy(false);
+              if (terms) setAi({ q, terms });
+              inputRef.current?.focus();
+            }}
+            className="w-full flex items-center gap-2 px-4 py-2 text-[12.5px] font-semibold border-b border-gray-100 bg-violet-50 text-violet-800 hover:bg-violet-100 disabled:opacity-70"
+          >
+            <Sparkles size={14} className={aiBusy ? 'animate-pulse' : ''} />
+            {aiBusy ? (s.searchAiBusy ?? 'Asking the AI…') : (s.searchAiBtn ?? 'Search with AI')}
+          </button>
+        )}
+        {ai && ai.q === query && (
+          <div data-search-ai-terms className="px-4 py-1.5 text-[11px] text-violet-700 bg-violet-50/60 border-b border-gray-100 truncate">
+            {ai.terms.length
+              ? `✨ ${ai.terms.join(' · ')}`
+              : (s.searchAiNone ?? 'The AI found no other spellings.')}
+          </div>
+        )}
         {results.length > 0 ? (
           <div className="max-h-80 overflow-y-auto divide-y divide-gray-100">
             {results.map(result => (

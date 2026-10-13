@@ -2,7 +2,7 @@ import React from 'react';
 import {
   Globe2, Flame, Images, Rows3, Trophy, Disc3, Grid3x3, PartyPopper, Calculator,
   Fingerprint, Map as MapIcon, CloudSun, Music2, Building2, Search,
-  GitCommitHorizontal, Inbox, ListChecks,
+  GitCommitHorizontal, Inbox, ListChecks, Pin,
 } from 'lucide-react';
 import { UnitCard } from '../components/board/UnitCard';
 import { WidgetDef } from './widgets';
@@ -17,6 +17,7 @@ import { PhotosAlbumWidget } from '../components/board/PhotosAlbumWidget';
 import { GoalsWidget } from '../components/board/GoalsWidget';
 import { SearchTileWidget } from '../components/board/SearchTileWidget';
 import { FileTrayWidget } from '../components/board/FileTrayWidget';
+import { PinBoardWidget } from '../components/board/PinBoardWidget';
 import { TimelineWidget } from '../components/board/TimelineWidget';
 import { WhoDidWhatWidget } from '../components/board/WhoDidWhatWidget';
 
@@ -176,6 +177,15 @@ export const MORE_WIDGETS: WidgetDef[] = [
       + 'with a download button. PDFs preview in place with a Mark up button on top.',
     data: {},
     render: (el, c) => <FileTrayWidget el={el} c={c} />,
+  },
+  {
+    id: 'pin-board', rank: 4, name: 'Pin board', category: 'live',
+    icon: Pin, w: 520, h: 360,
+    blurb: 'A cork board with a handwritten title. Drag jobs onto it and they are pinned '
+      + 'there — move them about, drag them back off onto the board or a notebook day, '
+      + 'and pin handwritten notes beside them.',
+    data: {},
+    render: (el, c) => <PinBoardWidget el={el} c={c} />,
   },
   {
     id: 'search-tile', rank: 4, name: 'Search button', category: 'live',

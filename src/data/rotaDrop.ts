@@ -199,3 +199,59 @@ export function onRotaHover(fn: (h: RotaHit | null) => void): () => void {
   fn(hover);
   return () => { listeners.delete(fn); };
 }
+
+// ── Pin boards: a job let go over one is PINNED there ───────────────────────
+//
+// The fifth use of the registry idea. Each mounted pin board answers "is this
+// screen point on my cork?" with a placer that pins the jobs at that spot.
+// Every drag that can carry a job asks: the board's own tile drag, every list
+// row and search result (`usePlannerDrag`), and a card already pinned on
+// another board. Keyed per MOUNTED board (the projection lesson), and a board
+// never answers for a drag that started on itself — that is a move, which the
+// board handles in its own coordinates.
+
+export interface PinHit {
+  /** The mounted board that answered. */
+  key: string;
+  /** The board's element id — what a pinned job's `inNotebook` points at. */
+  elId: string;
+  /** Pin these jobs where the hand let go. Returns the toast, or null. */
+  place: (ids: string[], projectId?: string) => string | null;
+}
+
+type PinProbe = (clientX: number, clientY: number) => PinHit | null;
+const pinProbes = new Map<string, PinProbe>();
+
+export function registerPinBoard(key: string, probe: PinProbe): () => void {
+  pinProbes.set(key, probe);
+  return () => { pinProbes.delete(key); };
+}
+
+/** The pin board under a screen point, skipping the board a drag began on. */
+export function pinBoardAt(clientX: number, clientY: number, exceptKey?: string): PinHit | null {
+  for (const [key, probe] of pinProbes) {
+    if (key === exceptKey) continue;
+    const hit = probe(clientX, clientY);
+    if (hit) return hit;
+  }
+  return null;
+}
+
+export const anyPinBoard = () => pinProbes.size > 0;
+
+// Which board is lit while a job hovers it — a plain value with subscribers,
+// the rota hover's manner, so a drag never re-renders the whole board.
+let pinHover: string | null = null;
+const pinListeners = new Set<(key: string | null) => void>();
+
+export function setPinHover(key: string | null) {
+  if (key === pinHover) return;
+  pinHover = key;
+  pinListeners.forEach(fn => fn(pinHover));
+}
+
+export function onPinHover(fn: (key: string | null) => void): () => void {
+  pinListeners.add(fn);
+  fn(pinHover);
+  return () => { pinListeners.delete(fn); };
+}
