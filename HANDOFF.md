@@ -70,8 +70,9 @@ on there … And regarding number one, yeah, I'm adding it now" (number one = th
 - Built: the `pin-board` widget (cork / whiteboard / chalkboard, handwritten title and notes; jobs
   pinned by drag from the board, any list or the search; moved about and carried off to the board,
   another pin board or a notebook day). pinboard-probe (25).
-- Built: "Search with AI" in the header search — works once ANTHROPIC_API_KEY is in Vercel and the
-  site redeploys (health `searchAi` says which). searchai-test (10), searchaiui-probe (10).
+- Built: "Search with AI" in the header search. His Anthropic key is IN: after the deploy, health
+  reads `searchAi: anthropic` and `planReader: anthropic` (the plan reader moved to Opus too).
+  searchai-test (10), searchaiui-probe (10).
 - Not done: the AI row on the search TILE (header search only); the pin board on a phone was not
   checked (a phone board only navigates).
 - Checklist C-41, C-42, V8-2; ledger row 8 done.
