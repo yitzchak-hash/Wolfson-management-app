@@ -62,6 +62,8 @@ asks for it. ☑ done · ☐ next · ✎ awaiting Yitzchak's word. (Standing ord
 - ☑ 2026-10-12 (his answers): Active jobs as small tiles; A2 9 Registers
   ticked back.
 - ☑ 2026-10-13: the pin board widget; "Search with AI" in the header search.
+- ☑ 2026-10-15 (recording 10:11): Add Job → Add existing (another tile of the same job); search
+  results in layers; Search with AI fixed on the live site.
 
 ## Next (in order)
 - ☑ 2026-10-12 ("all stars"): ONE calendar drawn like the notebook (tiles, bars, bundles, + opens the notebook's form, drag to move) and time off for anyone on the notebook (band, booked-task ask, task-form warning, his phone in his language).

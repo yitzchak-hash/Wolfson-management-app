@@ -158,6 +158,13 @@ read "tap to open" while loading (left as a loading state) · four closed tasks 
 report and stages differ (A3 12, A3 17, A2 9, A2 27 — the display now reads the report; no data was
 rewritten).
 
+### Video 9 — Recording 2026-10-15 101128 ([feedback doc](2026-10-15-101128.md))
+| # | Time | Ask | Status | Proof |
+|---|------|-----|--------|-------|
+| V9-1 | 0:00 | Add Job: an "Add existing" tab with a search that puts another tile of an existing job on the board | Done | `AddExistingJob` · round51-probe |
+| V9-2 | 0:29 | The AI search answered nothing on the live site | Fixed | the newest model refused "thinking disabled" (a 502); now adaptive at low effort, wrong-keyboard words understood, a failure line with retry · searchai-test · searchaiui-probe |
+| V9-3 | 1:07 | Search results in layers: jobs, then tasks, then the rest | Done | `data-search-layers` · round51-probe |
+
 ## From chat
 
 | # | Date | Ask | Status | Proof |
@@ -203,4 +210,4 @@ rewritten).
 | C-39 | 2026-10-12 | "all stars, build it" — every starred answer on Calendar and Time Off | Done | timeoff-probe (44); notebook-r48 and round49 re-encoded to the one calendar |
 | C-40 | 2026-10-12 | "in the groups … multiple select or right click the job and the whole full menu is not coming up … move stuff to trash or to different folders" | Done | Ctrl/Shift-click in the group; job menu with Move to (every group), Move to Trash, Put back, Lock, Wallboard; groupmenu-probe (22) |
 | C-41 | 2026-10-13 | "a board where I can pin jobs on … in a handwriting type of way … drag jobs on there … drag wherever she wants stuff from there to there" | Done | Pin board widget; pinboard-probe (25) |
-| C-42 | 2026-10-13 | "Regarding number one, yeah, I'm adding it now" (the AI search) | Done | built; works the moment the key is in Vercel |
+| C-42 | 2026-10-13 | "Regarding number one, yeah, I'm adding it now" (the AI search) | Done | built; the key is in Vercel; the live failure fixed 2026-10-15 (see V9-2) |

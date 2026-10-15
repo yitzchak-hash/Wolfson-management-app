@@ -240,3 +240,6 @@ Legend: ☑ shipped · ☐ decided, not built · ◐ built in part · ✎ needs 
 - ☑ Search: a Hebrew-typed query is also tried spelled in Latin letters ("אא" finds "AA …") (2026-10-12)
 - ☑ AI search fallback: a "Search with AI" row asks for other spellings (only the typed words are sent) and runs them through the same index (2026-10-13)
 - ☑ The pin board widget: handwritten title, jobs pinned by drag from the board / lists / search, moved about and carried off again, handwritten notes, cork / whiteboard / chalkboard (2026-10-13)
+- ☑ Add Job → "Add existing": search any job (board, groups, notebooks, pin boards, other workspaces) and put another tile of the SAME job mid-screen (2026-10-15)
+- ☑ The header search lists its results in layers: jobs, tasks, notes/messages/files, on the board, workers and stages (2026-10-15)
+- ☑ Search with AI answers on the live site (Opus 5.5 adaptive, low effort) and says so when it cannot (2026-10-15)

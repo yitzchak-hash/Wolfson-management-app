@@ -238,16 +238,21 @@ async function searchAi(req, res, body) {
     'thing: the Hebrew written in English letters and the English written in Hebrew letters, common ' +
     'spelling variants of names (e.g. Yitzchak / Itzhak / יצחק, Tzvi / Zvi / צבי), the family name or ' +
     'city pulled out of a description, and the plain word for a described thing. Each string is one to ' +
-    'three words. Never repeat the query itself, never invent phone numbers. ' +
+    'three words. The text may have been typed with the keyboard on the wrong language (Hebrew letters for ' +
+    'English keys or the other way round, e.g. "ןככ" is "iff" typed on a Hebrew keyboard) — when it reads like ' +
+    'that, include what was meant. Never repeat the query itself, never invent phone numbers. ' +
     'Answer with JSON only, exactly: {"terms":["…"]}';
   try {
     let text = '';
     if (viaAnthropic) {
       const resp = await client().messages.create({
         model: process.env.SEARCH_AI_MODEL || 'claude-opus-5-5',
-        max_tokens: 1000,
-        // A rewrite, not a reasoning task — thinking would only add waiting.
-        thinking: { type: 'disabled' },
+        max_tokens: 4000,
+        // Opus 5.5 refuses thinking "disabled" (a 400 — which is why the
+        // button spun and gave nothing on 2026-10-15). Adaptive at LOW effort
+        // is the closest it allows: a rewrite, not a reasoning task.
+        thinking: { type: 'adaptive' },
+        output_config: { effort: 'low' },
         system,
         messages: [{ role: 'user', content: q }],
       });

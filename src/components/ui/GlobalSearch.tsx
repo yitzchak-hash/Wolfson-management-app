@@ -182,6 +182,8 @@ export function GlobalSearch({ open, onClose }: GlobalSearchProps) {
    */
   const [ai, setAi] = useState<{ q: string; terms: string[] } | null>(null);
   const [aiBusy, setAiBusy] = useState(false);
+  /** The question the AI was asked and did not answer — said out loud, never a silent reset. */
+  const [aiFailedFor, setAiFailedFor] = useState('');
   const [recent, setRecent] = useState<string[]>([]);
   /**
    * Every OTHER workspace's data, read from its own cache.
@@ -543,6 +545,24 @@ export function GlobalSearch({ open, onClose }: GlobalSearchProps) {
     board: s.searchTypeBoard, markup: s.searchTypeMarkup, pin: s.searchTypePin, file: s.searchTypeFile,
   };
 
+  /**
+   * The list in LAYERS (owner, recording 2026-10-15: "first show the jobs, then
+   * task names… it's busy — layer it"). The ranking still decides the order
+   * INSIDE a layer; the layers themselves always come jobs → tasks → notes →
+   * the board → people and stages, each under its own heading with a count.
+   */
+  const he = !!s.isRtl;
+  const LAYERS: { key: string; label: string; types: SearchResult['type'][] }[] = [
+    { key: 'jobs', label: he ? 'עבודות' : 'Jobs', types: ['apartment'] },
+    { key: 'tasks', label: he ? 'משימות' : 'Tasks', types: ['task'] },
+    { key: 'notes', label: he ? 'הערות, הודעות וקבצים' : 'Notes, messages and files', types: ['note', 'contractor_note', 'pin', 'file', 'markup'] },
+    { key: 'board', label: he ? 'על הלוח' : 'On the board', types: ['group', 'board'] },
+    { key: 'people', label: he ? 'עובדים ושלבים' : 'Workers and stages', types: ['contractor', 'stage'] },
+  ];
+  const layers = LAYERS
+    .map(l => ({ ...l, items: results.filter(r => l.types.includes(r.type)) }))
+    .filter(l => l.items.length);
+
   if (!open) return null;
 
   return (
@@ -597,7 +617,8 @@ export function GlobalSearch({ open, onClose }: GlobalSearchProps) {
               setAiBusy(true);
               const terms = await aiSearchTerms(q, s.isRtl ? 'he' : 'en');
               setAiBusy(false);
-              if (terms) setAi({ q, terms });
+              if (terms) { setAi({ q, terms }); setAiFailedFor(''); }
+              else setAiFailedFor(q);
               inputRef.current?.focus();
             }}
             className="w-full flex items-center gap-2 px-4 py-2 text-[12.5px] font-semibold border-b border-gray-100 bg-violet-50 text-violet-800 hover:bg-violet-100 disabled:opacity-70"
@@ -605,6 +626,11 @@ export function GlobalSearch({ open, onClose }: GlobalSearchProps) {
             <Sparkles size={14} className={aiBusy ? 'animate-pulse' : ''} />
             {aiBusy ? (s.searchAiBusy ?? 'Asking the AI…') : (s.searchAiBtn ?? 'Search with AI')}
           </button>
+        )}
+        {aiFailedFor === query && !aiBusy && aiSearchAvailable() && (
+          <div data-search-ai-failed className="px-4 py-1.5 text-[11px] text-red-700 bg-red-50 border-b border-gray-100">
+            {s.searchAiFailed ?? 'The AI did not answer just now — press again to retry.'}
+          </div>
         )}
         {ai && ai.q === query && (
           <div data-search-ai-terms className="px-4 py-1.5 text-[11px] text-violet-700 bg-violet-50/60 border-b border-gray-100 truncate">
@@ -614,8 +640,15 @@ export function GlobalSearch({ open, onClose }: GlobalSearchProps) {
           </div>
         )}
         {results.length > 0 ? (
-          <div className="max-h-80 overflow-y-auto divide-y divide-gray-100">
-            {results.map(result => (
+          <div className="max-h-[60vh] overflow-y-auto" data-search-layers>
+            {layers.map(layer => (
+              <div key={layer.key} data-search-layer={layer.key}>
+                <div className="sticky top-0 z-[1] flex items-center gap-2 px-4 py-1 bg-gray-50/95 backdrop-blur border-y border-gray-100 text-[10.5px] font-bold uppercase tracking-wider text-gray-500">
+                  {layer.label}
+                  <span className="text-gray-400 font-semibold tabular-nums" data-search-layer-count>{layer.items.length}</span>
+                </div>
+                <div className="divide-y divide-gray-100">
+            {layer.items.map(result => (
               <ResultRow
                 key={result.id}
                 result={result}
@@ -633,6 +666,9 @@ export function GlobalSearch({ open, onClose }: GlobalSearchProps) {
                   onClose();
                 }}
               />
+            ))}
+                </div>
+              </div>
             ))}
           </div>
         ) : query.trim() ? (

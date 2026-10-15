@@ -36,7 +36,7 @@ answer = '```json\n{"terms":["Yitzchak","יצחק","itzhak","Isaac","a","b","c",
 r = await call({ q: 'itzhak' });
 check(r.code === 200, 'answers 200 with the key', JSON.stringify(r.body));
 check(lastAnthropic?.model === 'claude-opus-5-5', 'asks Opus 5.5 by default', lastAnthropic?.model);
-check(lastAnthropic?.thinking?.type === 'disabled', 'no thinking — a rewrite, not a reasoning task');
+check(lastAnthropic?.thinking?.type === 'adaptive' && lastAnthropic?.output_config?.effort === 'low', 'adaptive thinking at low effort (Opus 5.5 refuses "disabled")');
 check(/transliter|English letters/i.test(lastAnthropic?.system ?? '') && /JSON only/.test(lastAnthropic?.system ?? ''), 'the prompt asks for spellings and JSON');
 check(lastAnthropic?.messages?.[0]?.content === 'itzhak', 'only the typed words are sent');
 check(!r.body.terms.includes('itzhak') && r.body.terms.length === 8, 'the query itself is dropped, at most 8', JSON.stringify(r.body.terms));

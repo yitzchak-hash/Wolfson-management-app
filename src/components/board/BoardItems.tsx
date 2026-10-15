@@ -192,6 +192,7 @@ export const JobTile = React.memo(function JobTile({
       onContextMenu={e => (isGhost ? H.ghostMenu!(e, job, ghostIndex!) : H.jobMenu(e, job))}
       onDoubleClick={() => H.jobOpen(job)}
       data-node-id={job.id}
+      data-ghost={isGhost ? ghostIndex : undefined}
       className={`absolute rounded-xl border px-3 pb-3 pt-[22px] group select-none ${
         job.boardLocked ? 'cursor-pointer shadow-sm hover:shadow-md' :
         isDragging ? 'shadow-2xl cursor-grabbing' :

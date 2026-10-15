@@ -18,5 +18,6 @@ ask built or answered) · **not this app** (a recording of another project — r
 | 6 | Screen Recording 2026-10-11 120729.mp4 | `1FPELWebt6VHzgLIBDEB1mfPnujgl46nW` | 1:43 | done | [2026-10-11-120729.md](2026-10-11-120729.md) |
 | 7 | Recording 2026-10-12 141731.mp4 (113.6 MB, 1920×1032) | `1wKWxTZKD159GuDBupBWy59A_zMlvGgXB` | 3:54 | done | [2026-10-12-141731.md](2026-10-12-141731.md) |
 | 8 | Recording 2026-10-12 144059.mp4 (124.4 MB) | `1frNRcbfMQdEoEg03xHuEUh9zbh2nXftR` | 3:40 | done (AI search built 2026-10-13) | [2026-10-12-144059.md](2026-10-12-144059.md) |
+| 9 | Recording 2026-10-15 101128.mp4 | `1E5uT6NzHRR2rgVpHZe5KCHUT4zwl2dQy` | 1:50 | done | [2026-10-15-101128.md](2026-10-15-101128.md) |
 
-Folder last listed: 2026-10-12.
+Folder last listed: 2026-10-15.

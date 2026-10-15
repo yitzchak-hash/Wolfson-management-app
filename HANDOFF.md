@@ -46,7 +46,7 @@ day still stands, after the numbered list.)
 3. `npx tsc --noEmit -p .` and `npx vite build`. 4. The audits:
    `node scratchpad/loopaudit.mjs`, `backupaudit.mjs`, `navaudit.mjs`, `apilimit.mjs`.
 5. A What's New entry (`src/data/whatsNew.tsx`, dates run AHEAD of the clock;
-   newest is `2027-01-30` — the next entry must be a later date (an older
+   newest is `2027-02-04` — the next entry must be a later date (an older
    entry lower down also wears `2026-12-20`; the marker compares only the TOP
    entry's date, so never reuse a date that appears anywhere in the file)). 6. A CLAUDE.md
    round record. 7. A line in `docs/CRM-CHECKLIST.md`, tick `docs/ROADMAP.md`, date a line in `docs/DECISIONS.md` when he decided something. 8. Rewrite THIS file.
@@ -64,7 +64,22 @@ with starred recommendations is published first; the owner says "approved" /
 "all yes" / answers by number; then it is built. Never build a redesign
 unasked.
 
-## Where things stand (2026-10-13, latest — the pin board and Search with AI)
+## Where things stand (2026-10-15, latest — recording 10:11: add existing, layers, AI search fixed)
+New recording "Recording 2026-10-15 101128" (1:50), ledger row 9, feedback doc
+`docs/feedback/2026-10-15-101128.md`, checklist V9-1…V9-3.
+- Built: Add Job's **Add existing** tab (`AddExistingJob.tsx`) — a ghost tile of the same job
+  mid-screen (`addGhost`), a unit card for another workspace's unit; ghosts now draw for grouped /
+  notebook / pinned jobs too (`ghostHosts`).
+- Built: header search results in **layers** (`data-search-layers`, `data-search-layer=<key>`).
+- Fixed: Search with AI was a 502 on production — Opus 5.5 refuses `thinking: disabled`; now
+  `adaptive` + `output_config.effort: low`; the prompt reads wrong-keyboard words; the client shows
+  `data-search-ai-failed` instead of resetting silently.
+- Probes: round51-probe (17) new; gsearch re-encoded to the layers (rows by `[data-search-row]`);
+  searchai-test, searchaiui-probe, searchtile, searchindex-test, foldertitle, round28, pinboard,
+  storefull and the four audits green.
+- **The reply he saw**: the three asks, the link, "✅ Nothing needed from you".
+
+## Where things stand (2026-10-13 — the pin board and Search with AI)
 His message: "build like a board where I can pin jobs on … in a handwriting type of way … drag jobs
 on there … And regarding number one, yeah, I'm adding it now" (number one = the AI search).
 - Built: the `pin-board` widget (cork / whiteboard / chalkboard, handwritten title and notes; jobs

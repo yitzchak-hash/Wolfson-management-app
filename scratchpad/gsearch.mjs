@@ -73,10 +73,8 @@ async function search(q) {
   }
 }
 const rows = () => page.evaluate(() => {
-  const panel = [...document.querySelectorAll('div')]
-    .find(d => d.className.includes('max-h-80') && d.className.includes('overflow-y-auto'));
-  if (!panel) return [];
-  return [...panel.children].map(r => ({
+  // The results come in layers now (2026-10-15) — read the rows themselves.
+  return [...document.querySelectorAll('[data-search-row]')].map(r => ({
     text: (r.textContent ?? '').replace(/\s+/g, ' ').trim(),
     reveal: !!r.querySelector('button[title]'),
   }));
@@ -133,9 +131,7 @@ const close = async () => { await page.keyboard.press('Escape'); await page.wait
   await search('Zambini');
   // Choosing a row is what records the search.
   await page.evaluate(() => {
-    const panel = [...document.querySelectorAll('div')]
-      .find(d => d.className.includes('max-h-80'));
-    panel?.firstElementChild?.click();
+    document.querySelector('[data-search-row]')?.click();
   });
   await page.waitForTimeout(1200);
 
@@ -166,8 +162,7 @@ const close = async () => { await page.keyboard.press('Escape'); await page.wait
   const r = await rows();
   check(r.length >= 1, 'the Wolfson unit is found from the Job Board', String(r.length));
   await page.evaluate(() => {
-    const panel = [...document.querySelectorAll('div')].find(d => d.className.includes('max-h-80'));
-    panel?.firstElementChild?.click();
+    document.querySelector('[data-search-row]')?.click();
   });
   await page.waitForTimeout(2500);
   const landed = await page.evaluate(() => ({
@@ -187,8 +182,7 @@ const close = async () => { await page.keyboard.press('Escape'); await page.wait
   await page.waitForTimeout(400);
   await search('Wolfsonfamily');
   const pressed = await page.evaluate(() => {
-    const panel = [...document.querySelectorAll('div')].find(d => d.className.includes('max-h-80'));
-    const btn = panel?.firstElementChild?.querySelector('button[title]');
+    const btn = document.querySelector('[data-search-row]')?.querySelector('button[title]');
     if (!btn) return false;
     btn.click();
     return true;

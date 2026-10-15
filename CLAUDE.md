@@ -9992,3 +9992,37 @@ record, labelled "AI found it as …" (`searchWhyAi`), the spellings listed in
 `search_ai_cache`, per machine); 501/401 stands the row down for the visit.
 `health` reports `searchAi`. Tests: `searchai-test.mjs` (offline, 10) ·
 `searchaiui-probe.mjs` (keyed 5174, 10).
+
+---
+
+# v2 — the recording of 15 Oct 10:11: add existing, search in layers, the AI search mended (2026-10-15)
+
+## Add existing (`src/components/board/AddExistingJob.tsx`)
+The Add Job window has two tabs (`data-add-mode`, `data-add-mode-pick=new|existing`). Add existing
+(`data-add-existing`, `data-add-existing-search`, `data-add-existing-row=<id>`) searches the live
+Job Board jobs (never Trash) through `searchJobs` and other workspaces' units from their snapshots
+(`snapshotTick`), each row saying where the job is now. Picking one:
+- a Job Board job gets ANOTHER TILE OF THE SAME RECORD — `addGhost(job.id, x, y)` at `newJobAt` or
+  `tileCentreSpot()`, one tracked `arrange` step. Never a copy. A job in a group, a notebook or a
+  pin board keeps its place and gains the board tile too.
+- a foreign unit lands as a `unit-card` node (named-board aware), the board's standing pointer.
+**Ghosts draw from `ghostHosts`, not `jobs`**: the board's `jobs` list leaves out filed and held
+jobs, so a ghost of a grouped job used to be invisible. `JobTile` carries `data-ghost=<index>`.
+
+## The header search lists in layers
+`LAYERS` in `GlobalSearch.tsx` — jobs · tasks · notes, messages and files · on the board · workers
+and stages — each a `data-search-layer=<key>` block with a sticky heading and a
+`data-search-layer-count`, inside `data-search-layers`. Ranking still decides order INSIDE a layer.
+**Harnesses read rows by `[data-search-row]`** — the old `max-h-80` list box is gone (gsearch
+re-encoded).
+
+## Search with AI was a 502 on production
+Opus 5.5 answers `thinking: {type:'disabled'}` with a 400, so every press came back empty. The
+`searchAi` branch uses `thinking: {type:'adaptive'}` + `output_config: {effort:'low'}`,
+max_tokens 4000; the prompt also reads a word typed on the wrong keyboard. The client shows
+`data-search-ai-failed` (`searchAiFailed`, both presets) with a retry instead of resetting. The
+translator still runs `claude-opus-5`, which accepts disabled. **Before trusting a model id in a
+branch, POST the branch on production with the bundle's key** — the health line said "anthropic"
+the whole time the call was failing.
+
+Harness: `scratchpad/round51-probe.mjs` (17).

@@ -69,6 +69,14 @@ async function run(status) {
   check(await page.locator('[data-search-ai]').count() === 0, 'without a key on the server the button stands down for the visit');
   await ctx.close();
 }
+{
+  const { page, ctx } = await run(502);
+  await page.locator('[data-search-ai]').click();
+  await page.waitForTimeout(700);
+  check(await page.locator('[data-search-ai-failed]').count() === 1, 'a failed AI answer says so (2026-10-15: it used to reset silently)');
+  check(await page.locator('[data-search-ai]').count() === 1, 'and the button stays, to try again');
+  await ctx.close();
+}
 await b.close();
 console.log(fails ? `\n${fails} FAILED` : '\nALL PASS');
 process.exit(fails ? 1 : 0);

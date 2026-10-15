@@ -40,7 +40,7 @@ function writeCache(q: string, terms: string[]) {
 /** Is the button worth drawing at all on this machine, this visit? */
 export function aiSearchAvailable(): boolean { return !!API_KEY && !serverOff; }
 
-/** The alternative search strings for a query, or null when the AI is not there. */
+/** The alternative search strings for a query; null when the AI is not there or did not answer. */
 export async function aiSearchTerms(query: string, lang: 'en' | 'he' = 'en'): Promise<string[] | null> {
   const q = norm(query);
   if (!q || !API_KEY || serverOff) return null;

@@ -13,6 +13,7 @@ import { Navigate, useNavigate } from 'react-router-dom';
 import { useStore, isTombstoned, loadProjectSnapshot } from '../data/store';
 import { useBoardTrack } from '../data/useBoardUndo';
 import { UndoButtons } from '../components/board/UndoLayer';
+import { AddExistingJob } from '../components/board/AddExistingJob';
 import { isPlannerElement, purgeJobsFromPlanner } from '../data/plannerPurge';
 import {
   rotaCellAt, setRotaHover, anyRota, RotaHit, registerBoardDrop, BoardPlacer,
@@ -23,7 +24,7 @@ import { placeJobsOnPlanner, dropMessage } from '../data/plannerDrop';
 import { PlannerEntry, personOf, weekStartOf, iso as isoDay } from '../components/board/PlannerWidget';
 import { PlannerTaskDialog, PlannerRemoveDialog, QuickAssignDialog } from '../components/board/PlannerDialogs';
 import { ScheduleWindow } from '../components/board/ScheduleWindow';
-import { boardAccess, projectShortName } from '../types';
+import { boardAccess, projectShortName, aptLabel } from '../types';
 import { Apartment, CanvasElement, BinKind, BIN_KINDS, BIN_META, binKeyOf, binLabelOf, isBuiltInBin, getStageName, relativeTime, personColor, PLANNER_ARCHIVE_MAX, BOARD_MARGIN, BoardLayout } from '../types';
 import { presenceReady, startPresence, publishPresence } from '../data/presence';
 import { PresenceLayer } from '../components/board/PresenceLayer';
@@ -506,6 +507,8 @@ export function GeneralJobsPage() {
   const [selectedJob, setSelectedJob] = useState<Apartment | null>(null);
   const [addTaskJob, setAddTaskJob] = useState<Apartment | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
+  /** The Add Job window's two tabs: make a new job, or add a tile of one that exists. */
+  const [addMode, setAddMode] = useState<'new' | 'existing'>('new');
   /** Where a job added from the right-click menu should land. */
   const [newJobAt, setNewJobAt] = useState<{ x: number; y: number } | null>(null);
   const [jobName, setJobName] = useState('');
@@ -2164,6 +2167,14 @@ export function GeneralJobsPage() {
    */
   const jobs = apartments.filter(a =>
     !a.isUnnamed && a.buildingId === 'G' && !a.boardBin && !a.inNotebook);
+  /**
+   * Every job wearing a ghost — including one filed in a group, a notebook or
+   * a pin board. "Add existing" (owner, 2026-10-15) puts ANOTHER tile of a job
+   * on the board wherever the job itself lives; drawing ghosts only for jobs
+   * already on the board would leave that tile invisible. Trash never draws.
+   */
+  const ghostHosts = apartments.filter(a =>
+    !a.isUnnamed && a.buildingId === 'G' && a.boardBin !== 'trash' && (a.ghosts?.length ?? 0) > 0);
 
   /**
    * A phone OPENS on the whole board.
@@ -7401,7 +7412,7 @@ function isPointerNode(el: CanvasElement | undefined): boolean {
             {/* ── Ghost appearances ──
                 The SAME job drawn a second time. One record, several places, so
                 an edit through a ghost is an edit to the job. */}
-            {jobs.flatMap(job => (job.ghosts ?? []).map((g, gi) => {
+            {ghostHosts.flatMap(job => (job.ghosts ?? []).map((g, gi) => {
               const p = ghostPos(job.id, gi, g);
               if (!(ghostDrag && ghostDrag.jobId === job.id && ghostDrag.index === gi)
                 && !cullVisible(p.x, p.y, tileSize(job).w, tileSize(job).h)) return null;
@@ -8473,10 +8484,52 @@ function isPointerNode(el: CanvasElement | undefined): boolean {
       {/* ── Add Job modal ── */}
       {showAddModal && (
         <>
-          <div className="fixed inset-0 bg-black/40 z-40" onClick={() => { setShowAddModal(false); setNewJobAt(null); jobNameTyped.current = false; jobFolderTitle.current = null; setNameLookup(false); }} />
+          <div className="fixed inset-0 bg-black/40 z-40" onClick={() => { setShowAddModal(false); setNewJobAt(null); setAddMode('new'); jobNameTyped.current = false; jobFolderTitle.current = null; setNameLookup(false); }} />
           <div className="fixed z-50 bg-white rounded-2xl shadow-2xl p-6"
             style={{ left: '50%', top: '50%', transform: 'translate(-50%,-50%)', width: 'min(420px, 92vw)' }}>
-            <h2 className="text-lg font-bold text-gray-900 mb-4">{s.addJobBtn}</h2>
+            <h2 className="text-lg font-bold text-gray-900 mb-3">{s.addJobBtn}</h2>
+            {/* New job | Add existing — the owner's second door (2026-10-15). */}
+            <div className="flex gap-1 p-1 rounded-xl bg-gray-100 mb-4" data-add-mode>
+              {(['new', 'existing'] as const).map(m => (
+                <button key={m} type="button" data-add-mode-pick={m}
+                  onClick={() => setAddMode(m)}
+                  className={`flex-1 py-1.5 rounded-lg text-sm font-semibold transition-all ${addMode === m ? 'bg-white text-[#1e3a5f] shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>
+                  {m === 'new' ? (s.isRtl ? 'עבודה חדשה' : 'New job') : (s.isRtl ? 'הוספת קיימת' : 'Add existing')}
+                </button>
+              ))}
+            </div>
+            {addMode === 'existing' ? (
+              <AddExistingJob
+                onCancel={() => { setShowAddModal(false); setNewJobAt(null); setAddMode('new'); }}
+                onPick={({ job, projectId }) => {
+                  const at = newJobAt
+                    ? { x: Math.max(0, newJobAt.x - TILE_W / 2), y: Math.max(0, newJobAt.y - TILE_H / 2) }
+                    : tileCentreSpot();
+                  const name = aptLabel(job) || job.displayName || 'job';
+                  if (projectId) {
+                    // Another workspace's unit — the board's pointer at it.
+                    track({ weight: 'arrange', label: 'Put a unit card on the board' }, () => {
+                      addCanvasElement({
+                        id: 'CE-' + Math.random().toString(36).slice(2, 9),
+                        type: 'widget', widget: 'unit-card',
+                        ...(activeBoardView ? { board: activeBoardView } : {}),
+                        x: Math.round(at.x), y: Math.round(at.y), w: 220, h: 96,
+                        text: '', color: '#ffffff',
+                        data: { projectId, aptId: job.id },
+                        addedAt: new Date().toISOString(),
+                      });
+                    });
+                    setToast(s.isRtl ? `כרטיס של ${name} נוסף ללוח` : `A card for ${name} is on the board`);
+                  } else {
+                    track({ weight: 'arrange', label: `Another tile of ${name}` }, () => {
+                      addGhost(job.id, Math.round(at.x), Math.round(at.y));
+                    });
+                    setToast(s.isRtl ? `אריח נוסף של ${name} על הלוח` : `Another tile of ${name} is on the board`);
+                  }
+                  setShowAddModal(false); setNewJobAt(null); setAddMode('new');
+                }}
+              />
+            ) : (
             <form onSubmit={e => {
               e.preventDefault();
               const now = new Date().toISOString();
@@ -8579,6 +8632,7 @@ function isPointerNode(el: CanvasElement | undefined): boolean {
                 </button>
               </div>
             </form>
+            )}
           </div>
         </>
       )}

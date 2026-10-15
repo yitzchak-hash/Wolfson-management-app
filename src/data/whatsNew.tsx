@@ -30,6 +30,32 @@ export interface WhatsNewEntry {
 
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    date: '2027-02-04',
+    title: 'Add an existing job, and search in layers',
+    items: [
+      {
+        title: 'Add existing',
+        body: 'Add Job now has two tabs. "Add existing" searches every job — on the board, in a group, '
+          + 'in a notebook or on a pin board — and puts another tile of that same job in the middle of '
+          + 'the screen. It is not a copy: edit either tile and it is the same job. A Wolfson or Netiv '
+          + 'unit lands as a unit card.',
+        demo: 'list',
+      },
+      {
+        title: 'Search results in layers',
+        body: 'The search lists jobs first, then tasks, then notes, messages and files, then what is on '
+          + 'the board, then workers and stages — each with its own heading and count.',
+        demo: 'list',
+      },
+      {
+        title: 'Search with AI works',
+        body: 'It came back empty on the live site; it answers now, understands a word typed with the '
+          + 'keyboard on the wrong language, and says so if the AI does not answer.',
+        demo: 'list',
+      },
+    ],
+  },
+  {
     date: '2027-02-03',
     title: 'A pin board, and search that asks the AI',
     items: [
