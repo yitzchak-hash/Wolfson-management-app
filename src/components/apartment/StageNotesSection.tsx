@@ -8,6 +8,7 @@ import { Translated } from '../ui/Translated';
 import { transcribeMemo } from '../../data/transcribe';
 import { stageStateOf, taskStageIds, recordStageIds } from '../../data/stageMarks';
 import { format } from 'date-fns';
+import { shrinkImage, readFileAsDataUrl } from '../../data/imageMeta';
 import {
   isUploadBackendConfigured, extractFolderId,
   findOrCreateFolderViaBackend, uploadFileViaResumableSession,
@@ -87,31 +88,10 @@ export function StageNotesSection({ apartmentId, stages, currentUser, onSaved }:
   };
   const isOpen = (stageId: string) => toggled[stageId] ?? defaultOpen(stageId);
 
-  async function compressImage(file: File): Promise<File> {
-    if (!file.type.startsWith('image/')) return file;
-    return new Promise(resolve => {
-      const img = new Image();
-      const url = URL.createObjectURL(file);
-      img.onload = () => {
-        URL.revokeObjectURL(url);
-        const MAX = 1200;
-        const scale = Math.min(1, MAX / Math.max(img.width, img.height));
-        const canvas = document.createElement('canvas');
-        canvas.width = Math.round(img.width * scale);
-        canvas.height = Math.round(img.height * scale);
-        canvas.getContext('2d')!.drawImage(img, 0, 0, canvas.width, canvas.height);
-        canvas.toBlob(blob => {
-          resolve(blob ? new File([blob], file.name.replace(/\.[^.]+$/, '.jpg'), { type: 'image/jpeg' }) : file);
-        }, 'image/jpeg', 0.72);
-      };
-      img.onerror = () => { URL.revokeObjectURL(url); resolve(file); };
-      img.src = url;
-    });
-  }
-
   /** A file or a memo waits on the box until Send — Drive first, base64 when there is no backend. */
   async function attach(stageId: string, file: File, transcript?: boolean) {
-    const processed = await compressImage(file);
+    // Drive gets the ORIGINAL file, EXIF and all (location, date taken,
+    // camera); only the base64 fallback below is shrunk.
     const attId = Math.random().toString(36).slice(2, 11);
     let att: PendingAttachment | null = null;
     if (isUploadBackendConfigured() && apt?.driveLink) {
@@ -122,9 +102,9 @@ export function StageNotesSection({ apartmentId, stages, currentUser, onSaved }:
           const photosFolderId = await findOrCreateFolderViaBackend(mainFolderId, 'Photos');
           const notesFolderId = await findOrCreateFolderViaBackend(photosFolderId, 'Stage Notes');
           const { fileId, webViewLink } = await uploadFileViaResumableSession(
-            notesFolderId, processed, pct => setUploading(p => ({ ...p, [attId]: pct })));
+            notesFolderId, file, pct => setUploading(p => ({ ...p, [attId]: pct })));
           await shareFileToDrive(fileId);
-          att = { id: attId, filename: processed.name, mimeType: processed.type, dataUrl: '', driveFileId: fileId, driveUrl: webViewLink };
+          att = { id: attId, filename: file.name, mimeType: file.type, dataUrl: '', driveFileId: fileId, driveUrl: webViewLink };
         }
       } catch (e) {
         console.warn('Drive upload failed for stage note, falling back to base64:', e);
@@ -133,11 +113,8 @@ export function StageNotesSection({ apartmentId, stages, currentUser, onSaved }:
       }
     }
     if (!att) {
-      const dataUrl = await new Promise<string>(resolve => {
-        const r = new FileReader();
-        r.onload = e => resolve((e.target?.result as string) ?? '');
-        r.readAsDataURL(processed);
-      });
+      const processed = await shrinkImage(file);
+      const dataUrl = await readFileAsDataUrl(processed);
       att = { id: attId, filename: processed.name, mimeType: processed.type, dataUrl };
     }
     const done = att;

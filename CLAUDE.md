@@ -10026,3 +10026,27 @@ branch, POST the branch on production with the bundle's key** — the health lin
 the whole time the call was failing.
 
 Harness: `scratchpad/round51-probe.mjs` (17).
+
+---
+
+# v2 — photos keep their EXIF (2026-10-15)
+
+`src/data/imageMeta.ts` — `shrinkImage(file)` / `shrinkImageToDataUrl(file)` (1200px, JPEG 0.72) and
+`readFileAsDataUrl`. A canvas drops every EXIF tag, so:
+- **Google Drive always gets the ORIGINAL file**, byte for byte (GPS, date taken, camera; HEIC as it
+  is). The stage-note attachments (`StageNotesSection.attach`), the drawer's task edit
+  (`handleTaskEditFileChosen`) and the Tasks page's add/edit (`handleAddFileChosen` /
+  `handleEditFileChosen`) upload `file`, record its own name and type, and shrink ONLY on the
+  base64 fallback. The portal already sent originals; its `compressImage` (previews and fallback)
+  now goes through the helper, and the unused `compressImageToBlob` is gone.
+- **A shrunk copy carries the original's EXIF**, copied with `piexifjs` (a dependency now): the whole
+  0th/Exif/GPS/Interop minus the thumbnail and MakerNote, falling back to the essentials (GPS,
+  DateTimeOriginal, Make, Model) when the full set will not dump. **Orientation is written as 1** —
+  the browser turns the pixels upright as it draws them, and copying 6/8 would turn the copy twice.
+- A file the browser cannot draw (HEIC in Chrome, a non-image) comes back untouched, as before.
+- **Any new photo upload goes through this rule**: original to Drive, `shrinkImage` only for a copy
+  the app keeps itself.
+
+Harness: `scratchpad/exifkeep-probe.mjs` (14 checks, keyed 5174 — the PUT body to Drive is the
+original with its GPS; the shrunk copy keeps GPS/date/make/model, Orientation 1, pixels upright;
+HEIC untouched).

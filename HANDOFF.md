@@ -46,7 +46,7 @@ day still stands, after the numbered list.)
 3. `npx tsc --noEmit -p .` and `npx vite build`. 4. The audits:
    `node scratchpad/loopaudit.mjs`, `backupaudit.mjs`, `navaudit.mjs`, `apilimit.mjs`.
 5. A What's New entry (`src/data/whatsNew.tsx`, dates run AHEAD of the clock;
-   newest is `2027-02-04` — the next entry must be a later date (an older
+   newest is `2027-02-05` — the next entry must be a later date (an older
    entry lower down also wears `2026-12-20`; the marker compares only the TOP
    entry's date, so never reuse a date that appears anywhere in the file)). 6. A CLAUDE.md
    round record. 7. A line in `docs/CRM-CHECKLIST.md`, tick `docs/ROADMAP.md`, date a line in `docs/DECISIONS.md` when he decided something. 8. Rewrite THIS file.
@@ -64,7 +64,17 @@ with starred recommendations is published first; the owner says "approved" /
 "all yes" / answers by number; then it is built. Never build a redesign
 unasked.
 
-## Where things stand (2026-10-15, latest — recording 10:11: add existing, layers, AI search fixed)
+## Where things stand (2026-10-15, latest — photos keep their EXIF)
+His ask: photos uploaded from the app lost GPS / date taken / camera (a canvas shrink before upload).
+- Built: `src/data/imageMeta.ts`; Drive gets the ORIGINAL file in stage notes, the drawer's task edit and
+  the Tasks page add/edit; the shrunk copy (base64 fallback, portal previews) keeps the EXIF via
+  `piexifjs`, Orientation written as 1 (pixels already upright); HEIC untouched.
+- Probe: `scratchpad/exifkeep-probe.mjs` (14). Green: taskdaysforms, drawerround, portalround, the four
+  audits. Standing reds unchanged: round40 "a passed stage is crossed off", round39's two (same on the
+  unchanged code).
+- **The reply he saw**: what changed, the Orientation note, the test, the link, "✅ Nothing needed".
+
+## Where things stand (2026-10-15 — recording 10:11: add existing, layers, AI search fixed)
 New recording "Recording 2026-10-15 101128" (1:50), ledger row 9, feedback doc
 `docs/feedback/2026-10-15-101128.md`, checklist V9-1…V9-3.
 - Built: Add Job's **Add existing** tab (`AddExistingJob.tsx`) — a ghost tile of the same job

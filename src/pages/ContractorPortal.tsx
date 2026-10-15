@@ -48,6 +48,7 @@ import { MoveTaskDialog, workerMoveWords, fill } from '../components/tasks/MoveT
 import { placeLabel } from '../data/taskMove';
 import { orderTaskRows, isoToday } from '../components/portal/portalOrder';
 import { cachedPlanAspect, measurePlanAspect } from '../data/planAspect';
+import { shrinkImageToDataUrl } from '../data/imageMeta';
 // Lazy — the studio carries pdf.js, and a worker who never opens a plan should
 // not download it (the drawer's precedent).
 const PlanAnnotator = lazy(() =>
@@ -79,57 +80,14 @@ const CATEGORY_COLORS: Record<string, string> = {
   drywall: '#f59e0b', ac: '#3b82f6', general: '#10b981',
 };
 
+/**
+ * A small JPEG preview / base64 fallback, carrying the original's EXIF
+ * (location, date taken, camera). Drive always gets the ORIGINAL file.
+ */
 async function compressImage(file: File, maxPx = 1200, quality = 0.72): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = e => {
-      const img = new window.Image();
-      img.onload = () => {
-        let { width, height } = img;
-        if (width > maxPx || height > maxPx) {
-          const scale = maxPx / Math.max(width, height);
-          width = Math.round(width * scale);
-          height = Math.round(height * scale);
-        }
-        const canvas = document.createElement('canvas');
-        canvas.width = width; canvas.height = height;
-        canvas.getContext('2d')!.drawImage(img, 0, 0, width, height);
-        resolve(canvas.toDataURL('image/jpeg', quality));
-      };
-      img.onerror = reject;
-      img.src = e.target?.result as string;
-    };
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
-  });
-}
-
-async function compressImageToBlob(file: File, maxPx = 1200, quality = 0.72): Promise<Blob> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = e => {
-      const img = new window.Image();
-      img.onload = () => {
-        let { width, height } = img;
-        if (width > maxPx || height > maxPx) {
-          const scale = maxPx / Math.max(width, height);
-          width = Math.round(width * scale);
-          height = Math.round(height * scale);
-        }
-        const canvas = document.createElement('canvas');
-        canvas.width = width; canvas.height = height;
-        canvas.getContext('2d')!.drawImage(img, 0, 0, width, height);
-        canvas.toBlob(
-          blob => blob ? resolve(blob) : reject(new Error('Image compression failed')),
-          'image/jpeg', quality,
-        );
-      };
-      img.onerror = reject;
-      img.src = e.target?.result as string;
-    };
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
-  });
+  const url = await shrinkImageToDataUrl(file, maxPx, quality);
+  if (!url) throw new Error('This picture could not be read');
+  return url;
 }
 
 async function readAsDataUrl(file: File): Promise<string> {

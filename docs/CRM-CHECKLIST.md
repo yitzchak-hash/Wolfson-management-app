@@ -243,3 +243,4 @@ Legend: ☑ shipped · ☐ decided, not built · ◐ built in part · ✎ needs 
 - ☑ Add Job → "Add existing": search any job (board, groups, notebooks, pin boards, other workspaces) and put another tile of the SAME job mid-screen (2026-10-15)
 - ☑ The header search lists its results in layers: jobs, tasks, notes/messages/files, on the board, workers and stages (2026-10-15)
 - ☑ Search with AI answers on the live site (Opus 5.5 adaptive, low effort) and says so when it cannot (2026-10-15)
+- ☑ Photos keep their EXIF: Drive gets the original file (GPS, date taken, camera); the shrunk preview / base64 copy has the EXIF copied in; HEIC uploads as-is (2026-10-15)

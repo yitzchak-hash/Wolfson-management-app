@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { useStore, loadProjectSnapshot } from '../data/store';
 import { rememberReturn } from '../data/unitTravel';
+import { shrinkImage, readFileAsDataUrl } from '../data/imageMeta';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { rememberTaskFocus } from '../data/taskFocus';
 import { VoiceMemoPlayer } from '../components/ui/VoiceMemo';
@@ -200,31 +201,9 @@ export function TasksPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pendingFocus]);
 
-  async function compressImage(file: File): Promise<File> {
-    if (!file.type.startsWith('image/')) return file;
-    return new Promise(resolve => {
-      const img = new Image();
-      const url = URL.createObjectURL(file);
-      img.onload = () => {
-        URL.revokeObjectURL(url);
-        const MAX = 1200;
-        const scale = Math.min(1, MAX / Math.max(img.width, img.height));
-        const canvas = document.createElement('canvas');
-        canvas.width = Math.round(img.width * scale);
-        canvas.height = Math.round(img.height * scale);
-        const ctx = canvas.getContext('2d')!;
-        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-        canvas.toBlob(blob => {
-          resolve(blob ? new File([blob], file.name.replace(/\.[^.]+$/, '.jpg'), { type: 'image/jpeg' }) : file);
-        }, 'image/jpeg', 0.72);
-      };
-      img.onerror = () => { URL.revokeObjectURL(url); resolve(file); };
-      img.src = url;
-    });
-  }
-
   async function handleAddFileChosen(file: File) {
-    const processed = await compressImage(file);
+    // Drive gets the ORIGINAL file, EXIF and all (location, date taken,
+    // camera); only the base64 fallback below is shrunk.
     const id = crypto.randomUUID();
 
     const apt = apartments.find(a => a.id === addForm.aptId);
@@ -235,13 +214,13 @@ export function TasksPage() {
           setAddUploadProgress(1);
           const tasksFolderId = await findOrCreateFolderViaBackend(mainFolderId, 'Tasks');
           const { fileId, webViewLink } = await uploadFileViaResumableSession(
-            tasksFolderId, processed,
+            tasksFolderId, file,
             pct => setAddUploadProgress(pct),
           );
           await shareFileToDrive(fileId);
           setAddUploadProgress(null);
           setAddAttachments(prev => [...prev, {
-            id, filename: processed.name, mimeType: processed.type,
+            id, filename: file.name, mimeType: file.type,
             dataUrl: '', driveFileId: fileId, driveUrl: webViewLink,
           }]);
           return;
@@ -252,16 +231,14 @@ export function TasksPage() {
       }
     }
 
-    const reader = new FileReader();
-    reader.onload = e => {
-      const dataUrl = e.target?.result as string ?? '';
-      setAddAttachments(prev => [...prev, { id, filename: processed.name, mimeType: processed.type, dataUrl }]);
-    };
-    reader.readAsDataURL(processed);
+    const processed = await shrinkImage(file);
+    const dataUrl = await readFileAsDataUrl(processed);
+    setAddAttachments(prev => [...prev, { id, filename: processed.name, mimeType: processed.type, dataUrl }]);
   }
 
   async function handleEditFileChosen(file: File) {
-    const processed = await compressImage(file);
+    // Drive gets the ORIGINAL file, EXIF and all (location, date taken,
+    // camera); only the base64 fallback below is shrunk.
     const id = crypto.randomUUID();
     const assignment = contractorAssignments.find(a => a.id === editingId);
     const apt = apartments.find(a => a.id === assignment?.apartmentId);
@@ -272,13 +249,13 @@ export function TasksPage() {
           setEditUploadProgress(1);
           const tasksFolderId = await findOrCreateFolderViaBackend(mainFolderId, 'Tasks');
           const { fileId, webViewLink } = await uploadFileViaResumableSession(
-            tasksFolderId, processed,
+            tasksFolderId, file,
             pct => setEditUploadProgress(pct),
           );
           await shareFileToDrive(fileId);
           setEditUploadProgress(null);
           setEditAttachments(prev => [...prev, {
-            id, filename: processed.name, mimeType: processed.type,
+            id, filename: file.name, mimeType: file.type,
             dataUrl: '', driveFileId: fileId, driveUrl: webViewLink,
           }]);
           return;
@@ -288,12 +265,9 @@ export function TasksPage() {
         setEditUploadProgress(null);
       }
     }
-    const reader = new FileReader();
-    reader.onload = ev => {
-      const dataUrl = ev.target?.result as string ?? '';
-      setEditAttachments(prev => [...prev, { id, filename: processed.name, mimeType: processed.type, dataUrl }]);
-    };
-    reader.readAsDataURL(processed);
+    const processed = await shrinkImage(file);
+    const dataUrl = await readFileAsDataUrl(processed);
+    setEditAttachments(prev => [...prev, { id, filename: processed.name, mimeType: processed.type, dataUrl }]);
   }
 
   function onToast(msg: string, type: 'success' | 'error' = 'success') {

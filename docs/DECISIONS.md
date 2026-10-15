@@ -6,6 +6,13 @@ have them). The v2 rebuild's original design record is the root
 `DECISIONS.md`; the rules and traps behind each decision are in `CLAUDE.md`
 by round. (Standing order 6, 2026-09-23.)_
 
+## 2026-10-15 (photo metadata)
+- Every photo uploaded to Google Drive is the ORIGINAL file, untouched — the TzviAir Photos app reads
+  location and date from it. A shrunk copy is only the app's own preview / base64 fallback, and it
+  carries the original's EXIF (GPS, date taken, make, model). HEIC goes up as it is.
+- The shrunk copy's Orientation is written as 1: the browser already turns the pixels upright when it
+  draws them, so copying 6/8 would turn the copy a second time. The original keeps its own value.
+
 ## 2026-10-15 (recording 10:11 — add existing, search in layers)
 - Add Job has a second tab, **Add existing**: picking a job adds another tile of the SAME record
   (a ghost) mid-screen — never a copy. A job in a group, notebook or pin board keeps its place and

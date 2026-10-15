@@ -30,6 +30,19 @@ export interface WhatsNewEntry {
 
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    date: '2027-02-05',
+    title: 'Photos keep where and when they were taken',
+    items: [
+      {
+        title: 'The original photo goes to Drive',
+        body: 'A photo added to a task or a stage note now reaches Google Drive exactly as the phone took it — '
+          + 'with its location, the date it was taken and the camera. iPhone HEIC photos go up as they are. '
+          + 'The small copy the app keeps for itself carries the same details.',
+        demo: 'list',
+      },
+    ],
+  },
+  {
     date: '2027-02-04',
     title: 'Add an existing job, and search in layers',
     items: [

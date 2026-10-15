@@ -25,6 +25,7 @@ import type { CustomWhere } from './StagePicker';
 import { mediaKindOf, isMediaFile } from '../../data/mediaKind';
 import { rowNumOf } from '../../data/floorRows';
 import { extractFileId, drivePreviewUrl, driveDownloadUrl, findPlansPdfViaBackend, findAllPlansPdfsViaBackend, findPlanSetViaBackend, PlanEntry, isUploadBackendConfigured, findOrCreateFolderViaBackend, uploadFileViaResumableSession, shareFileToDrive, ensureDriveShared, extractFolderId, driveThumbUrl, listAllPhotosViaBackend, getFolderNameViaBackend, familyNameFromFolderName, DrivePhotoItem, DriveFile, FolderHealth, checkFolderHealthViaBackend } from '../../data/driveApi';
+import { shrinkImage, readFileAsDataUrl } from '../../data/imageMeta';
 import { Tooltip } from '../ui/Tooltip';
 import { DriveStatus, driveStateOf } from '../ui/DriveStatus';
 import { DriveDesktopPath } from './DriveDesktopPath';
@@ -999,26 +1000,8 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
   }
 
   async function handleTaskEditFileChosen(file: File) {
-    const isImage = file.type.startsWith('image/');
-    let processed = file;
-    if (isImage) {
-      processed = await new Promise<File>(resolve => {
-        const img = new Image();
-        const url = URL.createObjectURL(file);
-        img.onload = () => {
-          URL.revokeObjectURL(url);
-          const MAX = 1200;
-          const scale = Math.min(1, MAX / Math.max(img.width, img.height));
-          const canvas = document.createElement('canvas');
-          canvas.width = Math.round(img.width * scale);
-          canvas.height = Math.round(img.height * scale);
-          canvas.getContext('2d')!.drawImage(img, 0, 0, canvas.width, canvas.height);
-          canvas.toBlob(blob => resolve(blob ? new File([blob], file.name.replace(/\.[^.]+$/, '.jpg'), { type: 'image/jpeg' }) : file), 'image/jpeg', 0.72);
-        };
-        img.onerror = () => { URL.revokeObjectURL(url); resolve(file); };
-        img.src = url;
-      });
-    }
+    // Drive gets the ORIGINAL file, EXIF and all (location, date taken,
+    // camera); only the base64 fallback below is shrunk.
     const id = crypto.randomUUID();
     if (backendConfigured && apartment?.driveLink) {
       try {
@@ -1026,21 +1009,19 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
         if (mainFolderId) {
           setDrawerEditProgress(1);
           const tasksFolderId = await findOrCreateFolderViaBackend(mainFolderId, 'Tasks');
-          const { fileId, webViewLink } = await uploadFileViaResumableSession(tasksFolderId, processed, pct => setDrawerEditProgress(pct));
+          const { fileId, webViewLink } = await uploadFileViaResumableSession(tasksFolderId, file, pct => setDrawerEditProgress(pct));
           await shareFileToDrive(fileId);
           setDrawerEditProgress(null);
-          setDrawerEditAttachments(prev => [...prev, { id, filename: processed.name, mimeType: processed.type, dataUrl: '', driveFileId: fileId, driveUrl: webViewLink }]);
+          setDrawerEditAttachments(prev => [...prev, { id, filename: file.name, mimeType: file.type, dataUrl: '', driveFileId: fileId, driveUrl: webViewLink }]);
           return;
         }
       } catch {
         setDrawerEditProgress(null);
       }
     }
-    const reader = new FileReader();
-    reader.onload = ev => {
-      setDrawerEditAttachments(prev => [...prev, { id, filename: processed.name, mimeType: processed.type, dataUrl: ev.target?.result as string ?? '' }]);
-    };
-    reader.readAsDataURL(processed);
+    const processed = await shrinkImage(file);
+    const dataUrl = await readFileAsDataUrl(processed);
+    setDrawerEditAttachments(prev => [...prev, { id, filename: processed.name, mimeType: processed.type, dataUrl }]);
   }
 
   function handleSaveBasic() {
