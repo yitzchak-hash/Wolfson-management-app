@@ -3,7 +3,7 @@ import { X, Plus, CheckCircle2, Clock, CalendarDays, ArrowRight, User2, Papercli
 import {
   Apartment, User, ContractorCategory, TaskAttachment, ContractorAssignment, getStageName,
 } from '../../types';
-import { useStore } from '../../data/store';
+import { useStore, trackUndo } from '../../data/store';
 import { VoiceMemoPlayer } from '../ui/VoiceMemo';
 import { MessageBox, memoFile } from '../ui/MessageBox';
 import { contractorLoad, loadTooltip, loadColor } from '../../data/contractorLoad';
@@ -202,13 +202,13 @@ export function QuickAddTaskPanel({ apartment, onClose, currentUser, onToast }: 
     // and the office said "two tasks" (locked answer 9). The FROM stage never
     // moves the job: a task for a future stage is a task, not a stage change.
     const writes = taskWrites(dueDate, taskDays, pair, split);
-    writes.forEach((w, i) => {
+    trackUndo(null, () => writes.forEach((w, i) => {
       const rec = i === 0 ? { ...made, ...w } : {
         ...made, ...w,
         id: Math.random().toString(36).substr(2, 9) + Date.now().toString(36) + i,
       };
       addContractorAssignment(rec as ContractorAssignment);
-    });
+    }));
     setTask('');
     setContractorId('');
     setDueDate('');

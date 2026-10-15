@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { useStore, loadProjectSnapshot } from '../data/store';
+import { useStore, loadProjectSnapshot, trackUndo } from '../data/store';
 import { rememberReturn } from '../data/unitTravel';
 import { shrinkImage, readFileAsDataUrl } from '../data/imageMeta';
 import { useNavigate, useLocation } from 'react-router-dom';
@@ -493,7 +493,7 @@ export function TasksPage() {
     // One record, or two when the second stretch carries different stages and
     // the office said "two" (locked answer 9). The FROM stage never moves the
     // job — a task on a future stage is a task, not a stage change.
-    for (const w of taskWrites(addForm.dueDate, addDays, { from: addForm.stageId, to: addTo, ids: addIds }, addSplit)) {
+    trackUndo(null, () => { for (const w of taskWrites(addForm.dueDate, addDays, { from: addForm.stageId, to: addTo, ids: addIds }, addSplit)) {
       addContractorAssignment({
         contractorId: addForm.contractorId,
         apartmentId: addForm.aptId,
@@ -506,7 +506,7 @@ export function TasksPage() {
         attachments: addAttachments.length > 0 ? addAttachments : undefined,
         priority: (addForm.priority as TaskPriority) || undefined,
       });
-    }
+    } });
     setAddTo(''); setAddSplit(null);
     setAddForm({ contractorId: '', aptId: '', task: '', dueDate: '', stageId: '', priority: '' });
     setAddIds([]);

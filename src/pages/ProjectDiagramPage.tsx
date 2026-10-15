@@ -3,7 +3,7 @@ import { Search, X, ToggleLeft, CheckSquare, Printer, ChevronDown, SlidersHorizo
 import { Navigate, useNavigate } from 'react-router-dom';
 import { redeemReturn } from '../data/unitTravel';
 import { Tooltip } from '../components/ui/Tooltip';
-import { useStore } from '../data/store';
+import { useStore, trackUndo } from '../data/store';
 import { Apartment, BuildingId, isCountableApartment } from '../types';
 import { setMark, isWorkStage } from '../data/stageMarks';
 import { problemStates } from '../data/problems';
@@ -293,7 +293,7 @@ export function ProjectDiagramPage() {
 
   function handleSaveName() {
     if (!namingApt || !currentUser || !namingInput.trim()) return;
-    updateApartment(namingApt.id, { displayName: namingInput.trim(), isUnnamed: false }, currentUser);
+    trackUndo(null, () => updateApartment(namingApt.id, { displayName: namingInput.trim(), isUnnamed: false }, currentUser));
     setNamingApt(null);
     setNamingInput('');
   }
@@ -305,15 +305,18 @@ export function ProjectDiagramPage() {
     if (bulkStageSet) changes.currentStageId = bulkStageId || null;
     if (bulkTipus) changes.tipus = bulkTipus === '__none' ? undefined : bulkTipus;
     if (!Object.keys(changes).length && !bulkSetOp) return;
-    if (Object.keys(changes).length) bulkUpdateApartments(ids, changes, currentUser);
-    // Add / remove a stage: one mark per apartment, through the one writer.
-    if (bulkSetOp) {
-      for (const id of ids) {
-        const apt = apartments.find(a => a.id === id);
-        if (!apt) continue;
-        setApartmentMarks(id, setMark(apt.stageMarks, bulkSetOp.stageId, bulkSetOp.op === 'add' ? 'todo' : 'off'), currentUser);
+    // The whole bulk update is ONE undo step.
+    trackUndo(null, () => {
+      if (Object.keys(changes).length) bulkUpdateApartments(ids, changes, currentUser);
+      // Add / remove a stage: one mark per apartment, through the one writer.
+      if (bulkSetOp) {
+        for (const id of ids) {
+          const apt = apartments.find(a => a.id === id);
+          if (!apt) continue;
+          setApartmentMarks(id, setMark(apt.stageMarks, bulkSetOp.stageId, bulkSetOp.op === 'add' ? 'todo' : 'off'), currentUser);
+        }
       }
-    }
+    });
     const parts: string[] = [];
     if (bulkSetOp) parts.push(`${bulkSetOp.op === 'add' ? s.setBulkAddStage : s.setBulkRemoveStage}: ${sortedStages.find(x => x.id === bulkSetOp.stageId)?.name ?? ''}`);
     if (bulkStageSet) parts.push(sortedStages.find(s => s.id === bulkStageId)?.name ?? 'Not Started');

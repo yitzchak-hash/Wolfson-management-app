@@ -3133,6 +3133,62 @@ correct and tells you nothing; and seeding a planner `cell` without also
 setting the job's `inNotebook` tests half the link and blames the app for the
 other half.
 
+## Undo for everything (2026-10-15) — `trackUndo` is the one door
+The owner: "Any action I do, I want to see an undo." He added a task through
+the notebook's "+", took it off with "Remove both", and the arrow stayed grey.
+The cause: `useBoardTrack` snapshotted only jobs and board nodes, and a task's
+days live on the TASK — every notebook gesture was wrapped in a track that
+recorded a change of nothing. The full audit is `docs/research/UNDO-AUDIT.md`.
+
+- **`trackUndo(opts | null, body)`** (store.ts) snapshots EVERY kind of record
+  the office changes — jobs, board nodes, tasks, task messages, photos, stage
+  notes, office files, the per-workspace `boardSettings` bags (time off lives
+  in `__tv`) and tasks written into ANOTHER workspace (the `*InProject`
+  writers call `noteForeignTask` before writing) — and records ONE entry for
+  whatever differs. `useBoardTrack` is now just this in a hook; its API is
+  unchanged. `opts: null` words the step from the change itself
+  (`src/data/undoWords.ts`, pure, English), always `content`.
+- **Self-recording actions** (`SELF_RECORDING`, wrapped once after `create`):
+  task add/update/delete (+ the `*InProject` three), `moveTaskToApartment`,
+  `setApartmentMarks`, `bulkUpdateApartments`, general notes add/remove,
+  stage-note append/visibility, worker messages add/delete, photo delete,
+  office files add/delete. A new button calling any of these is undoable with
+  no extra code. NOT self-recording, on purpose: `updateApartment` (migrations,
+  sweeps and auto-fills call it constantly — screens wrap their own edits, as
+  the drawer's `autoSave`, stage marker, type and tipus now do), the
+  transcript writers and `addContractorPhoto`.
+- **Nesting is one step**: only the OUTERMOST track records. A screen that
+  makes several writes for one press (the "+" dialog's several workers, the
+  bulk forms, the problem form, saving a task edit that also moves photos and
+  ticks, the time-off form that hands tasks over) wraps them in one
+  `trackUndo` and the self-recording inner calls become part of it.
+- **Automated writes go through `withoutUndo(...)`** — the notebook's one-time
+  card fold is the example. An automated write recorded as a step would also
+  clear the redo stack. Nothing records while an undo walks, nor on the
+  worker's portal (`onPortalPath`).
+- **Restores are RAW** for tasks, messages, photos, notes and files: the record
+  is put back exactly — no completion rule, no push to the worker, no history
+  line, no planner question. Only the fields that differ between the two sides
+  are written, onto the LIVE record; an undo of an EDIT never resurrects a
+  record somebody deleted meanwhile. Jobs and nodes still go through
+  `applySide` (a job is never created or destroyed; nodes lift their
+  tombstone). Task deletes write no tombstone, so there is none to lift.
+- **Bookkeeping stamps** (`updatedAt`, `updatedBy*`, `contentUpdatedAt`) are
+  neither a change nor restored — a blur that saved identical values records
+  nothing.
+- The undo arrows (`UndoButtons`) also sit in the main header (`HeaderUndo`,
+  md and up) on every page but the Job Board — only while there is something
+  to undo in this workspace, so the header is unchanged at rest.
+- The question's footer no longer says "Nothing is deleted either way" (undoing
+  a new task DOES take it away): "Whatever this takes away or brings back,
+  Redo puts straight back."
+
+Harness: `scratchpad/undoall-probe.mjs` (36 checks — the owner's exact case,
+bar move, X/"Remove both" with the message and photo coming back, the
+window's complete / delete / stage tick, a task in another workspace, the
+header arrows). `undoredo.mjs` re-seeded with the Goals fixture parked away —
+its notebook section had gone red because the fixture sat over the notebook.
+
 ## The backup audit is a real file now
 `scratchpad/backupaudit.mjs`. CLAUDE.md has named it as a standing rule for
 months and it had **never existed in the repo** — so the rule it enforces was

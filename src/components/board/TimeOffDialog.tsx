@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Trash2, AlertTriangle } from 'lucide-react';
 import { aptLabel, projectShortName, getStageName, personColor, ContractorAssignment, Apartment } from '../../types';
-import { useStore, loadProjectSnapshot } from '../../data/store';
+import { useStore, loadProjectSnapshot, trackUndo } from '../../data/store';
 import {
   TimeOff, TimeOffKind, TIME_OFF_KINDS, TIME_OFF_COLOR, kindWord, hatchOf, bookedDuring, upsertTimeOff,
   removeTimeOff, shortDay, backDay, offOn,
@@ -77,14 +77,17 @@ export function TimeOffDialog({ person, name, color, initial, onClose }: {
       by: initial.by ?? currentUser?.name ?? 'Office',
       at: initial.at ?? new Date().toISOString(),
     };
-    saveTimeOff(upsertTimeOff(list, entry));
-    for (const row of booked) {
-      const target = moving[row.task.id] ? moveTo[row.task.id] : '';
-      if (!target) continue;
-      const patch = { contractorId: target } as Partial<ContractorAssignment>;
-      if (row.pid === currentProjectId) updateContractorAssignment(row.task.id, patch);
-      else updateAssignmentInProject(row.pid, row.task.id, patch);
-    }
+    // The time off and every task it handed to somebody else: ONE undo step.
+    trackUndo(null, () => {
+      saveTimeOff(upsertTimeOff(list, entry));
+      for (const row of booked) {
+        const target = moving[row.task.id] ? moveTo[row.task.id] : '';
+        if (!target) continue;
+        const patch = { contractorId: target } as Partial<ContractorAssignment>;
+        if (row.pid === currentProjectId) updateContractorAssignment(row.task.id, patch);
+        else updateAssignmentInProject(row.pid, row.task.id, patch);
+      }
+    });
     onClose();
   }
 

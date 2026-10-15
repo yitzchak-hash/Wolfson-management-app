@@ -1,6 +1,11 @@
 import {
   UndoState, UndoEntry, emptyUndo, remember, popUndo, popRedo,
 } from './undo';
+import type { TrackOpts } from './undo';
+import { applySide, patchBetween, sidesDiffer, snapEls, snapJobs } from './undoBoard';
+import type { BoardSides, Side } from './undoBoard';
+import { describeUndo, BOOKKEEPING } from './undoWords';
+import type { UndoDiff, UndoWorld } from './undoWords';
 import { create } from 'zustand';
 import { Apartment, CanvasElement, ActivityLog, Project, Stage, StageNote, StageNoteEntry, StageNoteAttachment, StageNoteVersion, GeneralNoteVersion, User, Building, Contractor, ContractorAssignment, ContractorNote, ContractorPhoto, BackupSnapshot, DataSummary, OfficeNoteFile, BackupFrequency, DriveExportFrequency, BackupLogEntry, ContractorUiStrings, DEFAULT_CONTRACTOR_UI_STRINGS, MainUiStrings, DEFAULT_MAIN_UI_STRINGS, HEBREW_MAIN_UI_STRINGS, BoardSetting, BoardSettingKey, BoardLayout, PlanPin, PlanAnnotation, BoardView, Employee, TimePunch, TimeClockSettings, WorkerLevel, FocusIntent, StageMark } from '../types';
 import { ReportDef } from './reportModel';
@@ -359,6 +364,312 @@ function tombstone(projectId: string, ids: string[]) {
 function untombstone(projectId: string, ids: string[]) {
   ids.forEach(id => _tombstones.delete(id));
   fsUntombstone(projectId, ids);
+}
+
+// ─── Undo: one tracker for every kind of record ─────────────────────────────
+/**
+ * `trackUndo(opts, body)` — THE door onto the undo stack (owner, 2026-10-15:
+ * "any action I do, I want to see an undo").
+ *
+ * It snapshots every record the office can change — jobs, board nodes, tasks,
+ * task messages, photos, stage notes, office files, the per-workspace
+ * settings bags (time off lives there) and any task written into ANOTHER
+ * workspace during the body — runs the body, snapshots again, and records ONE
+ * entry for whatever differs. The entry's undo/redo restore only the fields
+ * that differ between the two sides, onto the live record, so a colleague's
+ * edit to another field in between survives.
+ *
+ * Rules:
+ *   · Nested calls are one step: only the OUTERMOST records. A store action
+ *     that records itself (addContractorAssignment…) called inside a
+ *     caller's track becomes part of the caller's step.
+ *   · Nothing is recorded while an undo/redo is walking, inside
+ *     `withoutUndo` (automated writes — migrations, the notebook's fold), or
+ *     on the worker's portal (no undo there; his writes are not the office's).
+ *   · `opts` null → worded from the change itself (undoWords.ts), always
+ *     `content`, because every self-recording action changes content.
+ *   · Bookkeeping stamps (updatedAt, contentUpdatedAt …) are neither a
+ *     change nor restored.
+ *   · A JOB is never created or destroyed by an undo (applySide's rule).
+ *   · Tasks, messages and photos are restored RAW — no completion rule, no
+ *     push to the worker, no history line, no planner question: an undo puts
+ *     the record back, it does not perform the action again. Task deletes
+ *     write no tombstone, so there is none to lift; board nodes go through
+ *     restoreCanvasElements, which lifts theirs.
+ */
+type RawKind = 'contractorAssignments' | 'contractorNotes' | 'contractorPhotos' | 'stageNotes' | 'officeNoteFiles';
+const RAW_KINDS: RawKind[] = ['contractorAssignments', 'contractorNotes', 'contractorPhotos', 'stageNotes', 'officeNoteFiles'];
+type AnyRec = { id: string } & Record<string, unknown>;
+/** What each kind sends to Firestore — the binary stays on this machine, as on every normal write. */
+const RAW_LEAN: Record<RawKind, (r: AnyRec) => AnyRec> = {
+  contractorAssignments: a => ({ ...a, attachments: (a as unknown as ContractorAssignment).attachments?.map(att => ({ ...att, dataUrl: '' })) }),
+  contractorNotes: n => ({ ...n, attachmentDataUrl: undefined }),
+  contractorPhotos: p => ({ ...p, dataUrl: '' }),
+  stageNotes: n => {
+    const note = n as unknown as StageNote;
+    return {
+      ...n, attachmentDataUrl: undefined,
+      attachments: note.attachments?.map(a => ({ ...a, dataUrl: undefined })),
+      entries: note.entries?.map(e => ({ ...e, attachments: e.attachments?.map(a => ({ ...a, dataUrl: undefined })) })),
+    };
+  },
+  officeNoteFiles: f => ({ ...f, dataUrl: '' }),
+};
+
+let _trackDepth = 0;
+let _undoQuiet = 0;
+/** Tasks written into another workspace during the open track: `pid|id` → before. */
+let _foreignTouched: Map<string, { pid: string; id: string; before: ContractorAssignment | null }> | null = null;
+
+/** Run automated writes (migrations, sweeps, folds) without putting them on the undo stack. */
+export function withoutUndo<T>(body: () => T): T {
+  _undoQuiet++;
+  try { return body(); } finally { _undoQuiet--; }
+}
+
+/** The foreign task writers call this BEFORE writing, so the open track can undo them. */
+function noteForeignTask(pid: string, id: string, before: ContractorAssignment | null) {
+  if (!_foreignTouched) return;
+  const k = `${pid}|${id}`;
+  if (!_foreignTouched.has(k)) _foreignTouched.set(k, { pid, id, before: before ? { ...before } : null });
+}
+
+function foreignTasksOf(pid: string): ContractorAssignment[] {
+  const snap = loadFromStorage<Record<string, unknown>>(`${pid}_app_data`, {});
+  return Array.isArray(snap.contractorAssignments) ? snap.contractorAssignments as ContractorAssignment[] : [];
+}
+
+const unbook = <T extends object>(r: T): T => {
+  const out = { ...r } as Record<string, unknown>;
+  for (const k of BOOKKEEPING) delete out[k];
+  return out as T;
+};
+const sameRec = (a: unknown, b: unknown) => a === b || JSON.stringify(a) === JSON.stringify(b);
+
+/** The ids whose record appeared, went, or changed in more than bookkeeping. */
+function diffIds<T extends { id: string }>(m0: Map<string, T>, m1: Map<string, T>): string[] {
+  const out: string[] = [];
+  for (const id of new Set([...m0.keys(), ...m1.keys()])) {
+    const a = m0.get(id); const b = m1.get(id);
+    if (a === b) continue;
+    if (!a || !b) { out.push(id); continue; }
+    if (!sameRec(unbook(a), unbook(b))) out.push(id);
+  }
+  return out;
+}
+
+const byIdMap = <T extends { id: string }>(list: T[]) => new Map(list.map(r => [r.id, r]));
+
+interface UndoSides {
+  board: BoardSides;
+  raw: Partial<Record<RawKind, Record<string, AnyRec | null>>>;
+  settings: Record<string, BoardSetting | null>;
+  foreign: Record<string, Record<string, ContractorAssignment | null>>;
+}
+
+export function trackUndo<T>(opts: TrackOpts | null, body: () => T): T {
+  if (_trackDepth > 0 || _undoWalking || _undoQuiet > 0 || onPortalPath()) return body();
+  const s0 = useStore.getState();
+  const pid = s0.currentProjectId;
+  const jobs0 = byIdMap(s0.apartments);
+  const els0 = byIdMap(s0.canvasElements);
+  const raw0 = Object.fromEntries(RAW_KINDS.map(k => [k, byIdMap(s0[k] as unknown as AnyRec[])])) as Record<RawKind, Map<string, AnyRec>>;
+  const set0 = s0.boardSettings;
+  const foreign = new Map<string, { pid: string; id: string; before: ContractorAssignment | null }>();
+  const prevForeign = _foreignTouched;
+  _foreignTouched = foreign;
+  _trackDepth++;
+  let out: T;
+  try {
+    out = body();
+  } finally {
+    _trackDepth--;
+    _foreignTouched = prevForeign;
+  }
+  const s1 = useStore.getState();
+  // A workspace switch inside the body: the before and after describe two
+  // different collections — nothing honest can be recorded.
+  if (s1.currentProjectId !== pid) return out;
+
+  const jobs1 = byIdMap(s1.apartments);
+  const els1 = byIdMap(s1.canvasElements);
+  const jobIds = diffIds(jobs0, jobs1);
+  const elIds = diffIds(els0, els1);
+  const before: UndoSides = { board: {}, raw: {}, settings: {}, foreign: {} };
+  const after: UndoSides = { board: {}, raw: {}, settings: {}, foreign: {} };
+  let any = false;
+  if (jobIds.length || elIds.length) {
+    const unJobs = (side: Side<Apartment>) => Object.fromEntries(Object.entries(side).map(([k, v]) => [k, v && unbook(v)])) as Side<Apartment>;
+    before.board = { jobs: unJobs(snapJobs([...jobs0.values()], jobIds)), els: snapEls([...els0.values()], elIds) };
+    after.board = { jobs: unJobs(snapJobs([...jobs1.values()], jobIds)), els: snapEls([...els1.values()], elIds) };
+    if (sidesDiffer(before.board, after.board)) any = true;
+    else { before.board = {}; after.board = {}; }
+  }
+  for (const k of RAW_KINDS) {
+    const m1 = byIdMap(s1[k] as unknown as AnyRec[]);
+    const ids = diffIds(raw0[k], m1);
+    if (!ids.length) continue;
+    any = true;
+    before.raw[k] = Object.fromEntries(ids.map(id => [id, raw0[k].has(id) ? unbook(raw0[k].get(id)!) : null]));
+    after.raw[k] = Object.fromEntries(ids.map(id => [id, m1.has(id) ? unbook(m1.get(id)!) : null]));
+  }
+  const set1 = s1.boardSettings;
+  if (set1 !== set0) {
+    for (const key of new Set([...Object.keys(set0), ...Object.keys(set1)])) {
+      if (set0[key] === set1[key] || sameRec(set0[key], set1[key])) continue;
+      any = true;
+      before.settings[key] = set0[key] ? { ...set0[key] } : null;
+      after.settings[key] = set1[key] ? { ...set1[key] } : null;
+    }
+  }
+  for (const f of foreign.values()) {
+    const now = foreignTasksOf(f.pid).find(a => a.id === f.id) ?? null;
+    if (sameRec(f.before && unbook(f.before), now && unbook(now))) continue;
+    any = true;
+    (before.foreign[f.pid] ??= {})[f.id] = f.before && unbook(f.before);
+    (after.foreign[f.pid] ??= {})[f.id] = now && unbook(now);
+  }
+  if (!any) return out;
+
+  const words = opts ?? describeUndo(undoDiffOf(before, after, pid), undoWorldOf(s1));
+  s1.rememberUndo({
+    projectId: pid,
+    weight: words.weight,
+    label: words.label,
+    explain: words.explain,
+    undo: () => applyUndoSides(before, after),
+    redo: () => applyUndoSides(after, before),
+  });
+  return out;
+}
+
+function undoDiffOf(b: UndoSides, a: UndoSides, pid: string): UndoDiff {
+  const pairs = <T,>(x: Record<string, unknown> | undefined, y: Record<string, unknown> | undefined) =>
+    Object.keys({ ...(x ?? {}), ...(y ?? {}) }).map(id => [(x?.[id] ?? null) as T | null, (y?.[id] ?? null) as T | null] as [T | null, T | null]);
+  const tasks: UndoDiff['tasks'] = pairs<ContractorAssignment>(b.raw.contractorAssignments, a.raw.contractorAssignments)
+    .map(([before, after]) => ({ pid, before, after }));
+  for (const fp of new Set([...Object.keys(b.foreign), ...Object.keys(a.foreign)])) {
+    for (const [before, after] of pairs<ContractorAssignment>(b.foreign[fp], a.foreign[fp])) tasks.push({ pid: fp, before, after });
+  }
+  return {
+    jobs: pairs<Apartment>(b.board.jobs, a.board.jobs),
+    els: pairs<CanvasElement>(b.board.els, a.board.els),
+    tasks,
+    notes: pairs<ContractorNote>(b.raw.contractorNotes, a.raw.contractorNotes),
+    photos: pairs<ContractorPhoto>(b.raw.contractorPhotos, a.raw.contractorPhotos),
+    stageNotes: pairs<StageNote>(b.raw.stageNotes, a.raw.stageNotes),
+    officeFiles: pairs<OfficeNoteFile>(b.raw.officeNoteFiles, a.raw.officeNoteFiles),
+    settings: Object.keys({ ...b.settings, ...a.settings }).map(key => ({ key, before: b.settings[key] ?? null, after: a.settings[key] ?? null })),
+  };
+}
+
+function undoWorldOf(st: AppState): UndoWorld {
+  const pid = st.currentProjectId;
+  const snapApts = new Map<string, Apartment[]>();
+  return {
+    projectId: pid,
+    aptOf: (id, p) => {
+      if (p === pid) return st.apartments.find(a => a.id === id);
+      if (!snapApts.has(p)) {
+        const snap = loadFromStorage<Record<string, unknown>>(`${p}_app_data`, {});
+        snapApts.set(p, Array.isArray(snap.apartments) ? snap.apartments as Apartment[] : []);
+      }
+      return snapApts.get(p)!.find(a => a.id === id);
+    },
+    contractors: st.contractors,
+    users: st.users,
+    sortedStages: stagesOfProject(pid, st.stages),
+    ctx: setContextOf(pid, st.boardSettings),
+    workspaceName: p => { const pr = st.projects.find(x => x.id === p); return pr?.shortName ?? pr?.name ?? p; },
+  };
+}
+
+/** `cur` with exactly the fields that differ between the two sides put back. */
+function withPatch<T extends object>(cur: T, was: T, want: T): T {
+  return { ...cur, ...patchBetween(was, want) };
+}
+
+function applyUndoSides(to: UndoSides, from: UndoSides) {
+  const st = useStore.getState();
+  const pid = st.currentProjectId;
+  // Tasks, messages, photos, notes, files — raw, exactly as they were.
+  for (const kind of RAW_KINDS) {
+    const want = to.raw[kind]; const was = from.raw[kind] ?? {};
+    if (!want) continue;
+    const live = byIdMap(useStore.getState()[kind] as unknown as AnyRec[]);
+    const puts = new Map<string, AnyRec>(); const removes = new Set<string>();
+    for (const id of Object.keys(want)) {
+      const w = want[id] ?? null; const f = was[id] ?? null; const cur = live.get(id) ?? null;
+      if (w && !f) puts.set(id, cur ? withPatch(cur, cur, w) : { ...w });
+      else if (!w && f) { if (cur) removes.add(id); }
+      // Somebody deleted it meanwhile: an undo of an EDIT does not resurrect it.
+      else if (w && f && cur) puts.set(id, withPatch(cur, f, w));
+    }
+    if (!puts.size && !removes.size) continue;
+    useStore.setState(s => {
+      const list = s[kind] as unknown as AnyRec[];
+      const have = new Set(list.map(r => r.id));
+      return {
+        [kind]: [
+          ...list.filter(r => !removes.has(r.id)).map(r => puts.get(r.id) ?? r),
+          ...[...puts.values()].filter(r => !have.has(r.id)),
+        ],
+      } as Partial<AppState>;
+    });
+    puts.forEach(r => fsSet(projectCollection(pid, kind), r.id, RAW_LEAN[kind](r)));
+    removes.forEach(id => fsDelete(projectCollection(pid, kind), id));
+  }
+  persist(useStore.getState);
+
+  // Jobs and board nodes — through the board's own writer (field patches; a
+  // job is never created or destroyed; nodes come back with their tombstone lifted).
+  if (to.board.jobs || to.board.els) {
+    const user = st.currentUser ?? ({ id: 'office', name: 'Office' } as User);
+    applySide(to.board, from.board, {
+      updateJob: (id, patch) => useStore.getState().updateApartment(id, patch, user),
+      updateEl: (id, patch) => useStore.getState().updateCanvasElement(id, patch),
+      restoreEls: els => useStore.getState().restoreCanvasElements(els),
+      deleteEl: id => useStore.getState().deleteCanvasElement(id),
+    });
+  }
+
+  // The settings bags (time off, tipus sets …): field by field, one key at a time.
+  const keys = Object.keys(to.settings);
+  if (keys.length) {
+    const next: Record<string, BoardSetting> = { ...useStore.getState().boardSettings };
+    for (const key of keys) {
+      const w = to.settings[key]; const f = from.settings[key] ?? null; const cur = next[key] ?? null;
+      if (w && !f) next[key] = { ...(cur ?? {}), ...w };
+      else if (!w && f) delete next[key];
+      else if (w && f) next[key] = withPatch(cur ?? {}, f, w);
+    }
+    useStore.setState({ boardSettings: next });
+    persist(useStore.getState);
+    fsSet('settings', 'app', { boardSettings: next });
+  }
+
+  // Tasks in other workspaces — back into that workspace's snapshot and collection.
+  for (const fpid of Object.keys(to.foreign)) {
+    const want = to.foreign[fpid]; const was = from.foreign[fpid] ?? {};
+    const key = `${fpid}_app_data`;
+    const snap = loadFromStorage<Record<string, unknown>>(key, {});
+    let list = Array.isArray(snap.contractorAssignments) ? [...snap.contractorAssignments as ContractorAssignment[]] : [];
+    for (const id of Object.keys(want)) {
+      const w = want[id] ?? null; const f = was[id] ?? null;
+      const cur = list.find(a => a.id === id) ?? null;
+      let put: ContractorAssignment | null = null;
+      if (w && !f) put = cur ? { ...cur, ...w } : { ...w };
+      else if (!w && f) {
+        if (cur) { list = list.filter(a => a.id !== id); fsDelete(projectCollection(fpid, 'contractorAssignments'), id); }
+      } else if (w && f && cur) put = withPatch(cur, f, w);
+      if (put) {
+        list = list.some(a => a.id === id) ? list.map(a => (a.id === id ? put! : a)) : [...list, put];
+        fsSet(projectCollection(fpid, 'contractorAssignments'), id, put);
+      }
+    }
+    saveToStorage(key, { ...snap, contractorAssignments: list });
+  }
+  if (Object.keys(to.foreign).length) useStore.setState(s => ({ snapshotTick: s.snapshotTick + 1 }));
 }
 
 /**
@@ -2882,6 +3193,7 @@ export const useStore = create<AppState>((set, get) => ({
       return id;
     }
     const a: ContractorAssignment = { id: generateId(), createdAt: new Date().toISOString(), ...fields } as ContractorAssignment;
+    noteForeignTask(projectId, a.id, null);
     const key = `${projectId}_app_data`;
     const snap = loadFromStorage<Record<string, unknown>>(key, {});
     const list = Array.isArray(snap.contractorAssignments) ? snap.contractorAssignments as ContractorAssignment[] : [];
@@ -2906,6 +3218,7 @@ export const useStore = create<AppState>((set, get) => ({
     const list = Array.isArray(snap.contractorAssignments) ? snap.contractorAssignments as ContractorAssignment[] : [];
     const cur = list.find(a => a.id === id);
     if (!cur) return;
+    noteForeignTask(projectId, id, cur);
     if (!cur.completedAt && patch.completedAt && !('days' in patch)) {
       const late = closeDayFields(cur, patch.completedAt);
       if (late) patch = { ...patch, ...late };
@@ -2920,6 +3233,7 @@ export const useStore = create<AppState>((set, get) => ({
     const key = `${projectId}_app_data`;
     const snap = loadFromStorage<Record<string, unknown>>(key, {});
     const list = Array.isArray(snap.contractorAssignments) ? snap.contractorAssignments as ContractorAssignment[] : [];
+    noteForeignTask(projectId, id, list.find(a => a.id === id) ?? null);
     saveToStorage(key, { ...snap, contractorAssignments: list.filter(a => a.id !== id) });
     fsDelete(projectCollection(projectId, 'contractorAssignments'), id);
     set(st => ({ snapshotTick: st.snapshotTick + 1 }));
@@ -3777,6 +4091,37 @@ export const useStore = create<AppState>((set, get) => ({
     persist(get);
   },
 }));
+
+/**
+ * The actions that put THEMSELVES on the undo stack, whichever screen calls
+ * them (owner, 2026-10-15: "if I add a task, undo. If I delete something,
+ * undo"). Each is wrapped once, here, in `trackUndo(null, …)`, so a new button
+ * that adds or deletes a task is undoable without anybody remembering to say
+ * so. A caller that wants its own words (or several writes as ONE step) wraps
+ * its writes in `trackUndo` / `useBoardTrack` — nesting makes the inner
+ * recordings part of its step.
+ *
+ * Deliberately NOT here: `updateApartment` (migrations, sweeps and auto-fills
+ * call it constantly — screens wrap their own edits), the transcript writers
+ * (`updateContractorNote`, `updateOfficeNoteFile`) and `addContractorPhoto`
+ * (uploads), none of which is a person's deliberate change.
+ */
+const SELF_RECORDING = [
+  'addContractorAssignment', 'updateContractorAssignment', 'deleteContractorAssignment',
+  'addAssignmentToProject', 'updateAssignmentInProject', 'deleteAssignmentInProject',
+  'moveTaskToApartment', 'setApartmentMarks', 'bulkUpdateApartments',
+  'appendApartmentNote', 'removeApartmentNote',
+  'appendStageNoteEntry', 'setStageNoteEntryVisibility',
+  'addContractorNote', 'deleteContractorNote', 'deleteContractorPhoto',
+  'addOfficeNoteFile', 'deleteOfficeNoteFile',
+] as const satisfies ReadonlyArray<keyof AppState>;
+{
+  const st = useStore.getState() as unknown as Record<string, (...args: unknown[]) => unknown>;
+  useStore.setState(Object.fromEntries(SELF_RECORDING.map(name => {
+    const inner = st[name];
+    return [name, (...args: unknown[]) => trackUndo(null, () => inner(...args))];
+  })) as Partial<AppState>);
+}
 
 /**
  * Debounced localStorage write.

@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { X, Paperclip, Loader2, AlertTriangle, Search, Plus, Building2 } from 'lucide-react';
 import {
   Apartment, Contractor, Stage, TaskAttachment, TaskPriority, User, personColor, aptLabel, GeneralWhere, generalBuildingsText, projectShortName, getStageName } from '../../types';
-import { useStore, loadProjectSnapshot } from '../../data/store';
+import { useStore, loadProjectSnapshot, trackUndo } from '../../data/store';
 import { searchJobs } from '../../data/searchIndex';
 import { TaskDaysPicker, taskWrites, splitStringsOf, TaskSplit } from '../tasks/TaskDaysPicker';
 import { StagePairPicker, stagePairStrings, StagePairValue } from '../tasks/StagePair';
@@ -237,6 +237,9 @@ export function PlannerTaskDialog({
       const writes = taskWrites(start, allDays, pair, split);
       const targetPid = picked?.projectId ?? general?.projectId ?? currentProjectId;
       const ids: string[] = [];
+      // Every task this press makes — several workers, two stretches — is ONE
+      // undo step (worded from the tasks themselves).
+      trackUndo(null, () => {
       for (const cid of who) {
         for (const w of writes) {
           const fields = {
@@ -269,6 +272,7 @@ export function PlannerTaskDialog({
       if (st.plannerAsk && ids.includes(st.plannerAsk.taskId) && ids.includes(st.plannerAsk.overlap.taskId)) {
         st.answerPlannerAsk('keep');
       }
+      });
       onDone({
         taskIds: ids, days: allDays, contractorIds: who,
         jobId: picked?.job.id,

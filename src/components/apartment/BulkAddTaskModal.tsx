@@ -4,7 +4,7 @@ import {
   Loader, ChevronLeft, CheckCircle2, Circle, FileText, ZoomIn, Save,
 } from 'lucide-react';
 import { Apartment, ContractorCategory, TaskAttachment, TaskPriority } from '../../types';
-import { useStore } from '../../data/store';
+import { useStore, trackUndo } from '../../data/store';
 import { VoiceMemoPlayer } from '../ui/VoiceMemo';
 import { MessageBox, memoFile } from '../ui/MessageBox';
 import { TaskDaysPicker, daysFields, taskWrites, splitStringsOf, TaskSplit } from '../tasks/TaskDaysPicker';
@@ -243,7 +243,8 @@ export function BulkAddTaskModal({ onClose, onToast }: Props) {
 
   function createAllWithAtts(attsList: TaskAttachment[][]) {
     const apts = selectedApts;
-    apts.forEach((apt, i) => {
+    // Every task the bulk form makes is ONE undo step.
+    trackUndo(null, () => apts.forEach((apt, i) => {
       const atts = attsList[i] ?? [];
       // The FROM stage never moves the job (a task on a future stage is a
       // task); two stretches with different stages may be two records.
@@ -261,7 +262,7 @@ export function BulkAddTaskModal({ onClose, onToast }: Props) {
           ...(atts.length ? { attachments: atts } : {}),
         });
       }
-    });
+    }));
     onToast(`${apts.length} task${apts.length !== 1 ? 's' : ''} created`);
     onClose();
   }

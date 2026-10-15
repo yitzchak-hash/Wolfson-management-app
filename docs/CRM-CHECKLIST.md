@@ -244,3 +244,4 @@ Legend: ☑ shipped · ☐ decided, not built · ◐ built in part · ✎ needs 
 - ☑ The header search lists its results in layers: jobs, tasks, notes/messages/files, on the board, workers and stages (2026-10-15)
 - ☑ Search with AI answers on the live site (Opus 5.5 adaptive, low effort) and says so when it cannot (2026-10-15)
 - ☑ Photos keep their EXIF: Drive gets the original file (GPS, date taken, camera); the shrunk preview / base64 copy has the EXIF copied in; HEIC uploads as-is (2026-10-15)
+- ☑ Undo for everything: tasks added / edited / completed / deleted (with their messages and photos), notebook bars moved / resized / taken off, stage ticks, notes, apartment fields, time off, problems, tasks in other workspaces — one step each, content steps ask first; undo arrows in the header on every page (2026-10-15)

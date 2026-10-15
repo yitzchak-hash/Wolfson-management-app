@@ -8769,10 +8769,13 @@ function isPointerNode(el: CanvasElement | undefined): boolean {
             || 'the task on it'}
           onCancel={() => setPlannerRemove(null)}
           onDone={alsoDelete => {
-            if (alsoDelete && plannerRemove.entry.taskId) {
-              deleteContractorAssignment(plannerRemove.entry.taskId);
-            }
-            plannerRemove.done(alsoDelete);
+            // The card and (when asked) its task go as ONE undo step.
+            track(null, () => {
+              if (alsoDelete && plannerRemove.entry.taskId) {
+                deleteContractorAssignment(plannerRemove.entry.taskId);
+              }
+              plannerRemove.done(alsoDelete);
+            });
             setPlannerRemove(null);
           }}
         />

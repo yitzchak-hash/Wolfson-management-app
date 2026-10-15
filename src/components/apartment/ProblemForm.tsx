@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { AlertTriangle, X, Camera, Loader2 } from 'lucide-react';
-import { useStore } from '../../data/store';
+import { useStore, trackUndo } from '../../data/store';
 import { Apartment, User, aptLabel, ContractorAssignment, ContractorNote } from '../../types';
 import { MessageBox, memoFile } from '../ui/MessageBox';
 import { TaskThread } from '../tasks/TaskThread';
@@ -138,7 +138,8 @@ export function ProblemForm({ apartments, currentUser, onClose, onSaved }: {
     const all: Bubble[] = text.trim() ? [...bubbles, { id: 'draft-line', at: new Date().toISOString(), text: text.trim() }] : bubbles;
     const head = all.find(b => b.text.trim());
     const headLine = (head?.text ?? '').trim() || all.find(b => b.att?.transcript)?.att?.transcript || ui.problemLabel;
-    for (const apt of apartments) {
+    // Every problem this press raises, and its first messages: ONE undo step.
+    trackUndo(null, () => { for (const apt of apartments) {
       const line = (many ? (perApt[apt.id] ?? '').trim() : '') || headLine;
       const id = `PR-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
       addContractorAssignment({
@@ -191,7 +192,7 @@ export function ProblemForm({ apartments, currentUser, onClose, onSaved }: {
         newValue: line.slice(0, 80),
         stageId: apt.currentStageId ?? '',
       } as never);
-    }
+    } });
     onSaved?.(apartments.length);
     onClose();
   }
