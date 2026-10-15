@@ -37,7 +37,7 @@ function towardDone(i: number, n: number): string {
 function floorWord(lang: string | undefined, n: string): string {
   return lang === 'he' ? `קומה ${n}` : lang === 'ru' ? `этаж ${n}` : `Floor ${n}`;
 }
-import { useStore, loadProjectSnapshot } from '../../data/store';
+import { useStore, loadProjectSnapshot, withoutUndo } from '../../data/store';
 import { useBoardTrack } from '../../data/useBoardUndo';
 import { holidaysOn, hebrewLabel, Holiday } from '../../data/hebrewDates';
 import { DriveIcon, ZohoIcon, PlanIcon } from '../ui/BrandIcons';
@@ -1136,13 +1136,16 @@ export function PlannerWidget({
       });
       if (kept.length) next[key] = kept;
     }
-    for (const [tid, dds] of adds) {
-      const t = assignments.find(a => a.id === tid);
-      if (!t) continue;
-      const merged = [...new Set([...daysOf(t), ...dds])].sort();
-      updateAssignment(tid, { days: merged.length > 1 ? merged : undefined, dueDate: merged[merged.length - 1] });
-    }
-    write({ cells: next });
+    // A migration, not anybody's act — it never goes on the undo stack.
+    withoutUndo(() => {
+      for (const [tid, dds] of adds) {
+        const t = assignments.find(a => a.id === tid);
+        if (!t) continue;
+        const merged = [...new Set([...daysOf(t), ...dds])].sort();
+        updateAssignment(tid, { days: merged.length > 1 ? merged : undefined, dueDate: merged[merged.length - 1] });
+      }
+      write({ cells: next });
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ro, projection, assignments.length > 0, el.id]);
 

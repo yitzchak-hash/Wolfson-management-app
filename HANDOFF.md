@@ -46,7 +46,7 @@ day still stands, after the numbered list.)
 3. `npx tsc --noEmit -p .` and `npx vite build`. 4. The audits:
    `node scratchpad/loopaudit.mjs`, `backupaudit.mjs`, `navaudit.mjs`, `apilimit.mjs`.
 5. A What's New entry (`src/data/whatsNew.tsx`, dates run AHEAD of the clock;
-   newest is `2027-02-05` — the next entry must be a later date (an older
+   newest is `2027-02-06` — the next entry must be a later date (an older
    entry lower down also wears `2026-12-20`; the marker compares only the TOP
    entry's date, so never reuse a date that appears anywhere in the file)). 6. A CLAUDE.md
    round record. 7. A line in `docs/CRM-CHECKLIST.md`, tick `docs/ROADMAP.md`, date a line in `docs/DECISIONS.md` when he decided something. 8. Rewrite THIS file.
@@ -64,7 +64,27 @@ with starred recommendations is published first; the owner says "approved" /
 "all yes" / answers by number; then it is built. Never build a redesign
 unasked.
 
-## Where things stand (2026-10-15, latest — photos keep their EXIF)
+## Where things stand (2026-10-15, latest — four recordings of 15 Oct afternoon + undo for everything)
+His ask: "check the folder for new videos". Four new recordings: 14:13 (2:05), 14:17 (3:36), 14:19 (0:28),
+15:39 (0:18) — ledger rows 10–13, feedback docs `docs/feedback/2026-10-15-14{1326,1727,1950}.md` and
+`2026-10-15-153941.md`, checklist V10–V13.
+- Built: the worker's small wrong-apartment icon that asks; "Anything the office should know?"; a
+  notebook bar dragged elsewhere asks first (names another trade); hide people on the notebook;
+  Active jobs counts notebook moves (`plannedAt`), icon marks, fluid width + Tile size slider; the
+  worker's week newest day first with single done rows green.
+- Built by an agent he asked for ("run an ultra code Opus 5.5 agent"): undo for everything —
+  `trackUndo` in store.ts, self-recording task/stage/note actions, `undoWords.ts`, header undo arrows
+  on every page, audit in `docs/research/UNDO-AUDIT.md`. Not undoable by design: job create /
+  delete-forever, widget keystrokes, settings pages, the portal.
+- Waiting on him: the plan page "More Than the Task Said"
+  (https://claude.ai/artifact/6eMECscK1vr3x5FhSzAVoC) — 7 starred questions: "anything else today?" on
+  the close, part of a stage, a stage the apartment lacks, a task dropped on another trade's row.
+- Probes: round52-probe (24), undoall-probe (36) new; notebookbars, multiday, activejobs, portal-r48,
+  undoredo re-encoded/green; drawerround, headerfit, timeoff, round51, the four audits green.
+- **The reply he saw**: an interim report (everything but undo, then undo still running), then the
+  undo merge — numbered list, the plan link, "👉 answer the seven questions".
+
+## Where things stand (2026-10-15 — photos keep their EXIF)
 His ask: photos uploaded from the app lost GPS / date taken / camera (a canvas shrink before upload).
 - Built: `src/data/imageMeta.ts`; Drive gets the ORIGINAL file in stage notes, the drawer's task edit and
   the Tasks page add/edit; the shrunk copy (base64 fallback, portal previews) keeps the EXIF via

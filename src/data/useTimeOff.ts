@@ -1,4 +1,4 @@
-import { useStore } from './store';
+import { useStore, trackUndo } from './store';
 import type { TimeOff } from './timeOff';
 
 const EMPTY: TimeOff[] = [];
@@ -10,7 +10,8 @@ export function useTimeOff(): TimeOff[] {
 
 /** Write the whole list back (persist + the settings doc, like every `__tv` key). */
 export function saveTimeOff(list: TimeOff[]): void {
-  useStore.getState().setTvSetting('timeOff', list);
+  // Every change to somebody's time off is an undo step ("Changed time off for …").
+  trackUndo(null, () => useStore.getState().setTvSetting('timeOff', list));
 }
 
 /** The list as it stands right now, outside React. */

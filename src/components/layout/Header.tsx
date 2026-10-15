@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { LogOut, User, Sun, Moon, AlertTriangle, Loader2, CheckCircle2, Search, CalendarDays, Settings,
          ChevronDown, Check, GripVertical, Clock } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useStore } from '../../data/store';
 import { usePhone } from '../../data/usePhone';
 import { Project, aptLabel, getStageName, projectName, projectShortName } from '../../types';
@@ -16,6 +16,25 @@ import { GlobalSearch } from '../ui/GlobalSearch';
 import { subscribeCloudSync, isFirebaseConfigured, SyncStatus } from '../../data/firebase';
 import { clearReturnTicket } from '../../data/unitTravel';
 import { OfficeAlertsAsk } from './OfficeAlerts';
+import { UndoButtons } from '../board/UndoLayer';
+
+/**
+ * The undo arrows, on every page (owner, 2026-10-15: "any action I do, I want
+ * to SEE an undo"). Drawn only while there is something to take back in this
+ * workspace, so the header stays as it was at rest, and not on the Job Board,
+ * whose own header already carries them.
+ */
+function HeaderUndo({ light }: { light: boolean }) {
+  const { pathname } = useLocation();
+  const pid = useStore(st => st.currentProjectId);
+  const any = useStore(st => st.undoState.past.some(e => e.projectId === pid) || st.undoState.future.some(e => e.projectId === pid));
+  if (!any || pathname.startsWith('/jobs')) return null;
+  return (
+    <span data-header-undo className="hidden md:contents">
+      <UndoButtons className={`rounded-xl border px-0.5 ${light ? 'border-gray-200 text-gray-600' : 'border-white/15 text-gray-300'}`} />
+    </span>
+  );
+}
 
 function CloudSyncBadge({ light }: { light: boolean }) {
   const [status, setStatus] = useState<SyncStatus>('idle');
@@ -550,6 +569,7 @@ export function Header() {
 
       <div className="flex items-center gap-0.5 md:gap-2 flex-shrink-0 lg:flex-shrink lg:min-w-0">
         {/* What the APP learned to do — left of what the office just did. */}
+        {currentUser && <HeaderUndo light={lightTheme} />}
         {currentUser && <WhatsNewButton />}
         {/* The training session — a practice board that teaches every gesture.
             Not on a phone: the phone board only navigates, and in a 390px

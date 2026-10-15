@@ -177,7 +177,7 @@ rewritten).
 |---|------|-----|--------|-------|
 | V11-1 | 0:27 | A notebook bar dragged elsewhere asks "move the task you gave X on Y to Z?" yes/no | Done | `PlannerMoveConfirm` · round52-probe · notebookbars-probe · multiday |
 | V11-2 | 0:53 | A task dropped on a drywall worker should become a new task on the drywall stage — "how would this work" | Waiting (plan page, section D, Q6–7); the move question already names the other trade | round52-probe §2 |
-| V11-3 | 2:16 | Undo/redo for every action: move, add a task, delete — audited by an agent | UNDO_STATUS | UNDO_PROOF |
+| V11-3 | 2:16 | Undo/redo for every action: move, add a task, delete — audited by an agent | Done | `trackUndo` + self-recording store actions; docs/research/UNDO-AUDIT.md · undoall-probe (36) · undoredo |
 | V11-4 | 2:40 | Active jobs: a task moved on the notebook showed nothing under "Notebook" | Fixed | `ContractorAssignment.plannedAt` · round52-probe §3 |
 | V11-5 | 2:52 | Active jobs: "what is this stuff" (the lettered squares) | Done | icons, words on hover · round52-probe §3 |
 | V11-6 | 3:12 | Active jobs: no "tiles across" — a size slider, and dragging the widget wider fits more | Done | `WidgetDef.fluid` + Tile size slider · round52-probe §4 · activejobs-probe |

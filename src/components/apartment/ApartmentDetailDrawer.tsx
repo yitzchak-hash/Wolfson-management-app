@@ -4,7 +4,7 @@ import { Apartment, User, getStageName, TaskAttachment, TaskPriority, aptLabel, 
 import { TaskThread } from '../tasks/TaskThread';
 import { Translated } from '../ui/Translated';
 import { Send } from 'lucide-react';
-import { useStore } from '../../data/store';
+import { useStore, trackUndo } from '../../data/store';
 import { peekTaskFocus, takeTaskFocus } from '../../data/taskFocus';
 import { TaskDaysPicker, daysFields } from '../tasks/TaskDaysPicker';
 import { StagePairPill, StagePairPicker, stagePairStrings } from '../tasks/StagePair';
@@ -511,7 +511,7 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
     };
     if (atts.length === 0) {
       addContractorNote({ ...base, text });
-    } else {
+    } else trackUndo(null, () => {
       atts.forEach((att, i) => addContractorNote({
         ...base,
         text: i === 0 && text ? text : (att.mimeType.startsWith('audio/') || att.mimeType.startsWith('image/') ? '' : att.filename),
@@ -522,7 +522,7 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
         attachmentDriveUrl: att.driveUrl,
         transcript: att.transcript,
       }));
-    }
+    });
     setOfficeNoteDrafts(d => ({ ...d, [a.id]: '' }));
     setOfficeNoteAtts(d => ({ ...d, [a.id]: [] }));
   }
@@ -956,6 +956,13 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
 
   function saveTaskEdit() {
     if (!drawerEditingTaskId) return;
+    // The task, its pictures' stages and the apartment's ticks: ONE undo step.
+    trackUndo(null, () => saveTaskEditNow(drawerEditingTaskId));
+    setDrawerEditingTaskId(null);
+    setDrawerEditAttachments([]);
+    onToast(ui.saveChanges);
+  }
+  function saveTaskEditNow(drawerEditingTaskId: string) {
     const before = contractorAssignments.find(x => x.id === drawerEditingTaskId);
     // A FINISHED task re-pointed at other stages takes its record with it:
     // the close's stages, the pictures filed under the old stage, and the
@@ -994,9 +1001,6 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
       priority: (drawerEditFields.priority as TaskPriority) || undefined,
       attachments: drawerEditAttachments.length > 0 ? drawerEditAttachments : undefined,
     });
-    setDrawerEditingTaskId(null);
-    setDrawerEditAttachments([]);
-    onToast(ui.saveChanges);
   }
 
   async function handleTaskEditFileChosen(file: File) {
@@ -1036,7 +1040,7 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
    * back. The stage board writes through `setApartmentMarks` on the spot.
    */
   function doSaveBasic() {
-    updateApartment(apartment!.id, {
+    trackUndo(null, () => updateApartment(apartment!.id, {
       displayName: familyName || apartment!.apartmentNumber,
       classification,
       driveLink: driveLink.trim() || undefined,
@@ -1044,7 +1048,7 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
       zohoLink: zohoLinkLocal.trim() || undefined,
       address: addressLocal.trim() || undefined,
       phone: phoneLocal.trim() || undefined,
-    }, currentUser);
+    }, currentUser));
     onToast(ui.apartmentSaved);
   }
 
@@ -1052,7 +1056,7 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
   function handleClassificationChange(v: 'standard' | 'shinui') {
     setClassification(v);
     if (v !== apartment!.classification) {
-      updateApartment(apartment!.id, { classification: v }, currentUser);
+      trackUndo(null, () => updateApartment(apartment!.id, { classification: v }, currentUser));
     }
   }
 
@@ -1061,7 +1065,9 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
   // "saved" and "hoped".
   function autoSave() {
     const wasDirty = basicDirty();
-    updateApartment(apartment!.id, {
+    // An undo step only when something really changed (bookkeeping stamps
+    // alone record nothing).
+    trackUndo(null, () => updateApartment(apartment!.id, {
       displayName: familyName || apartment!.apartmentNumber,
       classification,
       driveLink: driveLink.trim() || undefined,
@@ -1069,7 +1075,7 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
       zohoLink: zohoLinkLocal.trim() || undefined,
       address: addressLocal.trim() || undefined,
       phone: phoneLocal.trim() || undefined,
-    }, currentUser);
+    }, currentUser));
     basicSnapshot.current = {
       familyName, address: addressLocal, phone: phoneLocal,
       zoho: zohoLinkLocal, drive: driveLink,
@@ -1666,7 +1672,7 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
             composer={<MessageBox hook="nf-office-message" value={nfText} onChange={setNfText} rows={2}
               lang={ui.isRtl ? 'he' : 'en'} />}
             onClose={close}
-            onSubmit={(fin, next) => {
+            onSubmit={(fin, next) => trackUndo(null, () => {
               const plan = notFinishedPlan(t, {
                 today: dayIso(new Date()), next, finishedIds: fin,
                 by: currentUser?.name || 'Office', at: new Date().toISOString(),
@@ -1686,7 +1692,7 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
               }
               onToast(unfinishedWords(ui.isRtl ? 'he' : 'en').officeBtn + ' ✓');
               close();
-            }}
+            })}
           />
         );
       })()}
@@ -1963,7 +1969,7 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                   <select
                     data-tipus-select
                     value={apartment.tipus ?? ''}
-                    onChange={e => updateApartment(apartment.id, { tipus: e.target.value || undefined }, currentUser)}
+                    onChange={e => trackUndo(null, () => updateApartment(apartment.id, { tipus: e.target.value || undefined }, currentUser))}
                     className="border border-gray-200 rounded-lg px-2 py-2 text-sm font-bold bg-white focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30"
                   >
                     <option value="">{ui.tipusNone}</option>
@@ -2030,7 +2036,7 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                     photos={contractorPhotos}
                     onMarks={next => setApartmentMarks(apartment.id, next, currentUser)}
                     onMarker={id => {
-                      updateApartment(apartment.id, { currentStageId: id }, currentUser);
+                      trackUndo(null, () => updateApartment(apartment.id, { currentStageId: id }, currentUser));
                       setCurrentStageId(id);
                     }}
                     onAddCustom={({ name, color, where }) => addCustomStage(name, color, where)}

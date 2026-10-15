@@ -251,3 +251,4 @@ Legend: ☑ shipped · ☐ decided, not built · ◐ built in part · ✎ needs 
 - ☑ Active jobs: notebook moves count as notebook activity; icon marks; tiles fill the width + Tile size slider (2026-10-15)
 - ✎ Closing with more work done / part of a stage / a stage the apartment lacks / a drop on another trade's row — plan page, awaiting answers (2026-10-15)
 - ☑ The worker's weekly calendar: newest day first; a single done task green like the fold (2026-10-15)
+- ☑ Undo for everything: tasks added / edited / completed / deleted (with their messages and photos), notebook bars moved / resized / taken off, stage ticks, notes, apartment fields, time off, problems, tasks in other workspaces — one step each, content steps ask first; undo arrows in the header on every page (2026-10-15)

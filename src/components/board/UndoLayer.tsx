@@ -202,8 +202,8 @@ export function UndoLayer() {
         </div>
         <p className="text-xs text-gray-500 mb-4">
           {isRtl
-            ? 'שום דבר לא נמחק — אפשר לחזור על הפעולה שוב מיד אחר כך.'
-            : 'Nothing is deleted either way, and you can put it straight back with Redo.'}
+            ? 'מה שזה מוריד או מחזיר — אפשר להחזיר מיד אחר כך עם "בצע שוב".'
+            : 'Whatever this takes away or brings back, Redo puts straight back.'}
         </p>
 
         <div className="flex gap-2 justify-end">

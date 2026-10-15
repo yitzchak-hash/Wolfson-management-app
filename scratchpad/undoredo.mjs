@@ -37,6 +37,9 @@ await ctx.addInitScript(() => {
     stages: [],
     apartments: [job(0), job(1, { inNotebook: 'CE-book' })],
     canvasElements: [
+      // The seeded Goals fixture lands at the view centre — over the notebook —
+      // unless it is parked out of the way (the standing seed rule).
+      { id: 'CE-goals-board', type: 'widget', widget: 'goals', x: 3200, y: 2400, w: 320, h: 220, text: '', color: '#ffffff', data: {} },
       { id: 'CE-note1', type: 'note', x: 320, y: 560, w: 200, h: 160,
         text: 'A note that says something', color: '#fef3c7' },
       { id: 'CE-book', type: 'widget', widget: 'rota',

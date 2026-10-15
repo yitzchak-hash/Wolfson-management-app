@@ -106,5 +106,21 @@ export function undoKey(e: KeyboardEvent): 'undo' | 'redo' | null {
   return null;
 }
 
+/**
+ * What a caller says about an action it wants recorded (see `trackUndo` in
+ * store.ts). Optional everywhere: a store action that changes content records
+ * itself, with a sentence worded from what actually changed (undoWords.ts).
+ */
+export interface TrackOpts {
+  weight: UndoWeight;
+  /** What was DONE, past tense: "Moved 3 things". Shown in the history. */
+  label: string;
+  /**
+   * What undoing it will DO, spelled out — required for `content`, because
+   * that sentence is the whole reason a content undo stops to ask.
+   */
+  explain?: string;
+}
+
 /** "3 things", "1 thing" — used in a dozen labels, so written once. */
 export const things = (n: number) => `${n} ${n === 1 ? 'thing' : 'things'}`;

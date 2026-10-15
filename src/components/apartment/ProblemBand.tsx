@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { AlertTriangle, Check, Undo2, X } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
-import { useStore } from '../../data/store';
+import { useStore, trackUndo } from '../../data/store';
 import { Apartment, ContractorAssignment, User, getStageName } from '../../types';
 import { bandWorthy, canApproveProblem, isLiveProblem, problemDaysLate, PROBLEM_RED, PROBLEM_ROSE } from '../../data/problems';
 import { driveThumbUrl } from '../../data/driveApi';
@@ -49,15 +49,18 @@ export function ProblemBand({ apartment, currentUser }: { apartment: Apartment; 
 
   function sendBack(a: ContractorAssignment) {
     const note = returnNote.trim();
-    updateContractorAssignment(a.id, {
-      problem: { ...a.problem!, status: 'returned', returnNote: note || undefined, returnedAt: new Date().toISOString(), closedAt: undefined },
-    });
-    if (note) {
-      addContractorNote({
-        assignmentId: a.id, apartmentId: apartment.id, contractorId: a.contractorId,
-        text: note, authorType: 'office', authorId: currentUser.id, authorName: currentUser.name,
+    // The send-back and its note are ONE undo step.
+    trackUndo(null, () => {
+      updateContractorAssignment(a.id, {
+        problem: { ...a.problem!, status: 'returned', returnNote: note || undefined, returnedAt: new Date().toISOString(), closedAt: undefined },
       });
-    }
+      if (note) {
+        addContractorNote({
+          assignmentId: a.id, apartmentId: apartment.id, contractorId: a.contractorId,
+          text: note, authorType: 'office', authorId: currentUser.id, authorName: currentUser.name,
+        });
+      }
+    });
     setReturning(null);
     setReturnNote('');
   }

@@ -31,12 +31,19 @@ export interface WhatsNewEntry {
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
     date: '2027-02-06',
-    title: 'The notebook asks before it moves, and Active jobs fits its width',
+    title: 'Undo for everything, and the notebook asks before it moves',
     items: [
       {
         title: 'Moving a task asks first',
         body: 'Drag a task on the weekly notebook to another day or person and it asks: "Move the task you '
           + 'gave Yaakov on Sunday to Thursday?" — Yes or No. If the row belongs to another trade, it says so.',
+        demo: 'list',
+      },
+      {
+        title: 'Undo works on everything',
+        body: 'Adding a task, removing one ("Remove both"), moving it on the notebook, ticking a stage, '
+          + 'a note, time off — every change can be undone with the arrows or Ctrl+Z, and redone. '
+          + 'The arrows now sit in the header on every page.',
         demo: 'list',
       },
       {
