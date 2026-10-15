@@ -2,6 +2,7 @@ import React from 'react';
 import {
   CalendarOff, EyeOff, UserX, TrendingUp, MapPinned, FileWarning,
   Layers3, CopyCheck, SkipForward, Activity, RefreshCw,
+  Eye, Pencil, ClipboardList, MessageSquare, Camera, FileText, BookOpen, HardDrive,
 } from 'lucide-react';
 import {
   Apartment, CanvasElement, ContractorAssignment,
@@ -265,16 +266,39 @@ function OpenSnags({ c, el }: { c: WidgetCtx; el: CanvasElement }) {
  * job is not activity: the "opened" history entries are looks, not work.
  * The count opens the same list through the host, the standing rule.
  */
-const KIND_STYLE: Record<TouchKind, { bg: string; letter: string; label: string }> = {
-  opened:   { bg: '#1e3a5f', letter: 'O', label: 'opened' },
-  edited:   { bg: '#475569', letter: 'E', label: 'edited · stage · note' },
-  task:     { bg: '#f59e0b', letter: 'T', label: 'task or problem' },
-  message:  { bg: '#7c3aed', letter: 'M', label: 'message or memo' },
-  photo:    { bg: '#dc2626', letter: 'P', label: 'photo or video from site' },
-  plan:     { bg: '#0284c7', letter: 'L', label: 'plan marked up or pinned' },
-  notebook: { bg: '#0d9488', letter: 'N', label: 'in the weekly notebook' },
-  drive:    { bg: '#0f9d58', letter: 'D', label: 'Drive file added, changed or removed' },
+const KIND_STYLE: Record<TouchKind, { bg: string; icon: typeof Eye; label: string }> = {
+  opened:   { bg: '#1e3a5f', icon: Eye, label: 'opened' },
+  edited:   { bg: '#475569', icon: Pencil, label: 'edited · stage · note' },
+  task:     { bg: '#d97706', icon: ClipboardList, label: 'task or problem' },
+  message:  { bg: '#7c3aed', icon: MessageSquare, label: 'message or memo' },
+  photo:    { bg: '#dc2626', icon: Camera, label: 'photo or video from site' },
+  plan:     { bg: '#0284c7', icon: FileText, label: 'plan marked up or pinned' },
+  notebook: { bg: '#0d9488', icon: BookOpen, label: 'in the weekly notebook' },
+  drive:    { bg: '#0f9d58', icon: HardDrive, label: 'Drive file added, changed or removed' },
 };
+/**
+ * What kinds of thing happened on a job, as small ICONS with the count after
+ * them (owner, 2026-10-15, hovering the old lettered squares: "I don't know
+ * what is this stuff over here"). A camera, a speech bubble, a notebook read
+ * without a legend; the words are on hover.
+ */
+function KindMarks({ kinds, count }: { kinds: TouchKind[]; count: number }) {
+  return (
+    <span className="ms-auto flex-shrink-0 flex items-center gap-0.5"
+      title={`${kinds.map(k => KIND_STYLE[k].label).join(' · ')} — ${count} thing${count === 1 ? '' : 's'} in this window`}>
+      {kinds.map(k => {
+        const I = KIND_STYLE[k].icon;
+        return (
+          <span key={k} data-active-square={k} title={KIND_STYLE[k].label}
+            className="inline-grid place-items-center rounded" style={{ width: 13, height: 13, backgroundColor: `${KIND_STYLE[k].bg}1f`, color: KIND_STYLE[k].bg }}>
+            <I size={9} strokeWidth={2.6} />
+          </span>
+        );
+      })}
+      <span className="text-[8.5px] text-slate-400 ms-0.5 tabular-nums" data-active-heat>{count}</span>
+    </span>
+  );
+}
 const FILTERS: { id: TouchFilter; label: string }[] = [
   { id: 'all', label: 'All' }, { id: 'office', label: 'Office' }, { id: 'site', label: 'Site' },
   { id: 'drive', label: 'Drive' }, { id: 'notebook', label: 'Notebook' },
@@ -353,13 +377,7 @@ function ActiveTile({ job, stage, pending, group, h, booked, onOpen }: {
             title={`${pending} task${pending === 1 ? '' : 's'} still open`}>{pending}</span>
         )}
         <span className="flex-shrink-0 scale-90"><DriveStatus job={job} /></span>
-        <span className="ms-auto flex-shrink-0 flex items-center gap-0.5" title={h.kinds.map(k => KIND_STYLE[k].label).join(' · ')}>
-          {h.kinds.map(k => (
-            <span key={k} className="inline-grid place-items-center rounded text-[7px] font-black text-white"
-              style={{ width: 11, height: 11, backgroundColor: KIND_STYLE[k].bg }} data-active-square={k}>{KIND_STYLE[k].letter}</span>
-          ))}
-          <span className="text-[8.5px] text-slate-400 ms-0.5 tabular-nums" data-active-heat>{h.count}</span>
-        </span>
+        <KindMarks kinds={h.kinds} count={h.count} />
       </span>
     </button>
   );
@@ -421,13 +439,11 @@ function ActiveJobs({ c, el }: { c: WidgetCtx; el: CanvasElement }) {
   /** Small board tiles unless the pencil asks for the old one-line rows. */
   const tiles = d(el).look !== 'list';
   /**
-   * How many tiles side by side. A widget MAGNIFIES as a whole when its box is
-   * stretched (WidgetSurface draws at its natural width and scales), so a wider
-   * widget gives bigger tiles, never more of them — the count is a setting,
-   * the tap-in board's precedent.
+   * Tiles fill the width: the widget lays out at its box's real width (it is
+   * `fluid`), so the number side by side follows how wide it is dragged, and
+   * the pencil's Tile size zooms them (owner, 2026-10-15).
    */
-  const across = Math.max(1, Math.min(4, Number(d(el).across) || 2));
-
+  const TILE_MIN = 150;
   return (
     <Frame title={title} icon={Activity} tone="#16a34a">
       <div className="h-full flex flex-col min-h-0">
@@ -471,7 +487,7 @@ function ActiveJobs({ c, el }: { c: WidgetCtx; el: CanvasElement }) {
         <Scroll>
           {list.length === 0 && <Empty>Nothing happened on any job in the last {days} days{filter !== 'all' ? ` (${FILTERS.find(f => f.id === filter)?.label.toLowerCase()})` : ''}</Empty>}
           {tiles && shown.length > 0 && (
-            <div className="grid gap-1.5" data-active-tiles data-across={across} style={{ gridTemplateColumns: `repeat(${across}, minmax(0, 1fr))` }}>
+            <div className="grid gap-1.5" data-active-tiles style={{ gridTemplateColumns: `repeat(auto-fill, minmax(${TILE_MIN}px, 1fr))` }}>
               {shown.map(j => {
                 const st = c.stages.find(x => x.id === j.currentStageId);
                 return (
@@ -497,13 +513,7 @@ function ActiveJobs({ c, el }: { c: WidgetCtx; el: CanvasElement }) {
                     </span>
                     {bk && <span className="flex-shrink-0 text-[8.5px] font-bold px-1.5 rounded-full bg-emerald-50 text-emerald-700" data-active-booked
                       title={`${bk.who} is booked on this job on ${bk.day}`}>{bk.who} · {niceShort(bk.day)}</span>}
-                    <span className="ms-auto flex-shrink-0 flex items-center gap-0.5" title={h.kinds.map(k => KIND_STYLE[k].label).join(' · ')}>
-                      {h.kinds.map(k => (
-                        <span key={k} className="inline-grid place-items-center rounded text-[7px] font-black text-white"
-                          style={{ width: 11, height: 11, backgroundColor: KIND_STYLE[k].bg }} data-active-square={k}>{KIND_STYLE[k].letter}</span>
-                      ))}
-                      <span className="text-[8.5px] text-slate-400 ms-0.5 tabular-nums" data-active-heat>{h.count}</span>
-                    </span>
+                    <KindMarks kinds={h.kinds} count={h.count} />
                   </span>
                 } />
             );
@@ -583,7 +593,7 @@ export const INSIGHT_WIDGETS: WidgetDef[] = [
   // ── 10 · Active jobs ──────────────────────────────────────────────────────
   {
     id: 'active-jobs', rank: 9, name: 'Active jobs', category: 'live',
-    icon: Activity, w: 240, h: 200,
+    icon: Activity, w: 240, h: 200, fluid: true,
     blurb: 'Every job something happened on in the last 30 days — a task, a message, a photo, a stage — newest first.',
     data: { days: 30 },
     render: (el, c) => <ActiveJobs el={el} c={c} />,

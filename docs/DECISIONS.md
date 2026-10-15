@@ -6,6 +6,16 @@ have them). The v2 rebuild's original design record is the root
 `DECISIONS.md`; the rules and traps behind each decision are in `CLAUDE.md`
 by round. (Standing order 6, 2026-09-23.)_
 
+## 2026-10-15 (recordings 14:13–14:19)
+- The worker's wrong-apartment control is a small icon beside the place name that asks Yes/No
+  before the move window — never a big button ("I don't want him to have the ability to, like, this").
+- The closing screen asks one question, "Anything the office should know?" — no "comment" heading.
+- A notebook task bar dragged to another day or person asks first ("move the task you gave Yaakov on
+  Sunday to there — yes or no"). What a drop on ANOTHER TRADE should do is his to decide (plan page D).
+- A notebook person can be hidden (kept on the list, not drawn).
+- Active jobs: no "tiles across" — the tiles fill the widget's width and a Tile size slider zooms them;
+  the kind marks are icons; a task moved on the notebook is notebook activity.
+
 ## 2026-10-15 (photo metadata)
 - Every photo uploaded to Google Drive is the ORIGINAL file, untouched — the TzviAir Photos app reads
   location and date from it. A shrunk copy is only the app's own preview / base64 fallback, and it

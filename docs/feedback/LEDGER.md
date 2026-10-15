@@ -19,5 +19,8 @@ ask built or answered) · **not this app** (a recording of another project — r
 | 7 | Recording 2026-10-12 141731.mp4 (113.6 MB, 1920×1032) | `1wKWxTZKD159GuDBupBWy59A_zMlvGgXB` | 3:54 | done | [2026-10-12-141731.md](2026-10-12-141731.md) |
 | 8 | Recording 2026-10-12 144059.mp4 (124.4 MB) | `1frNRcbfMQdEoEg03xHuEUh9zbh2nXftR` | 3:40 | done (AI search built 2026-10-13) | [2026-10-12-144059.md](2026-10-12-144059.md) |
 | 9 | Recording 2026-10-15 101128.mp4 | `1E5uT6NzHRR2rgVpHZe5KCHUT4zwl2dQy` | 1:50 | done | [2026-10-15-101128.md](2026-10-15-101128.md) |
+| 10 | Recording 2026-10-15 141326.mp4 (28.8 MB) | `1p9gsRYdC6h575DvnUjsAJBKZbUUG8yFS` | 2:05 | open (closing-with-more-work plan waits on his answers) | [2026-10-15-141326.md](2026-10-15-141326.md) |
+| 11 | Recording 2026-10-15 141727.mp4 (112.6 MB) | `1uqukg5k_BOCXQRMsL_DvXypSPwmSKvv5` | 3:36 | open (the other-trade drop waits on his answers) | [2026-10-15-141727.md](2026-10-15-141727.md) |
+| 12 | Recording 2026-10-15 141950.mp4 (14.7 MB) | `1VmLFg_WG4DoiI60NLA0fQT53R2uxsuUG` | 0:28 | done | [2026-10-15-141950.md](2026-10-15-141950.md) |
 
 Folder last listed: 2026-10-15.

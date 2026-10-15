@@ -19,6 +19,8 @@ import { WIDGET_ALIASES } from './widgetAliases';
 
 export type WidgetFieldKind =
   | 'text' | 'longtext' | 'number' | 'percent'
+  /** A zoom slider, 70–180%, stored as a fraction (1 = normal). */
+  | 'scale'
   | 'select' | 'colour' | 'url' | 'image' | 'datetime'
   | 'job' | 'jobs' | 'contractor' | 'stage' | 'people' | 'project'
   /** Main / Projection for a planner: one Main across the workspace, with a
@@ -298,9 +300,8 @@ export const WIDGET_FIELDS: Record<string, WidgetField[]> = {
       options: [{ value: '', label: 'Small tiles' }, { value: 'list', label: 'One line each' }],
     },
     {
-      key: 'across', label: 'Tiles across', kind: 'select',
-      options: [{ value: '1', label: '1' }, { value: '2', label: '2' }, { value: '3', label: '3' }, { value: '4', label: '4' }],
-      hint: 'Stretching the widget makes the tiles bigger; this decides how many sit side by side.',
+      key: 'tileSize', label: 'Tile size', kind: 'scale',
+      hint: 'How big each tile is. Stretching the widget wider fits more tiles side by side.',
     },
   ],
   'nobody-booked': [

@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { PlannerDropDialog, PlannerTaskDialog, PlannerRemoveDialog, TaskDialogResult } from './PlannerDialogs';
+import { PlannerDropDialog, PlannerTaskDialog, PlannerRemoveDialog, PlannerMoveConfirm, TaskDialogResult } from './PlannerDialogs';
 import { ChevronUp, ChevronDown, Plus, X, CalendarDays, Maximize2, Eye, EyeOff, ClipboardList, Check, MapPin } from 'lucide-react';
 import {
   Apartment, CanvasElement, Contractor, User, ContractorAssignment, Stage, personColor,
@@ -93,6 +93,12 @@ export interface PlannerData {
   offFrom?: Record<string, string>;
   /** Where their jobs went, so putting them back can put everything back. */
   offKept?: Record<string, Record<string, PlannerEntry[]>>;
+  /**
+   * People kept on the list but not drawn (owner, 2026-10-15: "if some of
+   * these aren't really active I want to be able to hide them"). Nothing of
+   * theirs is touched — showing them again brings the row straight back.
+   */
+  hiddenPeople?: string[];
   /** The day the view is anchored on. Kept for notebooks made before weeks. */
   start?: string;
   /**
@@ -435,11 +441,12 @@ export function PlannerWidget({
    */
   const nameColW = useMemo(() => {
     const widest = (data.people ?? [])
+      .filter(pid => !(data.hiddenPeople ?? []).includes(pid))
       .map(pid => personOf(pid, contractors, users).name)
       .reduce((w, n) => Math.max(w, nameEms(n)), 0);
     const CHROME = z(6) + z(4) + z(8);        // dot + gap + the row's own padding
     return Math.round(Math.min(z(220), Math.max(z(56), widest * nameSize + CHROME)));
-  }, [data.people, contractors, users, nameSize, z]);
+  }, [data.people, data.hiddenPeople, contractors, users, nameSize, z]);
   const dayBg = String(data.dayBg || '#f1f5f9');
   const offBg = String(data.offBg || '#f5f3ff');
   const todayBg = String(data.todayBg || '#e0f2fe');
@@ -1151,6 +1158,8 @@ export function PlannerWidget({
   const [offEdit, setOffEdit] = useState<{ pid: string; initial: Partial<TimeOff> & { from: string; to: string } } | null>(null);
   /** A bar being taken off the sheet — keep the task (dateless) or delete it. */
   const [barAsk, setBarAsk] = useState<TaskBarSeg | null>(null);
+  /** A bar dropped on another square, waiting on "move this task?" (2026-10-15). */
+  const [moveAsk, setMoveAsk] = useState<{ bar: TaskBarSeg; target: RotaHit } | null>(null);
 
   const rowContractorId = (person: string) => (person.startsWith('c:') ? person.slice(2) : null);
   /** Calendar days between two ISO dates. */
@@ -1172,6 +1181,8 @@ export function PlannerWidget({
     const sorted = [...new Set(dds)].sort();
     const patch = {
       ...more,
+      plannedAt: new Date().toISOString(),
+      plannedBy: useStore.getState().currentUser?.name ?? 'Office',
       dueDate: sorted.length ? sorted[sorted.length - 1] : null,
       days: sorted.length > 1 ? sorted : undefined,
     };
@@ -1223,6 +1234,13 @@ export function PlannerWidget({
     : null;
   lastBundle.current = liveBundle;
   const closeBundle = useCallback(() => setBundleOpen(null), []);
+  /** A bar landing elsewhere asks first; a drop back on its own square asks nothing. */
+  function askMoveBar(bar: TaskBarSeg, target: RotaHit) {
+    const cid = rowContractorId(target.person);
+    if (!cid) return;
+    if (bar.days[0] === target.day && cid === bar.task.contractorId) return;
+    setMoveAsk({ bar, target });
+  }
   /** A bar dropped on a square: the task's days shift, and its worker follows the row. */
   function dropBarTo(bar: TaskBarSeg, target: RotaHit) {
     const cid = rowContractorId(target.person);
@@ -1313,8 +1331,9 @@ export function PlannerWidget({
     return dayWeek.getTime() === lastWeek.getTime() ? 'ending' : 'gone';
   }
 
+  const hiddenSet = new Set(data.hiddenPeople ?? []);
   const rowVisible = (pid: string, days: Date[]) =>
-    days.some(d => personState(pid, iso(d)) !== 'gone');
+    !hiddenSet.has(pid) && days.some(d => personState(pid, iso(d)) !== 'gone');
 
   const title = data.title || (lang === 'he' ? 'מחברת שבועית' : lang === 'ru' ? 'Недельный блокнот' : 'Weekly notebook');
 
@@ -1875,7 +1894,7 @@ export function PlannerWidget({
                                         onHeld={h => { heldBarRef.current = h ? bar.taskId : null; }}
                                         readOnly={ro || state === 'ending'} isRtl={LT === 'he-IL'} lang={lang}
                                         onOpen={() => openBar(bar)}
-                                        onDropTo={t => dropBarTo(bar, t)}
+                                        onDropTo={t => askMoveBar(bar, t)}
                                         onDragOff={() => setBarAsk(bar)}
                                         onRemove={() => removeBar(bar)}
                                         onResizeTo={dd => resizeBarTo(bar, dd)} />
@@ -2108,6 +2127,26 @@ export function PlannerWidget({
           document.body,
         );
       })()}
+
+      {moveAsk && createPortal((() => {
+        const { bar, target } = moveAsk;
+        const fromPid = `c:${bar.task.contractorId}`;
+        const fromKey = cellKey(fromPid, bar.days[0]);
+        const toKey = cellKey(target.person, target.day);
+        return (
+          <PlannerMoveConfirm
+            jobName={bar.label}
+            fromWho={personOf(fromPid, contractors, users).name}
+            fromDay={dayName(fromKey)}
+            toWho={personOf(target.person, contractors, users).name}
+            toDay={dayName(toKey)}
+            fromTrade={categoryOf(fromPid)}
+            toTrade={categoryOf(target.person)}
+            onCancel={() => setMoveAsk(null)}
+            onYes={() => { setMoveAsk(null); dropBarTo(bar, target); }}
+          />
+        );
+      })(), document.body)}
 
       {/* A bar's last days coming off: keep the task (dateless) or delete it. */}
       {barAsk && createPortal(

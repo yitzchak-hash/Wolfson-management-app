@@ -193,6 +193,10 @@ const drag = async (from, to) => {
   const from = await centre('[data-task-bar="T-old"]');
   const to = await cellCentre(4);
   await drag({ x: from.x - from.w / 4, y: from.y }, to);
+  await page.waitForTimeout(500);
+  // Owner, 2026-10-15: a bar dragged elsewhere asks first.
+  check(await page.locator('[data-move-confirm-yes]').count() === 1, '5 · the move asks first');
+  await page.locator('[data-move-confirm-yes]').click();
   await page.waitForTimeout(900);
   const t = (await tasks()).find(a => a.id === 'T-old');
   check(JSON.stringify(t.days) === JSON.stringify(['2026-09-17', '2026-09-20']), '5 · Tue–Wed dropped on Thursday → Thu + Sunday (never Saturday)', JSON.stringify(t.days));

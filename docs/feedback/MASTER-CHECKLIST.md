@@ -165,6 +165,28 @@ rewritten).
 | V9-2 | 0:29 | The AI search answered nothing on the live site | Fixed | the newest model refused "thinking disabled" (a 502); now adaptive at low effort, wrong-keyboard words understood, a failure line with retry · searchai-test · searchaiui-probe |
 | V9-3 | 1:07 | Search results in layers: jobs, then tasks, then the rest | Done | `data-search-layers` · round51-probe |
 
+### Video 10 — Recording 2026-10-15 141326 ([feedback doc](2026-10-15-141326.md))
+| # | Time | Ask | Status | Proof |
+|---|------|-----|--------|-------|
+| V10-1 | 0:00 | The worker's big "Wrong apartment? Move it" button → a small icon that asks yes/no first | Done | `data-task-move` icon + `data-task-move-ask` · portal-r48 |
+| V10-2 | 0:30 | Closing: "did you do more stuff today?"; a small part of a stage; a stage the apartment doesn't have — plan it | Waiting (plan page "More Than the Task Said", Q1–5) | docs/artifacts/2026-10-15-more-than-the-task-said.html |
+| V10-3 | 1:53 | "A comment" → just "Anything the office should know?" | Done | `data-closing-ask-office` · portal-r48 |
+
+### Video 11 — Recording 2026-10-15 141727 ([feedback doc](2026-10-15-141727.md))
+| # | Time | Ask | Status | Proof |
+|---|------|-----|--------|-------|
+| V11-1 | 0:27 | A notebook bar dragged elsewhere asks "move the task you gave X on Y to Z?" yes/no | Done | `PlannerMoveConfirm` · round52-probe · notebookbars-probe · multiday |
+| V11-2 | 0:53 | A task dropped on a drywall worker should become a new task on the drywall stage — "how would this work" | Waiting (plan page, section D, Q6–7); the move question already names the other trade | round52-probe §2 |
+| V11-3 | 2:16 | Undo/redo for every action: move, add a task, delete — audited by an agent | UNDO_STATUS | UNDO_PROOF |
+| V11-4 | 2:40 | Active jobs: a task moved on the notebook showed nothing under "Notebook" | Fixed | `ContractorAssignment.plannedAt` · round52-probe §3 |
+| V11-5 | 2:52 | Active jobs: "what is this stuff" (the lettered squares) | Done | icons, words on hover · round52-probe §3 |
+| V11-6 | 3:12 | Active jobs: no "tiles across" — a size slider, and dragging the widget wider fits more | Done | `WidgetDef.fluid` + Tile size slider · round52-probe §4 · activejobs-probe |
+
+### Video 12 — Recording 2026-10-15 141950 ([feedback doc](2026-10-15-141950.md))
+| # | Time | Ask | Status | Proof |
+|---|------|-----|--------|-------|
+| V12-1 | 0:00 | A hide button per person in the notebook's people list | Done | `hiddenPeople` · round52-probe §5 |
+
 ## From chat
 
 | # | Date | Ask | Status | Proof |

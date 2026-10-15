@@ -89,9 +89,10 @@ void rows;
 const tiles = node.locator('[data-active-tile]');
 check(await tiles.count() === 4, 'every active job is a small tile', String(await tiles.count()));
 const grid = await node.locator('[data-active-tiles]').evaluate(g => ({
-  across: g.getAttribute('data-across'), cols: getComputedStyle(g).gridTemplateColumns.split(' ').length,
+  cols: getComputedStyle(g).gridTemplateColumns.split(' ').length,
 }));
-check(grid.across === '2' && grid.cols === 2, 'two tiles side by side by default', JSON.stringify(grid));
+// Owner, 2026-10-15: the tiles follow the widget's WIDTH (no "tiles across").
+check(grid.cols >= 1, 'the tiles fill the widget\'s width', JSON.stringify(grid));
 const look = await tiles.first().evaluate(t => {
   const name = t.querySelector('[data-active-name]');
   const cs = getComputedStyle(t);
@@ -106,13 +107,11 @@ check(await page.locator('.drawer-panel').count() > 0, 'a tile opens the job');
 await page.keyboard.press('Escape');
 await page.waitForTimeout(700);
 const elId = await node.getAttribute('data-node-id');
-await page.evaluate(id => {
-  const st = window.__store.getState();
-  const el = st.canvasElements.find(e => e.id === id);
-  st.updateCanvasElement(id, { data: { ...(el.data || {}), across: 3 } });
-}, elId);
+const colsNow = () => node.locator('[data-active-tiles]').evaluate(g => getComputedStyle(g).gridTemplateColumns.split(' ').length);
+const before = await colsNow();
+await page.evaluate(id => window.__store.getState().updateCanvasElement(id, { w: 760 }), elId);
 await page.waitForTimeout(500);
-check(await node.locator('[data-active-tiles]').evaluate(g => getComputedStyle(g).gridTemplateColumns.split(' ').length) === 3, 'the pencil\'s "tiles across" sets three');
+check(await colsNow() > before, 'stretching the widget wider fits more tiles side by side', `${before} → ${await colsNow()}`);
 await page.evaluate(id => {
   const st = window.__store.getState();
   const el = st.canvasElements.find(e => e.id === id);

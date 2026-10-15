@@ -842,6 +842,8 @@ export function ContractorPortal() {
    * shows after, in place of a toast the sheet would cover.
    */
   const [movingTask, setMovingTask] = useState(false);
+  /** The small icon's "is this the wrong apartment?" ask, before the move window. */
+  const [moveAsk, setMoveAsk] = useState(false);
   const [movedTo, setMovedTo] = useState<string | null>(null);
   useEffect(() => {
     if (!movedTo) return;
@@ -849,7 +851,7 @@ export function ContractorPortal() {
     return () => clearTimeout(t);
   }, [movedTo]);
   // Another task opened (or the sheet closed): the move belongs to the old one.
-  useEffect(() => { setMovingTask(false); setMovedTo(null); }, [selectedAssignment?.id]);
+  useEffect(() => { setMovingTask(false); setMoveAsk(false); setMovedTo(null); }, [selectedAssignment?.id]);
   /**
    * The message box on the task sheet opens on "Send a note or message to
    * the office" (owner, 2026-10-07) — closed again for every task opened.
@@ -2933,6 +2935,12 @@ export function ContractorPortal() {
         const apt = getApt(a.apartmentId);
         const stage = getStage(a.stageId);
         const isOverdue = isLate(a);
+        // Recorded on the wrong apartment — only HIS OWN work, never a general
+        // job (it has no apartment) and never a problem (the office's record of
+        // a fault). Work he STARTED HIMSELF is always his to put right; a task
+        // the office gave him still needs the `moveOwnWork` switch.
+        const canMoveHere = (perms.moveOwnWork || startedByHim(a)) && a.contractorId === contractorId
+          && !!a.apartmentId && !a.general && !a.problem && !!apt;
         const dueBadge = getDueBadge(effectiveDue(a), dueWords);
         // The starred plan — or, when nobody starred one, the app's guess:
         // the plans folder's latest-activity sheet, marked in red as a guess.
@@ -3023,6 +3031,19 @@ export function ContractorPortal() {
                         {whereLabel(a, apt, currentWsName)}
                       </span>
                       {!a.general && <span className="text-gray-400 text-sm">{a.buildingId}</span>}
+                      {/* Wrong apartment — a SMALL icon beside the place's
+                          name (owner, 2026-10-15: "remove it from here … just
+                          a little tiny icon"). A press asks first; Yes opens
+                          the move window. */}
+                      {canMoveHere && (
+                        <button type="button" data-task-move={a.id}
+                          onClick={() => setMoveAsk(v => !v)}
+                          title={workerMoveWords(s, readLang).mvAction}
+                          aria-label={workerMoveWords(s, readLang).mvAction}
+                          className={`w-7 h-7 flex items-center justify-center rounded-full border ${moveAsk ? 'bg-amber-100 border-amber-300 text-amber-800' : 'border-gray-200 text-gray-400 hover:text-amber-700 hover:border-amber-300'}`}>
+                          <ArrowRightLeft size={13} />
+                        </button>
+                      )}
                     </div>
                     {stage && (
                       <div className="flex items-center gap-2">
@@ -3095,13 +3116,26 @@ export function ContractorPortal() {
                     himself to change an apartment he's working on by
                     mistake"); a task the office gave him still needs the
                     `moveOwnWork` switch. */}
-                {(perms.moveOwnWork || startedByHim(a)) && a.contractorId === contractorId && !!a.apartmentId && !a.general && !a.problem && apt && (
-                  <button type="button" data-task-move={a.id}
-                    onClick={() => setMovingTask(true)}
-                    className="mt-2.5 w-full flex items-center justify-center gap-2 text-[14px] font-extrabold px-3 py-2.5 rounded-xl border-2 active:scale-[0.99]"
-                    style={{ borderColor: '#f59e0b', backgroundColor: '#fffbeb', color: '#92400e' }}>
-                    <ArrowRightLeft size={16} /> {workerMoveWords(s, readLang).mvAction}
-                  </button>
+                {canMoveHere && moveAsk && (
+                  <div data-task-move-ask className="mt-2.5 rounded-xl border-2 px-3 py-2.5" style={{ borderColor: '#f59e0b', backgroundColor: '#fffbeb' }}>
+                    <div className="text-[14px] font-bold" style={{ color: '#92400e' }}>
+                      {w('Is this the wrong apartment? Move your work to another one?',
+                        'זו דירה לא נכונה? להעביר את העבודה שלך לדירה אחרת?',
+                        'Это не та квартира? Перенести вашу работу в другую?')}
+                    </div>
+                    <div className="flex gap-2 mt-2">
+                      <button type="button" data-task-move-yes
+                        onClick={() => { setMoveAsk(false); setMovingTask(true); }}
+                        className="flex-1 py-2 rounded-lg font-bold text-white text-sm" style={{ backgroundColor: '#d97706' }}>
+                        {w('Yes', 'כן', 'Да')}
+                      </button>
+                      <button type="button" data-task-move-no
+                        onClick={() => setMoveAsk(false)}
+                        className="flex-1 py-2 rounded-lg font-bold text-sm border border-gray-200 bg-white text-gray-700">
+                        {w('No', 'לא', 'Нет')}
+                      </button>
+                    </div>
+                  </div>
                 )}
                 {movedTo && (
                   <div data-portal-moved className="mt-2 flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-green-50 border border-green-200 text-green-700">
@@ -3801,11 +3835,9 @@ export function ContractorPortal() {
                       {/* 2 · one comment box — paperclip and microphone
                           INSIDE it, bottom corner, the General-notes idiom. */}
                       <div>
-                        <div className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-0.5">
-                          {s.closingCommentLabel || (w('A comment', 'הערה', 'Комментарий'))}
-                        </div>
-                        <div className="text-gray-400 mb-2" style={{ fontSize: 13 }}>
-                          {s.closingCommentHint || (w('Anything the office should know', 'כל מה שהמשרד צריך לדעת', 'Всё, что нужно знать офису'))}
+                        {/* One question, no "comment" heading (owner, 2026-10-15). */}
+                        <div className="font-semibold text-gray-700 mb-2" style={{ fontSize: 15 }} data-closing-ask-office>
+                          {s.closingAskOffice || (w('Anything the office should know?', 'משהו שהמשרד צריך לדעת?', 'Что-нибудь, что офису нужно знать?'))}
                         </div>
                         <MessageBox
                           hook="closing-comment"

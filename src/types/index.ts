@@ -1414,6 +1414,14 @@ export interface ContractorAssignment {
    */
   days?: string[];
   /**
+   * When and by whom the weekly notebook last moved this task's days (a bar
+   * dragged, stretched or taken off a day). Read by the Active jobs widget as
+   * notebook activity — a task bar is the task, so the notebook's own squares
+   * no longer record it (2026-10-15).
+   */
+  plannedAt?: string;
+  plannedBy?: string;
+  /**
    * Where the JOB moves when this task is closed — picked at creation in the
    * planner's drop card ("when it's done, move to"). Applied by the store at
    * the completion write, whichever screen closes the task. Absent/null =
@@ -1797,6 +1805,8 @@ export interface ContractorUiStrings {
   sendAndClose?: string;
   closingCommentLabel?: string;
   closingCommentHint?: string;
+  /** The closing screen's one question over the message box (2026-10-15). */
+  closingAskOffice?: string;
   typeWhatYouDid?: string;
   /** Names MIN_CLOSE_MEDIA through {n} — change the constant and the sentence follows. */
   addPicturesRule?: string;
@@ -1964,6 +1974,7 @@ export const DEFAULT_CONTRACTOR_UI_STRINGS: ContractorUiStrings = {
   sendAndClose: 'Send and close the job',
   closingCommentLabel: 'A comment',
   closingCommentHint: 'Anything the office should know',
+  closingAskOffice: 'Anything the office should know?',
   typeWhatYouDid: 'Type what you did…',
   addPicturesRule: 'Add at least {n} pictures to close the job',
   thisTaskLabel: 'This task',
@@ -2122,6 +2133,7 @@ export const HEBREW_CONTRACTOR_UI_STRINGS: ContractorUiStrings = {
   sendAndClose: 'שליחה וסגירת העבודה',
   closingCommentLabel: 'הערה',
   closingCommentHint: 'כל מה שהמשרד צריך לדעת',
+  closingAskOffice: 'משהו שהמשרד צריך לדעת?',
   typeWhatYouDid: 'כתבו מה עשיתם…',
   addPicturesRule: 'הוסיפו לפחות {n} תמונות כדי לסגור את העבודה',
   thisTaskLabel: 'המשימה הזאת',
@@ -2285,6 +2297,7 @@ export const RUSSIAN_CONTRACTOR_UI_STRINGS: ContractorUiStrings = {
   sendAndClose: 'Отправить и закрыть работу',
   closingCommentLabel: 'Комментарий',
   closingCommentHint: 'Всё, что офису нужно знать',
+  closingAskOffice: 'Что-нибудь, что офису нужно знать?',
   typeWhatYouDid: 'Напишите, что вы сделали…',
   addPicturesRule: 'Добавьте минимум {n} фото, чтобы закрыть работу',
   thisTaskLabel: 'Эта задача',

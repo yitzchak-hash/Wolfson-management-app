@@ -273,7 +273,18 @@ const BASE = { seeSchedule: true, markUpPlans: true };
   // ── 4 · he moves his OWN started work, no permission needed ────────────────
   check(await page.locator(`[data-task-move="${rep?.id}"]`).count() === 1,
     'his own started report shows "Wrong apartment? Move it" WITHOUT the moveOwnWork switch');
+  // Owner, 2026-10-15: a SMALL icon, never the big amber button — and it asks first.
+  const iconBox = await page.locator(`[data-task-move="${rep?.id}"]`).boundingBox();
+  check(!!iconBox && iconBox.width <= 36 && iconBox.height <= 36, 'the move control is a small icon beside the place name', JSON.stringify(iconBox));
   await page.locator(`[data-task-move="${rep?.id}"]`).click();
+  await waitFor(page, '[data-task-move-ask]');
+  check(/не та квартира/i.test(await page.locator('[data-task-move-ask]').innerText()), 'the icon asks "is this the wrong apartment?" in his language');
+  await page.locator('[data-task-move-no]').click();
+  await page.waitForTimeout(250);
+  check(await page.locator('[data-task-move-ask]').count() === 0 && await page.locator('[data-move-dialog]').count() === 0, 'No puts the question away, nothing opens');
+  await page.locator(`[data-task-move="${rep?.id}"]`).click();
+  await waitFor(page, '[data-task-move-ask]');
+  await page.locator('[data-task-move-yes]').click();
   await waitFor(page, '[data-move-dialog]');
   await page.locator('[data-move-pick="A1-10"]').click();
   await page.waitForTimeout(300);
@@ -297,6 +308,15 @@ const BASE = { seeSchedule: true, markUpPlans: true };
 
   // ── 4b · an office task keeps the switch ──────────────────────────────────
   check(await page.locator('[data-task-move="T-today"]').count() === 0, 'a task the office gave him still needs the switch to move');
+
+  // ── 4c · the closing screen asks ONE question over the message box (2026-10-15)
+  await page.locator('[data-close-job]').first().click();
+  await waitFor(page, '[data-closing-ask-office]');
+  const ask = (await page.locator('[data-closing-ask-office]').innerText()).trim();
+  check(/офису нужно знать\?$/.test(ask), 'the closing screen asks "anything the office should know?" in his language', ask);
+  check(!/Комментарий/i.test(await page.locator('[data-closing-panel]').innerText()), 'and the old "A comment" heading is gone');
+  await page.locator('[data-closing-panel] button').first().click();
+  await page.waitForTimeout(400);
 
   // ── 5 · the sheet ─────────────────────────────────────────────────────────
   await shot(page, '5a-sheet');

@@ -101,6 +101,11 @@ export function touchesOf(src: TouchSources, now: number, days: number): Touch[]
     if (a.problem?.closedAt) push(a.apartmentId, a.problem.closedAt, worker, 'task', 'closed the problem, waiting for approval', 'site');
     if (a.problem?.approvedAt) push(a.apartmentId, a.problem.approvedAt, a.problem.approvedBy, 'task', 'approved the fix');
     if (a.completedAt && !a.problem) push(a.apartmentId, a.completedAt, worker, 'task', 'closed the task', 'site');
+    // A bar moved, stretched or taken off a day on the weekly notebook.
+    if (a.plannedAt && a.apartmentId) {
+      const first = (a.days?.length ? a.days[0] : a.dueDate) ?? '';
+      push(a.apartmentId, a.plannedAt, a.plannedBy, 'notebook', first ? `planned on the notebook for ${niceDay(first)}` : 'took it off the notebook');
+    }
   }
   for (const n of src.notes ?? []) {
     const site = n.authorType === 'contractor';

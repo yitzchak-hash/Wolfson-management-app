@@ -120,6 +120,10 @@ const midOf = r => ({ x: r.x + r.width / 2, y: r.y + r.height / 2 });
 const rotaCells = () => data().then(x => x.canvasElements.find(e => e.id === 'CE-rota').data.cells ?? {});
 const firstBar = await bars.first().boundingBox();
 await drag({ x: firstBar.x + firstBar.width / 4, y: firstBar.y + firstBar.height / 2 }, await cellCentre(1));
+await page.waitForTimeout(500);
+// Owner, 2026-10-15: a bar dragged elsewhere asks first.
+check(await page.locator('[data-move-confirm-yes]').count() === 1, 'the move asks before it moves');
+await page.locator('[data-move-confirm-yes]').click();
 await page.waitForTimeout(800);
 d = await data();
 task = d.contractorAssignments[0];

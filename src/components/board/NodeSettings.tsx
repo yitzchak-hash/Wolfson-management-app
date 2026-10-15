@@ -1,6 +1,6 @@
 import { MovablePanel } from './MovablePanel';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { X, Trash2, Upload, Check, Plus, ChevronUp, ChevronDown } from 'lucide-react';
+import { X, Trash2, Upload, Check, Plus, ChevronUp, ChevronDown, Eye, EyeOff } from 'lucide-react';
 import { useStore } from '../../data/store';
 import { CanvasElement, Stage, binLabelOf, isBuiltInBin, personColor } from '../../types';
 import { WIDGET_BY_ID, aliasedEl } from '../../data/widgets';
@@ -825,14 +825,19 @@ function PeopleField({ el, label, hint, value, onChange }: {
           const c = choices.find(x => x.id === id);
           const name = c?.name ?? (id.startsWith('n:') ? id.slice(2) : 'Someone who has gone');
           const offOn = data.offFrom?.[id];
+          const hidden = (data.hiddenPeople ?? []).includes(id);
           return (
-            <div key={id} className="flex items-center gap-1.5 px-2 py-1 rounded-lg border"
-              style={{ borderColor: offOn ? '#fcd9d5' : '#e5e7eb', backgroundColor: offOn ? '#fff8f7' : undefined }}>
+            <div key={id} data-person-row={id} data-hidden={hidden ? '1' : undefined}
+              className="flex items-center gap-1.5 px-2 py-1 rounded-lg border"
+              style={{ borderColor: offOn ? '#fcd9d5' : '#e5e7eb', backgroundColor: offOn ? '#fff8f7' : hidden ? '#f8fafc' : undefined }}>
               <span className="w-2 h-2 rounded-full flex-shrink-0"
-                style={{ backgroundColor: c?.color ?? personColor(name), opacity: offOn ? 0.4 : 1 }} />
+                style={{ backgroundColor: c?.color ?? personColor(name), opacity: offOn || hidden ? 0.4 : 1 }} />
               <span className="flex-1 min-w-0">
                 <span className="block truncate text-[12px]"
-                  style={{ color: offOn ? '#94a3b8' : '#374151' }}>{name}</span>
+                  style={{ color: offOn || hidden ? '#94a3b8' : '#374151' }}>{name}</span>
+                {hidden && !offOn && (
+                  <span className="block text-[10px] text-gray-400">hidden — not drawn on the notebook</span>
+                )}
                 {offOn && (
                   <span className="block text-[10px] text-[#b4342a]">
                     coming off {new Date(`${offOn}T00:00:00`).toLocaleDateString(undefined,
@@ -842,6 +847,18 @@ function PeopleField({ el, label, hint, value, onChange }: {
               </span>
               {!offOn && (
                 <>
+                  {/* Hide / show — the row stays on the list, nothing of
+                      theirs is touched (owner, 2026-10-15). */}
+                  <button data-person-hide={id}
+                    onClick={() => {
+                      const cur = data.hiddenPeople ?? [];
+                      const nextHidden = hidden ? cur.filter(x => x !== id) : [...cur, id];
+                      updateCanvasElement(el.id, { data: { ...data, people: value, hiddenPeople: nextHidden.length ? nextHidden : undefined } as Record<string, unknown> });
+                    }}
+                    title={hidden ? 'Show on the notebook' : 'Hide from the notebook'}
+                    className={`p-0.5 ${hidden ? 'text-[#1e3a5f]' : 'text-gray-300 hover:text-gray-600'}`}>
+                    {hidden ? <EyeOff size={13} /> : <Eye size={13} />}
+                  </button>
                   <button onClick={() => move(i, -1)} disabled={i === 0} title="Up"
                     className="p-0.5 text-gray-300 hover:text-gray-600 disabled:opacity-30">
                     <ChevronUp size={13} />
@@ -990,6 +1007,20 @@ function Field({ el, field, value, onChange, stages, jobs, contractors }: {
   if (f.kind === 'people') {
     return <PeopleField el={el} label={f.label} hint={f.hint}
       value={Array.isArray(value) ? value as string[] : []} onChange={onChange} />;
+  }
+
+  if (f.kind === 'scale') {
+    const n = Math.round((Number(str) || 1) * 100);
+    return (
+      <Row label={f.label} hint={f.hint}>
+        <div className="flex items-center gap-2" data-field-scale={f.key}>
+          <input type="range" min={70} max={180} step={5} value={n}
+            onChange={e => onChange(Number(e.target.value) === 100 ? undefined : Number(e.target.value) / 100)}
+            className="flex-1 accent-[#1e3a5f]" />
+          <span className="text-[12px] font-bold tabular-nums w-10 text-right">{n}%</span>
+        </div>
+      </Row>
+    );
   }
 
   if (f.kind === 'percent') {

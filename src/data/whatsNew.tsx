@@ -30,6 +30,37 @@ export interface WhatsNewEntry {
 
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    date: '2027-02-06',
+    title: 'The notebook asks before it moves, and Active jobs fits its width',
+    items: [
+      {
+        title: 'Moving a task asks first',
+        body: 'Drag a task on the weekly notebook to another day or person and it asks: "Move the task you '
+          + 'gave Yaakov on Sunday to Thursday?" — Yes or No. If the row belongs to another trade, it says so.',
+        demo: 'list',
+      },
+      {
+        title: 'Hide someone from the notebook',
+        body: 'In the notebook\'s settings, every person has an eye. Hide the ones who are not working now; '
+          + 'they stay on the list and come back with one press.',
+        demo: 'list',
+      },
+      {
+        title: 'Active jobs',
+        body: 'A task moved on the notebook now shows under "Notebook". The little squares are icons — '
+          + 'a camera for photos, a speech bubble for messages. Stretch the widget wider for more tiles; '
+          + 'Tile size in its settings makes them bigger or smaller.',
+        demo: 'list',
+      },
+      {
+        title: 'On the worker\'s phone',
+        body: 'The big "Wrong apartment" button is now a small icon beside the apartment\'s name that asks '
+          + 'first. Closing a job asks one simple question: "Anything the office should know?"',
+        demo: 'list',
+      },
+    ],
+  },
+  {
     date: '2027-02-05',
     title: 'Photos keep where and when they were taken',
     items: [

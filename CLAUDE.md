@@ -10050,3 +10050,64 @@ Harness: `scratchpad/round51-probe.mjs` (17).
 Harness: `scratchpad/exifkeep-probe.mjs` (14 checks, keyed 5174 — the PUT body to Drive is the
 original with its GPS; the shrunk copy keeps GPS/date/make/model, Orientation 1, pixels upright;
 HEIC untouched).
+
+---
+
+# v2 — the three recordings of 15 Oct 14:13–14:19 (2026-10-15)
+
+## The worker's wrong-apartment control is a SMALL icon that asks
+Supersedes the big amber "Wrong apartment? Move it" button (owner: "remove it
+from here … just a little tiny icon"). `canMoveHere` (same rule as before:
+his own work, never a general job or a problem; a report he started himself
+needs no permission, an office task needs `moveOwnWork`) draws a 28px round
+`[data-task-move=<id>]` icon beside the place name in the sheet's title row.
+A press opens `[data-task-move-ask]` — "Is this the wrong apartment? Move your
+work to another one?" in his language — with `[data-task-move-yes]` (opens the
+standing `MoveTaskDialog`) and `[data-task-move-no]`. `moveAsk` resets with
+the selected task.
+
+## The closing screen asks one question
+`ContractorUiStrings.closingAskOffice` ("Anything the office should know?",
+three presets, optional with a fallback) over the closing message box
+(`[data-closing-ask-office]`); the "A comment" heading and the separate hint
+line are gone. A NEW key rather than editing `closingCommentHint`, because
+contractor strings are stored and user-edited — an old stored hint would
+otherwise keep the old words.
+
+## A notebook bar dragged elsewhere asks first
+`askMoveBar` → `PlannerMoveConfirm` (PlannerDialogs): "Move <job> — the task
+you gave <worker> on <day> — to <day>?" (or "to <worker> on <day>"), Yes /
+No (`[data-move-confirm-text|yes|no]`). Yes runs the standing `dropBarTo`
+(working-day pattern, tracked undo step). Dropped back on its own square
+asks nothing. When the target row is another TRADE (`categoryOf`), the ask
+says so in words (`[data-move-confirm-trade]`, "Max is in Drywall, not AC");
+what an other-trade drop should DO is the open plan page "More Than the Task
+Said", section D. Harnesses that drag a bar must press
+`[data-move-confirm-yes]` (notebookbars-probe, multiday re-encoded).
+
+## Hidden people on the notebook
+`PlannerData.hiddenPeople?: string[]` — kept on the list, not drawn
+(`rowVisible` and the name-column width both skip them). The pencil's
+people list carries an eye per row (`[data-person-hide=<pid>]`, the row
+`[data-person-row][data-hidden]`); the last one shown again clears the
+field to undefined. Nothing of theirs is touched.
+
+## A task moved on the notebook is notebook activity
+`ContractorAssignment.plannedAt` / `plannedBy` — stamped by the notebook's
+`writeDays` (a bar moved, stretched, taken off a day). A task bar IS the task,
+so the notebook's own squares no longer record anything; `touchesOf` reads the
+stamp as a `notebook` touch ("planned on the notebook for Mon 12 Oct").
+
+## Active jobs: icons, and tiles that follow the width
+- The lettered squares are `KindMarks` — a small lucide icon per kind
+  (`[data-active-square=<kind>]`, words on hover), then the count.
+- `WidgetDef.fluid`: `WidgetSurface` lays a fluid widget out at its box's REAL
+  width and zooms it by its own `data.tileSize` (0.7–1.8) instead of magnifying
+  its natural drawing — so stretching it fits more tiles. Active jobs is the
+  first fluid widget; its grid is `repeat(auto-fill, minmax(150px, 1fr))` and
+  "Tiles across" is gone, replaced by a Tile size slider (new widget field kind
+  `scale`, 70–180%, 100% writes undefined).
+
+Harness: `scratchpad/round52-probe.mjs` (24). Plan page: "More Than the Task
+Said" (`docs/artifacts/2026-10-15-more-than-the-task-said.html`), seven
+starred questions, waiting.

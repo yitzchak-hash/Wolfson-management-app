@@ -64,6 +64,11 @@ asks for it. ☑ done · ☐ next · ✎ awaiting Yitzchak's word. (Standing ord
 - ☑ 2026-10-13: the pin board widget; "Search with AI" in the header search.
 - ☑ 2026-10-15 (recording 10:11): Add Job → Add existing (another tile of the same job); search
   results in layers; Search with AI fixed on the live site.
+- ☑ 2026-10-15 (recordings 14:13–14:19): the worker's small wrong-apartment icon that asks;
+  "Anything the office should know?"; a notebook bar asks before it moves; hide people on the notebook;
+  Active jobs counts notebook moves, wears icons, and fills its width with a Tile size slider.
+- ✎ "More Than the Task Said" (plan page, 7 questions): what else he did on the close, part of a stage,
+  a stage the apartment does not have, a task dropped on another trade's row.
 
 ## Next (in order)
 - ☑ 2026-10-12 ("all stars"): ONE calendar drawn like the notebook (tiles, bars, bundles, + opens the notebook's form, drag to move) and time off for anyone on the notebook (band, booked-task ask, task-form warning, his phone in his language).

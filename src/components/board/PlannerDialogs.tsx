@@ -643,6 +643,47 @@ export function PlannerRemoveDialog({ jobName, taskName, onCancel, onDone }: {
   );
 }
 
+/**
+ * A task bar dragged to another day or person — asks first (owner,
+ * 2026-10-15: "I want to see an approval: move the task you gave Yaakov on
+ * Sunday to there — yes or no"). When the bar lands on a person in another
+ * trade, it says so in words; the stages stay as the task has them.
+ */
+export function PlannerMoveConfirm({ jobName, fromWho, fromDay, toWho, toDay, fromTrade, toTrade, onCancel, onYes }: {
+  jobName: string;
+  fromWho: string; fromDay: string;
+  toWho: string; toDay: string;
+  fromTrade?: string; toTrade?: string;
+  onCancel: () => void;
+  onYes: () => void;
+}) {
+  const samePerson = fromWho === toWho;
+  const otherTrade = !samePerson && !!fromTrade && !!toTrade && fromTrade !== toTrade;
+  return (
+    <Shell onCancel={onCancel} title="Move this task?">
+      <p className="text-[13px] text-gray-700 m-0" data-move-confirm-text>
+        Move <b>{jobName}</b> — the task you gave <b>{fromWho}</b> on <b>{fromDay}</b> —
+        {samePerson ? <> to <b>{toDay}</b>?</> : <> to <b>{toWho}</b> on <b>{toDay}</b>?</>}
+      </p>
+      {otherTrade && (
+        <p className="text-[12px] m-0 mt-2 px-2.5 py-1.5 rounded-lg bg-amber-50 border border-amber-200 text-amber-800" data-move-confirm-trade>
+          {toWho} is in <b>{toTrade}</b>, not {fromTrade}. The task moves to {toWho} as it is — its stages do not change.
+        </p>
+      )}
+      <Footer>
+        <button onClick={onCancel} data-move-confirm-no
+          className="px-3 py-1.5 rounded-lg border border-gray-200 text-[12.5px] font-semibold text-gray-600 hover:bg-gray-50">
+          No
+        </button>
+        <button onClick={onYes} data-move-confirm-yes
+          className="px-3 py-1.5 rounded-lg text-[12.5px] font-bold text-white" style={{ backgroundColor: '#1e3a5f' }}>
+          Yes, move it
+        </button>
+      </Footer>
+    </Shell>
+  );
+}
+
 /** A recorded memo waiting to be sent, drawn as the player it will become. */
 function PendingAudio({ file, onDelete }: { file: File; onDelete: () => void }) {
   const [url, setUrl] = useState('');

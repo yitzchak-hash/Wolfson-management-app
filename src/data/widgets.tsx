@@ -168,6 +168,14 @@ export interface WidgetDef {
    * working forever; nothing new is ever placed under the old name.
    */
   retired?: boolean;
+  /**
+   * Lays out at the box's REAL width instead of magnifying its natural
+   * drawing (owner, 2026-10-15, on Active jobs: "instead of tiles across …
+   * a scaling thing, and when we drag it, it resizes accordingly"). The
+   * widget's own `tileSize` (0.7–1.8) is the zoom; stretching the box gives
+   * MORE room — more tiles side by side — never just bigger ones.
+   */
+  fluid?: boolean;
   render: (el: CanvasElement, ctx: WidgetCtx) => React.ReactNode;
 }
 

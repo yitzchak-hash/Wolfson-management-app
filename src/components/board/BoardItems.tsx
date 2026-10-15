@@ -519,7 +519,12 @@ export function WidgetSurface({ el, w, h, children }: {
   // Guard the extremes: below a third the type is unreadable, above three
   // times it is a poster. Both are past the point of being useful.
   const bump = el.fontSize ? Math.max(0.4, Math.min(3, el.fontSize / 14)) : 1;
-  const k = Math.max(0.34, Math.min(3, (w / Math.max(1, naturalW)) * bump));
+  // A fluid widget zooms by its own Tile size and lays out at the box's real
+  // width; every other widget magnifies its natural drawing to fill the box.
+  const tileZoom = Math.max(0.7, Math.min(1.8, Number((el.data as { tileSize?: unknown } | undefined)?.tileSize) || 1));
+  const k = def?.fluid
+    ? Math.max(0.34, Math.min(3, tileZoom * bump))
+    : Math.max(0.34, Math.min(3, (w / Math.max(1, naturalW)) * bump));
 
   /**
    * The drawing width has to follow the CLAMP, not the natural size.
@@ -531,7 +536,7 @@ export function WidgetSurface({ el, w, h, children }: {
    * drawn wider than the space it had and the right-hand edge fell off. Taking
    * whichever is larger means the drawing always covers the box.
    */
-  const innerW = Math.max(naturalW, w / k);
+  const innerW = def?.fluid ? w / k : Math.max(naturalW, w / k);
 
   return (
     // The drawing is pinned to the LEFT edge by position, not by flow: under
