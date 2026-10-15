@@ -250,3 +250,4 @@ Legend: ☑ shipped · ☐ decided, not built · ◐ built in part · ✎ needs 
 - ☑ Hide a person from the notebook (kept on the list) (2026-10-15)
 - ☑ Active jobs: notebook moves count as notebook activity; icon marks; tiles fill the width + Tile size slider (2026-10-15)
 - ✎ Closing with more work done / part of a stage / a stage the apartment lacks / a drop on another trade's row — plan page, awaiting answers (2026-10-15)
+- ☑ The worker's weekly calendar: newest day first; a single done task green like the fold (2026-10-15)

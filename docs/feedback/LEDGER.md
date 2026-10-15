@@ -22,5 +22,6 @@ ask built or answered) · **not this app** (a recording of another project — r
 | 10 | Recording 2026-10-15 141326.mp4 (28.8 MB) | `1p9gsRYdC6h575DvnUjsAJBKZbUUG8yFS` | 2:05 | open (closing-with-more-work plan waits on his answers) | [2026-10-15-141326.md](2026-10-15-141326.md) |
 | 11 | Recording 2026-10-15 141727.mp4 (112.6 MB) | `1uqukg5k_BOCXQRMsL_DvXypSPwmSKvv5` | 3:36 | open (the other-trade drop waits on his answers) | [2026-10-15-141727.md](2026-10-15-141727.md) |
 | 12 | Recording 2026-10-15 141950.mp4 (14.7 MB) | `1VmLFg_WG4DoiI60NLA0fQT53R2uxsuUG` | 0:28 | done | [2026-10-15-141950.md](2026-10-15-141950.md) |
+| 13 | Recording 2026-10-15 153941.mp4 (5.1 MB) | `1s7HntfimA6EXgI6F6gyy9ygqMYaFXe_w` | 0:18 | done | [2026-10-15-153941.md](2026-10-15-153941.md) |
 
 Folder last listed: 2026-10-15.

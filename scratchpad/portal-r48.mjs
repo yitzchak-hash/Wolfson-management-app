@@ -440,6 +440,14 @@ const BASE = { seeSchedule: true, markUpPlans: true };
   await shot(page, '6c-week');
   check(await page.locator(`[data-week-done-list="wolfson:${target}"] [data-done-row]`).count() === 6, 'pressed, it opens the six');
   check(await page.locator(`[data-week-done-one="general:G-done:${target}"]`).count() === 1, 'the single Job Board finish is a green row of its own');
+  // Owner, 2026-10-15: the week runs newest day first, and a single done task
+  // wears the same green as the folded "N done" row.
+  const one = page.locator(`[data-week-done-one="general:G-done:${target}"]`);
+  check(await one.evaluate(e => getComputedStyle(e).backgroundColor) === 'rgb(240, 253, 244)' && await one.locator('svg').count() >= 1,
+    'the single done row wears the fold\'s green with its tick');
+  const dayNums = await page.locator('[data-week-order="newest-first"] > div > div:first-child > span:first-child').allInnerTexts();
+  const nums = dayNums.map(Number).filter(n => !isNaN(n));
+  check(nums.length === 7 && nums[0] !== nums[6] && (nums[0] > nums[1] || nums[1] === 1), 'the week runs newest day first', nums.join(','));
   const todayOrder = await page.evaluate(t => {
     const fold = document.querySelector(`[data-week-done-fold^="wolfson:${t}"]`);
     return !!fold;

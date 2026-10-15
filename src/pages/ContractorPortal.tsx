@@ -2578,8 +2578,10 @@ export function ContractorPortal() {
                   <button onClick={() => setCalWeekOff(v => v + 1)} aria-label="Next week"
                     className="w-9 h-9 rounded-xl border border-gray-200 bg-white font-black text-gray-500">›</button>
                 </div>
-                <div className="space-y-2">
-                  {weekDays.map(d => {
+                {/* Newest day first (owner, 2026-10-15: "it should go from the
+                    newest day to the oldest day"). */}
+                <div className="space-y-2" data-week-order="newest-first">
+                  {[...weekDays].reverse().map(d => {
                     const key = format(d, 'yyyy-MM-dd');
                     const evs = byDay.get(key) ?? [];
                     const isToday = key === todayKey;
@@ -2642,7 +2644,15 @@ export function ContractorPortal() {
                           if (ev.completed) {
                             const r = rowOfEv.get(ev.id);
                             return r ? (
-                              <div key={ev.id} className="border-t border-gray-50" data-week-done-one={ev.id}>{doneRow(r, ev.id)}</div>
+                              // A single done task wears the SAME green as the
+                              // folded "N done" row, so the two never read as
+                              // different things (owner, 2026-10-15).
+                              <div key={ev.id} className="relative border-t border-gray-50" data-week-done-one={ev.id}
+                                style={{ backgroundColor: '#f0fdf4' }}>
+                                <CheckCircle2 size={15} className="absolute text-green-600 pointer-events-none"
+                                  style={{ insetInlineStart: 12, top: '50%', transform: 'translateY(-50%)' }} />
+                                {doneRow(r, ev.id)}
+                              </div>
                             ) : null;
                           }
                           return (

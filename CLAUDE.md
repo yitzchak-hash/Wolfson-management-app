@@ -10108,6 +10108,12 @@ stamp as a `notebook` touch ("planned on the notebook for Mon 12 Oct").
   "Tiles across" is gone, replaced by a Tile size slider (new widget field kind
   `scale`, 70–180%, 100% writes undefined).
 
+## The worker's week runs newest day first (recording 15:39)
+The portal's Weekly list draws `[...weekDays].reverse()` (`[data-week-order="newest-first"]`),
+and a single done task (`[data-week-done-one]`) wears the fold row's green
+(`#f0fdf4`) and tick so one finished task and "N done" read the same. Asserted
+in portal-r48.
+
 Harness: `scratchpad/round52-probe.mjs` (24). Plan page: "More Than the Task
 Said" (`docs/artifacts/2026-10-15-more-than-the-task-said.html`), seven
 starred questions, waiting.

@@ -13,6 +13,7 @@ by round. (Standing order 6, 2026-09-23.)_
 - A notebook task bar dragged to another day or person asks first ("move the task you gave Yaakov on
   Sunday to there — yes or no"). What a drop on ANOTHER TRADE should do is his to decide (plan page D).
 - A notebook person can be hidden (kept on the list, not drawn).
+- The worker's weekly calendar runs newest day first; a single done task is green like the folded done rows.
 - Active jobs: no "tiles across" — the tiles fill the widget's width and a Tile size slider zooms them;
   the kind marks are icons; a task moved on the notebook is notebook activity.
 

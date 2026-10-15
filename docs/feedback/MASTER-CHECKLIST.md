@@ -187,6 +187,12 @@ rewritten).
 |---|------|-----|--------|-------|
 | V12-1 | 0:00 | A hide button per person in the notebook's people list | Done | `hiddenPeople` · round52-probe §5 |
 
+### Video 13 — Recording 2026-10-15 153941 ([feedback doc](2026-10-15-153941.md))
+| # | Time | Ask | Status | Proof |
+|---|------|-----|--------|-------|
+| V13-1 | 0:00 | The worker's weekly calendar: newest day first | Done | `data-week-order="newest-first"` · portal-r48 |
+| V13-2 | 0:10 | A single done task should look like the green "N done" row | Done | `data-week-done-one` green + tick · portal-r48 |
+
 ## From chat
 
 | # | Date | Ask | Status | Proof |

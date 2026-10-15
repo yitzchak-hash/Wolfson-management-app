@@ -55,7 +55,8 @@ export const WHATS_NEW: WhatsNewEntry[] = [
       {
         title: 'On the worker\'s phone',
         body: 'The big "Wrong apartment" button is now a small icon beside the apartment\'s name that asks '
-          + 'first. Closing a job asks one simple question: "Anything the office should know?"',
+          + 'first. Closing a job asks one simple question: "Anything the office should know?" His weekly '
+          + 'calendar runs newest day first, and a finished task is green like the "done" rows.',
         demo: 'list',
       },
     ],
