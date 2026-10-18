@@ -22,12 +22,16 @@ import { useStore, loadAllProjectsTaskData, loadProjectSnapshot } from '../../da
 import { ContractorAssignment, ContractorNote, aptLabel, projectShortName } from '../../types';
 import { chime, notifyHere } from '../../data/pushClient';
 import { rememberTaskFocus } from '../../data/taskFocus';
+import { TrText } from '../ui/Translated';
 
 interface Arrival {
   key: string;
   kind: 'message' | 'closed';
   title: string;
   body: string;
+  /** The place, drawn as it is, and what the worker WROTE — read in the office's language. */
+  where?: string;
+  said?: string;
   taskId: string;
   apartmentId: string;
   projectId: string;
@@ -80,6 +84,7 @@ export function OfficeAlerts() {
           key: `n:${n.id}`, kind: 'message', at: n.createdAt,
           title: s.officeNotifMessage.replace('{who}', whoOf(a.contractorId, n.authorName)),
           body: [whereOf(a), said].filter(Boolean).join(' · '),
+          where: whereOf(a), said,
           taskId: a.id, apartmentId: a.apartmentId, projectId: p.projectId,
         });
       }
@@ -89,6 +94,7 @@ export function OfficeAlerts() {
           key: `c:${a.id}`, kind: 'closed', at: a.completedAt,
           title: s.officeNotifClosed.replace('{who}', whoOf(a.contractorId, '')),
           body: [whereOf(a), a.taskDescription].filter(Boolean).join(' · '),
+          where: whereOf(a), said: a.taskDescription,
           taskId: a.id, apartmentId: a.apartmentId, projectId: p.projectId,
         });
       }
@@ -162,7 +168,9 @@ export function OfficeAlerts() {
         </span>
         <span className="min-w-0 flex-1">
           <span className="block text-[13.5px] font-extrabold leading-tight">{toast.title}</span>
-          <span className="block text-[12.5px] mt-0.5 leading-snug opacity-90 line-clamp-2">{toast.body}</span>
+          <span className="block text-[12.5px] mt-0.5 leading-snug opacity-90 line-clamp-2">
+            {toast.said ? <>{toast.where ? `${toast.where} · ` : ''}<TrText text={toast.said} to={s.isRtl ? 'he' : 'en'} /></> : toast.body}
+          </span>
           <span className="block text-[11px] mt-1 opacity-70">{s.officeNotifOpen} ›</span>
         </span>
       </button>

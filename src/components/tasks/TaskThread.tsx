@@ -135,7 +135,7 @@ function photoViewerItem(p: ContractorPhoto): ViewerItem {
   };
 }
 
-export function TaskThread({ assignment, notes, photos, viewer, readOnly = false, words, maxBubble, translateTo, footer, canDelete }: {
+export function TaskThread({ assignment, notes, photos, viewer, readOnly = false, words, maxBubble, translateTo, footer, canDelete, isMine }: {
   assignment: ContractorAssignment;
   /**
    * Which messages THIS reader may take back (owner, 2026-09-16). The office
@@ -149,6 +149,13 @@ export function TaskThread({ assignment, notes, photos, viewer, readOnly = false
    * translated.
    */
   translateTo?: Lang | null;
+  /**
+   * Which messages THIS reader wrote — never translated for them, whatever
+   * their screen is set to (owner, 2026-10-18: a worker on an English screen
+   * types Russian and must read his own Russian, not a translation of it).
+   * Absent = the worker's own messages on the worker's side.
+   */
+  isMine?: (note: ContractorNote) => boolean;
   /**
    * The composer, drawn INSIDE the grey panel under the messages (owner,
    * 2026-09-03: the messages and the box you answer them from are one thing).
@@ -172,7 +179,7 @@ export function TaskThread({ assignment, notes, photos, viewer, readOnly = false
   // confirms (an inline two-step, never a native confirm), anything else
   // stands it down.
   const [askDelete, setAskDelete] = useState<string | null>(null);
-  void viewer; void readOnly; // the thread is the same drawing for everyone;
+  void readOnly; // the thread is the same drawing for everyone;
   // nothing in it is edited, and only a message of your OWN can be deleted.
 
   // A photo the closing comment claimed rides inside that message; the rest
@@ -296,6 +303,8 @@ export function TaskThread({ assignment, notes, photos, viewer, readOnly = false
     } else {
       const n = item.note;
       when = n.createdAt;
+      const mine = isMine ? isMine(n) : (viewer === 'contractor' && n.authorType === 'contractor');
+      const to = mine ? null : translateTo;
       if (!worker && n.authorName) {
         body.push(
           <div key="who" className="font-bold mb-0.5" style={{ fontSize: 12.5, color: ACCENT }}>{n.authorName}</div>,
@@ -313,7 +322,7 @@ export function TaskThread({ assignment, notes, photos, viewer, readOnly = false
                 src={n.attachmentDriveUrl || n.attachmentDataUrl || ''}
                 transcript={n.transcript}
                 onTranscript={t => { if (!n.transcript) updateContractorNote(n.id, { transcript: t }); }}
-                lang={translateTo}
+                lang={to}
                 saidLabel={words.said ?? 'Said'}
                 className="w-full min-w-[220px]"
               />
@@ -348,7 +357,7 @@ export function TaskThread({ assignment, notes, photos, viewer, readOnly = false
       }
       if (n.text?.trim()) body.push(
         <div key="t" style={{ color: '#1f2c3d' }} data-thread-text>
-          <Translated text={n.text} to={translateTo} />
+          <Translated text={n.text} to={to} />
         </div>,
       );
     }

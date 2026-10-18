@@ -10,10 +10,15 @@
  * notification that cannot be sent must never hold up, or fail, the write
  * that caused it.
  *
- * Words in the WORKER's language (`Contractor.lang`), because it is his phone.
+ * Words in the WORKER's language (`Contractor.lang`), because it is his phone
+ * — the app's own words AND what the office wrote: a message typed in Hebrew
+ * reaches an English phone in English (the reader's language, decided by the
+ * text's own letters, never by the writer's screen). A translation that does
+ * not come back within a few seconds is not waited for; the original goes.
  */
 import { fsGetAll, fsDelete, isFirebaseConfigured } from './firebase';
 import { portalLink } from './portalLink';
+import { requestTranslation } from './translate';
 import type { Contractor } from '../types';
 
 const API_KEY = (import.meta.env.VITE_DRIVE_API_KEY as string | undefined) ?? '';
@@ -52,7 +57,8 @@ export function notifyWorker(contractor: Contractor | undefined, portalDomain: s
       const lang = (contractor.lang === 'he' || contractor.lang === 'ru') ? contractor.lang : 'en';
       const words = T[lang];
       const title = ping.kind === 'task' ? words.task : words.message(ping.from ?? '');
-      const said = ping.body
+      const typed = ping.body ? await translatedFor(ping.body, lang) : '';
+      const said = typed
         || (ping.attachment?.startsWith('audio/') ? words.voice
           : ping.attachment?.startsWith('image/') ? words.photo
           : ping.attachment ? words.file : '');
@@ -76,4 +82,11 @@ export function notifyWorker(contractor: Contractor | undefined, portalDomain: s
       }
     } catch { /* a missed ring is not a failed write */ }
   })();
+}
+
+/** The office's words in the worker's language — the original if no answer comes in time. */
+async function translatedFor(text: string, lang: 'en' | 'he' | 'ru'): Promise<string> {
+  const timeout = new Promise<null>(r => setTimeout(() => r(null), 4000));
+  const out = await Promise.race([requestTranslation(text, lang), timeout]).catch(() => null);
+  return out || text;
 }

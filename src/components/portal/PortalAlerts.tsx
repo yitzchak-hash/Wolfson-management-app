@@ -19,6 +19,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Bell, BellRing, X } from 'lucide-react';
 import { useStore, loadAllProjectsTaskData, loadProjectSnapshot } from '../../data/store';
 import { Contractor, ContractorAssignment, ContractorNote, PortalLang, aptLabel, projectShortName } from '../../types';
+import { TrText } from '../ui/Translated';
 import { chime, enablePush, notifyHere, pushConfigured, pushPermission, pushRemembered, pushSupported } from '../../data/pushClient';
 
 const W = {
@@ -75,7 +76,7 @@ export function PushBanner({ contractor, lang }: { contractor: Contractor; lang:
   );
 }
 
-interface Arrival { key: string; title: string; body: string; taskId: string; projectId: string }
+interface Arrival { key: string; title: string; body: string; where?: string; said?: string; taskId: string; projectId: string }
 
 export function ArrivalWatcher({ contractor, lang, onOpen }: {
   contractor: Contractor;
@@ -108,6 +109,7 @@ export function ArrivalWatcher({ contractor, lang, onOpen }: {
         out.set(`t:${a.id}`, {
           key: `t:${a.id}`, title: words.newTask, taskId: a.id, projectId: p.projectId,
           body: [where, a.taskDescription].filter(Boolean).join(' · '),
+          where, said: a.taskDescription,
         });
       }
       for (const n of notes) {
@@ -117,7 +119,7 @@ export function ArrivalWatcher({ contractor, lang, onOpen }: {
             : n.attachmentMimeType?.startsWith('image/') ? words.photo
             : n.attachmentMimeType ? words.file : '');
         out.set(`n:${n.id}`, {
-          key: `n:${n.id}`, title: words.message(n.authorName), taskId: n.assignmentId, projectId: p.projectId, body: said,
+          key: `n:${n.id}`, title: words.message(n.authorName), taskId: n.assignmentId, projectId: p.projectId, body: said, said: n.text?.trim() ? said : undefined,
         });
       }
     }
@@ -176,7 +178,9 @@ export function ArrivalWatcher({ contractor, lang, onOpen }: {
       </span>
       <span className="min-w-0 flex-1">
         <span className="block text-[13.5px] font-extrabold leading-tight">{toast.title}</span>
-        <span className="block text-[12.5px] mt-0.5 leading-snug opacity-90 line-clamp-2">{toast.body}</span>
+        <span className="block text-[12.5px] mt-0.5 leading-snug opacity-90 line-clamp-2">
+          {toast.said ? <>{toast.where ? `${toast.where} · ` : ''}<TrText text={toast.said} to={lang} /></> : toast.body}
+        </span>
       </span>
     </button>
   );

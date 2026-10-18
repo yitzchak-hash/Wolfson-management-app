@@ -12,7 +12,7 @@
 // not.
 import { chromium } from 'playwright';
 
-const APP = 'http://localhost:5174';
+const APP = process.env.APP || 'http://localhost:5174';
 let fails = 0;
 const check = (ok, l, extra = '') => { console.log(`${ok ? 'PASS' : 'FAIL'} ${l}${extra ? ' — ' + extra : ''}`); if (!ok) fails++; };
 const today = new Date().toISOString().slice(0, 10);

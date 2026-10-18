@@ -3,6 +3,7 @@ import { Mic, Paperclip, Send, Loader2 } from 'lucide-react';
 import { VoiceRecorderButton } from './VoiceMemo';
 import { useSpeechToText } from '../../data/voiceSearch';
 import { transcribeMemo } from '../../data/transcribe';
+import { useSpeakLang, setSpeakLang, noteTyped, typedTail, nextSpeakLang, SPEAK_CHIP } from '../../data/speakLang';
 import type { RecordedMemo } from '../../data/voiceMemo';
 
 /**
@@ -36,10 +37,20 @@ import type { RecordedMemo } from '../../data/voiceMemo';
  */
 export type MessageLang = 'en' | 'he' | 'ru';
 
-const WORDS: Record<MessageLang, { placeholder: string; dictate: string; attach: string; record: string; send: string; sending: string; pending: string }> = {
-  en: { placeholder: 'Your message', dictate: 'Dictate', attach: 'Attach a file', record: 'Record a voice memo', send: 'Send', sending: 'Sending the recording…', pending: 'Not sent yet — press Send' },
-  he: { placeholder: 'ההודעה שלך', dictate: 'הקלדה קולית', attach: 'צירוף קובץ', record: 'הקלטת הודעה קולית', send: 'שליחה', sending: 'שולח את ההקלטה…', pending: 'עוד לא נשלח — לחצו על שליחה' },
-  ru: { placeholder: 'Ваше сообщение', dictate: 'Голосовой ввод', attach: 'Прикрепить файл', record: 'Записать голосовое', send: 'Отправить', sending: 'Отправляю запись…', pending: 'Ещё не отправлено — нажмите Отправить' },
+/**
+ * DICTATION speaks the PERSON's language, not the screen's (owner,
+ * 2026-10-18): a worker on an English screen who talks Russian got English
+ * gibberish back. The mic recognises in the person's remembered speaking
+ * language (speakLang.ts — learned from what they last typed, else the
+ * screen's language), and the small chip beside it (`data-dictate-lang`)
+ * switches it with one press. A memo's transcript needs none of this: the
+ * transcriber hears the language itself.
+ */
+
+const WORDS: Record<MessageLang, { placeholder: string; dictate: string; dictateLang: string; attach: string; record: string; send: string; sending: string; pending: string }> = {
+  en: { placeholder: 'Your message', dictate: 'Dictate', dictateLang: 'The language you speak — press to change', attach: 'Attach a file', record: 'Record a voice memo', send: 'Send', sending: 'Sending the recording…', pending: 'Not sent yet — press Send' },
+  he: { placeholder: 'ההודעה שלך', dictate: 'הקלדה קולית', dictateLang: 'השפה שבה אתם מדברים — לחצו להחלפה', attach: 'צירוף קובץ', record: 'הקלטת הודעה קולית', send: 'שליחה', sending: 'שולח את ההקלטה…', pending: 'עוד לא נשלח — לחצו על שליחה' },
+  ru: { placeholder: 'Ваше сообщение', dictate: 'Голосовой ввод', dictateLang: 'Язык, на котором вы говорите — нажмите, чтобы сменить', attach: 'Прикрепить файл', record: 'Записать голосовое', send: 'Отправить', sending: 'Отправляю запись…', pending: 'Ещё не отправлено — нажмите Отправить' },
 };
 
 export const dictationLocale = (lang: MessageLang | null | undefined) =>
@@ -86,7 +97,11 @@ export function MessageBox({
   const L = WORDS[lang ?? 'en'];
   const fileRef = useRef<HTMLInputElement>(null);
   const areaRef = useRef<HTMLTextAreaElement>(null);
-  const dictate = useSpeechToText(dictationLocale(lang), text => onChange(text));
+  const speak = useSpeakLang(lang);
+  const dictate = useSpeechToText(dictationLocale(speak), text => onChange(text));
+  // The last run of letters TYPED (never a value the host set) — what
+  // teaches the box which language this person writes in.
+  const typedRun = useRef('');
   const sendMode = !!onSend;
   const canSend = sendMode && (value.trim().length > 0 || !!hasPending);
   const [sending, setSending] = useState(false);
@@ -190,11 +205,35 @@ export function MessageBox({
               <Mic size={16} />
             </button>
           )}
+          {dictate.supported && (
+            <button
+              type="button"
+              data-dictate-lang={speak}
+              onClick={() => { typedRun.current = ''; setSpeakLang(nextSpeakLang(speak)); }}
+              disabled={disabled || dictate.listening}
+              title={L.dictateLang}
+              className="self-center -ms-1 px-1.5 h-[18px] rounded-full text-[9.5px] font-extrabold leading-none flex-shrink-0 tracking-wide disabled:opacity-40"
+              style={{ backgroundColor: '#eef4fa', color: '#1e3a5f', border: '1px solid #dbe3ec' }}
+            >
+              {SPEAK_CHIP[speak]}
+            </button>
+          )}
           <textarea
             ref={areaRef}
             data-composer-input
             value={value}
-            onChange={e => onChange(e.target.value)}
+            onChange={e => {
+              const next = e.target.value;
+              // Pasted words are somebody else's as often as not (a worker's
+              // message quoted back) — only what the hand types teaches.
+              const pasted = (e.nativeEvent as InputEvent).inputType === 'insertFromPaste';
+              const added = pasted ? '' : typedTail(value, next);
+              if (added) {
+                typedRun.current = (typedRun.current + added).slice(-24);
+                noteTyped(typedRun.current);
+              } else if (!next) typedRun.current = '';
+              onChange(next);
+            }}
             onBlur={onBlur}
             onKeyDown={e => {
               if (sendMode && e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); if (canSend) onSend!(); }
