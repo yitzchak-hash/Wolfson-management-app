@@ -2728,6 +2728,21 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                                     })}
                                   </div>
                                 )}
+                                {done && (a.addedStages ?? []).length > 0 && (
+                                  <div data-task-added-work className="mt-1.5 space-y-0.5">
+                                    {(a.addedStages ?? []).map(sid => {
+                                      const st = sortedStages.find(x => x.id === sid);
+                                      const words = a.addedWords?.[sid];
+                                      return (
+                                        <p key={sid} data-task-added-stage={sid} className="m-0 text-[12px] text-gray-700">
+                                          <b>{st ? getStageName(st, ui.isRtl) : ''}</b>
+                                          {' · '}{ui.isRtl ? 'נוספה עבודה (השלב כבר היה גמור)' : 'work added (it was already finished)'}{words ? ': ' : ''}
+                                          {words && <Translated text={words} to={ui.isRtl ? 'he' : 'en'} />}
+                                        </p>
+                                      );
+                                    })}
+                                  </div>
+                                )}
                                 {(a.offList ?? []).map(it => (
                                   <div key={it.id} data-task-offlist={it.id} data-answered={it.answer ? '1' : undefined}
                                     className={`mt-1.5 rounded-lg border px-2 py-1.5 text-[12px] ${it.answer ? 'border-gray-200 bg-white text-gray-700' : 'border-violet-300 bg-violet-50 text-slate-800'}`}>

@@ -10511,6 +10511,23 @@ Shipped: off on Contractor and Technician, on for Manager.
 Harness: `scratchpad/closewhen-probe.mjs` (30). Green: closemore, portal-r48 (re-encoded: TASK is capitals),
 portalround, multiday, bubbles-probe, round52, workerplans, doneline, notfinished, media-r53, the audits.
 
+## A finished stage still takes added work (owner, 2026-10-18)
+`finishedStageChoices` (closeExtras.ts) — the set's stages already DONE here (not the task's own, never
+Sold/Start). The close's "Is it one of these?" draws them greyed under the open ones
+(`data-close-done-stages`, each `data-close-done-stage=<id>` + `data-close-extra`), still pressable.
+A pick is `extraPick[id] = 'added'`: an `data-close-added-row` says it stays finished, optional words
+(`addedWords`); one picture step of its own (`PhotoStep.added`, need 1 whatever the settings — the picture
+is the point). The write keeps it OUT of `stagesWorked` / `stagesUnfinished` / `extraStages` (the
+completion rule and Who did what must not read it as finished again) and records `addedStages` +
+`addedWords`; `extrasLine` adds "Added work to stages already finished: …"; the drawer's done card shows
+`data-task-added-stage`. **A close picture files into the folder of the stage it was taken FOR**
+(`stageTag ?? asg.stageId` in `handleMediaUpload`) — extras used to land in the task's own stage folder.
+`whereLabel` reads a Job Board job by its own name (no "Apt" in front). Probe:
+`scratchpad/addedwork-probe.mjs` (24, keyed 5174).
+
+The recordings folder: moving his files is refused for the connector AND the app's service account —
+the recordings are on the shared drive and neither is a member. He drags; the ledger is the record.
+
 ## Vercel's daily deployment limit (2026-10-18)
 The Hobby plan caps deployments per day, and production answered "Deployment rate limited — retry in
 24 hours" after a day of many rounds — the push was fine, the site simply did not update (GitHub's commit

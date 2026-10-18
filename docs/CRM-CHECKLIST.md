@@ -269,4 +269,6 @@ Legend: ☑ shipped · ☐ decided, not built · ◐ built in part · ✎ needs 
 - ☑ A notebook copy: "Copy of the notebook" · Show the original · Make this the original (the real week moves over); settings say "The original / A copy" (2026-10-18)
 - ☑ The office app says when a newer version is out, one press to reload (2026-10-18)
 - ☑ Sold/Start is never named as finished or being done in a sentence (2026-10-18)
+- ☑ The worker's close: a stage already finished shows greyed in "Is it one of these?" and still takes added work + pictures, filed in that stage's folder; it is never reopened (2026-10-18)
+- ☑ Close pictures for another stage file into that stage's own Drive folder (2026-10-18)
 - ☑ Worker plan switches: "for the units they work in" (task sheet + that unit's map sheet) and "any engineered plan from the building diagram"; the plan, floor and type on the map sheet; a Standard bubble on a standard apartment (2026-10-18)

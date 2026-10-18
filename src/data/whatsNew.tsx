@@ -30,6 +30,25 @@ export interface WhatsNewEntry {
 
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    date: '2027-02-12',
+    title: 'Adding to a finished stage',
+    items: [
+      {
+        title: 'Work on a stage that is already done',
+        body: 'When the worker closes a job and says he did more, the stages already finished there show greyed — '
+          + 'and he can still pick one. It stays finished; he adds a picture or video (and a few words if he likes), '
+          + 'the pictures go into that stage\'s own folder, and the job\'s card says "work added".',
+        demo: 'tap',
+      },
+      {
+        title: 'Pictures land in the right folder',
+        body: 'A picture taken for another stage at the close now files into that stage\'s folder in Drive, not '
+          + 'the task\'s own.',
+        demo: 'list',
+      },
+    ],
+  },
+  {
     date: '2027-02-11',
     title: 'Closing a job, clearer',
     items: [

@@ -30,7 +30,7 @@ import { MessageBox } from '../components/ui/MessageBox';
 import { PushBanner, ArrivalWatcher } from '../components/portal/PortalAlerts';
 import { problemStates, isLiveProblem, problemDaysLate, problemStateOf } from '../data/problems';
 import { stageSetOf, liveStateOf, taskStageIds, setMark, isStartStage } from '../data/stageMarks';
-import { enoughMedia, shotCount, closeMinFilesOf, extraStageChoices, extrasLine } from '../data/closeExtras';
+import { enoughMedia, shotCount, closeMinFilesOf, extraStageChoices, finishedStageChoices, extrasLine } from '../data/closeExtras';
 import { runPool } from '../data/uploadPool';
 import { mediaKindOf } from '../data/mediaKind';
 import type { User, StageMark } from '../types';
@@ -847,7 +847,9 @@ export function ContractorPortal() {
    * takes his words and ticks nothing — the office answers it.
    */
   const [moreAsk, setMoreAsk] = useState<'yes' | 'no' | null>(null);
-  const [extraPick, setExtraPick] = useState<Record<string, 'all' | 'part'>>({});
+  const [extraPick, setExtraPick] = useState<Record<string, 'all' | 'part' | 'added'>>({});
+  /** What he said he added to a stage already finished (optional). */
+  const [addedWords, setAddedWords] = useState<Record<string, string>>({});
   const [partWords, setPartWords] = useState<Record<string, string>>({});
   const [offOn, setOffOn] = useState(false);
   const [offText, setOffText] = useState('');
@@ -1129,9 +1131,12 @@ export function ContractorPortal() {
     const bNum = (apt.buildingId.match(/\d+/)?.[0]) ?? apt.buildingId;
     return `${w('Building', 'בניין', 'Корпус')} ${bNum} · ${w('Apartment', 'דירה', 'Квартира')} ${num}${fam ? ` - ${fam}` : ''}`;
   };
-  /** "Apt 47" — or "Work at Wolfson" for a general job. */
+  /** "Apt 47" — a Job Board job by its own name (no "Apt" in front of a
+   *  client's name), or "Work at Wolfson" for a general job. */
   const whereLabel = (a: ContractorAssignment, apt: Apartment | undefined, ws: string) =>
-    a.general ? workAtLabel(readLang, ws) : `${w('Apt', 'דירה', 'Кв.')} ${aptLabel(apt)}`;
+    a.general ? workAtLabel(readLang, ws)
+      : apt?.buildingId === 'G' ? aptLabel(apt)
+      : `${w('Apt', 'דירה', 'Кв.')} ${aptLabel(apt)}`;
   /** Open a task — switching workspace first when it lives elsewhere. */
   const openTask = (pid: string, a: ContractorAssignment) => {
     setShowHistory(false);
@@ -1485,7 +1490,11 @@ export function ContractorPortal() {
     const stageFolder: Promise<string> | null = canUseDrive
       ? findOrCreateFolderOnce(mainFolderId!, 'Photos').then(photosFolderId => {
           ensureDriveShared(photosFolderId);
-          const stageName = getStage(asg.stageId)?.name ?? w('General', 'כללי', 'Общее');
+          // The folder of the stage the picture is FOR — a close step's own
+          // stage (an extra one, or a finished stage he added work to), else
+          // the task's stage (owner, 2026-10-18: "adds it to … the folder of
+          // the closed stage").
+          const stageName = getStage(stageTag ?? asg.stageId)?.name ?? w('General', 'כללי', 'Общее');
           return findOrCreateFolderOnce(photosFolderId, stageName);
         })
       : null;
@@ -1727,7 +1736,7 @@ export function ContractorPortal() {
       setCloseUnfinished([]);
       setCloseWhen(null);
       setClosePhotoIdx(0);
-      setMoreAsk(null); setExtraPick({}); setPartWords({}); setOffOn(false); setOffText(''); setMoreDone(false);
+      setMoreAsk(null); setExtraPick({}); setPartWords({}); setAddedWords({}); setOffOn(false); setOffText(''); setMoreDone(false);
       closeStageRef.current = null;
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1745,7 +1754,10 @@ export function ContractorPortal() {
       // Everything he did, written BEFORE the close: the task's own stages
       // (unfinished ones half done), the extra stages ("Is it one of these?"),
       // the part ones half done with his words, and any "not on the list" work.
-      const extraIds = moreAsk === 'yes' ? Object.keys(extraPick) : [];
+      // A FINISHED stage he added work to stays out of stagesWorked: it is
+      // already done, and the completion rule must not touch it.
+      const extraIds = moreAsk === 'yes' ? Object.keys(extraPick).filter(id => extraPick[id] !== 'added') : [];
+      const addedIds = moreAsk === 'yes' ? Object.keys(extraPick).filter(id => extraPick[id] === 'added') : [];
       const partIds = extraIds.filter(id => extraPick[id] === 'part');
       const worked = [...closeStages, ...extraIds.filter(id => !closeStages.includes(id))];
       const unfinished = [...closeStages.filter(id => closeUnfinished.includes(id)), ...partIds];
@@ -1754,6 +1766,11 @@ export function ContractorPortal() {
       if (worked.length) Object.assign(patch, { stagesWorked: worked, stagesUnfinished: unfinished, stagesFinished: unfinished.length === 0 });
       if (extraIds.length) patch.extraStages = extraIds;
       if (partIds.length) patch.partWords = Object.fromEntries(partIds.map(id => [id, (partWords[id] ?? '').trim()]));
+      if (addedIds.length) {
+        patch.addedStages = addedIds;
+        const said = addedIds.map(id => [id, (addedWords[id] ?? '').trim()] as const).filter(([, t]) => t);
+        if (said.length) patch.addedWords = Object.fromEntries(said);
+      }
       if (off) patch.offList = [...(liveA.offList ?? []), { id: `OL-${Date.now().toString(36)}`, text: off, at: completedAt, by: contractor?.name ?? '' }];
       if (Object.keys(patch).length) updateContractorAssignment(selectedAssignment.id, patch);
     }
@@ -1849,13 +1866,16 @@ export function ContractorPortal() {
     if (!selectedAssignment) return;
     // The extras ride at the top of the closing message, in English (a stored
     // record is English; every screen translates it for its reader).
-    const extraIds = moreAsk === 'yes' ? Object.keys(extraPick) : [];
+    const extraIds = moreAsk === 'yes' ? Object.keys(extraPick).filter(id => extraPick[id] !== 'added') : [];
+    const added = (moreAsk === 'yes' ? Object.keys(extraPick).filter(id => extraPick[id] === 'added') : [])
+      .map(id => ({ name: wsStageList.find(x => x.id === id)?.name ?? '', words: (addedWords[id] ?? '').trim() }))
+      .filter(e => e.name);
     const extras = extraIds.map(id => {
       const st = wsStageList.find(x => x.id === id);
       return { name: st?.name ?? '', part: extraPick[id] === 'part', words: (partWords[id] ?? '').trim() };
     }).filter(e => e.name);
     const off = moreAsk === 'yes' && offOn && offText.trim() ? [offText.trim()] : [];
-    const text = [extrasLine(extras, off), closingComment.trim()].filter(Boolean).join('\n\n');
+    const text = [extrasLine(extras, off, added), closingComment.trim()].filter(Boolean).join('\n\n');
     const newPhotoIds = getMedia(selectedAssignment.id)
       .map(m => m.id)
       .filter(id => !preClosingIds.current.has(id));
@@ -2066,11 +2086,16 @@ export function ContractorPortal() {
     ? extraStageChoices(getApt(liveSel.apartmentId), wsStageList, closeStages, { tipusStages: tipusStagesPortal })
     : [];
   const extraIds = extraChoices.filter(st => extraPick[st.id]).map(st => st.id);
-  const moreValid = (extraIds.length > 0 || offOn)
+  /** Stages already finished here — greyed, still pickable to add work to. */
+  const doneChoices = stageClose && liveSel
+    ? finishedStageChoices(getApt(liveSel.apartmentId), wsStageList, closeStages, { tipusStages: tipusStagesPortal })
+    : [];
+  const addedIds = doneChoices.filter(st => extraPick[st.id] === 'added').map(st => st.id);
+  const moreValid = (extraIds.length > 0 || addedIds.length > 0 || offOn)
     && extraIds.every(id => extraPick[id] === 'all' || !!(partWords[id] ?? '').trim())
     && (!offOn || !!offText.trim());
   const moreOk = moreAsk === 'no' || (moreAsk === 'yes' && moreDone);
-  type PhotoStep = { id: string; ids: string[]; need: number; part?: boolean; loose?: boolean; sofar?: boolean };
+  type PhotoStep = { id: string; ids: string[]; need: number; part?: boolean; loose?: boolean; sofar?: boolean; added?: boolean };
   const photoSteps: PhotoStep[] = !stageClose ? [] : [
     // A stage REPORT: the close minimum for each stage he finished.
     ...(isReportClose ? closeFinishedIds.map(id => ({ id, ids: [id], need: MIN_CLOSE_MEDIA })) : []),
@@ -2083,6 +2108,9 @@ export function ContractorPortal() {
     ...(moreAsk === 'yes' ? extraIds.flatMap(id => extraPick[id] === 'part'
       ? (partNeedsPicture ? [{ id, ids: [id], need: 1, part: true }] : [])
       : [{ id, ids: [id], need: MIN_CLOSE_MEDIA }]) : []),
+    // Work added to a FINISHED stage: one picture or video, filed into that
+    // stage's folder — the reason to pick it at all.
+    ...(moreAsk === 'yes' ? addedIds.map(id => ({ id, ids: [id], need: 1, added: true })) : []),
   ];
   const stepMedia = (st: PhotoStep) => selMedia.filter(m => (m.stageId ? st.ids.includes(m.stageId) : !!st.loose));
   const stepOk = (st: PhotoStep) => enoughMedia(stepMedia(st), st.need);
@@ -4235,6 +4263,48 @@ plansPdfFileId && (
                                     );
                                   })}
                                 </div>
+                                {doneChoices.length > 0 && (
+                                  <div data-close-done-stages>
+                                    <p className="text-center text-gray-400 mb-1.5" style={{ fontSize: 12 }}>
+                                      {w('Already finished — tap one to add work to it', 'כבר הסתיים — אפשר להוסיף לו עבודה', 'Уже готово — нажмите, чтобы добавить работу')}
+                                    </p>
+                                    <div className="flex flex-wrap justify-center gap-1.5">
+                                      {doneChoices.map(st => {
+                                        const on = extraPick[st.id] === 'added';
+                                        return (
+                                          <button key={st.id} data-close-extra={st.id} data-close-done-stage={st.id} data-on={on ? '1' : undefined}
+                                            onClick={() => setExtraPick(prev => { const n = { ...prev }; if (n[st.id]) delete n[st.id]; else n[st.id] = 'added'; return n; })}
+                                            className="flex items-center gap-1.5 px-3 py-2 rounded-full text-[14px] font-bold border active:scale-[0.98]"
+                                            style={on ? { backgroundColor: '#475569', borderColor: '#475569', color: '#fff' } : { borderColor: '#e2e8f0', color: '#94a3b8', backgroundColor: '#f1f5f9' }}>
+                                            <CheckCircle2 size={14} style={{ color: on ? '#fff' : '#94a3b8' }} />
+                                            {stageNameIn(st, readLang)}
+                                          </button>
+                                        );
+                                      })}
+                                    </div>
+                                  </div>
+                                )}
+                                {addedIds.map(id => {
+                                  const st = wsStageList.find(x => x.id === id)!;
+                                  return (
+                                    <div key={id} data-close-added-row={id} className="rounded-xl border border-gray-200 bg-slate-50 p-2.5 space-y-2">
+                                      <p className="font-bold text-gray-800 flex items-center gap-1.5 min-w-0 m-0" style={{ fontSize: 14 }}>
+                                        <CheckCircle2 size={14} className="text-slate-500 flex-shrink-0" />
+                                        <span className="truncate">{stageNameIn(st, readLang)}</span>
+                                      </p>
+                                      <p className="text-gray-500 m-0" style={{ fontSize: 12.5 }}>
+                                        {w('Already finished — it stays finished. Your pictures go into its folder.',
+                                          'כבר הסתיים — נשאר גמור. התמונות נכנסות לתיקייה שלו.',
+                                          'Уже готово — так и останется. Фото пойдут в его папку.')}
+                                      </p>
+                                      <MessageBox hook={`added-words-${id}`} rows={2} value={addedWords[id] ?? ''}
+                                        onChange={v => setAddedWords(prev => ({ ...prev, [id]: v }))}
+                                        onTranscript={t => setAddedWords(prev => (prev[id]?.trim() ? prev : { ...prev, [id]: t }))}
+                                        lang={readLang} fontSize={15}
+                                        placeholder={w('What did you add? (if you want)', 'מה הוספת? (לא חובה)', 'Что добавили? (необязательно)')} />
+                                    </div>
+                                  );
+                                })}
                                 {extraIds.map(id => {
                                   const st = wsStageList.find(x => x.id === id)!;
                                   const part = extraPick[id] === 'part';
@@ -4307,7 +4377,9 @@ plansPdfFileId && (
                                   {w('Pictures of', 'תמונות של', 'Фотографии')} <span style={{ color: stepColor(step) }}>{stepName(step)}</span>
                                 </p>
                                 <p className="text-center text-gray-500 mb-2" style={{ fontSize: 12.5 }}>
-                                  {step.sofar
+                                  {step.added
+                                    ? w('work added to a finished stage · one picture or video', 'עבודה שנוספה לשלב שהסתיים · תמונה או סרטון', 'добавлено к завершённому этапу · одно фото или видео')
+                                    : step.sofar
                                     ? w('what you did so far · one picture or video', 'מה שעשית עד עכשיו · תמונה או סרטון', 'что сделано пока · одно фото или видео')
                                     : step.part
                                     ? w('part of it · one picture or video', 'חלק · תמונה או סרטון', 'часть · одно фото или видео')

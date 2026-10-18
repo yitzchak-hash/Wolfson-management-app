@@ -64,7 +64,19 @@ with starred recommendations is published first; the owner says "approved" /
 "all yes" / answers by number; then it is built. Never build a redesign
 unasked.
 
-## Where things stand (2026-10-18, latest — recording 14:28: the task sheet and the closing screen)
+## Where things stand (2026-10-18, latest — a finished stage takes added work; the recordings audited)
+His ask: "if he already finished the stage and he clicks it, it should be grayed out, but still allow him
+to click it and add work to it … the pictures … go to the folder of the closed stage … it doesn't reopen
+the stage." Built (CLAUDE.md "A finished stage still takes added work"); addedwork-probe 24/24. Also: close
+pictures for any extra stage now file into that stage's own folder; a Job Board job on the worker's list
+no longer reads "Apt <name>" (shown in recording 10, never said).
+"Can you move the videos yourself … make sure we did all of them really?": moving refused again (shared
+drive, not a member). A read-only audit of recordings 1–14: every spoken ask built; stale "Waiting"/"open"
+cells corrected in LEDGER, MASTER-CHECKLIST (now a Video 14 section) and seven feedback docs. All 14
+belong in Processed. Still open, shown only: video 8's Plans chooser (blank tiles / wrong first folder),
+the "who's waiting for Geves" list question, V14-Q (old + new stage names side by side).
+
+## Where things stand (2026-10-18 — recording 14:28: the task sheet and the closing screen)
 New standing rule (his words): "you always have to launch a helper after a new video to organize the
 drive into subfolders of processed and not processed." Done this round: the folder now has **Processed**
 and **Not processed** (ids in docs/feedback/LEDGER.md). The Drive connector refuses to move files it did
@@ -77,8 +89,7 @@ stage gets its own one-picture step; Take photo / Record video / Choose files li
 step; Sold/Start off the extras list; the sheet's row one = "Building 1 · Apartment 15 - family" +
 Standard + move + delete + X, row two = stage + day + address; TASK big; new switches **Delete their own
 tasks** + **Including tasks the office gave them** (off on Contractor and Technician, on for Manager).
-NOT LIVE YET: Vercel answered "Deployment rate limited — retry in 24 hours" (too many deployments today).
-The code is on both branches; the next production push or a Redeploy after the limit resets puts it live.
+Vercel's daily limit hit once ("Deployment rate limited"); the next push deployed — it is live.
 `vercel.json` now stops the working branch from building, halving the count.
 Waiting on him: the shared stage list carries old and new names of the same work side by side
 ("Concealed Units Installed" + "Concealed Units" …) — shown in the video, not touched.

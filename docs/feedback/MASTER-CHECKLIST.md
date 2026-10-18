@@ -33,7 +33,7 @@ Activity rows (**Done**) · squares counted 13 stages vs 9 (**Done** — stageMa
 dialog names them and offers Move) · A1 floor 10's empty fifth square (**Done** 10-06 — the A1-BLANK-37
 placeholder deleted and tombstoned) · A3 12 Access Panels ticked by Igor before drywall (**Done** 10-06 —
 un-ticked, one history line) · A1 12 still has the moved report's stages done (**Done** — he said leave it)
-· A3 9/10/11 read "Registers" = next to do (Waiting — the "Next:" cue, asked again in plain words; note
+· A3 9/10/11 read "Registers" = next to do (**Done** 10-08 — the "Next:" cue settled by the last-done headline, C-25/C-31; note
 Esther unticked Wall/Outdoor there herself on 10-06, so they now read "Wall Units") · the "Skipped a stage"
 widget only reads old "X → Y" records (**Done** 10-06 — retired).
 
@@ -158,6 +158,10 @@ read "tap to open" while loading (left as a loading state) · four closed tasks 
 report and stages differ (A3 12, A3 17, A2 9, A2 27 — the display now reads the report; no data was
 rewritten).
 
+Seen, not said (video 8): the Plans chooser drew blank tiles on every open and once opened on Engineered
+Plans before his folder (open — noted, not changed) · the office's "who's waiting for Geves" list in the
+office chat (Waiting — a question to him).
+
 ### Video 9 — Recording 2026-10-15 101128 ([feedback doc](2026-10-15-101128.md))
 | # | Time | Ask | Status | Proof |
 |---|------|-----|--------|-------|
@@ -169,14 +173,17 @@ rewritten).
 | # | Time | Ask | Status | Proof |
 |---|------|-----|--------|-------|
 | V10-1 | 0:00 | The worker's big "Wrong apartment? Move it" button → a small icon that asks yes/no first | Done | `data-task-move` icon + `data-task-move-ask` · portal-r48 |
-| V10-2 | 0:30 | Closing: "did you do more stuff today?"; a small part of a stage; a stage the apartment doesn't have — plan it | Waiting (plan page "More Than the Task Said", Q1–5) | docs/artifacts/2026-10-15-more-than-the-task-said.html |
+| V10-2 | 0:30 | Closing: "did you do more stuff today?"; a small part of a stage; a stage the apartment doesn't have — plan it | Done | built 2026-10-18 on "all starred, build it" (C-45) · closemore-probe (36) |
 | V10-3 | 1:53 | "A comment" → just "Anything the office should know?" | Done | `data-closing-ask-office` · portal-r48 |
+
+Seen, not said (video 10): a Job Board job on the worker's list read "Apt <name>" (**Done** 2026-10-18 —
+the job's own name) · addedwork-probe §5.
 
 ### Video 11 — Recording 2026-10-15 141727 ([feedback doc](2026-10-15-141727.md))
 | # | Time | Ask | Status | Proof |
 |---|------|-----|--------|-------|
 | V11-1 | 0:27 | A notebook bar dragged elsewhere asks "move the task you gave X on Y to Z?" yes/no | Done | `PlannerMoveConfirm` · round52-probe · notebookbars-probe · multiday |
-| V11-2 | 0:53 | A task dropped on a drywall worker should become a new task on the drywall stage — "how would this work" | Waiting (plan page, section D, Q6–7); the move question already names the other trade | round52-probe §2 |
+| V11-2 | 0:53 | A task dropped on a drywall worker should become a new task on the drywall stage — "how would this work" | Done | built 2026-10-18, section D (C-45, C-52) · crosstrade-probe (31) |
 | V11-3 | 2:16 | Undo/redo for every action: move, add a task, delete — audited by an agent | Done | `trackUndo` + self-recording store actions; docs/research/UNDO-AUDIT.md · undoall-probe (36) · undoredo |
 | V11-4 | 2:40 | Active jobs: a task moved on the notebook showed nothing under "Notebook" | Fixed | `ContractorAssignment.plannedAt` · round52-probe §3 |
 | V11-5 | 2:52 | Active jobs: "what is this stuff" (the lettered squares) | Done | icons, words on hover · round52-probe §3 |
@@ -192,6 +199,23 @@ rewritten).
 |---|------|-----|--------|-------|
 | V13-1 | 0:00 | The worker's weekly calendar: newest day first | Done | `data-week-order="newest-first"` · portal-r48 |
 | V13-2 | 0:10 | A single done task should look like the green "N done" row | Done | `data-week-done-one` green + tick · portal-r48 |
+
+### Video 14 — Recording 2026-10-18 142856 ([feedback doc](2026-10-18-142856.md))
+| # | Time | Ask | Status | Proof |
+|---|------|-----|--------|-------|
+| V14-1 | 0:00 | Closing a task whose day passed asks "did you finish yesterday or today?" — today extends the task to today | Done | `data-close-when` · closewhen-probe §1 |
+| V14-2 | 0:16 | The task sheet's information on one row; the date on a second row | Done | `data-sheet-head` / `data-sheet-when-where` · closewhen-probe |
+| V14-3 | 0:23 | Permission to delete his own tasks, with a sub-permission for tasks the office gave him | Done | `deleteOwnTasks` / `deleteOfficeTasks` · closewhen-probe §B–D |
+| V14-4 | 0:44 | The word TASK big and dramatic | Done | `data-task-word` 22px |
+| V14-5 | 0:51 | Standard on the top row | Done | `data-sheet-standard` |
+| V14-6 | 0:56 | "Building 1 · Apartment 15 - name", a regular dash | Done | `sheetPlace` (sheet + closing header) |
+| V14-7 | 1:15 | The date on a second row | Done | `data-sheet-when-where` · closewhen-probe |
+| V14-8 | 1:18 | One stage → never ask "which didn't you finish?" | Done | closewhen-probe §2 |
+| V14-9 | 1:46 | What if he picks something already done? | Done | answered, then refined 2026-10-18 (C-70): a finished stage shows greyed and still adds work and pictures · addedwork-probe |
+| V14-10 | 2:00 | Take photo / Record video / Choose files — a step of their own, inside the box | Done | `data-close-step-media` · closewhen-probe §4 |
+| V14-11 | 2:19 | Pictures for the work done on a stage he did not finish | Done | one-picture step (`sofar`) · closewhen-probe §3 · bubbles-probe |
+| V14-12 | 2:41 | "The line should be inside" — the buttons inside the picture box | Done | `data-close-step-media` · closewhen-probe §4 |
+| V14-Q | — | The shared stage list has old and new names side by side (e.g. "Concealed Units Installed" + "Concealed Units") | Waiting | question to the owner |
 
 ## From chat
 
@@ -248,7 +272,6 @@ rewritten).
 | C-49 | 2026-10-18 | The question in plain English: "<worker> did work that wasn't on the list. This is what he wrote: …" then pick again | Done | `OffListQuestion` · closemore-probe §3 |
 | C-50 | 2026-10-18 | "Explain what exactly needs me" | Done | answered in chat; found nobody's role says "admin" → the question glow now shows for everybody until unticked |
 | C-51 | 2026-10-18 | On Sunday the notebook should show this week, with easy access to last week and the weeks ahead — "a good, good plan" | Done | week chips on every notebook · weekribbon-probe (33) |
-
 | C-52 | 2026-10-18 | Stage trades: AC = drilling, piping, concealed units, fans, wall units, outdoor units, thermostats; Drywall = registers, access panels, drywall — "I approve you to change it" | Done | production stages written (11 × 200) |
 | C-53 | 2026-10-18 | Approve questions 2 and 3 (questions glow for everybody; part of it needs one picture) | Done | unchanged defaults |
 | C-54 | 2026-10-18 | Notebook: no folded last-week bar, no "Open last week"; the week chips on top with the notebook starting right under them | Done | weekribbon-probe §1 |
@@ -266,15 +289,6 @@ rewritten).
 | C-67 | 2026-10-18 | New switch: open ANY engineered plan from the building diagram — tap an apartment, see the plan on the "I'm going to work here" sheet, expand it like usual, see all the info | Done | `seeAnyPlan` (Technician + Manager ship on) · floor, type, stage on the sheet · workerplans-probe |
 | C-68 | 2026-10-18 | A small Standard bubble on a standard apartment's plan | Done | on the plan title and the map sheet · workerplans-probe |
 | C-65 | 2026-10-18 | "Why does it say finished Sold/Start? … We shouldn't see Sold/Start anywhere other than an initial stage" | Done | dropped from the busy-day window, task sentences, the done card, Who did what, the day story and the history lines · round49-probe, activitywords-test |
-| V14-1 | 2026-10-18 | Closing a task whose day passed asks "did you finish yesterday or today?" — today extends the task to today | Done | `data-close-when` · closewhen-probe §1 |
-| V14-2 | 2026-10-18 | The task sheet's information on one row; the date on a second row | Done | `data-sheet-head` / `data-sheet-when-where` · closewhen-probe |
-| V14-3 | 2026-10-18 | Permission to delete his own tasks, with a sub-permission for tasks the office gave him | Done | `deleteOwnTasks` / `deleteOfficeTasks` · closewhen-probe §B–D |
-| V14-4 | 2026-10-18 | The word TASK big and dramatic | Done | `data-task-word` 22px |
-| V14-5 | 2026-10-18 | Standard on the top row | Done | `data-sheet-standard` |
-| V14-6 | 2026-10-18 | "Building 1 · Apartment 15 - name", a regular dash | Done | `sheetPlace` (sheet + closing header) |
-| V14-8 | 2026-10-18 | One stage → never ask "which didn't you finish?" | Done | closewhen-probe §2 |
-| V14-9 | 2026-10-18 | What if he picks something already done? | Done | answered: the list holds only stages not done; Sold/Start removed from it |
-| V14-10 | 2026-10-18 | Take photo / Record video / Choose files — a step of their own, inside the box | Done | `data-close-step-media` · closewhen-probe §4 |
-| V14-11 | 2026-10-18 | Pictures for the work done on a stage he did not finish | Done | one-picture step (`sofar`) · closewhen-probe §3 · bubbles-probe |
-| V14-Q | 2026-10-18 | The shared stage list has old and new names side by side (e.g. "Concealed Units Installed" + "Concealed Units") | Waiting | question to the owner |
 | C-69 | 2026-10-18 | After a new video, launch a helper to sort the Drive folder into Processed / Not processed | Partly | folders made; the connector cannot move his own files — he drags them (LEDGER.md) |
+| C-70 | 2026-10-18 | A stage he already finished shows greyed in "Is it one of these?" but still pressable: it adds work and pictures to that stage's folder and never reopens it | Done | `data-close-done-stage` · `addedStages` / `addedWords` · addedwork-probe (24) |
+| C-71 | 2026-10-18 | "Can you move the videos yourself … make sure we did all of them really?" | Partly | audit: every spoken ask of the 14 recordings is built (ledger rows 10–11 corrected); moving refused again — the recordings sit on the shared drive and neither the connector nor the app's Drive account is a member |

@@ -58,6 +58,22 @@ export function extraStageChoices(apt: Apartment | undefined, sorted: Stage[], t
   });
 }
 
+/**
+ * The stages already FINISHED here (owner, 2026-10-18: "if he already
+ * finished the stage and he clicks it, it should be greyed out, but still
+ * allow him to click it and add work to it"). Offered greyed beside the open
+ * ones; picking one adds work and pictures to it and changes no mark —
+ * nothing is reopened.
+ */
+export function finishedStageChoices(apt: Apartment | undefined, sorted: Stage[], taskStages: string[], ctx?: SetContext): Stage[] {
+  if (!apt) return [];
+  return stageSetOf(apt, sorted, ctx).filter(st => {
+    if (taskStages.includes(st.id)) return false;
+    if (isStartStage(st)) return false;
+    return stageStateOf(apt, st.id, sorted) === 'done';
+  });
+}
+
 export const QUESTION_KINDS: { id: QuestionKind; en: string; he: string }[] = [
   { id: 'offList', en: "Work that wasn't on the list", he: 'עבודה שלא הייתה ברשימה' },
 ];
@@ -88,10 +104,14 @@ export function asksUser(t: Pick<ContractorAssignment, 'offList'>, user: Pick<Us
 export function extrasLine(
   extras: { name: string; part: boolean; words?: string }[],
   offList: string[],
+  added: { name: string; words?: string }[] = [],
 ): string {
   const parts: string[] = [];
   if (extras.length) {
     parts.push('Also did today: ' + extras.map(e => e.part ? `${e.name} (part of it${e.words ? ` — ${e.words}` : ''})` : e.name).join(', ') + '.');
+  }
+  if (added.length) {
+    parts.push('Added work to stages already finished: ' + added.map(e => e.words ? `${e.name} (${e.words})` : e.name).join(', ') + '.');
   }
   for (const t of offList) parts.push(`Work that wasn't on the list: ${t}`);
   return parts.join('\n');

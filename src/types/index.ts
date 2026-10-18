@@ -1491,6 +1491,14 @@ export interface ContractorAssignment {
   extraStages?: string[];
   partWords?: Record<string, string>;
   /**
+   * Work ADDED at the close to a stage already finished here (owner,
+   * 2026-10-18): the stage stays done — never reopened, never in
+   * `stagesWorked` — and its pictures are tagged to it, so they file into
+   * that stage's folder. `addedWords` is what he said he added (optional).
+   */
+  addedStages?: string[];
+  addedWords?: Record<string, string>;
+  /**
    * "Not on this list…": work he did that is no stage on the list — "took
    * out garbage". Nothing is ticked; each item waits for the office's answer
    * (it glows on the notebook for whoever answers that kind of question).
