@@ -5,6 +5,7 @@ import { daysOfTimeOff, kindWord, hatchOf, TIME_OFF_COLOR, bandLine, timeOffWord
 import { useStore, loadAllProjectsTaskData, loadProjectSnapshot, ensureProjectSnapshot, startForeignSync, stopForeignSync } from '../data/store';
 import { ContractorAssignment, ContractorPhoto, Contractor, Apartment, Project, StageNote, StageNoteEntry, Stage, DEFAULT_CONTRACTOR_UI_STRINGS, HEBREW_CONTRACTOR_UI_STRINGS, RUSSIAN_CONTRACTOR_UI_STRINGS, PortalLang, stageNameIn, aptLabel, workAtLabel, projectColor, projectName, projectShortName } from '../types';
 import { transcribeMemo } from '../data/transcribe';
+import { setActiveSpeaker } from '../data/speakLang';
 import { daysOf, futureDaysOf, dayIso, parseDay } from '../data/taskDays';
 import { notFinishedPlan, notFinishedLine, morningAskDay, needsNewDay, daysBetween } from '../data/notFinished';
 import { NotFinishedSheet, unfinishedWords } from '../components/tasks/NotFinishedSheet';
@@ -960,6 +961,10 @@ export function ContractorPortal() {
    */
   const notFound = !contractor;
   const contractorId = contractor?.id ?? '';
+  // This page is FOR the worker: his speaking language (speakLang.ts) drives
+  // the dictation mic and keeps his own words untranslated for him, whatever
+  // language the screen is set to.
+  useEffect(() => { setActiveSpeaker(contractorId ? `c:${contractorId}` : null); }, [contractorId]);
   const assignments = contractorAssignments.filter(a => a.contractorId === contractorId);
   /** Every apartment's live problem — the map paints them red whoever the problem is assigned to. */
   const problemMap = useMemo(() => problemStates(contractorAssignments), [contractorAssignments]);

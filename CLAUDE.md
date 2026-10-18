@@ -10240,3 +10240,48 @@ the job's next stage of that trade, original untouched, one undo step), `data-mo
 Harnesses: `scratchpad/closemore-probe.mjs` (36) · `scratchpad/crosstrade-probe.mjs` (31).
 Its trap: the closing screen has MessageBox paperclip inputs now — the MEDIA input is
 `input[type="file"][accept*="video"][accept*=".zip"]`, never the panel's first file input.
+
+---
+
+# v2 — the text decides the language, never the screen (2026-10-18)
+
+The owner: "If he types in Russian even though he's on the English UI, then
+it should just translate." A worker often sets the portal to English
+(`Contractor.lang = 'en'`) and types and talks Russian. Rules:
+- **What others wrote is shown in the READER's language**, decided by the
+  text's own letters (`detectLang`) — never by the writer's screen. The office
+  reads a Russian message in English whatever language the worker's portal is
+  set to; push bodies and the office/portal arrival toasts translate the
+  written words too (`pushNotify.translatedFor`, 4s cap, the original if no
+  answer; toasts carry `where` + `said` and draw `said` through `TrText`).
+- **Your own words are never translated for you.** `TaskThread.isMine(note)`
+  (default: the worker's own notes on the worker's side; the drawer passes
+  the office author by name) gives those bubbles and their memo transcripts
+  no target. And `Translated`/`TrText` skip text written in the reader's
+  LEARNED speaking language — what you can write you can read.
+- **The speaking language** (`src/data/speakLang.ts`): per person per device,
+  `speak_lang_<personKey>` in localStorage (`c:<contractorId>` on the portal,
+  `u:<userId>` in the office — `setActiveSpeaker`, set by ContractorPortal and
+  AppLayout), never synced, out of the backup audit. LEARNED from the last run
+  of letters the hand TYPED into a MessageBox (`typedTail` — a host-set value
+  or a paste teaches nothing; three letters before it says anything), else the
+  screen's language. `MessageBox` dictates in it (`dictationLocale(speak)`),
+  and the small chip beside the mic (`[data-dictate-lang]`, EN → עב → RU)
+  sets it with one press. The header search and the search tile still dictate
+  in the screen's language.
+- **Transcription forces no language**: the client sends only the bytes (or
+  the Drive id) and the server's form carries no `language` — the model hears
+  it. The words are then translated per reader by `Translated`.
+- **A memo recorded as `voice-memo-<n>.webm` is AUDIO** (`mediaKindOf`): WebM
+  and MP4 hold sound alone too, so an `audio/*` mime or the memo's own name
+  wins over the film extension. Drawn as a film, a Chrome memo had lost its
+  player and its words in every thread.
+- Stored records stay ENGLISH where the app writes them (the standing rule);
+  what a person types is kept as typed and translated on the way to a reader.
+
+Harnesses: `scratchpad/speaklang-test.mjs` (offline, 19) ·
+`scratchpad/translang-probe.mjs` (keyed server; `APP=` env, default 5178; 24
+— the English-screen worker's own Russian and memo untouched, nothing of his
+sent for translation, no language on the transcribe request, the chip
+learning RU from typing, the mic following it, the cycle, kept across a
+reload, the office reading him in English). `round38-probe.mjs` takes `APP=`.

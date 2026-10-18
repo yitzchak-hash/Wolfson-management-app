@@ -9,10 +9,15 @@ import { isFirebaseConfigured } from '../../data/firebase';
 import { PlannerAskModal } from '../board/PlannerAskModal';
 import { UndoLayer } from '../board/UndoLayer';
 import { OfficeAlerts } from './OfficeAlerts';
+import { setActiveSpeaker } from '../../data/speakLang';
 
 export function AppLayout() {
   const { startFirebaseSync, firebaseListening, mainUiStrings } = useStore();
   const currentProjectId = useStore(st => st.currentProjectId);
+  const speakerId = useStore(st => st.currentUser?.id ?? null);
+  // The signed-in person's speaking language (speakLang.ts) — the mic and the
+  // translator read it, never the screen's language.
+  useEffect(() => { setActiveSpeaker(speakerId ? `u:${speakerId}` : null); }, [speakerId]);
   const location = useLocation();
   const navigate = useNavigate();
 

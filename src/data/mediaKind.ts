@@ -27,7 +27,17 @@ export function mediaKindOf(name?: string | null, mime?: string | null): MediaKi
   const ext = extOf(name ?? '');
   if (ext) {
     if (IMAGE_EXT.includes(ext)) return 'image';
-    if (VIDEO_EXT.includes(ext)) return 'video';
+    if (VIDEO_EXT.includes(ext)) {
+      // WebM (and MP4) are containers for sound alone as well as film: the
+      // app's own voice memos are `voice-memo-<n>.webm` recorded as
+      // `audio/webm`, and drawn as a film they lost their player and their
+      // words. The recorder's mime is honest here (it is Drive's mime that
+      // lies, about CAD); Drive re-guessing `video/webm` from the name is
+      // why the memo's own name counts too.
+      if ((ext === 'webm' || ext === 'mp4')
+        && (String(mime ?? '').toLowerCase().startsWith('audio/') || /^voice-memo/i.test(String(name ?? '').trim()))) return 'audio';
+      return 'video';
+    }
     if (AUDIO_EXT.includes(ext)) return 'audio';
     if (ext === 'pdf') return 'pdf';
     return 'file';

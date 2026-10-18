@@ -3005,6 +3005,7 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                               maxBubble={640}
                               translateTo={ui.isRtl ? 'he' : 'en'}
                               canDelete={n => n.authorType === 'office'}
+                              isMine={n => n.authorType === 'office' && !!currentUser && n.authorName === currentUser.name}
                               words={{
                                 rtl: !!ui.isRtl,
                                 tapToOpen: ui.threadTapToOpen,
