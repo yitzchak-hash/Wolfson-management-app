@@ -523,3 +523,34 @@ export function nextStageToDo(apt: AptLike, sortedStages: Stage[], ctx?: SetCont
   }
   return apt.currentStageId ?? '';
 }
+
+/**
+ * The job's NEXT stage of one TRADE (owner, 2026-10-18 — "More Than the Task
+ * Said", section D): the first stage, in the workspace's order, that carries
+ * `trade` and is neither done nor off on this apartment. With no apartment (a
+ * general job) it is simply the first active work stage of that trade. Null
+ * when no stage of that trade is left — or none is set as that trade at all
+ * (the caller tells those apart with `anyStageOfTrade`).
+ */
+export function nextStageOfTrade(
+  apt: AptLike | null | undefined,
+  sortedStages: Stage[],
+  trade: string,
+  ctx?: SetContext,
+): string | null {
+  if (!apt) {
+    const st = sortedStages.find(s => s.trade === trade && s.active && isWorkStage(s));
+    return st?.id ?? null;
+  }
+  for (const st of stageSetOf(apt, sortedStages, ctx)) {
+    if (st.trade !== trade) continue;
+    const state = stageStateOf(apt, st.id, sortedStages);
+    if (state !== 'done' && state !== 'off') return st.id;
+  }
+  return null;
+}
+
+/** Does any active work stage in this list carry the trade? */
+export function anyStageOfTrade(sortedStages: Stage[], trade: string): boolean {
+  return sortedStages.some(s => s.trade === trade && s.active && isWorkStage(s));
+}
