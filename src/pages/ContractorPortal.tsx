@@ -19,7 +19,7 @@ import {
   Plus, Send, AlertCircle, X, Play, File as FileIcon, MapPin,
   BookOpen, Download, Paperclip, MessageSquare, CloudUpload,
   ChevronLeft, ChevronRight, ChevronDown, History, PenLine, Mic,
-  Settings as SettingsIcon, Bell, Info, ArrowRightLeft,
+  Settings as SettingsIcon, Bell, Info, ArrowRightLeft, Video, FolderOpen,
 } from 'lucide-react';
 import { BuildingDiagram } from '../components/diagram/BuildingDiagram';
 import { permsOf } from '../data/workerLevels';
@@ -30,13 +30,15 @@ import { MessageBox } from '../components/ui/MessageBox';
 import { PushBanner, ArrivalWatcher } from '../components/portal/PortalAlerts';
 import { problemStates, isLiveProblem, problemDaysLate, problemStateOf } from '../data/problems';
 import { stageSetOf, liveStateOf, taskStageIds, setMark, isStartStage } from '../data/stageMarks';
-import { enoughMedia, extraStageChoices, extrasLine } from '../data/closeExtras';
+import { enoughMedia, shotCount, closeMinFilesOf, extraStageChoices, extrasLine } from '../data/closeExtras';
+import { runPool } from '../data/uploadPool';
+import { mediaKindOf } from '../data/mediaKind';
 import type { User, StageMark } from '../types';
 import { WazeIcon, wazeUrl } from '../components/ui/BrandIcons';
 import { RecordedMemo } from '../data/voiceMemo';
 import {
   extractFileId, drivePreviewUrl, driveDownloadUrl, driveThumbUrl,
-  extractFolderId, isUploadBackendConfigured, findOrCreateFolderViaBackend,
+  extractFolderId, isUploadBackendConfigured, findOrCreateFolderOnce,
   uploadFileViaResumableSession, shareFileToDrive, ensureDriveShared,
   fetchPlanBytes,
 } from '../data/driveApi';
@@ -104,8 +106,18 @@ async function readAsDataUrl(file: File): Promise<string> {
 function detectFileType(file: File): 'image' | 'video' | 'file' {
   if (file.type.startsWith('image/')) return 'image';
   if (file.type.startsWith('video/')) return 'video';
-  return 'file';
+  // Some Android pickers hand over a film with no type at all — the name decides.
+  const k = mediaKindOf(file.name, file.type);
+  return k === 'image' || k === 'video' ? k : 'file';
 }
+
+/** One picked file on its way up — drawn at once from the phone's own copy. */
+type PendingUpload = {
+  key: string; name: string; kind: 'image' | 'video' | 'file';
+  preview: string; pct: number; state: 'up' | 'done' | 'err';
+};
+/** How many files go up side by side. */
+const UPLOAD_LANES = 3;
 
 /**
  * The countdown badge on a task card — in the WORKER's language.
@@ -722,8 +734,26 @@ export function ContractorPortal() {
   const [selectedAssignment, setSelectedAssignment] = useState<ContractorAssignment | null>(null);
   const [noteText, setNoteText] = useState('');
   const [noteAttachments, setNoteAttachments] = useState<{ dataUrl: string; filename: string; mimeType: string; driveFileId?: string; driveUrl?: string; transcript?: string }[]>([]);
-  const [uploading, setUploading] = useState(false);
-  const [uploadProgress, setUploadProgress] = useState<{ name: string; pct: number } | null>(null);
+  /**
+   * Every picked file shows the moment it is picked — its own preview and its
+   * own progress — and up to three go up at once (owner, 2026-10-18: "it's
+   * uploading slow"). Nothing waits on the slowest file.
+   */
+  const [pendingUploads, setPendingUploads] = useState<PendingUpload[]>([]);
+  const uploading = pendingUploads.some(p => p.state === 'up');
+  // Once the whole batch is up, the finished tiles step aside (the count and
+  // the thread show them now) and their local previews are let go.
+  useEffect(() => {
+    if (!pendingUploads.length || pendingUploads.some(p => p.state === 'up')) return;
+    const done = pendingUploads.filter(p => p.state === 'done');
+    if (!done.length) return;
+    const t = setTimeout(() => {
+      done.forEach(p => { if (p.preview) URL.revokeObjectURL(p.preview); });
+      const gone = new Set(done.map(p => p.key));
+      setPendingUploads(prev => prev.filter(p => !gone.has(p.key)));
+    }, 1600);
+    return () => clearTimeout(t);
+  }, [pendingUploads]);
   const [completing, setCompleting] = useState(false);
   /** The finished-task celebration, carrying the ready-to-paste office message. */
   const [celebrate, setCelebrate] = useState<{ msg: string } | null>(null);
@@ -789,7 +819,7 @@ export function ContractorPortal() {
   const [closeFinished, setCloseFinished] = useState<'yes' | 'no'>('yes');
   /**
    * The set model's close (locked answers 11 + 14, 2026-09-22): "Did you
-   * finish everything you started?" → which not → three pictures for EACH
+   * finish everything you started?" → which not → the close minimum (one picture or video by default, `closeMinFiles`) for EACH
    * finished stage, one screen at a time. `closeAsked` is the yes/no given;
    * `closeUnfinished` the stages he tapped on "Which didn't you finish?";
    * `closePhotoIdx` which finished stage's pictures are being taken now.
@@ -805,7 +835,7 @@ export function ContractorPortal() {
    * the Task Said"): asked on every close after "Did you finish doing …?".
    * Yes → "Is it one of these?" — the stages still open on this apartment,
    * with "Not on this list…" first. Each picked stage is All of it (done,
-   * three pictures) or Part of it (half done; his words are required, and
+   * the close minimum) or Part of it (half done; his words are required, and
    * one picture unless the office switched that off). Not on this list
    * takes his words and ticks nothing — the office answers it.
    */
@@ -822,8 +852,12 @@ export function ContractorPortal() {
     id: contractorId, name: contractor?.name ?? 'Worker', code: '', role: 'viewer', active: true,
     createdAt: contractor?.createdAt ?? new Date().toISOString(),
   } as User);
-  /** How many pictures a closing needs. photosOptional workers skip it. */
-  const MIN_CLOSE_MEDIA = 3;
+  /**
+   * How many pictures or videos each close step needs (owner, 2026-10-18:
+   * "a minimum of one file, either a video or a picture"). The office can
+   * raise it in Settings → Workers. photosOptional workers skip it.
+   */
+  const MIN_CLOSE_MEDIA = useStore(st => closeMinFilesOf(st.boardSettings.__tv?.closeMinFiles));
   /** Weekly is what a worker plans his van by; the month grid is one press away. */
   const [calMode, setCalMode] = useState<'week' | 'month'>('month');
   const [calWeekOff, setCalWeekOff] = useState(0);
@@ -884,6 +918,8 @@ export function ContractorPortal() {
    */
   const [markup, setMarkup] = useState<{ aptId: string; fileId: string; plansFolderId?: string } | null>(null);
   const mediaInputRef = useRef<HTMLInputElement>(null);
+  const photoCamRef = useRef<HTMLInputElement>(null);
+  const videoCamRef = useRef<HTMLInputElement>(null);
   const noteAttachRef = useRef<HTMLInputElement>(null);
 
   const contractor = contractors.find(c => c.token === token && c.active) ?? null;
@@ -1288,89 +1324,103 @@ export function ContractorPortal() {
   const openEverywhere = assignments.filter(a => !a.completedAt).length + otherTasks.filter(r => !r.a.completedAt).length;
 
   async function handleMediaUpload(e: React.ChangeEvent<HTMLInputElement>) {
-    if (!selectedAssignment || !e.target.files?.length) return;
-    setUploading(true);
+    // Copy the list BEFORE clearing the input — a FileList is live, and
+    // clearing first empties it (the File Tray's trap).
+    const files = [...(e.target.files ?? [])];
+    e.target.value = '';
+    if (!selectedAssignment || !files.length) return;
+    // Captured at the PICK: the worker may walk on to the next picture step
+    // while these are still going up, and they belong to the step they were
+    // taken on.
+    const asg = selectedAssignment;
+    const stageTag = closeStageRef.current;
     setUploadError('');
     const LOCAL_MAX = 50 * 1024 * 1024;
-    const apt = getApt(selectedAssignment.apartmentId);
+    const apt = getApt(asg.apartmentId);
     const backendOn = isUploadBackendConfigured();
     const mainFolderId = apt?.driveLink ? extractFolderId(apt.driveLink) : null;
     const canUseDrive = backendOn && !!mainFolderId;
 
-    try {
-      for (const file of Array.from(e.target.files)) {
-        const fType = detectFileType(file);
+    const stamp = Date.now().toString(36);
+    const jobs = files.map((file, i) => ({ file, key: `${stamp}-${i}`, kind: detectFileType(file) }));
+    setPendingUploads(prev => [
+      ...prev.filter(p => p.state !== 'err'),
+      ...jobs.map(j => ({
+        key: j.key, name: j.file.name, kind: j.kind, pct: 0, state: 'up' as const,
+        preview: j.kind === 'file' ? '' : URL.createObjectURL(j.file),
+      })),
+    ]);
+    const patch = (key: string, p: Partial<PendingUpload>) =>
+      setPendingUploads(prev => prev.map(x => (x.key === key ? { ...x, ...p } : x)));
 
-        if (canUseDrive) {
-          // ── Primary: Google Drive (resumable, no file size limit) ─────────
-          setUploadProgress({ name: file.name, pct: 0 });
-          try {
-            const photosFolderId = await findOrCreateFolderViaBackend(mainFolderId!, 'Photos');
-            ensureDriveShared(photosFolderId);
-            const stageName = getStage(selectedAssignment.stageId)?.name ?? w('General', 'כללי', 'Общее');
-            const stageFolderId = await findOrCreateFolderViaBackend(photosFolderId, stageName);
-            const { fileId, webViewLink } = await uploadFileViaResumableSession(
-              stageFolderId, file, pct => setUploadProgress({ name: file.name, pct }),
-            );
-            // Make publicly readable so thumbnail URLs work in <img> tags
-            await shareFileToDrive(fileId);
-            addContractorPhoto({
-              assignmentId: selectedAssignment.id,
-              apartmentId: selectedAssignment.apartmentId,
-              contractorId,
-              dataUrl: '',
-              filename: file.name,
-              fileType: fType,
-              mimeType: file.type,
-              fileSizeBytes: file.size,
-              driveFileId: fileId,
-              driveUrl: webViewLink,
-              ...(closeStageRef.current ? { stageId: closeStageRef.current } : {}),
-            });
-          } catch (err) {
-            setUploadError(`"${file.name}" failed: ${(err as Error).message}`);
-            continue;
-          } finally {
-            setUploadProgress(null);
-          }
+    // ONE folder lookup for the whole batch (and for the visit) — it used to
+    // be two serverless round trips per file before any byte moved.
+    const stageFolder: Promise<string> | null = canUseDrive
+      ? findOrCreateFolderOnce(mainFolderId!, 'Photos').then(photosFolderId => {
+          ensureDriveShared(photosFolderId);
+          const stageName = getStage(asg.stageId)?.name ?? w('General', 'כללי', 'Общее');
+          return findOrCreateFolderOnce(photosFolderId, stageName);
+        })
+      : null;
 
-        } else {
-          // ── Last resort: local base64 ─────────────────────────────────────
-          if (file.size > LOCAL_MAX) {
-            setUploadError(`"${file.name}" exceeds 50 MB — skipped.`);
-            continue;
-          }
-          const dataUrl = fType === 'image' ? await compressImage(file) : await readAsDataUrl(file);
+    await runPool(jobs, UPLOAD_LANES, async ({ file, key, kind }) => {
+      try {
+        if (stageFolder) {
+          // ── Primary: Google Drive — the ORIGINAL bytes (EXIF intact), one PUT.
+          const folderId = await stageFolder;
+          const { fileId, webViewLink } = await uploadFileViaResumableSession(
+            folderId, file, pct => patch(key, { pct }),
+          );
+          // The Photos folder is link-shared and everything in it inherits;
+          // this per-file share only covers a first upload racing that share,
+          // so nothing waits for it.
+          void shareFileToDrive(fileId);
           addContractorPhoto({
-            assignmentId: selectedAssignment.id,
-            apartmentId: selectedAssignment.apartmentId,
+            assignmentId: asg.id,
+            apartmentId: asg.apartmentId,
+            contractorId,
+            dataUrl: '',
+            filename: file.name,
+            fileType: kind,
+            mimeType: file.type,
+            fileSizeBytes: file.size,
+            driveFileId: fileId,
+            driveUrl: webViewLink,
+            ...(stageTag ? { stageId: stageTag } : {}),
+          });
+        } else {
+          // ── Last resort: local base64 (a shrunk copy of a picture) ──────
+          if (file.size > LOCAL_MAX) throw new Error(w('bigger than 50 MB', 'גדול מ-50MB', 'больше 50 МБ'));
+          const dataUrl = kind === 'image' ? await compressImage(file) : await readAsDataUrl(file);
+          addContractorPhoto({
+            assignmentId: asg.id,
+            apartmentId: asg.apartmentId,
             contractorId,
             dataUrl,
             filename: file.name,
-            fileType: fType,
+            fileType: kind,
             mimeType: file.type,
-            ...(closeStageRef.current ? { stageId: closeStageRef.current } : {}),
+            ...(stageTag ? { stageId: stageTag } : {}),
           });
         }
-
         addActivityLog({
-          apartmentId: selectedAssignment.apartmentId,
+          apartmentId: asg.apartmentId,
           apartmentNumber: apt?.apartmentNumber ?? '',
-          buildingId: selectedAssignment.buildingId,
+          buildingId: asg.buildingId,
           userId: contractorId,
           userName: contractor!.name,
           actionType: 'contractor_upload',
           fieldChanged: 'photo_uploaded',
           previousValue: '',
           newValue: file.name,
-          stageId: selectedAssignment.stageId ?? '',
+          stageId: asg.stageId ?? '',
         });
+        patch(key, { state: 'done', pct: 100 });
+      } catch (err) {
+        patch(key, { state: 'err' });
+        setUploadError(`"${file.name}": ${(err as Error).message}`);
       }
-    } finally {
-      setUploading(false);
-      setUploadProgress(null);
-      if (mediaInputRef.current) mediaInputRef.current.value = '';
-    }
+    });
   }
 
   async function handleNoteFiles(files: File[]) {
@@ -1386,10 +1436,10 @@ export function ContractorPortal() {
 
       if (isUploadBackendConfigured() && mainFolderId) {
         try {
-          const photosFolderId = await findOrCreateFolderViaBackend(mainFolderId, 'Photos');
+          const photosFolderId = await findOrCreateFolderOnce(mainFolderId, 'Photos');
         ensureDriveShared(photosFolderId);
           ensureDriveShared(photosFolderId);
-          const notesFolderId = await findOrCreateFolderViaBackend(photosFolderId, 'Contractor Notes');
+          const notesFolderId = await findOrCreateFolderOnce(photosFolderId, 'Contractor Notes');
           const { fileId, webViewLink } = await uploadFileViaResumableSession(notesFolderId, file);
           await shareFileToDrive(fileId);
           setNoteAttachments(prev => [...prev, { dataUrl: isImg ? dataUrl : '', filename: file.name, mimeType: file.type, driveFileId: fileId, driveUrl: webViewLink }]);
@@ -1417,9 +1467,9 @@ export function ContractorPortal() {
 
     if (isUploadBackendConfigured() && mainFolderId) {
       try {
-        const photosFolderId = await findOrCreateFolderViaBackend(mainFolderId, 'Photos');
+        const photosFolderId = await findOrCreateFolderOnce(mainFolderId, 'Photos');
         ensureDriveShared(photosFolderId);
-        const notesFolderId = await findOrCreateFolderViaBackend(photosFolderId, 'Contractor Notes');
+        const notesFolderId = await findOrCreateFolderOnce(photosFolderId, 'Contractor Notes');
         const { fileId, webViewLink } = await uploadFileViaResumableSession(notesFolderId, file);
         await shareFileToDrive(fileId);
         setNoteAttachments(prev => [...prev, {
@@ -1767,6 +1817,75 @@ export function ContractorPortal() {
   }
 
   const selMedia = selectedAssignment ? getMedia(selectedAssignment.id) : [];
+  /** The count pill: "0/1" while short, "✓ 2" once enough (a picture + a video can be enough before the number is). */
+  const countText = (items: ContractorPhoto[], need: number) =>
+    enoughMedia(items, need) ? `✓ ${shotCount(items)}` : `${shotCount(items)}/${need}`;
+  /** What a close step asks for, in the worker's words. */
+  const needWords = (n: number) => n <= 1
+    ? w('one picture or video', 'תמונה או סרטון אחד', 'одно фото или видео')
+    : w(`${n} pictures — or 1 picture and 1 video`, `${n} תמונות — או תמונה וסרטון`, `${n} фото — или 1 фото и 1 видео`);
+  /**
+   * The three ways in (owner, 2026-10-18): the camera for a picture, the
+   * camera for a VIDEO, or the phone's files. All three feed the same upload.
+   */
+  const addMediaRow = (extra: React.ReactNode) => (
+    <div className="flex items-stretch gap-2">
+      <div className="flex-1 grid grid-cols-3 gap-2">
+        {([
+          { hook: 'data-add-photo-camera', ref: photoCamRef, Icon: Camera, label: w('Take photo', 'צילום תמונה', 'Сделать фото') },
+          { hook: 'data-add-video-camera', ref: videoCamRef, Icon: Video, label: w('Record video', 'צילום סרטון', 'Снять видео') },
+          { hook: 'data-add-files', ref: mediaInputRef, Icon: FolderOpen, label: w('Choose files', 'בחירת קבצים', 'Выбрать файлы') },
+        ] as const).map(b => (
+          <button key={b.hook} type="button" {...{ [b.hook]: '' }}
+            onClick={() => b.ref.current?.click()}
+            className="min-h-[60px] px-1.5 py-2 rounded-xl text-[12.5px] font-bold text-white flex flex-col items-center justify-center gap-1 leading-tight text-center active:scale-[0.98]"
+            style={{ backgroundColor: '#1e3a5f' }}>
+            <b.Icon size={20} />
+            {b.label}
+          </button>
+        ))}
+      </div>
+      {extra}
+    </div>
+  );
+  /** The files on their way up, each with its own preview and progress. */
+  const upCount = pendingUploads.filter(p => p.state === 'up').length;
+  const pendingTray = pendingUploads.length > 0 ? (
+    <div data-upload-tray className="mt-3">
+      {upCount > 0 && (
+        <div className="flex items-center gap-1.5 text-xs text-gray-500 mb-1.5">
+          <CloudUpload size={13} className="flex-shrink-0 text-[#4aa8d8]" />
+          {w(`Uploading ${upCount} of ${pendingUploads.length}…`, `מעלה ${upCount} מתוך ${pendingUploads.length}…`, `Загрузка: ${upCount} из ${pendingUploads.length}…`)}
+        </div>
+      )}
+      <div className="flex flex-wrap gap-2">
+        {pendingUploads.map(p => (
+          <div key={p.key} data-upload-tile={p.state} title={p.name}
+            className="relative w-16 h-16 rounded-lg overflow-hidden bg-gray-100 border border-gray-200 flex-shrink-0">
+            {p.kind === 'image' && p.preview && <img src={p.preview} alt="" className="w-full h-full object-cover" />}
+            {p.kind === 'video' && p.preview && <video src={p.preview} muted playsInline preload="metadata" className="w-full h-full object-cover" />}
+            {p.kind === 'file' && <div className="w-full h-full flex items-center justify-center"><FileIcon size={20} className="text-gray-400" /></div>}
+            {p.state === 'up' && (
+              <>
+                <div className="absolute inset-0 bg-black/25" />
+                <div className="absolute left-1 right-1 bottom-1 h-1.5 rounded-full bg-white/50 overflow-hidden">
+                  <div data-upload-pct={p.pct} className="h-full bg-[#4aa8d8] transition-all duration-150" style={{ width: `${Math.max(4, p.pct)}%` }} />
+                </div>
+              </>
+            )}
+            {p.state === 'done' && (
+              <div className="absolute top-1 end-1 w-5 h-5 rounded-full bg-green-600 text-white flex items-center justify-center">
+                <CheckCircle2 size={13} />
+              </div>
+            )}
+            {p.state === 'err' && (
+              <div className="absolute inset-0 bg-red-600/60 flex items-center justify-center text-white"><AlertCircle size={20} /></div>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  ) : null;
   const selNotes = selectedAssignment ? getNotes(selectedAssignment.id) : [];
   const selOfficeNotes = selNotes.filter(n => n.authorType === 'office');
   const selContractorNotes = selNotes.filter(n => n.authorType === 'contractor');
@@ -1774,7 +1893,7 @@ export function ContractorPortal() {
   const threadCount = selNotes.length + selMedia.length;
   /** The message box shows on the press, and stays while a draft is in it. */
   const composeShown = composeOpen || !!noteText.trim() || noteAttachments.length > 0;
-  // Three pictures close a job, unless the office relaxed it for this worker.
+  // One picture or video closes a job by default (Settings → Workers raises it).
   /**
    * Pictures: a PROBLEM carries its own answer (the office said yes or no
    * when it raised it), and that beats the worker's photos-optional switch.
@@ -1813,9 +1932,9 @@ export function ContractorPortal() {
   const moreOk = moreAsk === 'no' || (moreAsk === 'yes' && moreDone);
   type PhotoStep = { id: string; ids: string[]; need: number; part?: boolean; loose?: boolean };
   const photoSteps: PhotoStep[] = !stageClose ? [] : [
-    // A stage REPORT: three pictures for each stage he finished.
+    // A stage REPORT: the close minimum for each stage he finished.
     ...(isReportClose ? closeFinishedIds.map(id => ({ id, ids: [id], need: MIN_CLOSE_MEDIA })) : []),
-    // An ordinary task: three for the job, as always — tagged to its first stage.
+    // An ordinary task: the close minimum for the job — tagged to its first stage.
     ...(!isReportClose && (!hasOwnStages || closeFinishedIds.length)
       ? [{ id: closeFinishedIds[0] ?? '', ids: closeFinishedIds, need: MIN_CLOSE_MEDIA, loose: true }] : []),
     ...(moreAsk === 'yes' ? extraIds.flatMap(id => extraPick[id] === 'part'
@@ -1823,12 +1942,14 @@ export function ContractorPortal() {
       : [{ id, ids: [id], need: MIN_CLOSE_MEDIA }]) : []),
   ];
   const stepMedia = (st: PhotoStep) => selMedia.filter(m => (m.stageId ? st.ids.includes(m.stageId) : !!st.loose));
-  const stepOk = (st: PhotoStep) => st.need >= MIN_CLOSE_MEDIA ? enoughMedia(stepMedia(st), st.need) : stepMedia(st).length >= st.need;
+  const stepOk = (st: PhotoStep) => enoughMedia(stepMedia(st), st.need);
   const closeCountFor = (sid: string) => selMedia.filter(m => m.stageId === sid).length;
   void closeCountFor;
   const canComplete = (stageClose
     ? finishedOk && moreOk && (!photosNeeded || photoSteps.every(stepOk))
     : (enoughMedia(selMedia, MIN_CLOSE_MEDIA) || !photosNeeded))
+    // A file still going up belongs to this close — its closing note names it.
+    && !uploading
     && !selectedAssignment?.completedAt && selProblem?.status !== 'waiting';
 
   type FilterKey = 'yesterday' | 'today' | 'tomorrow' | 'week' | 'all';
@@ -3575,9 +3696,18 @@ export function ContractorPortal() {
                   {/* The hidden pickers stay mounted at sheet level — the
                       closing screen's add button and the composer's paperclip
                       both reach them. */}
-                  <input ref={mediaInputRef} type="file"
+                  <input ref={mediaInputRef} type="file" data-input="files"
                     accept="image/*,video/*,.pdf,.doc,.docx,.xls,.xlsx,.txt,.zip"
                     multiple className="hidden" onChange={handleMediaUpload} />
+                  {/* The camera, asked for by NAME: one input with a mixed
+                      accept list opens a photo-only camera on Android, so a
+                      film needs its own input that asks for video. */}
+                  <input ref={photoCamRef} type="file" data-input="photo-camera"
+                    accept="image/*" capture="environment"
+                    className="hidden" onChange={handleMediaUpload} />
+                  <input ref={videoCamRef} type="file" data-input="video-camera"
+                    accept="video/*" capture="environment"
+                    className="hidden" onChange={handleMediaUpload} />
                   <input ref={noteAttachRef} type="file"
                     accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.txt,.zip"
                     multiple className="hidden" onChange={e => { const files = [...(e.target.files ?? [])]; e.target.value = ''; void handleNoteFiles(files); }} />
@@ -3950,14 +4080,14 @@ export function ContractorPortal() {
                                 </p>
                                 <p className="text-center text-gray-500 mb-2" style={{ fontSize: 12.5 }}>
                                   {step.part
-                                    ? w('part of it · one picture', 'חלק · תמונה אחת', 'часть · одна фотография')
-                                    : w('3 pictures — or 1 picture and 1 video', '3 תמונות — או תמונה וסרטון', '3 фото — или 1 фото и 1 видео')}
+                                    ? w('part of it · one picture or video', 'חלק · תמונה או סרטון', 'часть · одно фото или видео')
+                                    : needWords(step.need)}
                                   {photoSteps.length > 1 && <> · {closePhotoIdx + 1}/{photoSteps.length}</>}
                                 </p>
                                 <div className="flex items-center justify-center gap-2 mb-1">
                                   <span data-close-count className="px-3 py-1 rounded-full text-sm font-black tabular-nums"
                                     style={stepOk(step) ? { backgroundColor: '#dcfce7', color: '#15803d' } : { backgroundColor: '#fef3c7', color: '#92400e' }}>
-                                    {stepOk(step) && stepMedia(step).length < step.need ? '✓' : `${stepMedia(step).length}/${step.need}`}
+                                    {countText(stepMedia(step), step.need)}
                                   </span>
                                 </div>
                                 <div className="flex gap-2 mt-2">
@@ -3990,46 +4120,22 @@ export function ContractorPortal() {
                         {photosNeeded && !stageClose && (
                           <p className="text-center font-extrabold text-gray-800 mb-3"
                             style={{ fontSize: 16, lineHeight: 1.35 }}>
-                            {(s.addPicturesRule || (s.isRtl
-                              ? 'הוסיפו לפחות {n} תמונות כדי לסגור את העבודה'
-                              : 'Add at least {n} pictures to close the job'))
-                              .replace('{n}', String(MIN_CLOSE_MEDIA))}
+                            {MIN_CLOSE_MEDIA === 1
+                              ? (s.addOneFileRule || w('Add at least one picture or video to close the job', 'הוסיפו לפחות תמונה או סרטון אחד כדי לסגור את העבודה', 'Добавьте хотя бы одно фото или видео, чтобы закрыть работу'))
+                              : (s.addPicturesRule || w('Add at least {n} pictures to close the job', 'הוסיפו לפחות {n} תמונות כדי לסגור את העבודה', 'Добавьте минимум {n} фото, чтобы закрыть работу'))
+                                .replace('{n}', String(MIN_CLOSE_MEDIA))}
                           </p>
                         )}
-                        <div className="flex items-center gap-2">
-                          <button
-                            onClick={() => mediaInputRef.current?.click()}
-                            disabled={uploading}
-                            className="flex-1 py-3 rounded-xl text-sm font-bold text-white flex items-center justify-center gap-2 active:scale-[0.98]"
-                            style={{ backgroundColor: '#1e3a5f' }}>
-                            <Camera size={17} />
-                            {uploading ? s.uploading : s.tapToAddMedia}
-                          </button>
-                          {photosNeeded && !stageClose && (
-                            <span data-close-count
-                              className="flex-shrink-0 px-3 py-2 rounded-xl text-sm font-black tabular-nums"
-                              style={selMedia.length >= MIN_CLOSE_MEDIA
-                                ? { backgroundColor: '#dcfce7', color: '#15803d' }
-                                : { backgroundColor: '#fef3c7', color: '#92400e' }}>
-                              {selMedia.length}/{MIN_CLOSE_MEDIA}
-                            </span>
-                          )}
-                        </div>
-                        {uploadProgress && (
-                          <div className="mt-3">
-                            <div className="flex items-center justify-between text-xs text-gray-500 mb-1">
-                              <span className="flex items-center gap-1.5 truncate">
-                                <CloudUpload size={13} className="flex-shrink-0 text-[#4aa8d8]" />
-                                <span className="truncate">{uploadProgress.name}</span>
-                              </span>
-                              <span className="flex-shrink-0 ml-2 font-medium">{uploadProgress.pct}%</span>
-                            </div>
-                            <div className="h-1.5 rounded-full bg-gray-100 overflow-hidden">
-                              <div className="h-full bg-[#4aa8d8] transition-all duration-150"
-                                style={{ width: `${uploadProgress.pct}%` }} />
-                            </div>
-                          </div>
-                        )}
+                        {addMediaRow(photosNeeded && !stageClose ? (
+                          <span data-close-count
+                            className="flex-shrink-0 px-3 py-2 rounded-xl text-sm font-black tabular-nums self-center"
+                            style={enoughMedia(selMedia, MIN_CLOSE_MEDIA)
+                              ? { backgroundColor: '#dcfce7', color: '#15803d' }
+                              : { backgroundColor: '#fef3c7', color: '#92400e' }}>
+                            {countText(selMedia, MIN_CLOSE_MEDIA)}
+                          </span>
+                        ) : null)}
+                        {pendingTray}
                         {uploadError && (
                           <div className="flex items-center gap-2 text-xs text-amber-700 bg-amber-50 rounded-lg px-3 py-2 mt-3 border border-amber-200">
                             <AlertCircle size={13} className="flex-shrink-0" /> {uploadError}

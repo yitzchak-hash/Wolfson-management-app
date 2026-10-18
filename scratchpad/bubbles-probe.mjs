@@ -14,7 +14,7 @@
 //   5 · a task form's pill shows every stage the task is for.
 import { chromium } from 'playwright';
 
-const APP = 'http://localhost:5173';
+const APP = process.env.APP || 'http://localhost:5173';
 let fails = 0;
 const check = (ok, l, extra = '') => { console.log(`${ok ? 'PASS' : 'FAIL'} ${l}${extra ? ' — ' + extra : ''}`); if (!ok) fails++; };
 
@@ -201,10 +201,10 @@ await page.locator('[data-close-more-pick="no"]').click();   // 2026-10-18: "any
 await page.waitForTimeout(400);
 check(await page.locator('[data-close-photo-step="S3"]').count() === 1 && await page.locator('[data-close-photo-step]').count() === 1,
   'a picture step for Concealed units — the one he finished — and none for Extra drainage');
-check((await page.locator('[data-close-count]').innerText()).trim() === '0/3' && await page.locator('[data-close-now]').isDisabled(), '0/3, Send locked');
+check((await page.locator('[data-close-count]').innerText()).trim() === '0/1' && await page.locator('[data-close-now]').isDisabled(), '0/1 (one file by default since 2026-10-18), Send locked');
 await page.locator('input[type="file"][accept*="video"][accept*=".zip"]').setInputFiles(files(3));
 await page.waitForTimeout(2500);
-check((await page.locator('[data-close-count]').innerText()).trim() === '3/3', '3/3 after three pictures');
+check((await page.locator('[data-close-count]').innerText()).trim() === '✓ 3', '✓ 3 after three pictures');
 check(!(await page.locator('[data-close-now]').isDisabled()), 'Send unlocks');
 d = await store(page);
 const tagged = d.contractorPhotos.filter(p => p.assignmentId === report.id && p.stageId === 'S3').length;

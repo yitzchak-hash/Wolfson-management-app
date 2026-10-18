@@ -1,6 +1,6 @@
 import React, { useState, useRef, useMemo, useEffect } from 'react';
 import { useStore, loadProjectSnapshot } from '../data/store';
-import { QUESTION_KINDS, answersKind } from '../data/closeExtras';
+import { QUESTION_KINDS, answersKind, closeMinFilesOf } from '../data/closeExtras';
 import {
   Plus, Trash2, Save, Palette, ChevronUp, ChevronDown, Shield, Sun, Moon,
   Copy, Check, Download, Upload, HardDrive, X, HardDriveDownload, ToggleLeft, ToggleRight,
@@ -1062,6 +1062,7 @@ function ContractorsTab({ onToast }: { onToast: (msg: string, type?: 'success' |
   const stages = useStore(st => st.stages);
   const currentProjectId = useStore(st => st.currentProjectId);
   const partNeedsPicture = useStore(st => st.boardSettings.__tv?.partNeedsPicture !== false);
+  const closeMinFiles = useStore(st => closeMinFilesOf(st.boardSettings.__tv?.closeMinFiles));
   /** Which worker's "maps" / "stages" panel is open — one at a time. */
   const [reachOpen, setReachOpen] = useState<{ id: string; what: 'maps' | 'stages' | 'self' } | null>(null);
   const [openPerms, setOpenPerms] = useState<string | null>(null);
@@ -1109,6 +1110,23 @@ function ContractorsTab({ onToast }: { onToast: (msg: string, type?: 'success' |
         <span><b>{s.isRtl ? 'עבודה חלקית צריכה תמונה אחת' : 'A stage done in part needs one picture'}</b>
           <span className="text-gray-500"> — {s.isRtl ? 'כשהעובד סוגר עבודה ואומר שעשה רק חלק משלב' : 'when a worker closes a job and says he did only part of a stage'}</span></span>
       </label>
+      {/* How many pictures or videos close a job (owner, 2026-10-18: one by default). */}
+      <div data-close-min-files={closeMinFiles} className="flex flex-wrap items-center gap-x-3 gap-y-2 bg-white border border-gray-200 rounded-xl px-4 py-3 text-sm text-gray-700">
+        <span className="min-w-0 flex-1"><b>{s.isRtl ? 'קבצים לסגירת עבודה' : 'Pictures or videos to close a job'}</b>
+          <span className="text-gray-500"> — {s.isRtl
+            ? 'בכל שלב שהעובד סוגר; מעל אחת, תמונה וסרטון מספיקים'
+            : 'for each thing a worker closes; past one, a picture and a video are enough'}</span></span>
+        <span className="inline-flex rounded-lg border border-gray-200 overflow-hidden flex-shrink-0">
+          {[1, 2, 3, 4, 5].map(n => (
+            <button key={n} type="button" data-close-min-files-pick={n} data-on={closeMinFiles === n ? '1' : undefined}
+              onClick={() => setTvSetting('closeMinFiles', n === 1 ? undefined : n)}
+              className="w-9 h-9 text-sm font-bold tabular-nums border-s border-gray-200 first:border-s-0"
+              style={closeMinFiles === n ? { backgroundColor: '#1e3a5f', color: '#fff' } : { color: '#475569' }}>
+              {n}
+            </button>
+          ))}
+        </span>
+      </div>
       {/*
         The address box has moved to the TV tab, next to the other one.
 

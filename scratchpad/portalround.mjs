@@ -7,7 +7,7 @@
 // quick toggle that writes the two permission switches.
 import { chromium } from 'playwright';
 
-const APP = 'http://localhost:5173';
+const APP = process.env.APP || 'http://localhost:5173';
 let fails = 0;
 const check = (ok, l, extra = '') => { console.log(`${ok ? 'PASS' : 'FAIL'} ${l}${extra ? ' — ' + extra : ''}`); if (!ok) fails++; };
 
@@ -106,16 +106,16 @@ if (await page.locator('[data-close-finished-pick="yes"]').count()) await page.l
 await page.locator('[data-close-more-pick="no"]').click();
 await page.waitForTimeout(300);
 check(await page.locator('[data-closing-panel]').count() === 1
-  && (await page.locator('[data-closing-panel]').innerText()).includes('3 pictures'),
-  'Close job opens the closing screen asking for 3 pictures');
+  && (await page.locator('[data-closing-panel]').innerText()).includes('one picture or video'),
+  'Close job opens the closing screen asking for one picture or video (the default since 2026-10-18)');
 check(await page.locator('[data-close-now]').isDisabled(),
   'the final press is locked until the pictures are in');
-check((await page.locator('[data-close-count]').innerText()).trim() === '0/3',
-  'the count reads 0/3');
+check((await page.locator('[data-close-count]').innerText()).trim() === '0/1',
+  'the count reads 0/1');
 // The media input is the one that also takes video.
 await page.locator('input[type="file"][accept*="video"][accept*=".zip"]').setInputFiles(files(3));
 await page.waitForTimeout(2500);
-check((await page.locator('[data-close-count]').innerText()).trim() === '3/3',
+check((await page.locator('[data-close-count]').innerText()).trim() === '✓ 3',
   'three pictures in — the count follows', await page.locator('[data-close-count]').innerText());
 check(!(await page.locator('[data-close-now]').isDisabled()), 'and the final press unlocks');
 await page.locator('[data-close-now]').click();
