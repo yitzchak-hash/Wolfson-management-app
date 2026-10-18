@@ -292,6 +292,8 @@ const rowText = (page, sel) => page.$eval(sel, e => e.textContent.replace(/\s+/g
   await page.waitForTimeout(500);
   await page.locator('[data-close-finished-pick="yes"]').click();
   await page.waitForTimeout(300);
+  await page.locator('[data-close-more-pick="no"]').click();   // 2026-10-18: "anything else here today?"
+  await page.waitForTimeout(300);
   await page.locator('[data-close-now]').click();
   await page.waitForTimeout(1500);
   logs = await logsNow();

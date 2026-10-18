@@ -101,8 +101,12 @@ check(await page.locator('[data-close-job]').count() >= 1,
   'the picture prompt became a Close job button');
 await page.locator('[data-close-job]').last().click();
 await page.waitForTimeout(400);
+// 2026-10-18: the close asks "Did you finish doing …?" and "anything else?" first.
+if (await page.locator('[data-close-finished-pick="yes"]').count()) await page.locator('[data-close-finished-pick="yes"]').click();
+await page.locator('[data-close-more-pick="no"]').click();
+await page.waitForTimeout(300);
 check(await page.locator('[data-closing-panel]').count() === 1
-  && (await page.locator('[data-closing-panel]').innerText()).includes('at least 3 pictures'),
+  && (await page.locator('[data-closing-panel]').innerText()).includes('3 pictures'),
   'Close job opens the closing screen asking for 3 pictures');
 check(await page.locator('[data-close-now]').isDisabled(),
   'the final press is locked until the pictures are in');

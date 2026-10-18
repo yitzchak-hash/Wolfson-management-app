@@ -42,7 +42,7 @@ await ctx.addInitScript((S) => {
     ],
     contractors: [
       { id: 'C-jo', name: 'Joseph', category: 'ac', token: 'tok-jo', active: true, createdAt: '2026-01-01' },
-      { id: 'C-av', name: 'Avner', category: 'ac', token: 'tok-av', active: true, createdAt: '2026-01-01' },
+      { id: 'C-av', name: 'Worker B', category: 'ac', token: 'tok-av', active: true, createdAt: '2026-01-01' },
       { id: 'C-mx', name: 'Max', category: 'drywall', token: 'tok-mx', active: true, createdAt: '2026-01-01' },
       { id: 'C-zz', name: 'Zalman', category: 'general', token: 'tok-zz', active: true, createdAt: '2026-01-01' },
     ],

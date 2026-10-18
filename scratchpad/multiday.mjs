@@ -186,6 +186,10 @@ await page.waitForTimeout(600);
 // The new flow: Close job opens the closing screen; the final press closes.
 await page.locator('[data-close-job]').first().click();
 await page.waitForTimeout(300);
+// 2026-10-18: every close asks "Did you finish doing …?" and "anything else?"
+if (await page.locator('[data-close-finished-pick="yes"]').count()) await page.locator('[data-close-finished-pick="yes"]').click();
+await page.locator('[data-close-more-pick="no"]').click();
+await page.waitForTimeout(200);
 await page.locator('[data-close-now]').click();
 await page.waitForTimeout(400);
 // The finish-early ask exists only while days lie AHEAD of the clock —

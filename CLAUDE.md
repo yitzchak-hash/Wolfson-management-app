@@ -10173,3 +10173,69 @@ in portal-r48.
 Harness: `scratchpad/round52-probe.mjs` (24). Plan page: "More Than the Task
 Said" (`docs/artifacts/2026-10-15-more-than-the-task-said.html`), seven
 starred questions, waiting.
+
+---
+
+# v2 — More Than the Task Said, built (2026-10-18, "all starred, build it")
+
+The plan is the "More Than the Task Said" artifact (v3 copy in `docs/artifacts/`). All eight
+stars, plus three asks of his own: part of it needs ONE picture by default (a setting), one
+picture + one video count as three, and office questions glow on the notebook for whoever
+answers them.
+
+## The close asks, on EVERY task but a problem or a general job
+`stageClose` in ContractorPortal (it used to be `isReportClose`, stage reports only):
+1. **"Did you finish doing <the task's stages>?"** (`data-close-finished-q`) — names them;
+   skipped when the task names none. An ordinary task no longer falls back to the
+   apartment's current stage (only a stage REPORT does). No → "Which didn't you finish?" as before.
+2. **"Did you do anything else here today?"** (`data-close-more-pick=yes|no`) — always.
+3. Yes → **"Is it one of these?"** (`data-close-extras`): `[data-close-offlist]` "Not on this
+   list…" FIRST, then `extraStageChoices()` — the apartment's set, not done, not off, not the
+   task's own. Each pick is `data-close-extra-all|part`; Part of it requires its words
+   (`data-close-part-words=<id>`, MessageBox field mode with dictation + a memo's words);
+   Not on this list requires "What else did you do?" (`data-close-offlist-box`).
+   `data-close-more-next` unlocks only when every part has words and the off-list box is filled.
+4. **Photo steps** (`photoSteps`): a report → 3 per finished own stage; an ordinary task →
+   one step of 3 for the job (tagged to its first stage, untagged photos count — `loose`);
+   each extra stage done in full → 3; each part → 1 unless `BoardSetting.partNeedsPicture ===
+   false` (the `__tv` bag, Settings → Workers `data-part-needs-picture`, absent = on).
+   **`enoughMedia(items, 3)`** (`src/data/closeExtras.ts`): three of anything OR one picture
+   and one video. The problem close uses it too.
+The write: `stagesWorked` = own + extras, `stagesUnfinished` = own unfinished + parts,
+`extraStages`, `partWords`, `offList: OffListItem[]` — all BEFORE `completedAt`, so the
+store's standing completion rule ticks done / half done. The closing message carries
+`extrasLine()` in English at its top ("Also did today: …" / "Work that wasn't on the list: …").
+Harnesses that close a task must answer `[data-close-more-pick="no"]` now (multiday,
+portalround, bubbles-probe, activitycenter re-encoded).
+
+## Office questions (`closeExtras.ts` + `OffListQuestion.tsx`)
+`OffListItem {id, text, at, by, answer?}` on the task; `QuestionKind` = `'offList'` (the list
+grows by adding a kind); `User.answers?: QuestionKind[]` — **absent = an admin answers every
+kind, anybody else none** (`answersKind`). Settings → Users: `[data-user-answers=<id>]` chips.
+- **The notebook glow**: `asksUser(task, currentUser)` on a TaskBar → `.question-glow`
+  (index.css, violet pulse), `data-bar-question`, a "needs an answer" tag; a press opens the
+  question instead of the job. Never on a read-only sheet; a task with an open question is
+  never folded into a bundle.
+- **The question** (portalled z-180/181, sealed, capture Escape): "<worker> did work that
+  wasn't on the list" / "This is what he wrote:" (translated) / "What should we do with it?" →
+  `data-offlist-answer=stage|task|note`. `answerOffList(pid, taskId, itemId, choice)` (store,
+  one undo step): stage → `setApartmentMarksInProject` ticks it done (switches it on when the
+  apartment lacked it — a mark wins over the base set); task → a CLOSED task dated the close
+  day (`addAssignmentToProject`; a closed task never pings the worker and never raises the
+  overlap ask — `!a.completedAt` guard added); note → just the answer.
+- **`setApartmentMarksInProject`** writes another workspace's apartment (snapshot + Firestore
+  + a `stage_marks` history line in that workspace's log). Its undo is not recorded (foreign
+  apartments are outside trackUndo's snapshot); the task's answer is.
+- The drawer's done card shows `data-task-part-words` and `data-task-offlist` rows with an
+  Answer button (`data-task-offlist-answer`) for an unanswered one.
+
+## Stages carry a trade; a drop on another trade offers a new task (built by an agent)
+`Stage.trade?: 'ac' | 'drywall' | 'general'` (Settings → Stages `data-stage-trade`).
+`nextStageOfTrade` in stageMarks.ts. `PlannerMoveConfirm` with `crossTrade`: ★
+`data-move-confirm-new` "New <trade> task for <worker> on <day>" (one task on the dropped day,
+the job's next stage of that trade, original untouched, one undo step), `data-move-confirm-yes`
+"Give this task to <worker> as it is", `data-move-confirm-no`. Same trade keeps Yes / No.
+
+Harnesses: `scratchpad/closemore-probe.mjs` (36) · `scratchpad/crosstrade-probe.mjs` (31).
+Its trap: the closing screen has MessageBox paperclip inputs now — the MEDIA input is
+`input[type="file"][accept*="video"][accept*=".zip"]`, never the panel's first file input.

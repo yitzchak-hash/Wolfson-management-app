@@ -239,3 +239,11 @@ rewritten).
 | C-40 | 2026-10-12 | "in the groups … multiple select or right click the job and the whole full menu is not coming up … move stuff to trash or to different folders" | Done | Ctrl/Shift-click in the group; job menu with Move to (every group), Move to Trash, Put back, Lock, Wallboard; groupmenu-probe (22) |
 | C-41 | 2026-10-13 | "a board where I can pin jobs on … in a handwriting type of way … drag jobs on there … drag wherever she wants stuff from there to there" | Done | Pin board widget; pinboard-probe (25) |
 | C-42 | 2026-10-13 | "Regarding number one, yeah, I'm adding it now" (the AI search) | Done | built; the key is in Vercel; the live failure fixed 2026-10-15 (see V9-2) |
+| C-43 | 2026-10-18 | "it should just tell him did you finish doing <original stage names of task>?" | Done | `data-close-finished-q` · closemore-probe |
+| C-44 | 2026-10-18 | "Is it one of these?" — the rest of the open stages, "Not on this list" as the first bubble; part of it → he must write what he did | Done | `data-close-extras` · closemore-probe |
+| C-45 | 2026-10-18 | "all starred, build it" (the eight questions of More Than the Task Said) | Done | closemore-probe (36) · crosstrade-probe (31) |
+| C-46 | 2026-10-18 | A setting, on by default: part of it also needs one picture | Done | Settings → Workers `data-part-needs-picture` · closemore-probe §2 |
+| C-47 | 2026-10-18 | Where three pictures are asked, one picture and a video is also fine | Done | `enoughMedia` · closemore-probe §1 |
+| C-48 | 2026-10-18 | A job that needs an answer glows on the notebook for the person who answers it; a per-user setting for which categories they answer; pressing it asks | Done | Settings → Users `data-user-answers` · `data-bar-question` · closemore-probe §3 |
+| C-49 | 2026-10-18 | The question in plain English: "<worker> did work that wasn't on the list. This is what he wrote: …" then pick again | Done | `OffListQuestion` · closemore-probe §3 |
+

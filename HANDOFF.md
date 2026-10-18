@@ -64,7 +64,27 @@ with starred recommendations is published first; the owner says "approved" /
 "all yes" / answers by number; then it is built. Never build a redesign
 unasked.
 
-## Where things stand (2026-10-15, latest — four recordings of 15 Oct afternoon + undo for everything)
+## Where things stand (2026-10-18, latest — "More Than the Task Said" BUILT)
+His words: "so I want all starred. build it", plus three of his own — part of it also needs one
+picture (a setting, default on); one picture and a video count as three; a job waiting on an
+answer GLOWS on the notebook for whoever answers that category (a per-user setting), and
+pressing it asks, in plain English: "<worker> did work that wasn't on the list. This is what he
+wrote: …".
+- Built: the close on every task (not problems, not general jobs) — "Did you finish doing
+  <stages>?" → "Did you do anything else here today?" → "Is it one of these?" (open stages,
+  "Not on this list…" first) → part of it needs words + one picture → photo steps; the office
+  question (glow, three answers: it was a stage / its own task / keep as a note); Settings →
+  Users "Answers questions about", Settings → Workers "A stage done in part needs one picture";
+  stages carry a trade (Settings → Stages) and a cross-trade notebook drop offers a new task
+  (built by an agent in a worktree, merged).
+- Plan page v3 + v2 copies in docs/artifacts; his two comments on it answered in their threads.
+- Probes: closemore-probe (new), crosstrade-probe (new); multiday, portalround, bubbles-probe,
+  activitycenter re-encoded to answer "anything else?"; four audits green.
+- Not covered: undoing a "that was a stage" answer on ANOTHER workspace's apartment undoes the
+  answer but not the tick (foreign apartments are outside the undo snapshot).
+- **The reply he saw**: numbered list of his asks → Done, the link, "✅ nothing needed".
+
+## Where things stand (2026-10-15 — four recordings of 15 Oct afternoon + undo for everything)
 His ask: "check the folder for new videos". Four new recordings: 14:13 (2:05), 14:17 (3:36), 14:19 (0:28),
 15:39 (0:18) — ledger rows 10–13, feedback docs `docs/feedback/2026-10-15-14{1326,1727,1950}.md` and
 `2026-10-15-153941.md`, checklist V10–V13.

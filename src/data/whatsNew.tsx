@@ -30,6 +30,38 @@ export interface WhatsNewEntry {
 
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    date: '2027-02-07',
+    title: 'More than the task said',
+    items: [
+      {
+        title: 'Closing asks what else he did',
+        body: 'When a worker closes a job, his phone asks "Did you finish doing Fans and Concealed Units?", then '
+          + '"Did you do anything else here today?" Yes shows the stages still open on that apartment, with '
+          + '"Not on this list…" first. For each one he picks All of it or Part of it — part needs his words '
+          + 'and one picture (Settings → Workers can turn the picture off).',
+        demo: 'list',
+      },
+      {
+        title: 'One picture and a video count as three',
+        body: 'Where a stage needs three pictures, one picture and one video are enough.',
+        demo: 'list',
+      },
+      {
+        title: 'Questions glow on the notebook',
+        body: 'Work that wasn\'t on the list ("took out garbage") makes the task glow on the notebook for whoever '
+          + 'answers those questions — set it per person in Settings → Users. Press it and it asks: it was one of '
+          + 'the stages, make it a task of its own, or keep it as a note.',
+        demo: 'list',
+      },
+      {
+        title: 'Moving a task to another trade',
+        body: 'Each stage now says who does it — AC, Drywall or General (Settings → Stages). Drop an AC task on a '
+          + 'drywall worker and it offers a new drywall task for him on that day; the AC task stays where it is.',
+        demo: 'list',
+      },
+    ],
+  },
+  {
     date: '2027-02-06',
     title: 'Undo for everything, and the notebook asks before it moves',
     items: [

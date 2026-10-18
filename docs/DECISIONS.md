@@ -356,3 +356,13 @@ Time off belongs to the person and lives in one shared list.
 - **Plans are link-shared** rather than proxied (08-17): every plan the app
   shows becomes anyone-with-link readable.
 - The Zoho stage routing table for the import (08-17).
+- **2026-10-18 · "More Than the Task Said", all stars, plus three of his own:** (1) "Part of
+  it" needs ONE picture by default, with a setting (Settings → Workers) to turn it off; (2)
+  where three pictures are asked, one picture and one video are enough; (3) work that wasn't
+  on the list waits for an office answer — it GLOWS on the notebook for whoever answers that
+  kind of question, a per-person setting in Settings → Users (absent = admins answer all), and
+  pressing it asks in plain English: "<worker> did work that wasn't on the list. This is what
+  he wrote: …" → it was one of the stages / make it a task of its own / keep it as a note.
+  The first closing question names the task's own stages ("Did you finish doing Fans and
+  Concealed Units?"); "Not on this list…" is the first bubble of "Is it one of these?".
+

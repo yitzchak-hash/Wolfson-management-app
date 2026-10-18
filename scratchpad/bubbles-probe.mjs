@@ -188,16 +188,18 @@ check(await page.locator('[data-close-job]').count() === 1, 'the task sheet open
 // the close: did you finish everything? → No → which didn't you finish → pictures per finished stage
 await page.locator('[data-close-job]').first().click();
 await page.waitForTimeout(600);
-check(await page.locator('[data-close-stage]').count() === 1 && /finish everything you started/i.test(await page.locator('[data-close-stage]').innerText()),
-  'the close asks "Did you finish everything you started?"');
+check(await page.locator('[data-close-stage]').count() === 1 && /Did you finish doing Concealed units and Extra drainage\?/i.test(await page.locator('[data-close-stage]').innerText()),
+  'the close asks "Did you finish doing <the stages he started>?" (2026-10-18)');
 check(await page.locator('[data-close-now]').isDisabled(), 'Send waits for the answer');
 await page.locator('[data-close-finished-pick="no"]').click();
 await page.waitForTimeout(300);
 check(await page.locator('[data-close-unfinished-pick]').count() === 2, '"Which didn\'t you finish?" lists only the two he started');
 await page.locator(`[data-close-unfinished-pick="${custom.id}"]`).click();
 await page.locator('[data-close-carry-on]').click();
+await page.waitForTimeout(300);
+await page.locator('[data-close-more-pick="no"]').click();   // 2026-10-18: "anything else here today?"
 await page.waitForTimeout(400);
-check(await page.locator('[data-close-photo-step="S3"]').count() === 1 && /stage 1 of 1/i.test(await page.locator('[data-close-photo-step="S3"]').innerText()),
+check(await page.locator('[data-close-photo-step="S3"]').count() === 1 && await page.locator('[data-close-photo-step]').count() === 1,
   'a picture step for Concealed units — the one he finished — and none for Extra drainage');
 check((await page.locator('[data-close-count]').innerText()).trim() === '0/3' && await page.locator('[data-close-now]').isDisabled(), '0/3, Send locked');
 await page.locator('input[type="file"][accept*="video"][accept*=".zip"]').setInputFiles(files(3));
