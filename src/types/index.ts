@@ -531,6 +531,14 @@ export interface Stage {
    * puts every ordinary stage everywhere.
    */
   everywhere?: boolean;
+  /**
+   * WHO DOES IT (owner, 2026-10-18, "More Than the Task Said" section D):
+   * the trade that performs this stage — the same three words a worker's
+   * `category` carries. Absent = not set. The weekly notebook reads it when a
+   * task is dragged onto a worker of another trade: the new task it offers
+   * lands on the job's next stage of THAT worker's trade.
+   */
+  trade?: ContractorCategory;
   createdAt: string;
   updatedAt: string;
 }
@@ -2612,6 +2620,11 @@ export interface MainUiStrings {
   setFlatIs: string;
   setKindWork: string;
   setKindMarker: string;
+  /** Settings → Stages: who performs this stage (Stage.trade). */
+  stageTradeLabel: string;
+  stageTradeAc: string;
+  stageTradeDrywall: string;
+  stageTradeGeneral: string;
   setEverywhere: string;
   setCustomBadge: string;
   setWiden: string;
@@ -3585,6 +3598,10 @@ export const DEFAULT_MAIN_UI_STRINGS: MainUiStrings = {
   setFlatIs: 'The whole flat is',
   setKindWork: 'work',
   setKindMarker: 'marker',
+  stageTradeLabel: 'Who does it',
+  stageTradeAc: 'AC',
+  stageTradeDrywall: 'Drywall',
+  stageTradeGeneral: 'General',
   setEverywhere: 'on every apartment',
   setCustomBadge: 'custom · used on {n}',
   setWiden: 'widen to all',
@@ -4529,6 +4546,10 @@ export const HEBREW_MAIN_UI_STRINGS: MainUiStrings = {
   setFlatIs: 'הדירה כולה',
   setKindWork: 'עבודה',
   setKindMarker: 'סימון',
+  stageTradeLabel: 'מי מבצע',
+  stageTradeAc: 'מיזוג',
+  stageTradeDrywall: 'גבס',
+  stageTradeGeneral: 'כללי',
   setEverywhere: 'בכל דירה',
   setCustomBadge: 'מותאם · בשימוש ב-{n}',
   setWiden: 'להרחיב לכולם',

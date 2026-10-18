@@ -800,6 +800,30 @@ function StageSettings({ stages, updateStage, addStage, deleteStage, onToast, cu
                           : { backgroundColor: '#eff6ff', borderColor: '#bfdbfe', color: '#1d4ed8' }}>
                         {kind === 'marker' ? s.setKindMarker : s.setKindWork}
                       </button>
+                      {/* WHO DOES IT — the trade that performs this stage.
+                          Pressing the lit choice again clears it (absent = not set). */}
+                      {kind === 'work' && (() => {
+                        const trade = edit.trade !== undefined ? edit.trade : stage.trade;
+                        const opts: Array<[NonNullable<Stage['trade']>, string]> = [
+                          ['ac', s.stageTradeAc], ['drywall', s.stageTradeDrywall], ['general', s.stageTradeGeneral],
+                        ];
+                        return (
+                          <div data-stage-trade={stage.id} data-trade={trade ?? ''}
+                            className="flex items-center gap-1 text-[10px] text-gray-500 whitespace-nowrap">
+                            <span>{s.stageTradeLabel}:</span>
+                            {opts.map(([v, label]) => (
+                              <button key={v} type="button" data-stage-trade-pick={v} data-on={trade === v ? '' : undefined}
+                                onClick={() => commit(stage, { trade: trade === v ? undefined : v })}
+                                className="px-1.5 py-0.5 rounded-md border font-semibold"
+                                style={trade === v
+                                  ? { backgroundColor: '#1e3a5f', borderColor: '#1e3a5f', color: '#fff' }
+                                  : { backgroundColor: '#fff', borderColor: '#e2e8f0', color: '#475569' }}>
+                                {label}
+                              </button>
+                            ))}
+                          </div>
+                        );
+                      })()}
                       {kind === 'work' && !stage.custom && (
                         <label className="flex items-center gap-1 text-[10px] text-gray-500 whitespace-nowrap cursor-pointer">
                           <input type="checkbox" data-stage-everywhere={stage.id}

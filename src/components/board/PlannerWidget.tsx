@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { PlannerDropDialog, PlannerTaskDialog, PlannerRemoveDialog, PlannerMoveConfirm, TaskDialogResult } from './PlannerDialogs';
 import { ChevronUp, ChevronDown, Plus, X, CalendarDays, Maximize2, Eye, EyeOff, ClipboardList, Check, MapPin } from 'lucide-react';
 import {
-  Apartment, CanvasElement, Contractor, User, ContractorAssignment, Stage, personColor,
+  Apartment, CanvasElement, Contractor, ContractorCategory, User, ContractorAssignment, Stage, personColor,
   aptLabel, getStageName, stageNameIn, generalBuildingsText, projectShortName, projectColor } from '../../types';
 import { asksUser, openOffList } from '../../data/closeExtras';
 import { OffListQuestion } from '../tasks/OffListQuestion';
@@ -13,7 +13,7 @@ import {
   announceNotebookDrag, quickBoxHover, quickBoxTake,
 } from '../../data/rotaDrop';
 import { daysOf, dayNumberOf, workingRun } from '../../data/taskDays';
-import { progressOf, StageProgress, taskStageIds, recordStageIds } from '../../data/stageMarks';
+import { progressOf, StageProgress, taskStageIds, recordStageIds, nextStageOfTrade, anyStageOfTrade } from '../../data/stageMarks';
 import { familyNameFromFolderName } from '../../data/driveApi';
 import { needsNewDay, unfinishedOn } from '../../data/notFinished';
 import { unfinishedWords } from '../tasks/NotFinishedSheet';
@@ -696,6 +696,8 @@ export function PlannerWidget({
   const deleteAssignment = useStore(st => st.deleteContractorAssignment);
   const updateAssignmentInProject = useStore(st => st.updateAssignmentInProject);
   const deleteAssignmentInProject = useStore(st => st.deleteAssignmentInProject);
+  const addAssignment = useStore(st => st.addContractorAssignment);
+  const addAssignmentToProject = useStore(st => st.addAssignmentToProject);
 
   function setCell(key: string, entries: PlannerEntry[]) {
     const next = { ...cells };
@@ -1280,6 +1282,91 @@ export function PlannerWidget({
       explain: `${bar.label} goes back to its previous days${cid !== bar.task.contractorId ? ' and worker' : ''}. `
         + 'The task itself is not otherwise touched.',
     }, () => writeDays(bar.task, next, cid !== bar.task.contractorId ? { contractorId: cid } : {}, bar.projectId));
+    const cover = runCover(target.day);
+    if (Object.keys(cover).length) write(cover);
+  }
+  /**
+   * The TRADE a row is (owner, 2026-10-18 — "More Than the Task Said", D):
+   * only a contractor row has one, and only when the worker is known. A user
+   * row, a free name or a worker this machine has not got counts as the same
+   * trade, so it keeps the plain Yes / No.
+   */
+  const tradeOf = (pid: string): ContractorCategory | null => {
+    if (!pid.startsWith('c:')) return null;
+    return contractors.find(x => x.id === pid.slice(2))?.category ?? null;
+  };
+  const TRADE_WORD: Record<ContractorCategory, string> = { ac: 'AC', drywall: 'Drywall', general: 'General' };
+  /** Is this drop onto a worker of ANOTHER trade than the bar's own worker? */
+  function crossTradeOf(bar: TaskBarSeg, target: RotaHit): ContractorCategory | null {
+    const from = tradeOf(`c:${bar.task.contractorId}`);
+    const to = tradeOf(target.person);
+    return from && to && from !== to && target.person !== `c:${bar.task.contractorId}` ? to : null;
+  }
+  /** The job's next stage of a trade, read from the job's OWN workspace. */
+  function newTradeStage(bar: TaskBarSeg, trade: ContractorCategory): { stageId: string | null; stageName?: string; noStageLine?: string } {
+    const pid = bar.projectId ?? currentProjectId;
+    const list = [...stagesFor(pid)].sort((x, y) => x.order - y.order);
+    const word = TRADE_WORD[trade];
+    if (!anyStageOfTrade(list, trade)) {
+      return { stageId: null, noStageLine: `No stage is set as ${word} yet — set it in Settings → Stages.` };
+    }
+    const apt = bar.task.general || !bar.task.apartmentId ? null
+      : pid === currentProjectId
+        ? (jobById.get(bar.task.apartmentId) ?? useStore.getState().apartments.find(a => a.id === bar.task.apartmentId) ?? null)
+        : (loadProjectSnapshot(pid).apartments.find(a => a.id === bar.task.apartmentId) ?? null);
+    const id = nextStageOfTrade(apt, list, trade, { tipusStages: boardSettingsAll[pid]?.tipusStages });
+    if (!id) return { stageId: null, noStageLine: `Every ${word} stage on this job is already done or not needed — the new task has no stage.` };
+    const st = list.find(x => x.id === id);
+    return { stageId: id, stageName: st ? getStageName(st, LT === 'he-IL') : id };
+  }
+  /**
+   * The default of a cross-trade drop: a NEW task for the target worker on
+   * the dropped day, on the job's next stage of HIS trade. The original task
+   * is not touched. One undo step; the bar draws itself from the new task.
+   */
+  function newTaskForTrade(bar: TaskBarSeg, target: RotaHit) {
+    const cid = rowContractorId(target.person);
+    const trade = crossTradeOf(bar, target);
+    if (!cid || !trade) return;
+    const pid = bar.projectId ?? currentProjectId;
+    const { stageId } = newTradeStage(bar, trade);
+    const me = useStore.getState().currentUser;
+    const fields = {
+      apartmentId: bar.task.apartmentId ?? '',
+      buildingId: bar.task.buildingId ?? '',
+      ...(bar.task.general ? { general: bar.task.general } : {}),
+      contractorId: cid,
+      taskDescription: `${TRADE_WORD[trade]} work`,
+      dueDate: target.day,
+      stageId: stageId ?? null,
+      ...(stageId ? { stageIds: [stageId] } : {}),
+      priority: 'normal' as const,
+      attachments: [],
+      completedAt: null,
+      createdBy: me?.id ?? '',
+      createdByName: me?.name ?? 'Office',
+    };
+    const who = personOf(target.person, contractors, users).name;
+    track({
+      weight: 'content',
+      label: `New ${TRADE_WORD[trade]} task on ${bar.label} for ${who}`,
+      explain: `The ${TRADE_WORD[trade]} task made for ${who} on ${squareName(cellKey(target.person, target.day))} is taken away again. `
+        + `${bar.label}'s original task is not touched.`,
+    }, () => {
+      let id: string;
+      if (pid !== currentProjectId) {
+        id = addAssignmentToProject(pid, fields as never);
+      } else {
+        id = `T-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
+        addAssignment({ id, createdAt: new Date().toISOString(), ...fields } as never);
+      }
+      // A second trade on the same job and day is the point of this choice —
+      // not the overlap the store's "already has work" ask exists for.
+      const st = useStore.getState();
+      if (st.plannerAsk && st.plannerAsk.taskId === id && st.plannerAsk.overlap.taskId === bar.task.id) {
+        st.answerPlannerAsk('keep');
+      }
+    });
     const cover = runCover(target.day);
     if (Object.keys(cover).length) write(cover);
   }
@@ -2155,8 +2242,12 @@ export function PlannerWidget({
         const fromPid = `c:${bar.task.contractorId}`;
         const fromKey = cellKey(fromPid, bar.days[0]);
         const toKey = cellKey(target.person, target.day);
+        const otherTrade = crossTradeOf(bar, target);
+        const plan = otherTrade ? newTradeStage(bar, otherTrade) : null;
         return (
           <PlannerMoveConfirm
+            crossTrade={plan ? { stageName: plan.stageName, noStageLine: plan.noStageLine } : undefined}
+            onNew={otherTrade ? () => { setMoveAsk(null); newTaskForTrade(bar, target); } : undefined}
             jobName={bar.label}
             fromWho={personOf(fromPid, contractors, users).name}
             fromDay={dayName(fromKey)}

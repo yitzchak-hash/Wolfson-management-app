@@ -652,17 +652,65 @@ export function PlannerRemoveDialog({ jobName, taskName, onCancel, onDone }: {
  * 2026-10-15: "I want to see an approval: move the task you gave Yaakov on
  * Sunday to there — yes or no"). When the bar lands on a person in another
  * trade, it says so in words; the stages stay as the task has them.
+ *
+ * A worker of ANOTHER TRADE (owner, 2026-10-18 — "More Than the Task Said",
+ * section D) gets three choices instead of two: the default makes a NEW task
+ * for him on the job's next stage of his own trade and leaves the original
+ * where it is; the second gives the task over as it is; the third cancels.
+ * A same-trade drop keeps the plain Yes / No.
  */
-export function PlannerMoveConfirm({ jobName, fromWho, fromDay, toWho, toDay, fromTrade, toTrade, onCancel, onYes }: {
+export function PlannerMoveConfirm({ jobName, fromWho, fromDay, toWho, toDay, fromTrade, toTrade, crossTrade, onCancel, onYes, onNew }: {
   jobName: string;
   fromWho: string; fromDay: string;
   toWho: string; toDay: string;
   fromTrade?: string; toTrade?: string;
+  /** Set when the target worker is of another trade: what the new task would be. */
+  crossTrade?: { stageName?: string; noStageLine?: string };
   onCancel: () => void;
   onYes: () => void;
+  onNew?: () => void;
 }) {
   const samePerson = fromWho === toWho;
   const otherTrade = !samePerson && !!fromTrade && !!toTrade && fromTrade !== toTrade;
+  if (crossTrade && onNew && otherTrade) {
+    return (
+      <Shell onCancel={onCancel} title="Move this task?">
+        <p className="text-[13px] text-gray-700 m-0" data-move-confirm-text>
+          <b>{jobName}</b> — the task you gave <b>{fromWho}</b> on <b>{fromDay}</b> — dropped on <b>{toWho}</b> on <b>{toDay}</b>.
+        </p>
+        <p className="text-[12px] m-0 mt-2 px-2.5 py-1.5 rounded-lg bg-amber-50 border border-amber-200 text-amber-800" data-move-confirm-trade>
+          {toWho} is in <b>{toTrade}</b>, not {fromTrade}.
+        </p>
+        <div className="flex flex-col gap-2 mt-3" data-move-confirm-choices>
+          <button onClick={onNew} data-move-confirm-new autoFocus
+            className="w-full text-left px-3 py-2.5 rounded-lg border-2 transition-colors hover:brightness-95"
+            style={{ borderColor: '#1e3a5f', backgroundColor: '#eff6ff' }}>
+            <b className="text-[13px] text-[#1e3a5f]">★ New {toTrade} task for {toWho} on {toDay}</b>
+            <span className="block text-[11.5px] text-slate-600 mt-0.5" data-move-confirm-new-stage>
+              {crossTrade.stageName
+                ? <>Stage: <b>{crossTrade.stageName}</b> (the job’s next {toTrade} stage). </>
+                : <>{crossTrade.noStageLine} </>}
+              {fromWho}’s {fromTrade} task stays where it is.
+            </span>
+          </button>
+          <button onClick={onYes} data-move-confirm-yes
+            className="w-full text-left px-3 py-2.5 rounded-lg border transition-colors hover:bg-slate-50"
+            style={{ borderColor: '#e2e8f0' }}>
+            <b className="text-[13px] text-slate-800">Give this task to {toWho} as it is</b>
+            <span className="block text-[11.5px] text-slate-500 mt-0.5">
+              It moves to {toWho} on {toDay}; its stages do not change.
+            </span>
+          </button>
+        </div>
+        <Footer>
+          <button onClick={onCancel} data-move-confirm-no
+            className="px-3 py-1.5 rounded-lg border border-gray-200 text-[12.5px] font-semibold text-gray-600 hover:bg-gray-50">
+            Cancel
+          </button>
+        </Footer>
+      </Shell>
+    );
+  }
   return (
     <Shell onCancel={onCancel} title="Move this task?">
       <p className="text-[13px] text-gray-700 m-0" data-move-confirm-text>
