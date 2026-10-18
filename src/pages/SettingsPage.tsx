@@ -992,7 +992,7 @@ function UserSettings({ users, updateUser, addUser, onToast }: {
             </button>
             {/* Which questions this person answers (owner, 2026-10-18): a job
                 waiting on one of them glows on the notebook while they are
-                signed in. Absent = an admin answers them all. */}
+                signed in. Absent = they answer every kind. */}
             <div data-user-answers={user.id} className="basis-full flex flex-wrap items-center gap-2 text-xs text-gray-600 ps-11">
               <span className="font-semibold">{s.isRtl ? 'עונה על שאלות:' : 'Answers questions about:'}</span>
               {QUESTION_KINDS.map(k => {

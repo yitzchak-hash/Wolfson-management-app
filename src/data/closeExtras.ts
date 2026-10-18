@@ -38,11 +38,16 @@ export const QUESTION_KINDS: { id: QuestionKind; en: string; he: string }[] = [
   { id: 'offList', en: "Work that wasn't on the list", he: 'עבודה שלא הייתה ברשימה' },
 ];
 
-/** Is this person someone who answers this kind of question? */
+/**
+ * Is this person someone who answers this kind of question? Absent = YES:
+ * the office's roles are words like "Boss" and "Manager", nobody is called
+ * "admin", so an admins-only default meant a question nobody would ever
+ * see glow. Everybody answers until Settings → Users says otherwise.
+ */
 export function answersKind(user: Pick<User, 'role' | 'answers'> | null | undefined, kind: QuestionKind): boolean {
   if (!user) return false;
   if (user.answers) return user.answers.includes(kind);
-  return (user.role ?? '').toLowerCase().includes('admin');
+  return true;
 }
 
 /** The pieces of "not on the list" work still waiting on the office. */

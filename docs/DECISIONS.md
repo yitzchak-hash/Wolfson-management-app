@@ -360,7 +360,7 @@ Time off belongs to the person and lives in one shared list.
   it" needs ONE picture by default, with a setting (Settings → Workers) to turn it off; (2)
   where three pictures are asked, one picture and one video are enough; (3) work that wasn't
   on the list waits for an office answer — it GLOWS on the notebook for whoever answers that
-  kind of question, a per-person setting in Settings → Users (absent = admins answer all), and
+  kind of question, a per-person setting in Settings → Users (absent = everybody answers — no role in the office says "admin"), and
   pressing it asks in plain English: "<worker> did work that wasn't on the list. This is what
   he wrote: …" → it was one of the stages / make it a task of its own / keep it as a note.
   The first closing question names the task's own stages ("Did you finish doing Fans and

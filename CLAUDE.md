@@ -10210,8 +10210,9 @@ portalround, bubbles-probe, activitycenter re-encoded).
 
 ## Office questions (`closeExtras.ts` + `OffListQuestion.tsx`)
 `OffListItem {id, text, at, by, answer?}` on the task; `QuestionKind` = `'offList'` (the list
-grows by adding a kind); `User.answers?: QuestionKind[]` — **absent = an admin answers every
-kind, anybody else none** (`answersKind`). Settings → Users: `[data-user-answers=<id>]` chips.
+grows by adding a kind); `User.answers?: QuestionKind[]` — **absent = they answer every kind**
+(`answersKind`) — the office's roles are "Boss", "Manager", "Secretary"…; nobody's role says
+"admin", so an admins-only default would have lit nothing for anybody. Settings → Users: `[data-user-answers=<id>]` chips.
 - **The notebook glow**: `asksUser(task, currentUser)` on a TaskBar → `.question-glow`
   (index.css, violet pulse), `data-bar-question`, a "needs an answer" tag; a press opens the
   question instead of the job. Never on a read-only sheet; a task with an open question is

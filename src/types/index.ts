@@ -333,7 +333,7 @@ export interface User {
   /**
    * The kinds of question this person answers (owner, 2026-10-18) — a job
    * waiting on one of them glows on the notebook while they are signed in.
-   * Absent = an admin answers every kind, anybody else none.
+   * Absent = they answer every kind (nobody's role says "admin").
    */
   answers?: QuestionKind[];
 }

@@ -170,7 +170,7 @@ await page.waitForTimeout(800);
 const glow = () => page.locator('[data-node-id="CE-rota"] [data-bar-question]').count();
 check(await glow() === 2, '3 · both tasks glow on the notebook for the admin', String(await glow()));
 check(/needs an answer/.test(await page.locator('[data-bar-question-tag]').first().innerText().catch(() => '')), '3 · and say "needs an answer"');
-await page.evaluate(() => { const s = window.__store.getState(); window.__store.setState({ currentUser: { ...s.currentUser, role: 'office' } }); });
+await page.evaluate(() => { const s = window.__store.getState(); window.__store.setState({ currentUser: { ...s.currentUser, role: 'Secretary', answers: [] } }); });
 await page.waitForTimeout(400);
 check(await glow() === 0, '3 · somebody who does not answer these questions sees no glow');
 await page.evaluate(() => { const s = window.__store.getState(); window.__store.setState({ currentUser: { ...s.currentUser, answers: ['offList'] } }); });

@@ -88,3 +88,4 @@ work here" filter · `boardsize.mjs` left-edge auto-pan · `gapboard.mjs` ·
 timeout · `round33.mjs` (a `data-map-project` hook removed 09-03) ·
 `round40-probe` "a passed stage is crossed off" (Ready to start is a marker
 under the set model). `round28.mjs` is green again (10-08).
+- ✎ "This Week First" (2026-10-18, plan page, 9 questions): the notebook opens on this week, turns the page on Sunday, last week folded, a week ribbon, weeks added / put away by themselves, a Dashboard card.

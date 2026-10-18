@@ -246,4 +246,6 @@ rewritten).
 | C-47 | 2026-10-18 | Where three pictures are asked, one picture and a video is also fine | Done | `enoughMedia` · closemore-probe §1 |
 | C-48 | 2026-10-18 | A job that needs an answer glows on the notebook for the person who answers it; a per-user setting for which categories they answer; pressing it asks | Done | Settings → Users `data-user-answers` · `data-bar-question` · closemore-probe §3 |
 | C-49 | 2026-10-18 | The question in plain English: "<worker> did work that wasn't on the list. This is what he wrote: …" then pick again | Done | `OffListQuestion` · closemore-probe §3 |
+| C-50 | 2026-10-18 | "Explain what exactly needs me" | Done | answered in chat; found nobody's role says "admin" → the question glow now shows for everybody until unticked |
+| C-51 | 2026-10-18 | On Sunday the notebook should show this week, with easy access to last week and the weeks ahead — "a good, good plan" | Waiting | plan page "This Week First" (9 starred questions) |
 

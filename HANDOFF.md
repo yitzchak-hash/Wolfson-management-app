@@ -64,7 +64,21 @@ with starred recommendations is published first; the owner says "approved" /
 "all yes" / answers by number; then it is built. Never build a redesign
 unasked.
 
-## Where things stand (2026-10-18, latest — "More Than the Task Said" BUILT)
+## Where things stand (2026-10-18, latest — what needs him, and the "This Week First" plan)
+- He asked what exactly needs him. Read production: no user's role says "admin" (Boss, Manager,
+  Secretary, Architect, Dev), so the admins-only default would have lit the question glow for NOBODY.
+  `answersKind` now defaults to everybody; Settings → Users narrows it. No stage carries a trade yet
+  — setting them by REST was refused here (shared-resource write), so it is his ten presses in
+  Settings → Stages (suggested: every Wolfson/Netiv work stage AC, AC installation AC, Installation
+  of Geves Drywall; Sold/Start and Access Panels his call).
+- Why the notebook shows last week on Sunday: the Job Board's main notebook runs 19 Jul–25 Oct,
+  11 weeks put away, the four left drawn oldest first in a node 2,939px tall — open-on-today only
+  works when the widget scrolls inside, and nothing turns the page on Sunday. There is no notebook
+  on the Dashboard page (it holds Goals and Tap-in).
+- Plan page "This Week First" (https://claude.ai/artifact/L7phyvgvyaTBCyaX2yz7bt), 9 starred
+  questions — waiting on his answers.
+
+## Where things stand (2026-10-18 — "More Than the Task Said" BUILT)
 His words: "so I want all starred. build it", plus three of his own — part of it also needs one
 picture (a setting, default on); one picture and a video count as three; a job waiting on an
 answer GLOWS on the notebook for whoever answers that category (a per-user setting), and
