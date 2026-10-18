@@ -239,6 +239,13 @@ export interface BoardSetting {
    */
   partNeedsPicture?: boolean;
   /**
+   * How many pictures or videos each close step needs (owner, 2026-10-18:
+   * "a minimum of one file, either a video or a picture"). Absent = 1;
+   * 1..5. Past one, a picture and a video are enough on their own. In the
+   * app-wide `__tv` bag, written through `setTvSetting`.
+   */
+  closeMinFiles?: number;
+  /**
    * Which board the wallboard shows. Empty is the workspace's main board.
    * Set by the top-level admin in app settings — never on the TV, which has no
    * keyboard and is read-only by design.
@@ -1861,8 +1868,10 @@ export interface ContractorUiStrings {
   /** The closing screen's one question over the message box (2026-10-15). */
   closingAskOffice?: string;
   typeWhatYouDid?: string;
-  /** Names MIN_CLOSE_MEDIA through {n} — change the constant and the sentence follows. */
+  /** Names the close minimum (`closeMinFiles`, 2+) through {n}; one file reads `addOneFileRule`. */
   addPicturesRule?: string;
+  /** The same rule when ONE file is enough — "one picture or video". */
+  addOneFileRule?: string;
   thisTaskLabel?: string;
   tapToOpenLabel?: string;
   /** The worker's-phone round (2026-09-03) — optional, same rule. */
@@ -2030,6 +2039,7 @@ export const DEFAULT_CONTRACTOR_UI_STRINGS: ContractorUiStrings = {
   closingAskOffice: 'Anything the office should know?',
   typeWhatYouDid: 'Type what you did…',
   addPicturesRule: 'Add at least {n} pictures to close the job',
+  addOneFileRule: 'Add at least one picture or video to close the job',
   thisTaskLabel: 'This task',
   tapToOpenLabel: 'tap to open',
   taskMessagesLabel: 'Task messages',
@@ -2189,6 +2199,7 @@ export const HEBREW_CONTRACTOR_UI_STRINGS: ContractorUiStrings = {
   closingAskOffice: 'משהו שהמשרד צריך לדעת?',
   typeWhatYouDid: 'כתבו מה עשיתם…',
   addPicturesRule: 'הוסיפו לפחות {n} תמונות כדי לסגור את העבודה',
+  addOneFileRule: 'הוסיפו לפחות תמונה או סרטון אחד כדי לסגור את העבודה',
   thisTaskLabel: 'המשימה הזאת',
   tapToOpenLabel: 'הקישו לפתיחה',
   taskMessagesLabel: 'הודעות המשימה',
@@ -2353,6 +2364,7 @@ export const RUSSIAN_CONTRACTOR_UI_STRINGS: ContractorUiStrings = {
   closingAskOffice: 'Что-нибудь, что офису нужно знать?',
   typeWhatYouDid: 'Напишите, что вы сделали…',
   addPicturesRule: 'Добавьте минимум {n} фото, чтобы закрыть работу',
+  addOneFileRule: 'Добавьте хотя бы одно фото или видео, чтобы закрыть работу',
   thisTaskLabel: 'Эта задача',
   tapToOpenLabel: 'нажмите, чтобы открыть',
   taskMessagesLabel: 'Сообщения по задаче',

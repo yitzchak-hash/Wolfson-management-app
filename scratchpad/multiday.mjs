@@ -9,7 +9,7 @@
 // the job to the when-done stage.
 import { chromium } from 'playwright';
 
-const APP = 'http://localhost:5173';
+const APP = process.env.APP || 'http://localhost:5173';
 let fails = 0;
 const check = (ok, l, extra = '') => { console.log(`${ok ? 'PASS' : 'FAIL'} ${l}${extra ? ' — ' + extra : ''}`); if (!ok) fails++; };
 

@@ -567,6 +567,25 @@ export async function findOrCreateFolderViaBackend(parentId: string, name: strin
 }
 
 /**
+ * The same, asked ONCE per folder per visit. A batch of pictures used to ask
+ * for "Photos" and then the stage subfolder for EVERY file — two serverless
+ * round trips each, before a single byte moved. The promise is kept, so files
+ * uploading side by side share one lookup; a failure is forgotten so the next
+ * press tries again.
+ */
+const folderOnce = new Map<string, Promise<string>>();
+export function findOrCreateFolderOnce(parentId: string, name: string): Promise<string> {
+  const key = `${parentId}|${name}`;
+  let p = folderOnce.get(key);
+  if (!p) {
+    p = findOrCreateFolderViaBackend(parentId, name);
+    folderOnce.set(key, p);
+    p.catch(() => { if (folderOnce.get(key) === p) folderOnce.delete(key); });
+  }
+  return p;
+}
+
+/**
  * Upload ANY size file directly to Drive via a resumable session.
  * Browser → /api/drive-session (tiny JSON) → browser PUT directly to Drive.
  * No Vercel body limit applies; shows real upload progress.

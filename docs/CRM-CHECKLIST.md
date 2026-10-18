@@ -254,3 +254,6 @@ Legend: ☑ shipped · ☐ decided, not built · ◐ built in part · ✎ needs 
 - ☑ Stages carry a trade (AC / Drywall / General); a task dropped on another trade's worker offers a new task on his next stage of that trade (2026-10-18)
 - ☑ The worker's weekly calendar: newest day first; a single done task green like the fold (2026-10-15)
 - ☑ Undo for everything: tasks added / edited / completed / deleted (with their messages and photos), notebook bars moved / resized / taken off, stage ticks, notes, apartment fields, time off, problems, tasks in other workspaces — one step each, content steps ask first; undo arrows in the header on every page (2026-10-15)
+- ☑ One picture or video closes each step by default; Settings → Workers raises it (1–5); past one, a picture + a video are enough; a PDF does not count (2026-10-18)
+- ☑ Closing screen: Take photo / Record video / Choose files — the camera asked for video by name, for Android tablets (2026-10-18)
+- ☑ Faster worker uploads: three at a time, one folder lookup per batch, share not waited for, a preview + progress per file the moment it is picked (2026-10-18)

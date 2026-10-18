@@ -104,10 +104,10 @@ check(!(await page.locator('[data-close-more-next]').isDisabled()), '1 · with b
 await page.locator('[data-close-more-next]').click();
 await page.waitForTimeout(300);
 const step1 = await page.locator('[data-close-photo-step]').getAttribute('data-step-need');
-check(step1 === '3', '1 · the job\'s own step needs three', step1);
+check(step1 === '1', '1 · the job\'s own step needs one file by default (2026-10-18)', step1);
 await page.locator(media).first().setInputFiles([pic(1), film]);
 await page.waitForTimeout(2500);
-check((await page.locator('[data-close-count]').innerText()).trim() === '✓', '1 · one picture and one video are enough', await page.locator('[data-close-count]').innerText());
+check((await page.locator('[data-close-count]').innerText()).trim() === '✓ 2', '1 · a picture and a video are (more than) enough', await page.locator('[data-close-count]').innerText());
 await page.locator('[data-close-photo-next]').click();
 await page.waitForTimeout(300);
 check(await page.locator('[data-close-photo-step="S4"]').getAttribute('data-step-need') === '1', '1 · the part-of-it stage asks for ONE picture');

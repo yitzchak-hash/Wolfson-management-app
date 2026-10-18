@@ -1,8 +1,8 @@
 /**
  * The worker's close, the parts that are pure arithmetic (owner, 2026-10-18,
  * "More Than the Task Said"):
- *  - the picture rule: three pictures close a stage — or one picture and one
- *    video, which show the work as well as three stills do;
+ *  - the picture rule: one picture or video closes a step by default (the
+ *    office can raise it); past one, a picture and a video are enough;
  *  - which stages "Is it one of these?" offers: the ones still open on this
  *    apartment, never the task's own;
  *  - the office's questions: work that was not on the list waits for an
@@ -12,15 +12,36 @@ import type { Apartment, ContractorAssignment, OffListItem, QuestionKind, Stage,
 import { shotKindOf } from './sitePhotos';
 import { stageSetOf, stageStateOf, type SetContext } from './stageMarks';
 
-export const MIN_CLOSE_MEDIA = 3;
+/**
+ * How many files a close step needs (owner, 2026-10-18: "a minimum of one
+ * file, either a video or a picture"). The office can raise it in Settings →
+ * Workers — `BoardSetting.closeMinFiles` in the app-wide `__tv` bag, absent
+ * = 1, clamped to 1..5.
+ */
+export const DEFAULT_CLOSE_MIN_FILES = 1;
+export const MAX_CLOSE_MIN_FILES = 5;
+export function closeMinFilesOf(v: number | undefined | null): number {
+  const n = Math.round(Number(v));
+  if (!Number.isFinite(n) || n < 1) return DEFAULT_CLOSE_MIN_FILES;
+  return Math.min(MAX_CLOSE_MIN_FILES, n);
+}
 
 type MediaLike = { fileType?: 'image' | 'video' | 'file'; filename: string; mimeType?: string };
 
-/** Enough to close? `need` 3 → three of anything, or one picture AND one video. */
+/** Only pictures and videos count toward a close — a PDF is not proof of work. */
+export function shotCount(items: MediaLike[]): number {
+  return items.filter(m => shotKindOf(m as never) !== null).length;
+}
+
+/**
+ * Enough to close? `need` pictures or videos — and for any need of two or
+ * more, one picture AND one video are enough on their own: a video shows the
+ * work as well as several stills do.
+ */
 export function enoughMedia(items: MediaLike[], need: number): boolean {
-  if (items.length >= need) return true;
-  if (need < MIN_CLOSE_MEDIA) return false;
-  const kinds = items.map(m => shotKindOf(m as never));
+  const kinds = items.map(m => shotKindOf(m as never)).filter(k => k !== null);
+  if (kinds.length >= need) return true;
+  if (need < 2) return false;
   return kinds.includes('image') && kinds.includes('video');
 }
 

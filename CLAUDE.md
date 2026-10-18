@@ -10240,3 +10240,65 @@ the job's next stage of that trade, original untouched, one undo step), `data-mo
 Harnesses: `scratchpad/closemore-probe.mjs` (36) · `scratchpad/crosstrade-probe.mjs` (31).
 Its trap: the closing screen has MessageBox paperclip inputs now — the MEDIA input is
 `input[type="file"][accept*="video"][accept*=".zip"]`, never the panel's first file input.
+
+---
+
+# v2 — one file closes a job, the camera asks for video, uploads go side by side (2026-10-18)
+
+## One picture or video by default (`src/data/closeExtras.ts`)
+Owner: "a minimum of one file, either a video or a picture". Every close step —
+a stage report's per-stage step, an ordinary task's job step, an extra stage
+done in full, a problem's close — needs `closeMinFiles` files, **absent = 1**.
+`BoardSetting.closeMinFiles` rides the app-wide `__tv` bag (written through
+`setTvSetting`, no new state key); Settings → Workers has a 1–5 row beside the
+part-of-it checkbox (`[data-close-min-files]`, `[data-close-min-files-pick=n]`;
+1 writes undefined). `closeMinFilesOf(v)` clamps; `enoughMedia(items, need)`
+counts only PICTURES and VIDEOS (`shotKindOf` — a PDF is not proof of work) and,
+for any need of two or more, one picture AND one video are enough on their own.
+`shotCount` is what the pill counts: `0/1` while short, `✓ n` once enough. A
+part-of-it step keeps its own switch (`partNeedsPicture` → one). Words: the
+step line is `needWords(n)` in the portal ("one picture or video" / "3 pictures
+— or 1 picture and 1 video", en/he/ru); a problem's headline is
+`addOneFileRule` (new optional ContractorUiStrings key, three presets) at one
+and `addPicturesRule` with `{n}` above it. `MIN_CLOSE_MEDIA` inside the portal
+is now that setting, not a constant.
+
+## Take photo · Record video · Choose files
+One `<input>` with a mixed accept list opens a PHOTO-ONLY camera on Android
+Chrome, so the closing screen's single add button became three finger-sized
+buttons (`[data-add-photo-camera]` → `input[data-input="photo-camera"]`
+`accept="image/*" capture="environment"`; `[data-add-video-camera]` →
+`input[data-input="video-camera"]` `accept="video/*" capture="environment"`;
+`[data-add-files]` → the existing multi-file input, no capture). All three feed
+the same `handleMediaUpload`. Harnesses keep selecting the files input by
+`input[type="file"][accept*="video"][accept*=".zip"]` — the video-camera input
+has no `.zip`, so the selector stays unique.
+
+## What made uploads slow, and what changed
+Per picked file the old path ran, one file after another: TWO `/api/folder`
+lookups (Photos, then the stage folder — each a serverless call doing a Drive
+list), `/api/drive-session`, the PUT, then an AWAITED `/api/share`. Nothing
+showed on screen but one progress bar for the current file. Now:
+- **`findOrCreateFolderOnce`** (driveApi) keeps the lookup's promise per
+  (parent, name) for the visit — one lookup per batch, shared by files going
+  up side by side; a failure is forgotten so the next press retries. The note
+  and memo paths use it too.
+- **`runPool(items, 3, fn)`** (`src/data/uploadPool.ts`) — three files at once
+  (`UPLOAD_LANES`); one failing never stops the others.
+- **The per-file share is fire-and-forget** — the Photos folder is link-shared
+  and its children inherit.
+- **Every picked file shows at once** (`pendingUploads`, `[data-upload-tray]`,
+  `[data-upload-tile=up|done|err]`): its own preview from the phone's copy and
+  its own progress bar; finished tiles step aside 1.6s after the batch.
+- The assignment and the step's stage tag are captured at the PICK, so a
+  worker walking on to the next picture step mid-upload files nothing wrong.
+- Close stays locked while a file is still going up (its closing note names it).
+- Unchanged on purpose: Drive gets the ORIGINAL bytes in one PUT (the EXIF
+  rule — no shrinking for Drive, no re-encoding of video). With bandwidth as
+  the real floor, parallel lanes help most with a phone link's latency, not
+  its raw speed.
+Measured (`scratchpad/media-r53.mjs`, stubbed backend: folder 400ms, session
+300ms, PUT 1.5s, share 300ms): six files 18.4s → 5.3s (3.5×), 12 folder
+lookups → 2, previews on screen in ~0.3s. Run with `APP` (keyless),
+`APP_KEYED` (a server started with `VITE_DRIVE_API_KEY`) and optionally
+`APP_BASE` (the previous build, for the before-number).
