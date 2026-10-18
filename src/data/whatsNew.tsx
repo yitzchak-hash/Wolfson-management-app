@@ -30,6 +30,30 @@ export interface WhatsNewEntry {
 
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    date: '2027-02-10',
+    title: 'Plans on the building map',
+    items: [
+      {
+        title: 'The plan is on the map sheet',
+        body: 'When a worker taps an apartment on the building map, the sheet with "I\'m going to work here" now '
+          + 'shows its engineered plan — tap to open it big, with pins, Download and Mark up like usual — plus the '
+          + 'floor and the type.',
+        demo: 'list',
+      },
+      {
+        title: 'Two plan switches for workers',
+        body: 'Settings → Workers: "Open the engineered plans for the units they work in" (on for everyone) and the '
+          + 'new "Open any engineered plan from the building diagram" (Technician and Manager).',
+        demo: 'list',
+      },
+      {
+        title: 'A Standard bubble',
+        body: 'A standard apartment wears a small blue "Standard" bubble on its plan and on its map sheet.',
+        demo: 'list',
+      },
+    ],
+  },
+  {
     date: '2027-02-09',
     title: 'The Done line, and one notebook',
     items: [

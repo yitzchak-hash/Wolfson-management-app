@@ -53,6 +53,7 @@ import { placeLabel } from '../data/taskMove';
 import { orderTaskRows, isoToday } from '../components/portal/portalOrder';
 import { cachedPlanAspect, measurePlanAspect } from '../data/planAspect';
 import { shrinkImageToDataUrl } from '../data/imageMeta';
+import { rowNumOf } from '../data/floorRows';
 // Lazy — the studio carries pdf.js, and a worker who never opens a plan should
 // not download it (the drawer's precedent).
 const PlanAnnotator = lazy(() =>
@@ -1176,9 +1177,16 @@ export function ContractorPortal() {
    * once per plan on this phone). Landscape √2 stands in until it is known.
    */
   const [planAspectFor, setPlanAspectFor] = useState<Record<string, number>>({});
+  /**
+   * The apartment whose plan is on screen: the open task's, else the map
+   * sheet's (owner, 2026-10-18 — the plan also shows on the "I'm going to
+   * work here" sheet). Only one of the two sheets is ever open at once.
+   */
+  const planAptId = selectedAssignment?.apartmentId || workHere?.aptId || null;
+  useEffect(() => { if (workHere?.aptId) setShowPlansPdf(false); }, [workHere?.aptId]);
   const sheetPlanId = (() => {
-    if (!selectedAssignment) return null;
-    const ap = apartments.find(x => x.id === selectedAssignment.apartmentId);
+    if (!planAptId) return null;
+    const ap = apartments.find(x => x.id === planAptId);
     return (ap?.plansPdfLink ? extractFileId(ap.plansPdfLink) : null) ?? (ap ? autoPlanFor[ap.id] ?? null : null);
   })();
   useEffect(() => {
@@ -1193,8 +1201,8 @@ export function ContractorPortal() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showPlansPdf, sheetPlanId]);
   useEffect(() => {
-    if (!selectedAssignment) return;
-    const apt = apartments.find(x => x.id === selectedAssignment.apartmentId);
+    if (!planAptId) return;
+    const apt = apartments.find(x => x.id === planAptId);
     if (!apt || apt.plansPdfLink || !apt.driveLink || !isUploadBackendConfigured()) return;
     if (apt.id in autoPlanFor) return;
     let dead = false;
@@ -1203,10 +1211,10 @@ export function ContractorPortal() {
       .catch(() => { if (!dead) setAutoPlanFor(m => ({ ...m, [apt.id]: null })); });
     return () => { dead = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedAssignment?.apartmentId, apartments]);
+  }, [planAptId, apartments]);
   useEffect(() => {
-    if (!selectedAssignment) return;
-    const apt = apartments.find(x => x.id === selectedAssignment.apartmentId);
+    if (!planAptId) return;
+    const apt = apartments.find(x => x.id === planAptId);
     const planId = (apt?.plansPdfLink ? extractFileId(apt.plansPdfLink) : null) ?? (apt ? autoPlanFor[apt.id] ?? null : null);
     ensureDriveShared(planId);
     if (apt && planId) {
@@ -1215,7 +1223,7 @@ export function ContractorPortal() {
         .sort((a, b) => b.version - a.version)[0];
       ensureDriveShared(latest?.driveFileId);
     }
-  }, [selectedAssignment, apartments, planAnnotations, autoPlanFor]);
+  }, [planAptId, apartments, planAnnotations, autoPlanFor]);
 
   const assignedAptIds = new Set(assignments.map(a => a.apartmentId));
 
@@ -2071,6 +2079,198 @@ export function ContractorPortal() {
       </div>
     );
   }
+
+  /**
+   * The plan, as the worker sees it: the guess warning, the title row (with
+   * the Standard bubble on a standard apartment — owner, 2026-10-18), the
+   * office's markup link, and the sheet that opens big with its pins,
+   * Download and Mark up. One drawing for the task sheet AND the map's
+   * apartment sheet, so the two can never drift. A plain function, never a
+   * component declared in the render body (the remount trap).
+   */
+  const renderPlanBlock = (apt: Apartment | undefined, plansPdfFileId: string | null, planIsGuess: boolean) => (
+plansPdfFileId && (
+                  <div>
+                    {planIsGuess && (
+                      <div data-plan-auto-warning className="mb-2 flex items-center gap-2 px-3 py-2 rounded-xl text-[12.5px] font-bold text-white"
+                        style={{ backgroundColor: '#dc2626' }}>
+                        <span className="w-5 h-5 rounded-full bg-white text-red-600 flex items-center justify-center text-[12px] font-black flex-shrink-0">!</span>
+                        {w('Latest-activity plan, auto-selected — the office has not starred one yet',
+                          'תוכנית עם הפעילות האחרונה נבחרה אוטומטית — המשרד עוד לא סימן תוכנית בכוכב',
+                          'План с последней активностью выбран автоматически — офис ещё не отметил план')}
+                      </div>
+                    )}
+                    {/* The header row is the title and View/Hide, nothing else
+                        (owner, 2026-10-07: "Markup should not be here") — Mark up
+                        and Download sit ON the plan once it is open. */}
+                    <div className="flex items-center justify-between mb-1.5" data-plan-head>
+                      <h3 className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider flex items-center gap-1.5">
+                        <BookOpen size={11} /> {s.engineeringPlans}
+                        {apt?.classification === 'standard' && (
+                          <span data-plan-standard
+                            className="ms-1 normal-case tracking-normal text-[10.5px] font-bold px-2 py-0.5 rounded-full"
+                            style={{ backgroundColor: '#e0f2fe', color: '#0c4a6e', border: '1px solid #bae6fd' }}>
+                            {w('Standard', 'סטנדרט', 'Стандарт')}
+                          </span>
+                        )}
+                      </h3>
+                      <button data-plan-toggle onClick={() => setShowPlansPdf(v => !v)}
+                        className="text-xs px-2.5 py-1 rounded-lg bg-[#1e3a5f] text-white font-medium">
+                        {showPlansPdf ? s.hide : s.view}
+                      </button>
+                    </div>
+
+                    {/* The office's markup, when there is one.
+                        A straight Drive link rather than the markup studio: on a
+                        phone on site the studio would pull the whole PDF down to
+                        render it, and all the contractor needs is to look at what
+                        was drawn — which the Drive viewer does natively, with the
+                        markup layer already switched on. */}
+                    {(() => {
+                      const latest = apt
+                        ? planAnnotations
+                            .filter(x => x.apartmentId === apt.id && x.planFileId === plansPdfFileId && x.driveUrl)
+                            .sort((x, y) => y.version - x.version)[0]
+                        : undefined;
+                      if (!latest) return null;
+                      return (
+                        <a href={latest.driveUrl} target="_blank" rel="noopener noreferrer"
+                          className="mb-2 flex items-center gap-2 px-3 py-2 rounded-xl border"
+                          style={{ borderColor: '#fcd34d', backgroundColor: '#fffbeb' }}>
+                          <PenLine size={13} className="text-amber-600 flex-shrink-0" />
+                          <span className="text-xs font-semibold text-amber-800 flex-1">
+                            {s.markedUpPlan}
+                          </span>
+                          <span className="text-[10px] text-amber-600">
+                            v{latest.version} · {format(new Date(latest.createdAt), 'MMM d')}
+                          </span>
+                        </a>
+                      );
+                    })()}
+                    {/* The annotator's own navy title bar is sent here and never
+                        shown (owner, 2026-10-07: "this bar should be removed" —
+                        "it should show just the plan, cleanly"). Its pager and
+                        zoom live in the floating pill on the sheet anyway. */}
+                    <div ref={setPlanBarSink} style={{ display: 'none' }} aria-hidden="true" />
+                    <div
+                      data-plan-view={showPlansPdf ? 'open' : 'thumb'}
+                      className="rounded-xl overflow-hidden border border-gray-200 relative"
+                      style={showPlansPdf
+                        /* FITTED to the sheet's width: the box takes the plan's
+                           own shape, so a landscape sheet fills the width with
+                           no band of blue above and below — "make it fit, make
+                           it smaller" (it was a fixed 520px tower). */
+                        ? { aspectRatio: String(planAspectFor[plansPdfFileId] ?? Math.SQRT2), maxHeight: '64dvh', minHeight: 190, width: '100%' }
+                        : { height: '160px', cursor: 'pointer' }}
+                      onClick={showPlansPdf ? undefined : () => setShowPlansPdf(true)}
+                    >
+                      {/* On the plan's corner, small: Download, and Mark up in
+                          the company blue for a worker allowed to draw. Outside
+                          the annotator, so a press here never opens full screen. */}
+                      {showPlansPdf && apt && (
+                        <div className="absolute top-2 inset-x-2 z-20 flex items-start justify-between gap-1.5 pointer-events-none">
+                        {/* The punch-list controls (Pin, the open count, print)
+                            join this row at its left — floating at the sheet's
+                            own corner they ran into Mark up on a phone. */}
+                        <span ref={setPinCtlSlot} data-plan-pin-controls
+                          className="flex flex-wrap items-center gap-1 min-w-0 pointer-events-auto" />
+                        <div data-plan-actions className="flex items-center gap-1.5 flex-shrink-0 pointer-events-auto"
+                          onClick={e => e.stopPropagation()} onPointerDown={e => e.stopPropagation()}>
+                          {/* Through the app's own /api/drive-fetch (decision 6):
+                              a drive.google.com link turns away a worker who is
+                              not signed into Google. The service account reads
+                              the bytes; the phone just gets a file. */}
+                          <button data-plan-download
+                            onClick={() => void downloadPlanFile(plansPdfFileId, aptLabel(apt))}
+                            disabled={planDlBusy}
+                            title={s.download}
+                            className="flex items-center gap-1 text-[11.5px] font-bold px-2.5 py-1.5 rounded-full bg-white/95 text-[#1e3a5f] border border-gray-200 shadow-sm disabled:opacity-50">
+                            <Download size={12} /> {planDlBusy ? '…' : s.download}
+                          </button>
+                          {perms.markUpPlans && (
+                            <button data-portal-markup data-plan-markup
+                              onClick={() => {
+                                setMarkup({ aptId: apt.id, fileId: plansPdfFileId });
+                                if (apt.driveLink) {
+                                  void findPlanSetViaBackend(apt.driveLink).then(ps => {
+                                    if (ps.plansFolderId) setMarkup(m => m && m.aptId === apt.id
+                                      ? { ...m, plansFolderId: ps.plansFolderId ?? undefined } : m);
+                                  }).catch(() => { /* the job folder stands in */ });
+                                }
+                              }}
+                              className="flex items-center gap-1 text-[11.5px] font-bold px-2.5 py-1.5 rounded-full text-white shadow-sm"
+                              style={{ backgroundColor: '#4aa8d8' }}>
+                              <PenLine size={12} /> {s.markUpBtn || w('Mark up', 'סימון', 'Разметка')}
+                            </button>
+                          )}
+                        </div>
+                        </div>
+                      )}
+                      {/*
+                        Expanded, the sheet is drawn by the app's own renderer
+                        (the drawer's and the wall's precedent) with the pins
+                        laid ON THE SHEET through the annotator's own slot. The
+                        Drive preview iframe framed the plan in a surround of
+                        its own, so a pin at 40%/60% of the BOX sat nowhere
+                        near 40%/60% of the PLAN — the owner's "the pins don't
+                        stick to the exact location, which is the whole point
+                        of the pin". Collapsed, Google's preview still stands
+                        in as the thumbnail (no PDF is downloaded for a glance).
+                        Workers WRITE pins too (2026-08-31): drop, memo, photo —
+                        and delete only their own.
+                      */}
+                      {showPlansPdf && apt ? (
+                        <div className="absolute inset-0" onClick={e => e.stopPropagation()}>
+                          <Suspense fallback={
+                            <div className="absolute inset-0 flex items-center justify-center text-gray-400 text-sm">
+                              {s.engineeringPlans}…
+                            </div>
+                          }>
+                            <PlanAnnotator
+                              key={plansPdfFileId}
+                              embedded
+                              readOnly
+                              planFileId={plansPdfFileId}
+                              planName={s.engineeringPlans}
+                              apartmentId={apt.id}
+                              apartmentLabel={aptLabel(apt)}
+                              driveFolderUrl={apt.driveLink}
+                              authorName={contractor?.name ?? ''}
+                              barInto={planBarSink}
+                              onClose={() => setShowPlansPdf(false)}
+                              sheetOverlay={
+                                <PlanPinOverlay
+                                  apartmentId={apt.id}
+                                  apartmentLabel={aptLabel(apt)}
+                                  authorName={contractor?.name ?? ''}
+                                  driveFolderLink={apt.driveLink}
+                                  workerMode
+                                  controlsInto={pinCtlSlot}
+                                  planFileId={plansPdfFileId}
+                                />
+                              }
+                            />
+                          </Suspense>
+                        </div>
+                      ) : (
+                        <iframe
+                          src={drivePreviewUrl(plansPdfFileId)}
+                          width="100%"
+                          height="160"
+                          allow="autoplay"
+                          title="Engineering Plans"
+                          style={{ border: 'none', display: 'block', pointerEvents: 'none' }}
+                        />
+                      )}
+                      {!showPlansPdf && (
+                        <div className="absolute inset-0 flex items-end justify-center pb-2 bg-gradient-to-t from-black/20 to-transparent">
+                          <span className="text-white text-xs font-medium bg-black/40 px-2 py-0.5 rounded">{s.tapToExpand}</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )
+  );
 
   return (
     <div className="min-h-screen flex flex-col" style={{ backgroundColor: '#f0f4f8' }} dir={s.isRtl ? 'rtl' : 'ltr'}>
@@ -3548,181 +3748,9 @@ export function ContractorPortal() {
                   );
                 })()}
 
-                {/* Engineering Plans PDF */}
-                {plansPdfFileId && (
-                  <div>
-                    {planIsGuess && (
-                      <div data-plan-auto-warning className="mb-2 flex items-center gap-2 px-3 py-2 rounded-xl text-[12.5px] font-bold text-white"
-                        style={{ backgroundColor: '#dc2626' }}>
-                        <span className="w-5 h-5 rounded-full bg-white text-red-600 flex items-center justify-center text-[12px] font-black flex-shrink-0">!</span>
-                        {w('Latest-activity plan, auto-selected — the office has not starred one yet',
-                          'תוכנית עם הפעילות האחרונה נבחרה אוטומטית — המשרד עוד לא סימן תוכנית בכוכב',
-                          'План с последней активностью выбран автоматически — офис ещё не отметил план')}
-                      </div>
-                    )}
-                    {/* The header row is the title and View/Hide, nothing else
-                        (owner, 2026-10-07: "Markup should not be here") — Mark up
-                        and Download sit ON the plan once it is open. */}
-                    <div className="flex items-center justify-between mb-1.5" data-plan-head>
-                      <h3 className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider flex items-center gap-1.5">
-                        <BookOpen size={11} /> {s.engineeringPlans}
-                      </h3>
-                      <button data-plan-toggle onClick={() => setShowPlansPdf(v => !v)}
-                        className="text-xs px-2.5 py-1 rounded-lg bg-[#1e3a5f] text-white font-medium">
-                        {showPlansPdf ? s.hide : s.view}
-                      </button>
-                    </div>
-
-                    {/* The office's markup, when there is one.
-                        A straight Drive link rather than the markup studio: on a
-                        phone on site the studio would pull the whole PDF down to
-                        render it, and all the contractor needs is to look at what
-                        was drawn — which the Drive viewer does natively, with the
-                        markup layer already switched on. */}
-                    {(() => {
-                      const latest = apt
-                        ? planAnnotations
-                            .filter(x => x.apartmentId === apt.id && x.planFileId === plansPdfFileId && x.driveUrl)
-                            .sort((x, y) => y.version - x.version)[0]
-                        : undefined;
-                      if (!latest) return null;
-                      return (
-                        <a href={latest.driveUrl} target="_blank" rel="noopener noreferrer"
-                          className="mb-2 flex items-center gap-2 px-3 py-2 rounded-xl border"
-                          style={{ borderColor: '#fcd34d', backgroundColor: '#fffbeb' }}>
-                          <PenLine size={13} className="text-amber-600 flex-shrink-0" />
-                          <span className="text-xs font-semibold text-amber-800 flex-1">
-                            {s.markedUpPlan}
-                          </span>
-                          <span className="text-[10px] text-amber-600">
-                            v{latest.version} · {format(new Date(latest.createdAt), 'MMM d')}
-                          </span>
-                        </a>
-                      );
-                    })()}
-                    {/* The annotator's own navy title bar is sent here and never
-                        shown (owner, 2026-10-07: "this bar should be removed" —
-                        "it should show just the plan, cleanly"). Its pager and
-                        zoom live in the floating pill on the sheet anyway. */}
-                    <div ref={setPlanBarSink} style={{ display: 'none' }} aria-hidden="true" />
-                    <div
-                      data-plan-view={showPlansPdf ? 'open' : 'thumb'}
-                      className="rounded-xl overflow-hidden border border-gray-200 relative"
-                      style={showPlansPdf
-                        /* FITTED to the sheet's width: the box takes the plan's
-                           own shape, so a landscape sheet fills the width with
-                           no band of blue above and below — "make it fit, make
-                           it smaller" (it was a fixed 520px tower). */
-                        ? { aspectRatio: String(planAspectFor[plansPdfFileId] ?? Math.SQRT2), maxHeight: '64dvh', minHeight: 190, width: '100%' }
-                        : { height: '160px', cursor: 'pointer' }}
-                      onClick={showPlansPdf ? undefined : () => setShowPlansPdf(true)}
-                    >
-                      {/* On the plan's corner, small: Download, and Mark up in
-                          the company blue for a worker allowed to draw. Outside
-                          the annotator, so a press here never opens full screen. */}
-                      {showPlansPdf && apt && (
-                        <div className="absolute top-2 inset-x-2 z-20 flex items-start justify-between gap-1.5 pointer-events-none">
-                        {/* The punch-list controls (Pin, the open count, print)
-                            join this row at its left — floating at the sheet's
-                            own corner they ran into Mark up on a phone. */}
-                        <span ref={setPinCtlSlot} data-plan-pin-controls
-                          className="flex flex-wrap items-center gap-1 min-w-0 pointer-events-auto" />
-                        <div data-plan-actions className="flex items-center gap-1.5 flex-shrink-0 pointer-events-auto"
-                          onClick={e => e.stopPropagation()} onPointerDown={e => e.stopPropagation()}>
-                          {/* Through the app's own /api/drive-fetch (decision 6):
-                              a drive.google.com link turns away a worker who is
-                              not signed into Google. The service account reads
-                              the bytes; the phone just gets a file. */}
-                          <button data-plan-download
-                            onClick={() => void downloadPlanFile(plansPdfFileId, aptLabel(apt))}
-                            disabled={planDlBusy}
-                            title={s.download}
-                            className="flex items-center gap-1 text-[11.5px] font-bold px-2.5 py-1.5 rounded-full bg-white/95 text-[#1e3a5f] border border-gray-200 shadow-sm disabled:opacity-50">
-                            <Download size={12} /> {planDlBusy ? '…' : s.download}
-                          </button>
-                          {perms.markUpPlans && (
-                            <button data-portal-markup data-plan-markup
-                              onClick={() => {
-                                setMarkup({ aptId: apt.id, fileId: plansPdfFileId });
-                                if (apt.driveLink) {
-                                  void findPlanSetViaBackend(apt.driveLink).then(ps => {
-                                    if (ps.plansFolderId) setMarkup(m => m && m.aptId === apt.id
-                                      ? { ...m, plansFolderId: ps.plansFolderId ?? undefined } : m);
-                                  }).catch(() => { /* the job folder stands in */ });
-                                }
-                              }}
-                              className="flex items-center gap-1 text-[11.5px] font-bold px-2.5 py-1.5 rounded-full text-white shadow-sm"
-                              style={{ backgroundColor: '#4aa8d8' }}>
-                              <PenLine size={12} /> {s.markUpBtn || w('Mark up', 'סימון', 'Разметка')}
-                            </button>
-                          )}
-                        </div>
-                        </div>
-                      )}
-                      {/*
-                        Expanded, the sheet is drawn by the app's own renderer
-                        (the drawer's and the wall's precedent) with the pins
-                        laid ON THE SHEET through the annotator's own slot. The
-                        Drive preview iframe framed the plan in a surround of
-                        its own, so a pin at 40%/60% of the BOX sat nowhere
-                        near 40%/60% of the PLAN — the owner's "the pins don't
-                        stick to the exact location, which is the whole point
-                        of the pin". Collapsed, Google's preview still stands
-                        in as the thumbnail (no PDF is downloaded for a glance).
-                        Workers WRITE pins too (2026-08-31): drop, memo, photo —
-                        and delete only their own.
-                      */}
-                      {showPlansPdf && apt ? (
-                        <div className="absolute inset-0" onClick={e => e.stopPropagation()}>
-                          <Suspense fallback={
-                            <div className="absolute inset-0 flex items-center justify-center text-gray-400 text-sm">
-                              {s.engineeringPlans}…
-                            </div>
-                          }>
-                            <PlanAnnotator
-                              key={plansPdfFileId}
-                              embedded
-                              readOnly
-                              planFileId={plansPdfFileId}
-                              planName={s.engineeringPlans}
-                              apartmentId={apt.id}
-                              apartmentLabel={aptLabel(apt)}
-                              driveFolderUrl={apt.driveLink}
-                              authorName={contractor?.name ?? ''}
-                              barInto={planBarSink}
-                              onClose={() => setShowPlansPdf(false)}
-                              sheetOverlay={
-                                <PlanPinOverlay
-                                  apartmentId={apt.id}
-                                  apartmentLabel={aptLabel(apt)}
-                                  authorName={contractor?.name ?? ''}
-                                  driveFolderLink={apt.driveLink}
-                                  workerMode
-                                  controlsInto={pinCtlSlot}
-                                  planFileId={plansPdfFileId}
-                                />
-                              }
-                            />
-                          </Suspense>
-                        </div>
-                      ) : (
-                        <iframe
-                          src={drivePreviewUrl(plansPdfFileId)}
-                          width="100%"
-                          height="160"
-                          allow="autoplay"
-                          title="Engineering Plans"
-                          style={{ border: 'none', display: 'block', pointerEvents: 'none' }}
-                        />
-                      )}
-                      {!showPlansPdf && (
-                        <div className="absolute inset-0 flex items-end justify-center pb-2 bg-gradient-to-t from-black/20 to-transparent">
-                          <span className="text-white text-xs font-medium bg-black/40 px-2 py-0.5 rounded">{s.tapToExpand}</span>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                )}
+                {/* Engineering Plans PDF — one drawing for this sheet and the
+                    map's apartment sheet (renderPlanBlock). */}
+                {(perms.seePlans || perms.seeAnyPlan) && renderPlanBlock(apt, plansPdfFileId, planIsGuess)}
 
                 {/* Completion status */}
                 {a.completedAt && (
@@ -4508,6 +4536,21 @@ export function ContractorPortal() {
                     <span className="text-gray-400 text-sm">{apt.buildingId}</span>
                   </div>
                   {apt.address && <p className="text-xs text-gray-500 mt-0.5 truncate">{apt.address}</p>}
+                  {/* The unit at a glance (owner, 2026-10-18: "they see also all
+                      the info") — the floor as the diagram counts it, its
+                      type, and the Standard bubble on a standard apartment. */}
+                  <p data-work-info className="text-xs text-gray-500 mt-0.5 flex items-center gap-1.5 flex-wrap">
+                    {rowNumOf(apt.buildingId, apt.floor) !== '' && (
+                      <span>{w('Floor', 'קומה', 'Этаж')} {rowNumOf(apt.buildingId, apt.floor)}</span>
+                    )}
+                    {apt.tipus && <span className="font-semibold text-gray-600">{apt.tipus}</span>}
+                    {apt.classification === 'standard' && (
+                      <span data-work-standard className="text-[10.5px] font-bold px-2 py-0.5 rounded-full"
+                        style={{ backgroundColor: '#e0f2fe', color: '#0c4a6e', border: '1px solid #bae6fd' }}>
+                        {w('Standard', 'סטנדרט', 'Стандарт')}
+                      </span>
+                    )}
+                  </p>
                   {curStage && (
                     <p className="text-xs mt-0.5 flex items-center gap-1.5">
                       <span className="w-2 h-2 rounded-full" style={{ backgroundColor: curStage.color }} />
@@ -4520,6 +4563,18 @@ export function ContractorPortal() {
               <div className="flex-1 overflow-y-auto px-5 py-4 space-y-3">
                 {workHere.step === 'view' && (
                   <>
+                    {/* The unit's plan, before the work starts (owner,
+                        2026-10-18): any unit with "Open any engineered plan",
+                        or a unit he has a task in with the ordinary plan
+                        switch. The same block as the task sheet — preview,
+                        tap to open big, pins, Download, Mark up. */}
+                    {(() => {
+                      const starred = apt.plansPdfLink ? extractFileId(apt.plansPdfLink) : null;
+                      const planId = starred ?? autoPlanFor[apt.id] ?? null;
+                      const hisWork = assignments.some(t => t.apartmentId === apt.id);
+                      if (!(perms.seeAnyPlan || (perms.seePlans && hisWork))) return null;
+                      return <div data-work-plan>{renderPlanBlock(apt, planId, !starred && !!planId)}</div>;
+                    })()}
                     {/* What the office wrote about the stage this unit is on —
                         read BEFORE the work starts, which is the whole point. */}
                     {apt.currentStageId && (

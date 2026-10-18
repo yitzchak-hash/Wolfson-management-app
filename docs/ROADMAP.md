@@ -94,3 +94,4 @@ under the set model). `round28.mjs` is green again (10-08).
 - ☑ A second notebook says "Copy of the notebook" and can be made the original from its corner or its settings (2026-10-18).
 - ☑ "A newer version is ready — Reload" note in the office app (2026-10-18).
 - ☑ Sold/Start never named as finished in any sentence (2026-10-18).
+- ☑ Plans on the worker's building map: the plan on the "I'm going to work here" sheet; "any plan" switch; Standard bubble (2026-10-18).

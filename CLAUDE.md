@@ -10435,3 +10435,26 @@ record carries another change; a record whose only change is Sold/Start still
 says so. A new sentence that names finished or current stages must filter it
 the same way. Guards: `round49-probe` (a flat with only Sold/Start done reads
 "Doing …"), `activitywords-test`.
+
+## Plans on the worker's building map (2026-10-18)
+- **Two plan switches** (`workerLevels.ts`): `seePlans` = "Open the engineered
+  plans for the units they work in" — the task sheet's plan, and the map
+  sheet's plan for a unit he has a task in; `seeAnyPlan` (new) = "Open any
+  engineered plan from the building diagram" — the plan on ANY apartment's map
+  sheet. Shipped on for Technician and Manager (`levelAnswer` gives stored
+  shipped levels the new answer), off for Contractor. The task sheet's plan is
+  now actually gated (`seePlans || seeAnyPlan`) — before, `seePlans` was a
+  switch nothing read.
+- **`renderPlanBlock(apt, fileId, isGuess)`** in ContractorPortal is the ONE
+  drawing of the worker's plan (guess warning, title row, markup link, the
+  sheet that opens big with pins / Download / Mark up) — a plain function,
+  never a component declared in the render body. The task sheet and the map's
+  work sheet (`data-work-plan`) both call it. `planAptId` (the open task's
+  apartment, else the map sheet's) drives the auto-plan guess, the aspect
+  measure and the share effects; the map sheet resets `showPlansPdf` when its
+  apartment changes. Only one of the two sheets is ever open.
+- The map sheet shows the unit's info (`data-work-info`: floor via `rowNumOf`,
+  the type) and a standard apartment wears a small Standard bubble there
+  (`data-work-standard`) and on its plan's title (`data-plan-standard`).
+Harness: `scratchpad/workerplans-probe.mjs` (16). `round39-probe`'s two reds
+(Today on arrival, the old stage filter) are pre-existing and superseded.

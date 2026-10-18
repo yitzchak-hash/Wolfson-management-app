@@ -57,8 +57,11 @@ export const WORKER_PERMISSIONS: PermissionDef[] = [
     hint: 'The floor-by-floor map. A subcontractor on one flat rarely needs it.' },
   { key: 'seeAllApartments', label: 'See every unit, not just theirs', group: 'The site',
     hint: 'With this off the diagram shows only the units they have work in.' },
-  { key: 'seePlans', label: 'Open the engineering plans', group: 'The site' ,
-    hint: 'The PDF for the unit they are working in.' },
+  { key: 'seePlans', label: 'Open the engineered plans for the units they work in', group: 'The site' ,
+    hint: 'The plan on their own task — and on the building map, for a unit they have a task in.' },
+  { key: 'seeAnyPlan', label: 'Open any engineered plan from the building diagram', group: 'The site',
+    hint: 'Tap any apartment on the map: its plan shows on the sheet (with "I\'m going to work here"), '
+      + 'and opens big like usual — whether or not they have work there.' },
   { key: 'markUpPlans', label: 'Mark up a plan', group: 'The site',
     hint: 'Draw on it and save a new version. Rare outside the office.' },
   { key: 'seeSnags', label: 'See the punch-list pins', group: 'The site',
@@ -109,7 +112,7 @@ export const DEFAULT_WORKER_LEVELS: WorkerLevel[] = [
     builtIn: true,
     description: 'Everything, optionally. Their own assignments stay picked out from the rest.',
     perms: on('ownTasks', 'completeTasks', 'uploadPhotos', 'addNotes', 'selfAssign', 'workHere',
-      'seeDiagrams', 'seeAllApartments', 'seePlans', 'seeSnags',
+      'seeDiagrams', 'seeAllApartments', 'seePlans', 'seeAnyPlan', 'seeSnags',
       'allTasks', 'seeSchedule', 'seeContacts'),
   },
   {

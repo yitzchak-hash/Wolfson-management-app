@@ -64,7 +64,16 @@ with starred recommendations is published first; the owner says "approved" /
 "all yes" / answers by number; then it is built. Never build a redesign
 unasked.
 
-## Where things stand (2026-10-18, latest — the Done line, notebook copies, Sold/Start, update note)
+## Where things stand (2026-10-18, latest — plans on the worker's building map)
+His last message, in his words: "open the engineered plans — I wanna change it to open the engineered
+plans for the units they are working in, and … another: open any engineered plans from the building
+diagram, so they can click on an apartment and on the screen that says I'm going to work here they see
+the preview of the plan and can expand it … they see also all the info. And on the standard plans … a
+small standard bubble." → BUILT: `seePlans` relabelled and enforced, new `seeAnyPlan` (Technician +
+Manager on, Contractor off), the plan + floor + type on the map sheet, the Standard bubble.
+Pending: nothing waiting on him; the Changes bubble was offered, not built.
+
+## Where things stand (2026-10-18 — the Done line, notebook copies, Sold/Start, update note)
 His last messages, in his words:
 - "regarding the deadline one is C. Two, is starred. Three, is starred. Four, starred. Five, starred." →
   The Done Line BUILT as look C (doneline-probe 24).
