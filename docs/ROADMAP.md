@@ -88,4 +88,6 @@ work here" filter · `boardsize.mjs` left-edge auto-pan · `gapboard.mjs` ·
 timeout · `round33.mjs` (a `data-map-project` hook removed 09-03) ·
 `round40-probe` "a passed stage is crossed off" (Ready to start is a marker
 under the set model). `round28.mjs` is green again (10-08).
-- ✎ "This Week First" (2026-10-18, plan page, 9 questions): the notebook opens on this week, turns the page on Sunday, last week folded, a week ribbon, weeks added / put away by themselves, a Dashboard card.
+- ☑ "This Week First" BUILT (2026-10-18): week chips on every notebook (this week first, the next under it, Sunday turn, three weeks ahead, per-copy memory), drag-hold over a chip turns the week, TV chips, Dashboard This week card. The folded last-week bar was struck by the owner.
+- ☑ Worker's phone (2026-10-18): one picture or video closes a job (setting 1–5); Take photo / Record video / Choose files; uploads three at a time; translation follows the text, dictation in his typing language.
+- ✎ "The Done Line" (2026-10-18, plan page, 5 questions): fold arrow + tiny filters on the worker's Done list.

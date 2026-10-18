@@ -247,5 +247,16 @@ rewritten).
 | C-48 | 2026-10-18 | A job that needs an answer glows on the notebook for the person who answers it; a per-user setting for which categories they answer; pressing it asks | Done | Settings → Users `data-user-answers` · `data-bar-question` · closemore-probe §3 |
 | C-49 | 2026-10-18 | The question in plain English: "<worker> did work that wasn't on the list. This is what he wrote: …" then pick again | Done | `OffListQuestion` · closemore-probe §3 |
 | C-50 | 2026-10-18 | "Explain what exactly needs me" | Done | answered in chat; found nobody's role says "admin" → the question glow now shows for everybody until unticked |
-| C-51 | 2026-10-18 | On Sunday the notebook should show this week, with easy access to last week and the weeks ahead — "a good, good plan" | Waiting | plan page "This Week First" (9 starred questions) |
+| C-51 | 2026-10-18 | On Sunday the notebook should show this week, with easy access to last week and the weeks ahead — "a good, good plan" | Done | week chips on every notebook · weekribbon-probe (33) |
 
+| C-52 | 2026-10-18 | Stage trades: AC = drilling, piping, concealed units, fans, wall units, outdoor units, thermostats; Drywall = registers, access panels, drywall — "I approve you to change it" | Done | production stages written (11 × 200) |
+| C-53 | 2026-10-18 | Approve questions 2 and 3 (questions glow for everybody; part of it needs one picture) | Done | unchanged defaults |
+| C-54 | 2026-10-18 | Notebook: no folded last-week bar, no "Open last week"; the week chips on top with the notebook starting right under them | Done | weekribbon-probe §1 |
+| C-55 | 2026-10-18 | Drag a job and HOLD it over "Last week" — the notebook moves there, drop on a day | Done | weekribbon-probe §3–4 (board tile and task bar) |
+| C-56 | 2026-10-18 | The TV gets the same week selector | Done | weekribbon-probe §6 |
+| C-57 | 2026-10-18 | "The rest of them, do what you recommended" — opens on this week, Sunday turn, three weeks ahead, per-copy memory, Thursday stays, Dashboard This week card | Done | weekribbon-probe §1–2, §7 |
+| C-58 | 2026-10-18 | Worker pictures: minimum ONE file — a picture or a video | Done | media-r53 (32) · Settings → Workers 1–5 |
+| C-59 | 2026-10-18 | Typing Russian on an English screen still translates — translation follows the text, not the screen | Done | translang-probe (24) · speaklang-test (19) |
+| C-60 | 2026-10-18 | The camera on the Galaxy tablet should offer video | Done | Take photo / Record video / Choose files buttons · media-r53 · needs a real tablet to see the camera |
+| C-61 | 2026-10-18 | Uploads are slow — upload faster | Done | three at a time, folder lookups once: 6 files 18.4s → 5.3s on a slow stub |
+| C-62 | 2026-10-18 | The Done line on his phone: collapsible with a tiny arrow, tiny clean filter buttons — "show me a preview" | Waiting | plan page "The Done Line" (5 starred questions) |

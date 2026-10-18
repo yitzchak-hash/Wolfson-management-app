@@ -257,3 +257,6 @@ Legend: ☑ shipped · ☐ decided, not built · ◐ built in part · ✎ needs 
 - ☑ One picture or video closes each step by default; Settings → Workers raises it (1–5); past one, a picture + a video are enough; a PDF does not count (2026-10-18)
 - ☑ Closing screen: Take photo / Record video / Choose files — the camera asked for video by name, for Android tablets (2026-10-18)
 - ☑ Faster worker uploads: three at a time, one folder lookup per batch, share not waited for, a preview + progress per file the moment it is picked (2026-10-18)
+- ☑ Notebook week chips: this week first, the next under it, Sunday turns the page, three weeks ahead kept, a pick per copy per computer, drag-hold over a chip turns the week; TV and the Dashboard This week card (2026-10-18)
+- ☑ Translation follows the text, never the screen language; dictation in the person's own typing language with an EN/עב/RU switch (2026-10-18)
+- ✎ The worker's Done line: fold arrow + tiny filters — plan page "The Done Line" (2026-10-18)

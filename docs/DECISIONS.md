@@ -365,4 +365,8 @@ Time off belongs to the person and lives in one shared list.
   he wrote: …" → it was one of the stages / make it a task of its own / keep it as a note.
   The first closing question names the task's own stages ("Did you finish doing Fans and
   Concealed Units?"); "Not on this list…" is the first bubble of "Is it one of these?".
+- **2026-10-18 · Stage trades, approved by the owner:** AC = Drilling, Piping, Concealed Units, Fans, Wall Units, Outdoor Units, Thermostats (and the Job Board's AC installation); Drywall = Registers, Access Panels (and Installation of Geves, the drywall stage). Sold/Start carries none. Written to production by REST on his word.
+- **2026-10-18 · This Week First, his answers:** A kept; the folded last-week bar and "Open last week" struck; the notebook starts right under the chips; a drag held over a chip turns the notebook to that week; the TV gets the chips; every other starred answer taken (open on this week, Sunday turn, three weeks ahead, old weeks simply not drawn — nothing hidden or deleted, per-copy memory, Thursday stays, Dashboard card). The old long scroll stays a pencil setting (Weeks → Every week).
+- **2026-10-18 · Worker pictures:** the default is ONE file — a picture or a video — per close step; Settings → Workers raises it to 5. A PDF never counts.
+- **2026-10-18 · Translation follows the text, never the screen language** (a worker on an English screen typing Russian). His own words are never translated for him; dictation listens in the language he last typed in, with an EN/עב/RU chip.
 

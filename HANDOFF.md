@@ -64,7 +64,24 @@ with starred recommendations is published first; the owner says "approved" /
 "all yes" / answers by number; then it is built. Never build a redesign
 unasked.
 
-## Where things stand (2026-10-18, latest — what needs him, and the "This Week First" plan)
+## Where things stand (2026-10-18, latest — This Week First built; the phone round)
+- Stage trades written to production on his approval (11 stages, AC / Drywall as he listed).
+- "This Week First" built with his changes: week chips on every notebook, the chosen week and the
+  next drawn right under them, Sunday turns the page, three weeks ahead kept, a pick remembered per
+  copy per computer, a drag HELD over a chip turns the week (tiles, list rows, cards, task bars),
+  the TV has the chips, the Dashboard page has a "This week" card. Old long scroll = pencil setting.
+- Worker's phone (helper): one picture or video closes a job (Settings → Workers 1–5); Take photo /
+  Record video / Choose files on the closing screen; uploads three at a time (6 files 18.4s → 5.3s on
+  a slow stub). The real Galaxy camera could not be tried here.
+- Translation (helper): follows the text, never the screen; his own words never translated for him;
+  dictation in his typing language with an EN/עב/RU chip; pushes and pop-ups translated.
+- Plan page "The Done Line" (https://claude.ai/artifact/GeFAXgnSAfJCcQX7BFhHaS), 5 starred
+  questions — waiting on his answers.
+- Probes: weekribbon-probe (33) · media-r53 (32) · translang-probe (24) · speaklang-test (19);
+  notebook harnesses seeded on old dates now seed `weekView: 'all'`. Standing reds: notebookflip ×2
+  (month size, eye size — identical before this round), round38's key check expects `testkey`.
+
+## Where things stand (2026-10-18 — what needs him, and the "This Week First" plan)
 - He asked what exactly needs him. Read production: no user's role says "admin" (Boss, Manager,
   Secretary, Architect, Dev), so the admins-only default would have lit the question glow for NOBODY.
   `answersKind` now defaults to everybody; Settings → Users narrows it. No stage carries a trade yet

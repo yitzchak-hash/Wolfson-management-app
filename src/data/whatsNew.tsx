@@ -30,6 +30,44 @@ export interface WhatsNewEntry {
 
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    date: '2027-02-08',
+    title: 'This week first',
+    items: [
+      {
+        title: 'The notebook opens on this week',
+        body: 'Week chips sit on top of every weekly notebook — two weeks back, this week, three ahead, each with '
+          + 'how many tasks it holds and how many are done. This week is drawn right under them, next week below '
+          + 'it, and on Sunday every screen turns the page by itself. "Older…" reaches anything further back.',
+        demo: 'list',
+      },
+      {
+        title: 'Hold a job over a week to go there',
+        body: 'Dragging a job or a task? Hold it over a chip — "Last week", "Nov 1" — for half a second and the '
+          + 'notebook turns to that week, so you can drop it on a day there. The TV has the same chips, and the '
+          + 'Dashboard page has a small "This week" card.',
+        demo: 'list',
+      },
+      {
+        title: 'One picture or video closes a job',
+        body: 'A worker now needs just one picture or video to close a job. Settings → Workers can raise it to '
+          + 'up to five. On the phone the closing screen has three buttons: Take photo, Record video, Choose files.',
+        demo: 'list',
+      },
+      {
+        title: 'Uploads go three at a time',
+        body: 'Pictures from site appear on the screen straight away and upload three at a time — about three '
+          + 'times faster than before.',
+        demo: 'list',
+      },
+      {
+        title: 'Translation follows what is written',
+        body: 'A worker whose phone is in English but who types in Russian is translated for the office all the '
+          + 'same. The microphone listens in the language he types in, with a small EN · עב · RU switch beside it.',
+        demo: 'list',
+      },
+    ],
+  },
+  {
     date: '2027-02-07',
     title: 'More than the task said',
     items: [
@@ -43,7 +81,7 @@ export const WHATS_NEW: WhatsNewEntry[] = [
       },
       {
         title: 'One picture and a video count as three',
-        body: 'Where a stage needs three pictures, one picture and one video are enough.',
+        body: 'Where the office asks for three pictures, one picture and one video are enough.',
         demo: 'list',
       },
       {
