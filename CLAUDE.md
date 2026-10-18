@@ -10385,3 +10385,53 @@ Measured (`scratchpad/media-r53.mjs`, stubbed backend: folder 400ms, session
 lookups → 2, previews on screen in ~0.3s. Run with `APP` (keyless),
 `APP_KEYED` (a server started with `VITE_DRIVE_API_KEY`) and optionally
 `APP_BASE` (the previous build, for the before-number).
+
+---
+
+# v2 — the Done line, notebook copies in plain words, Sold/Start out of sentences (2026-10-18)
+
+## The Done line (`ContractorPortal.tsx`, the owner's answers to "The Done Line": look C)
+The divider between open and done work (`data-done-line`) carries ONE small
+`data-done-sort` button — "Latest ▾" in the worker's language — opening
+`data-done-sort-menu` with `data-done-sort-pick=latest|today|week` first, a
+rule, then `oldest|lastweek|building|ws`; and a fold arrow at its edge
+(`data-done-fold`). Folded, the line keeps only its count. `portal_done_<token>`
+(localStorage, per phone, `{open, sort}`; absent = open on Latest). Today /
+This week (since Sunday) / Last week FILTER; By building / By workspace group
+with `data-done-group` headings. Open work is never touched. Harness:
+`scratchpad/doneline-probe.mjs` (24, Russian, 390px).
+
+## A second notebook says what it is (`PlannerHost` in widgets.tsx)
+The word "projection" is gone from the screen: a copy wears
+`data-notebook-copy` ("Copy of the notebook" / "No original") with
+`data-notebook-goto-original` (flies there through the new
+`WidgetCtx.focusEl` — switches named board first when needed) and
+`data-notebook-make-original`. **`crownPlanner(id)`** is the ONE door for
+making a notebook the original — the corner button and the pencil
+(`data-notebook-role`, now ungrouped so it is in plain sight, "The original /
+A copy") both use it: it MOVES the current original's data onto this one,
+re-points every job's `inNotebook`, and only then demotes the old one, in one
+undo step. A copy's own `data` is whatever it held the day it became a copy
+(often months stale) — flipping the role alone would put that on screen and
+turn the real week into a copy of it. The owner's board had an old original
+far off to the right; removing his visible one let that one inherit, so the
+re-added notebook became a copy. Harness: `scratchpad/notebookcopy-probe.mjs`.
+
+## "A newer version is ready" (`NewVersionNote.tsx`, mounted in AppLayout)
+A tab never reloads itself, and the owner's report ("I don't see the week
+picker") was a tab still running the build from before the deploy. Every ten
+minutes and on tab return it compares the served `/assets/index-*.js` with the
+running one and offers `data-new-version-reload`; it never reloads by itself.
+Never shows on the dev server (no /assets bundle). Harness:
+`scratchpad/newversion-probe.mjs` against `vite preview` on 4173.
+
+## Sold/Start is never "finished" in a sentence
+It ticks itself the moment later work begins (`withImpliedDone`), so naming it
+says nothing about the day. `isStartStage` filters it out of: the busy-day
+window's plain line (TaskBundle — also the "last done" half), `taskPlainSentence`,
+the drawer's done-card sentence, `workDone` (Who did what), the day story's
+stage marks, and the history's `stage_marks` phrase — the last ONLY when the
+record carries another change; a record whose only change is Sold/Start still
+says so. A new sentence that names finished or current stages must filter it
+the same way. Guards: `round49-probe` (a flat with only Sold/Start done reads
+"Doing …"), `activitywords-test`.

@@ -259,4 +259,7 @@ rewritten).
 | C-59 | 2026-10-18 | Typing Russian on an English screen still translates — translation follows the text, not the screen | Done | translang-probe (24) · speaklang-test (19) |
 | C-60 | 2026-10-18 | The camera on the Galaxy tablet should offer video | Done | Take photo / Record video / Choose files buttons · media-r53 · needs a real tablet to see the camera |
 | C-61 | 2026-10-18 | Uploads are slow — upload faster | Done | three at a time, folder lookups once: 6 files 18.4s → 5.3s on a slow stub |
-| C-62 | 2026-10-18 | The Done line on his phone: collapsible with a tiny arrow, tiny clean filter buttons — "show me a preview" | Waiting | plan page "The Done Line" (5 starred questions) |
+| C-62 | 2026-10-18 | The Done line on his phone: collapsible with a tiny arrow, tiny clean filter buttons — "show me a preview" | Done | his answers: look C + stars 2–5 · doneline-probe (24) |
+| C-63 | 2026-10-18 | "I removed the notebook and re-added it… now it shows it's a projection. I should be able to change it from the settings. I don't even know what the difference is" | Done | the copy says "Copy of the notebook" with Show the original / Make this the original; the switch in plain sight in its settings; crowning moves the REAL week over · notebookcopy-probe (14) |
+| C-64 | 2026-10-18 | "I don't see the weekly picker on top" | Done | his tab ran the version from before the update; the app now shows "A newer version is ready — Reload" · newversion-probe (5) |
+| C-65 | 2026-10-18 | "Why does it say finished Sold/Start? … We shouldn't see Sold/Start anywhere other than an initial stage" | Done | dropped from the busy-day window, task sentences, the done card, Who did what, the day story and the history lines · round49-probe, activitywords-test |

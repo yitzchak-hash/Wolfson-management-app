@@ -3,7 +3,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { X, Trash2, Upload, Check, Plus, ChevronUp, ChevronDown, Eye, EyeOff } from 'lucide-react';
 import { useStore } from '../../data/store';
 import { CanvasElement, Stage, binLabelOf, isBuiltInBin, personColor } from '../../types';
-import { WIDGET_BY_ID, aliasedEl } from '../../data/widgets';
+import { WIDGET_BY_ID, aliasedEl, crownPlanner } from '../../data/widgets';
 import { WidgetField, WIDGET_FIELDS, ART_FIELDS, BOX_FIELDS, TEXT_STYLE_FIELDS, OUTLINE_FIELDS, fieldDefault } from '../../data/widgetFields';
 import { ART_KINDS, ArtKind } from './BoardNodes';
 import {
@@ -553,37 +553,28 @@ function PlannerRoleField({ el, label, hint }: {
   function pick(next: 'main' | 'projection') {
     if (next === role) return;
     if (next === 'main') {
-      if (currentMain && !window.confirm(
-        'Make this the main notebook?\n\n'
-        + 'The one that is main now, and every other copy, becomes a projection — '
-        + 'read-only, showing whatever is written in this one.')) return;
-      // Demote everybody else FIRST, then crown this one: two planners both
-      // claiming to be main, even for a moment, is a projection with nothing to
-      // point at.
-      siblings.forEach(e => {
-        if (((e.data ?? {}) as Record<string, unknown>).role === 'projection') return;
-        updateCanvasElement(e.id, { data: { ...(e.data ?? {}), role: 'projection' } });
-      });
-      updateCanvasElement(el.id, { data: { ...(el.data ?? {}), role: 'main' } });
+      // crownPlanner moves the real week onto this one first, so nothing on
+      // screen changes except which copy owns the data.
+      crownPlanner(el.id);
       return;
     }
-    if (!currentMain && !window.confirm(
-      'Make this a projection?\n\n'
-      + 'There would then be no main notebook, and nothing to show. '
-      + 'Set another one to main first if you can.')) return;
+    if (!currentMain) {
+      window.alert('This is the only original — make another notebook the original first.');
+      return;
+    }
     updateCanvasElement(el.id, { data: { ...(el.data ?? {}), role: 'projection' } });
   }
 
   return (
     <Row label={label} hint={hint}>
-      <div className="flex rounded-lg overflow-hidden border border-gray-200">
+      <div data-notebook-role className="flex rounded-lg overflow-hidden border border-gray-200">
         {(['main', 'projection'] as const).map(v => (
-          <button key={v} type="button" onClick={() => pick(v)}
+          <button key={v} type="button" data-notebook-role-pick={v} onClick={() => pick(v)}
             className="flex-1 px-2 py-1.5 text-[12px] font-semibold transition-colors"
             style={role === v
               ? { backgroundColor: '#1e3a5f', color: '#fff' }
               : { backgroundColor: '#fff', color: '#64748b' }}>
-            {v === 'main' ? 'The main one' : 'A projection'}
+            {v === 'main' ? 'The original' : 'A copy'}
           </button>
         ))}
       </div>
@@ -591,10 +582,10 @@ function PlannerRoleField({ el, label, hint }: {
         {others === 0
           ? 'The only notebook in this workspace.'
           : role === 'main'
-            ? `${others} other cop${others === 1 ? 'y' : 'ies'} show this one.`
+            ? `${others} other cop${others === 1 ? 'y shows' : 'ies show'} this same week.`
             : currentMain
-              ? 'Showing the main notebook. Nothing here can be edited.'
-              : 'There is no main notebook to show yet.'}
+              ? 'Shows the same week as the original. Both can be edited.'
+              : 'There is no original — make this one the original.'}
       </p>
     </Row>
   );

@@ -90,4 +90,7 @@ timeout · `round33.mjs` (a `data-map-project` hook removed 09-03) ·
 under the set model). `round28.mjs` is green again (10-08).
 - ☑ "This Week First" BUILT (2026-10-18): week chips on every notebook (this week first, the next under it, Sunday turn, three weeks ahead, per-copy memory), drag-hold over a chip turns the week, TV chips, Dashboard This week card. The folded last-week bar was struck by the owner.
 - ☑ Worker's phone (2026-10-18): one picture or video closes a job (setting 1–5); Take photo / Record video / Choose files; uploads three at a time; translation follows the text, dictation in his typing language.
-- ✎ "The Done Line" (2026-10-18, plan page, 5 questions): fold arrow + tiny filters on the worker's Done list.
+- ☑ "The Done Line" (2026-10-18, his answers: look C, stars 2–5): "Latest ▾" button + fold arrow on the worker's Done line.
+- ☑ A second notebook says "Copy of the notebook" and can be made the original from its corner or its settings (2026-10-18).
+- ☑ "A newer version is ready — Reload" note in the office app (2026-10-18).
+- ☑ Sold/Start never named as finished in any sentence (2026-10-18).

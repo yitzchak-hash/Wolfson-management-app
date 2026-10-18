@@ -14,10 +14,10 @@ import {
 import {
   Apartment, CanvasElement, Stage, ContractorAssignment, Contractor,
   ContractorPhoto, ActivityLog, BIN_KINDS, BIN_META, binKeyOf, binLabelOf, isCountableApartment, personColor,
-  User, ContractorNote, PlanPin, Employee, TimePunch,
+  User, ContractorNote, PlanPin, Employee, TimePunch, DASHBOARD_BOARD,
 } from '../types';
 import { portalLink } from './portalLink';
-import { useStore, loadProjectSnapshot } from './store';
+import { useStore, loadProjectSnapshot, trackUndo } from './store';
 import { searchJobs } from './searchIndex';
 import { describeActivity } from './activityText';
 import { foldActivity } from './activityWords';
@@ -142,6 +142,8 @@ export interface WidgetCtx {
    * the shelf hands them a sample planner.
    */
   boardElements?: CanvasElement[];
+  /** Fly the board to one of its nodes (switching named board when needed). */
+  focusEl?: (id: string) => void;
 }
 
 export interface WidgetDef {
@@ -2863,6 +2865,48 @@ export function mainPlannerFor(el: CanvasElement, all: CanvasElement[]): CanvasE
     e.id !== el.id && e.type === 'widget' && e.widget === el.widget && !isProjection(e)) ?? null;
 }
 
+/**
+ * Make this notebook the ORIGINAL (owner, 2026-10-18: "this one's not a
+ * projection — I should be able to change it").
+ *
+ * A copy stores no week of its own — it draws the original's — so its own
+ * `data` is whatever it held the day it became a copy, often months stale.
+ * Crowning it by flipping the role alone would put THAT on screen and turn
+ * the real week into a copy of it. So the original's data moves onto this
+ * one, every job filed in the old original is re-pointed here, and only then
+ * does the old one become a copy. One undo step.
+ */
+export function crownPlanner(id: string): void {
+  const st = useStore.getState();
+  const el = st.canvasElements.find(e => e.id === id);
+  if (!el) return;
+  const others = st.canvasElements.filter(e =>
+    e.id !== id && e.type === 'widget' && e.widget === el.widget && e.board !== DASHBOARD_BOARD);
+  const main = others.find(e => !isProjection(e));
+  trackUndo({
+    weight: 'content',
+    label: 'Made this notebook the original',
+    explain: main
+      ? 'The other notebook goes back to being the original, and this one shows it again.'
+      : 'This notebook goes back to being a copy.',
+  }, () => {
+    const src = main ?? el;
+    const { role: _r, ...data } = (src.data ?? {}) as Record<string, unknown>;
+    // Demote first: two originals, even for a moment, leaves a copy with
+    // nothing certain to point at.
+    others.forEach(e => {
+      if (isProjection(e)) return;
+      st.updateCanvasElement(e.id, { data: { ...(e.data ?? {}), role: 'projection' } });
+    });
+    st.updateCanvasElement(id, { data });
+    const user = st.currentUser;
+    if (main && user) {
+      st.apartments.filter(a => a.inNotebook === main.id)
+        .forEach(a => st.updateApartment(a.id, { inNotebook: id }, user));
+    }
+  });
+}
+
 function PlannerHost({ el, c }: { el: CanvasElement; c: WidgetCtx }) {
   // Subscribed, not read once: a projection has to redraw when the MAIN
   // changes, and the main is a different element than the one this node is.
@@ -2931,11 +2975,35 @@ function PlannerHost({ el, c }: { el: CanvasElement; c: WidgetCtx }) {
         onLeaveNotebook={c.leaveNotebook}
       />
       {projecting && (
-        <span className="absolute top-1 right-1 px-1.5 py-0.5 rounded-full text-[9px] font-bold
-                         pointer-events-none"
-          style={{ backgroundColor: orphan ? '#fee2e2' : '#e2e8f0', color: orphan ? '#b4342a' : '#475569' }}>
-          {orphan ? 'no main planner' : 'projection'}
-        </span>
+        /*
+         * Said in plain words, with the two things somebody wants from it
+         * right on it: where the original is, and "make THIS one the
+         * original". "projection" alone told nobody anything.
+         */
+        <div data-notebook-copy={orphan ? 'orphan' : 'copy'}
+          className="absolute top-1 end-1 flex items-center gap-1 rounded-full ps-2 pe-1 py-0.5 text-[10px] font-bold shadow-sm"
+          style={{ backgroundColor: orphan ? '#fee2e2' : '#eef2f7', color: orphan ? '#b4342a' : '#475569' }}
+          title={orphan
+            ? 'The original notebook was removed. Make this the original to plan in it again.'
+            : 'This notebook shows the same week as the original, and both can be edited. The only difference: removing the original moves its weeks into this one; removing this one loses nothing.'}>
+          <span>{orphan ? 'No original' : 'Copy of the notebook'}</span>
+          {!orphan && c.focusEl && main && (
+            <button data-no-drag data-el-action data-notebook-goto-original
+              onPointerDown={e => e.stopPropagation()}
+              onClick={e => { e.stopPropagation(); c.focusEl!(main.id); }}
+              className="rounded-full bg-white px-1.5 py-px text-[#1e3a5f] hover:bg-slate-100">
+              Show the original
+            </button>
+          )}
+          {!c.readOnly && !c.wall && (
+            <button data-no-drag data-el-action data-notebook-make-original
+              onPointerDown={e => e.stopPropagation()}
+              onClick={e => { e.stopPropagation(); crownPlanner(el.id); }}
+              className="rounded-full bg-[#1e3a5f] px-1.5 py-px text-white hover:bg-[#2c4f78]">
+              Make this the original
+            </button>
+          )}
+        </div>
       )}
     </div>
   );

@@ -1318,9 +1318,107 @@ export function ContractorPortal() {
     return orderTaskRows([...live, ...foreign], isoToday());
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filteredAssignments, otherTasks, mapFilter, currentProjectId, currentWsName, apartments]);
+  /**
+   * THE DONE LINE (owner, 2026-10-18 — "The Done Line" page, look C): the line
+   * between the open work and the finished work folds away with a tiny arrow
+   * at its edge, and ONE small button on it says how the done list is shown —
+   * its menu holds Latest / Today / This week first (his starred three), then
+   * Oldest, Last week, By building, By workspace. Latest is the default; the
+   * choice and the fold are remembered on this phone, open the first time.
+   */
+  type DoneSort = 'latest' | 'today' | 'week' | 'oldest' | 'lastweek' | 'building' | 'ws';
+  const doneKey = `portal_done_${token ?? ''}`;
+  const [doneView, setDoneView] = useState<{ open: boolean; sort: DoneSort }>(() => {
+    try {
+      const v = JSON.parse(localStorage.getItem(`portal_done_${token ?? ''}`) || 'null');
+      if (v && typeof v === 'object') return { open: v.open !== false, sort: (v.sort as DoneSort) || 'latest' };
+    } catch { /* private window */ }
+    return { open: true, sort: 'latest' };
+  });
+  const setDone = (patch: Partial<{ open: boolean; sort: DoneSort }>) => {
+    const next = { ...doneView, ...patch };
+    setDoneView(next);
+    try { localStorage.setItem(doneKey, JSON.stringify(next)); } catch { /* private window */ }
+  };
+  const [doneMenu, setDoneMenu] = useState(false);
+  const openRows = useMemo(() => listRows.filter(r => !r.a.completedAt), [listRows]);
+  const doneAll = useMemo(() => listRows.filter(r => !!r.a.completedAt), [listRows]);
+  const doneRows = useMemo(() => {
+    const day = (d: Date) => format(d, 'yyyy-MM-dd');
+    const now = new Date();
+    const today = day(now);
+    const sun = new Date(now.getFullYear(), now.getMonth(), now.getDate() - now.getDay());
+    const weekStart = day(sun);
+    const lastStart = day(new Date(sun.getFullYear(), sun.getMonth(), sun.getDate() - 7));
+    const closedDay = (r: ListRow) => { const t = new Date(r.a.completedAt as string); return isNaN(t.getTime()) ? '' : day(t); };
+    const at = (r: ListRow) => new Date(r.a.completedAt as string).getTime() || 0;
+    let rows = [...doneAll];
+    if (doneView.sort === 'today') rows = rows.filter(r => closedDay(r) === today);
+    if (doneView.sort === 'week') rows = rows.filter(r => closedDay(r) >= weekStart);
+    if (doneView.sort === 'lastweek') rows = rows.filter(r => { const d = closedDay(r); return d >= lastStart && d < weekStart; });
+    rows.sort((x, y) => doneView.sort === 'oldest' ? at(x) - at(y) : at(y) - at(x));
+    if (doneView.sort === 'building' || doneView.sort === 'ws') {
+      const key = (r: ListRow) => doneView.sort === 'ws' ? r.projectName
+        : r.a.general ? r.projectName : (r.apt?.buildingId && r.apt.buildingId !== 'G' ? r.apt.buildingId : r.projectName);
+      rows.sort((x, y) => key(x).localeCompare(key(y)) || at(y) - at(x));
+      return rows.map(r => ({ ...r, group: key(r) }));
+    }
+    return rows.map(r => ({ ...r, group: '' }));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [doneAll, doneView.sort]);
+  const shownRows: (ListRow & { group?: string })[] = doneView.open ? [...openRows, ...doneRows] : openRows;
   /** Where the open work ends and the finished work begins — the divider sits here. */
-  const firstDoneRow = listRows.findIndex(r => !!r.a.completedAt);
-  const doneRowCount = firstDoneRow < 0 ? 0 : listRows.length - firstDoneRow;
+  const firstDoneRow = doneAll.length ? openRows.length : -1;
+  const doneRowCount = doneRows.length;
+  const doneSortWords: Record<DoneSort, string> = {
+    latest: w('Latest', 'אחרונים', 'Последние'),
+    today: w('Today', 'היום', 'Сегодня'),
+    week: w('This week', 'השבוע', 'Эта неделя'),
+    oldest: w('Oldest', 'הישנים', 'Старые'),
+    lastweek: w('Last week', 'שבוע שעבר', 'Прошлая неделя'),
+    building: w('By building', 'לפי בניין', 'По зданиям'),
+    ws: w('By workspace', 'לפי פרויקט', 'По проектам'),
+  };
+  const doneLine = (
+    <div data-list-divider data-done-line className="relative flex items-center gap-2 pt-3 pb-1">
+      <span className="flex items-center gap-1.5 text-[13px] font-extrabold text-gray-500 whitespace-nowrap">
+        <CheckCircle2 size={15} className="text-green-500" />
+        {s.doneDividerLabel || w('Done', 'בוצע', 'Готово')} · {doneView.open ? doneRowCount : doneAll.length}
+      </span>
+      <span className="flex-1 h-px bg-gray-300 min-w-[8px]" />
+      {doneView.open && (
+        <span className="relative">
+          <button data-done-sort aria-expanded={doneMenu} onClick={() => setDoneMenu(m => !m)}
+            className="rounded-full border border-gray-200 bg-white px-2.5 py-0.5 text-[11.5px] font-bold text-[#1e3a5f] whitespace-nowrap">
+            {doneSortWords[doneView.sort]} ▾
+          </button>
+          {doneMenu && (
+            <>
+              <div className="fixed inset-0 z-30" onClick={() => setDoneMenu(false)} />
+              <div data-done-sort-menu className="absolute top-7 end-0 z-40 min-w-[170px] rounded-xl border border-gray-200 bg-white p-1 shadow-xl">
+                {(['latest', 'today', 'week', '-', 'oldest', 'lastweek', 'building', 'ws'] as const).map((k, i) => k === '-'
+                  ? <div key={`sep${i}`} className="my-1 h-px bg-gray-100" />
+                  : (
+                    <button key={k} data-done-sort-pick={k} data-on={doneView.sort === k ? '' : undefined}
+                      onClick={() => { setDone({ sort: k }); setDoneMenu(false); }}
+                      className="flex w-full items-center rounded-lg px-3 py-2 text-start text-[13px] font-semibold text-gray-700 hover:bg-slate-50">
+                      <span className="flex-1">{doneSortWords[k]}</span>
+                      {doneView.sort === k && <CheckCircle2 size={14} className="text-green-500" />}
+                    </button>
+                  ))}
+              </div>
+            </>
+          )}
+        </span>
+      )}
+      <button data-done-fold aria-expanded={doneView.open}
+        onClick={() => { setDone({ open: !doneView.open }); setDoneMenu(false); }}
+        title={doneView.open ? w('Fold the done jobs away', 'לקפל את המשימות שבוצעו', 'Свернуть выполненные') : w('Show the done jobs', 'להציג את המשימות שבוצעו', 'Показать выполненные')}
+        className="flex-shrink-0 grid place-items-center w-7 h-7 rounded-full text-gray-400 hover:text-[#1e3a5f] hover:bg-gray-100">
+        <ChevronDown size={16} className={`transition-transform ${doneView.open ? '' : (s.isRtl ? 'rotate-90' : '-rotate-90')}`} />
+      </button>
+    </div>
+  );
   const openEverywhere = assignments.filter(a => !a.completedAt).length + otherTasks.filter(r => !r.a.completedAt).length;
 
   async function handleMediaUpload(e: React.ChangeEvent<HTMLInputElement>) {
@@ -2463,7 +2561,7 @@ export function ContractorPortal() {
             </div>
           ) : (
             <div className="space-y-3 py-2">
-              {listRows.map(({ a, apt, projectId: rowPid, projectName: rowWs, live }, rowIdx) => {
+              {shownRows.map(({ a, apt, projectId: rowPid, projectName: rowWs, live, group }, rowIdx) => {
                 const stage = live ? getStage(a.stageId) : undefined;
                 const media = live ? getMedia(a.id) : [];
                 const notes = live ? getNotes(a.id) : [];
@@ -2477,15 +2575,9 @@ export function ContractorPortal() {
                   <React.Fragment key={`${rowPid}:${a.id}`}>
                   {/* The line between the work still to do and the work done
                       (owner, 2026-10-07): "not everything in one shot". */}
-                  {rowIdx === firstDoneRow && (
-                    <div data-list-divider className="flex items-center gap-3 pt-3 pb-1">
-                      <span className="flex-1 h-px bg-gray-300" />
-                      <span className="flex items-center gap-1.5 text-[13px] font-extrabold text-gray-500">
-                        <CheckCircle2 size={15} className="text-green-500" />
-                        {s.doneDividerLabel || w('Done', 'בוצע', 'Готово')} · {doneRowCount}
-                      </span>
-                      <span className="flex-1 h-px bg-gray-300" />
-                    </div>
+                  {rowIdx === firstDoneRow && doneLine}
+                  {group && group !== shownRows[rowIdx - 1]?.group && (
+                    <div data-done-group={group} className="px-1 pt-1 text-[11px] font-black tracking-wide text-gray-400 uppercase">{group}</div>
                   )}
                   <button data-task-card={a.id} data-task-ws={rowPid}
                     data-task-done={a.completedAt ? '1' : undefined}
@@ -2586,6 +2678,12 @@ export function ContractorPortal() {
                   </React.Fragment>
                 );
               })}
+              {doneAll.length > 0 && shownRows.length === openRows.length && doneLine}
+              {doneAll.length > 0 && doneView.open && doneRows.length === 0 && (
+                <div data-done-none className="text-center text-[13px] text-gray-400 py-2">
+                  {w('Nothing closed then.', 'לא נסגר כלום בזמן הזה.', 'В это время ничего не закрыто.')}
+                </div>
+              )}
             </div>
           )}
         </main>

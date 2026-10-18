@@ -38,6 +38,7 @@
 import type { ActivityLog, ActivityMarkChange, Apartment, Stage } from '../types';
 import { aptLabel } from '../types';
 import { mediaKindOf } from './mediaKind';
+import { isStartStage } from './stageMarks';
 
 export type ActivityLang = 'en' | 'he';
 
@@ -735,7 +736,12 @@ export function describeGroup(logs: ActivityLog[], ctx: WordsContext): ActivityS
         }
       }
       const marker = logs.find(l => l.marker)?.marker;
-      const phrase = net.size ? stagePhrase([...net.values()], ctx, W) : null;
+      // Sold/Start ticks itself the moment later work begins; beside that work
+      // it is noise ("finished Sold/Start") — said only when it is all there is.
+      let changes = [...net.values()];
+      const real = changes.filter(c => !isStartStage({ id: c.id, name: c.name ?? '' }));
+      if (real.length) changes = real;
+      const phrase = changes.length ? stagePhrase(changes, ctx, W) : null;
       if (marker) {
         const name = stageWord(undefined, marker, ctx) || marker;
         const detail = phrase ? [phrase.text, phrase.detail].filter(Boolean).join(' · ') : undefined;

@@ -54,7 +54,7 @@ const W = {
   currentUser: U, users: [U], stages: STAGES, contractors: [IG],
   buildings: [{ id: 'A2', name: 'A2' }, { id: 'A3', name: 'A3' }],
   apartments: [
-    apt('A3', 13, 5, DRILLED), apt('A3', 14, 5, DRILLED), apt('A3', 15, 5, DRILLED), apt('A2', 16, 5, DRILLED),
+    apt('A3', 13, 5, DRILLED), apt('A3', 14, 5, DRILLED), apt('A3', 15, 5, DRILLED), apt('A2', 16, 5, { skhtatb: 'done' }),
     apt('A2', 9, 3, { skhtatb: 'done', 's-drilling': 'done', 's1-piping': 'done', 's1-concealed': 'done', 's1-fans': 'done', 's7-registers': 'done' }, {
       driveLink: 'https://drive.google.com/drive/folders/FOLDER29',
       noteEntries: [
@@ -131,6 +131,10 @@ const store = (page, k = 'wolfson_app_data') => page.evaluate(k => JSON.parse(lo
   check(/Finished Drilling/.test(plain) && /doing Piping, Concealed Units and Fans/.test(plain), 'in plain words: finished Drilling · doing Piping, Concealed Units and Fans', plain);
   check(await row.locator('[data-bundle-thumb]').count() === 2 && await row.locator('[data-bundle-thumb-more="3"]').count() === 1, 'five pictures: two shown and "+3"');
   check(!/working here today/.test(await page.locator('[data-bundle-popup]').textContent()), 'no app words in the window');
+  const plains = (await page.locator('[data-bundle-popup] [data-bundle-row-plain]').allTextContents()).join(' | ');
+  check(!/Sold\/Start/.test(plains), 'Sold/Start is never "finished" in a sentence (owner, 2026-10-18)', plains);
+  const only = await page.locator('[data-bundle-row="T16"] [data-bundle-row-plain]').textContent();
+  check(/^Doing Piping, Concealed Units and Fans$/.test(only.trim()), 'a flat with only Sold/Start ticked reads "Doing …" and that is it', only);
   await row.locator('[data-bundle-thumb]').first().click();
   check(await page.locator('[data-media-viewer]').count() === 1, 'a picture opens the viewer');
   await page.keyboard.press('Escape');

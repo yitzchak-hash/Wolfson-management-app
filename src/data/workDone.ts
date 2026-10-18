@@ -27,7 +27,7 @@
  */
 import type { Apartment, ContractorAssignment, ContractorPhoto, Contractor, Stage } from '../types';
 import { generalBuildingsText } from '../types';
-import { taskStageIds } from './stageMarks';
+import { taskStageIds, isStartStage } from './stageMarks';
 import { mediaKindOf } from './mediaKind';
 
 export type WorkKind = 'done' | 'half' | 'task' | 'problem';
@@ -201,7 +201,9 @@ export function workDone(sources: WorkSource[], opt: WorkOptions): WorkLine[] {
       };
 
       if (t.problem) { add('problem', '', null, wordsOf(t)); continue; }
-      const worked = (t.stagesWorked?.length ? t.stagesWorked : taskStageIds(t)).filter(Boolean);
+      // Sold/Start is never "finished" work (owner, 2026-10-18).
+      const worked = (t.stagesWorked?.length ? t.stagesWorked : taskStageIds(t)).filter(Boolean)
+        .filter(id => { const st = opt.stages.find(x => x.id === id); return !st || !isStartStage(st); });
       if (!worked.length) {
         const w = wordsOf(t);
         add('task', foldWords(w), null, w);

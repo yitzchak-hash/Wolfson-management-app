@@ -64,6 +64,23 @@ with starred recommendations is published first; the owner says "approved" /
 "all yes" / answers by number; then it is built. Never build a redesign
 unasked.
 
+## Where things stand (2026-10-18, latest — the Done line, notebook copies, Sold/Start, update note)
+His last messages, in his words:
+- "regarding the deadline one is C. Two, is starred. Three, is starred. Four, starred. Five, starred." →
+  The Done Line BUILT as look C (doneline-probe 24).
+- "I removed the notebook widget and re-added it. I don't see yet … the weekly picker on top … now it's
+  showing me that it's a projection … I should be able to change it from the settings. I don't even know
+  what the difference is." → his tab ran the pre-update build (the live records prove it: the original's
+  run was never topped up); production has his old original at x≈4889 on the main board and the re-added
+  one (CE-18dz4ob) as a copy. Shipped: plain-words copy tag with Show the original / Make this the
+  original (crownPlanner moves the real week), the pencil switch in plain sight, and a "newer version is
+  ready" note. NOT changed in production data: he can press "Make this the original" himself, or remove
+  the far-right one (the copy then inherits by itself).
+- "Why does it say finished Sold/Start? … We shouldn't see Sold/Start anywhere other than an initial
+  stage" → removed from every work sentence (busy-day window, task sentences, done card, Who did what,
+  day story, history lines).
+Pending: nothing waiting on him from this round.
+
 ## Where things stand (2026-10-18, latest — This Week First built; the phone round)
 - Stage trades written to production on his approval (11 stages, AC / Drywall as he listed).
 - "This Week First" built with his changes: week chips on every notebook, the chosen week and the

@@ -1,4 +1,5 @@
 import { format } from 'date-fns';
+import { isStartStage } from './stageMarks';
 import {
   ActivityKind, ActivityLang, ScopedLog, WordsContext, kindOf, stageWord, workStages,
 } from './activityWords';
@@ -126,6 +127,9 @@ function absorb(v: DayVisit, l: ScopedLog, kind: ActivityKind, ctx: WordsContext
       break;
     case 'stages':
       for (const m of l.marks ?? []) {
+        // Sold/Start ticks itself when later work begins — not part of the
+        // day's story (owner, 2026-10-18).
+        if (isStartStage({ id: m.id, name: m.name ?? '' })) continue;
         const w = stageWord(m.id, m.name, ctx);
         if (m.to === 'done') addOnce(v.done, w);
         else if (m.to === 'pending') addOnce(v.half, w);

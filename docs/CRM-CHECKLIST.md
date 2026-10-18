@@ -259,4 +259,7 @@ Legend: ☑ shipped · ☐ decided, not built · ◐ built in part · ✎ needs 
 - ☑ Faster worker uploads: three at a time, one folder lookup per batch, share not waited for, a preview + progress per file the moment it is picked (2026-10-18)
 - ☑ Notebook week chips: this week first, the next under it, Sunday turns the page, three weeks ahead kept, a pick per copy per computer, drag-hold over a chip turns the week; TV and the Dashboard This week card (2026-10-18)
 - ☑ Translation follows the text, never the screen language; dictation in the person's own typing language with an EN/עב/RU switch (2026-10-18)
-- ✎ The worker's Done line: fold arrow + tiny filters — plan page "The Done Line" (2026-10-18)
+- ☑ The worker's Done line: "Latest ▾" (Latest · Today · This week, then Oldest · Last week · By building · By workspace) and a fold arrow, remembered per phone, in his language (2026-10-18)
+- ☑ A notebook copy: "Copy of the notebook" · Show the original · Make this the original (the real week moves over); settings say "The original / A copy" (2026-10-18)
+- ☑ The office app says when a newer version is out, one press to reload (2026-10-18)
+- ☑ Sold/Start is never named as finished or being done in a sentence (2026-10-18)

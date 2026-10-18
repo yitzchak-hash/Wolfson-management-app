@@ -88,6 +88,13 @@ const corpus = [
   [log({ actionType: 'stage_marks', fieldChanged: 'stageMarks', userName: 'Yitzchak', marker: 'Job completed', marks: ['s1', 's2', 's3', 's4', 's5'].map(id => ({ id, name: stages.find(s => s.id === id).name, from: 'todo', to: 'done' })) }),
     'Yitzchak set the whole flat to Job completed [marked 5 stages done · Piping, Wall Units, Registers, Access Panels, Fans]'],
   [log({ actionType: 'stage_marks', fieldChanged: 'stageMarks', userName: '', marks: [{ id: 's3', name: 'Registers', from: 'todo', to: 'done' }] }), 'Someone marked Registers done'],
+  // Sold/Start ticks itself when later work begins — never said beside it
+  // (owner, 2026-10-18), but still said when it is the only change.
+  [log({ actionType: 'stage_marks', fieldChanged: 'stageMarks', marks: [
+    { id: 'skhtatb', name: 'Sold/Start', from: 'todo', to: 'done' }, { id: 's5', name: 'Fans', from: 'todo', to: 'doing' }] }),
+    'Igor started Fans'],
+  [log({ actionType: 'stage_marks', fieldChanged: 'stageMarks', userName: 'Yitzchak', marks: [{ id: 'skhtatb', name: 'Sold/Start', from: 'todo', to: 'done' }] }),
+    'Yitzchak marked Sold/Start done'],
 ];
 for (const [l, want] of corpus) {
   const got = say(l);

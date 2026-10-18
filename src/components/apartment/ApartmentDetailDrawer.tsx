@@ -37,7 +37,7 @@ import { shotKindOf } from '../../data/sitePhotos';
 import { printSheet, printEsc } from '../../data/printing';
 import { PlanAddressSuggest } from './PlanAddressSuggest';
 import { StagePicker } from './StagePicker';
-import { isWorkStage, progressOf, taskStageIds, recordStageIds } from '../../data/stageMarks';
+import { isWorkStage, progressOf, taskStageIds, recordStageIds, isStartStage } from '../../data/stageMarks';
 import { ProblemForm } from './ProblemForm';
 import { ProblemBand } from './ProblemBand';
 import { problemState } from '../../data/problems';
@@ -2629,8 +2629,9 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                               const d = new Date(a.completedAt!);
                               const day = (() => { try { return format(d, 'EEEE d MMM', he ? { locale: heLocale } : undefined); } catch { return ''; } })();
                               const time = (() => { try { return format(d, 'HH:mm'); } catch { return ''; } })();
-                              const fin = doneStages.filter(st => !unfinishedIds.includes(st.id)).map(st => getStageName(st, he));
-                              const half = doneStages.filter(st => unfinishedIds.includes(st.id)).map(st => getStageName(st, he));
+                              // Sold/Start is never named as finished (owner, 2026-10-18).
+                              const fin = doneStages.filter(st => !unfinishedIds.includes(st.id) && !isStartStage(st)).map(st => getStageName(st, he));
+                              const half = doneStages.filter(st => unfinishedIds.includes(st.id) && !isStartStage(st)).map(st => getStageName(st, he));
                               const list = (xs: string[]) => xs.length <= 1 ? (xs[0] ?? '') : `${xs.slice(0, -1).join(', ')} ${he ? 'ו' : 'and '}${xs[xs.length - 1]}`;
                               const what = fin.length ? list(fin) : (he ? 'את המשימה' : 'the task');
                               const sentence = he

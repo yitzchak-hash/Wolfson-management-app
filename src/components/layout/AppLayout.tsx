@@ -9,6 +9,7 @@ import { isFirebaseConfigured } from '../../data/firebase';
 import { PlannerAskModal } from '../board/PlannerAskModal';
 import { UndoLayer } from '../board/UndoLayer';
 import { OfficeAlerts } from './OfficeAlerts';
+import { NewVersionNote } from './NewVersionNote';
 import { setActiveSpeaker } from '../../data/speakLang';
 
 export function AppLayout() {
@@ -243,6 +244,7 @@ export function AppLayout() {
       <PlannerAskModal />
       {/* A worker's message or a closed job rings the office — every page. */}
       <OfficeAlerts />
+      <NewVersionNote />
       {/* Ctrl+Z / Ctrl+Shift+Z / Ctrl+Y, and the question that guards anything
           putting real content back. Here rather than on the board so the keys
           work on every page, and so a question raised on the board is still

@@ -30,6 +30,38 @@ export interface WhatsNewEntry {
 
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    date: '2027-02-09',
+    title: 'The Done line, and one notebook',
+    items: [
+      {
+        title: 'Done work folds away on the phone',
+        body: 'On a worker\'s task list the "Done" line has a small "Latest ▾" button — Latest, Today, This week, '
+          + 'and more under it — and a tiny arrow at its edge that folds the done jobs away. Each phone remembers '
+          + 'how it was left. In the worker\'s own language.',
+        demo: 'list',
+      },
+      {
+        title: 'A second notebook says what it is',
+        body: 'A second weekly notebook now says "Copy of the notebook", with "Show the original" and "Make this the '
+          + 'original" right on it. Both show the same week and both can be edited — the original is only the one '
+          + 'that keeps the data if a notebook is removed.',
+        demo: 'list',
+      },
+      {
+        title: 'Sold/Start is never "finished"',
+        body: 'Sold/Start ticks itself the moment later work begins, so it is no longer named as finished in the '
+          + 'busy-day window, the task sentences, Who did what, the day story or the history.',
+        demo: 'list',
+      },
+      {
+        title: 'A note when the app has been updated',
+        body: 'When a newer version is out, a small note in the corner offers one press to reload — a tab left '
+          + 'open no longer keeps running yesterday\'s version.',
+        demo: 'list',
+      },
+    ],
+  },
+  {
     date: '2027-02-08',
     title: 'This week first',
     items: [

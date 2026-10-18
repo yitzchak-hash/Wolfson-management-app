@@ -1568,7 +1568,7 @@ export function GeneralJobsPage() {
     // The store STAYS OPEN. Furnishing a board meant reopening it for every
     // single piece.
     setToast(alreadyMain
-      ? `${def.name} added as a projection — it shows the main one`
+      ? `${def.name} added as a copy — it shows the same week as the one already on your board. "Make this the original" is on its top corner.`
       : revive
         ? `${def.name} added — everything that was in the last one is back`
         : `${def.name} added`);
@@ -5899,6 +5899,17 @@ function isPointerNode(el: CanvasElement | undefined): boolean {
     update: () => {},
     openJob: (id: string) => openJobRef.current(id),
     boardElements: canvasElements,
+    // A node on ANOTHER named board: switch to that board, then fly once it
+    // has drawn. Read through the store, never the memo's captured list.
+    focusEl: (id: string) => {
+      const el = useStore.getState().canvasElements.find(e => e.id === id);
+      if (!el) return;
+      const here = useStore.getState().activeBoardView ?? '';
+      if ((el.board ?? '') !== here) {
+        useStore.getState().setActiveBoardView(el.board ?? '');
+        window.setTimeout(() => live.current.elFocus?.(el), 400);
+      } else live.current.elFocus?.(el);
+    },
     isRtl: !!s.isRtl,
     // A job whose last square in the notebook was emptied comes back to the
     // board, at the position it never lost.

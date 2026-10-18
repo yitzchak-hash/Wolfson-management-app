@@ -2,7 +2,7 @@ import React from 'react';
 import { Check } from 'lucide-react';
 import type { ContractorAssignment, Stage, Apartment } from '../../types';
 import { getStageName } from '../../types';
-import { stageSetOf, stageStateOf, isWorkStage, taskStageIds, recordStageIds, SetContext } from '../../data/stageMarks';
+import { stageSetOf, stageStateOf, isWorkStage, taskStageIds, recordStageIds, isStartStage, SetContext } from '../../data/stageMarks';
 
 /**
  * WHICH STAGES A TASK IS FOR — the set model (locked answer 7, 2026-09-22):
@@ -157,7 +157,7 @@ export function StagePairPill({ task, stages, isRtl, size = 'sm', className = ''
 export function taskPlainSentence(task: Pick<ContractorAssignment, 'stageId' | 'stageIds' | 'stagesWorked' | 'stagesUnfinished' | 'completedAt' | 'dueDate'>,
   stages: Stage[], who: string, isRtl?: boolean): string {
   const he = !!isRtl;
-  const names = recordStageIds(task).map(id => stages.find(s => s.id === id)).filter((s): s is Stage => !!s).map(st => getStageName(st, he));
+  const names = recordStageIds(task).map(id => stages.find(s => s.id === id)).filter((s): s is Stage => !!s && !isStartStage(s)).map(st => getStageName(st, he));
   const list = (xs: string[]) => xs.length <= 1 ? (xs[0] ?? '') : `${xs.slice(0, -1).join(', ')} ${he ? 'ו' : 'and '}${xs[xs.length - 1]}`;
   const day = (iso: string) => {
     const d = new Date(iso.length === 10 ? `${iso}T12:00:00` : iso);

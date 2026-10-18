@@ -7,7 +7,7 @@ import {
 } from '../../types';
 import { useStore, loadProjectSnapshot } from '../../data/store';
 import { buildFloorRows, positionMap, rowCells, rowPillLabel } from '../../data/floorRows';
-import { recordStageIds } from '../../data/stageMarks';
+import { recordStageIds, isStartStage } from '../../data/stageMarks';
 import { photoSrcOf } from '../../data/photoSrc';
 import { shotKindOf } from '../../data/sitePhotos';
 import { MediaViewer, ViewerItem } from '../ui/MediaViewer';
@@ -606,13 +606,17 @@ export function BundlePopup({ bundle, person, personColor, dayLabel, stages, wor
                           // Where the apartment stands, in plain words (owner's recording,
                           // 2026-10-11: "currently finished Drilling, doing Piping,
                           // Concealed Units, Fans — that's how it should read").
-                          const named = ids.map(stageName).filter(Boolean);
+                          // Sold/Start is never "finished" or "being done" in a sentence
+                          // (owner, 2026-10-18): it ticks itself the moment later work
+                          // begins, so naming it says nothing about the day's work.
+                          const notStart = (id: string) => { const st = stages.find(x => x.id === id); return !st || !isStartStage(st); };
+                          const named = ids.filter(notStart).map(stageName).filter(Boolean);
                           const join = (xs: string[]) => xs.length <= 1 ? (xs[0] ?? '') : `${xs.slice(0, -1).join(', ')} ${isRtl ? 'ו' : 'and '}${xs[xs.length - 1]}`;
                           let line = '';
                           if (t.completedAt) {
                             line = named.length ? (isRtl ? `סיים ${join(named)}` : `Finished ${join(named)}`) : '';
                           } else {
-                            const doneIds = stages.filter(st => apt?.stageMarks?.[st.id] === 'done' && !ids.includes(st.id));
+                            const doneIds = stages.filter(st => apt?.stageMarks?.[st.id] === 'done' && !ids.includes(st.id) && !isStartStage(st));
                             const last = doneIds.length ? getStageName(doneIds[doneIds.length - 1], isRtl) : '';
                             const doing = named.length ? (isRtl ? `עושה ${join(named)}` : `doing ${join(named)}`) : '';
                             line = [last ? (isRtl ? `סיים ${last}` : `Finished ${last}`) : '', doing].filter(Boolean).join(' · ');

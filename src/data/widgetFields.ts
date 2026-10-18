@@ -632,10 +632,10 @@ export const WIDGET_FIELDS: Record<string, WidgetField[]> = {
         + 'close together. Everything still opens, drags and crosses off the same.',
     },
     {
-      key: 'role', label: 'This copy is', kind: 'plannerRole', group: 'People and days',
-      hint: 'The MAIN notebook is the record that holds the week; every other copy is a '
-        + 'window onto it. Both carry every control and stay in step — the label only '
-        + 'says which one owns the data when a copy is removed.',
+      key: 'role', label: 'This notebook is', kind: 'plannerRole',
+      hint: 'Every notebook shows the same week and every one can be edited. The original '
+        + 'is the one that keeps the data: remove it and its weeks move into a copy; remove '
+        + 'a copy and nothing is lost.',
     },
     {
       key: 'showTasks', label: 'Show assigned tasks', kind: 'select', group: 'People and days',
