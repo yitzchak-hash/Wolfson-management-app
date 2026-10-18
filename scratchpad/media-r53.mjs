@@ -38,7 +38,7 @@ function seed(driveLink) {
     localStorage.setItem('whats_new_seen', '2099-01-01');
     if (!localStorage.getItem('active_project')) localStorage.setItem('active_project', 'wolfson');
     if (localStorage.getItem('wolfson_app_data')) return;
-    const admin = { id: 'U-t', name: 'Dana', code: '999999', role: 'admin', active: true, createdAt: '2026-01-01' };
+    const admin = { id: 'U-t', name: 'Officer', code: '999999', role: 'admin', active: true, createdAt: '2026-01-01' };
     const stages = [
       { id: 'S1', name: 'Ready to start', color: '#64748b', order: 1, active: true, kind: 'marker' },
       { id: 'S2', name: 'Fans', color: '#0ea5e9', order: 2, active: true, kind: 'work' },
@@ -49,7 +49,7 @@ function seed(driveLink) {
       stageMarks: {}, createdAt: '2026-01-01', updatedAt: '2026-01-01', updatedBy: 'U', updatedByName: 'U',
       ...(D ? { driveLink: D } : {}) });
     const task = (id, a) => ({ id, apartmentId: a, buildingId: 'A1', contractorId: 'C-jo', taskDescription: 'Install',
-      dueDate: T, stageId: 'S2', stageIds: ['S2'], completedAt: null, createdAt: '2026-01-01', createdBy: 'U-t', createdByName: 'Dana' });
+      dueDate: T, stageId: 'S2', stageIds: ['S2'], completedAt: null, createdAt: '2026-01-01', createdBy: 'U-t', createdByName: 'Officer' });
     localStorage.setItem('wolfson_app_data', JSON.stringify({
       currentUser: admin, users: [admin], stages,
       contractors: [{ id: 'C-jo', name: 'Yaakov', category: 'ac', token: 'tok-jo', active: true, createdAt: '2026-01-01', lang: 'en' }],

@@ -46,7 +46,7 @@ function seed(ctx) {
     const user = { id: 'U-t', name: 'Esther', code: '999999', role: 'admin', active: true, createdAt: '2026-01-01' };
     const max = { id: 'C-mx', name: 'Max', email: '', category: 'ac', token: 'tok-mx', active: true,
       photosOptional: true, createdAt: '2026-01-01', lang: 'en' };
-    const job = { id: 'G-1', buildingId: 'G', floor: 0, apartmentNumber: '', displayName: 'Levi', isUnnamed: false,
+    const job = { id: 'G-1', buildingId: 'G', floor: 0, apartmentNumber: '', displayName: 'Testfam', isUnnamed: false,
       isDuplexApt: false, classification: 'standard', generalNotes: '', currentStageId: null,
       stageDates: {}, canvasX: 300, canvasY: 190,
       createdAt: '2026-01-01', updatedAt: '2026-01-01', updatedBy: 'U', updatedByName: 'U' };
