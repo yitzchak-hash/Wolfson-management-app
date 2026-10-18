@@ -1,0 +1,337 @@
+<title>More Than the Task Said</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@700;800;900&family=IBM+Plex+Sans:wght@400;500;600;700&family=Caveat:wght@500;600;700&family=Inter:wght@400;500;600;700;800;900&display=swap">
+<style>
+  /* Layout: a drafting desk. The app's screens are drawn in the app's own
+     material (white sheets, its navy, its stage colours) and lie on the desk;
+     everything that explains is desk chrome — paper grey and china-marker red
+     — so the thing being decided and the note about it never mix. */
+  :root {
+    --desk: #d8dde4;
+    --plate: #e7ebf0;
+    --ink: #17212d;
+    --ink-2: #4a5665;
+    --rule: #b8c1cc;
+    --marker: #c2402f;
+    --marker-ink: #ffffff;
+    --chip: #f5f7fa;
+    --font-display: 'Archivo', 'Arial Narrow', 'Helvetica Neue', Arial, sans-serif;
+    --font-body: 'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif;
+    --font-hand: 'Caveat', 'Segoe Print', 'Bradley Hand', 'Comic Sans MS', cursive;
+    --font-app: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --desk: #181d24; --plate: #222932; --ink: #e7ebf0; --ink-2: #a8b3c1; --rule: #3a4451;
+      --marker: #ff8a74; --marker-ink: #1a0f0d; --chip: #2a313b; color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --desk: #181d24; --plate: #222932; --ink: #e7ebf0; --ink-2: #a8b3c1; --rule: #3a4451;
+    --marker: #ff8a74; --marker-ink: #1a0f0d; --chip: #2a313b; color-scheme: dark;
+  }
+
+  body { background: var(--desk); color: var(--ink); font-family: var(--font-body); font-size: 15px; line-height: 1.5; -webkit-font-smoothing: antialiased; }
+  .wrap { max-width: 1120px; margin: 0 auto; padding-inline: 16px; padding-block: 30px 90px; }
+  .eyebrow { font: 600 12px/1.3 var(--font-body); letter-spacing: .12em; text-transform: uppercase; color: var(--ink-2); margin: 0; }
+  .title { font: 900 clamp(32px, 6vw, 50px)/1 var(--font-display); letter-spacing: -.015em; margin: 8px 0 14px; text-wrap: balance; }
+  .lede { max-width: 68ch; color: var(--ink-2); font-size: 16px; margin: 0 0 10px; }
+  .lede q { color: var(--ink); font-style: italic; }
+  .small { font-size: 13px; color: var(--ink-2); margin: 0; }
+
+  .sec { margin-top: 52px; }
+  .sec-head { display: flex; align-items: flex-end; gap: 6px 16px; flex-wrap: wrap; margin-bottom: 14px; }
+  .letter { font: 700 92px/.78 var(--font-hand); color: var(--marker); transform: rotate(-5deg); flex-shrink: 0; width: 64px; text-align: center; }
+  .sec-text { flex: 1 1 280px; min-width: 0; }
+  .sec-title { font: 800 23px/1.15 var(--font-display); margin: 0; text-wrap: balance; }
+  .caption { font: 600 23px/1.15 var(--font-hand); color: var(--marker); margin: 4px 0 0; transform: rotate(-.6deg); }
+  .plate { background: var(--plate); border: 1px solid var(--rule); border-radius: 18px; padding: 14px; }
+  .plate-cap { font: 600 19px/1.2 var(--font-hand); color: var(--marker); margin: 0 0 8px 2px; }
+  .lower { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: 16px; margin-top: 14px; align-items: start; }
+  @media (max-width: 820px) { .lower { grid-template-columns: minmax(0, 1fr); } }
+  .marks { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+  .marks li { display: flex; gap: 10px; align-items: flex-start; font-size: 14.5px; }
+  .marks li b.k { flex-shrink: 0; width: 22px; height: 22px; border-radius: 999px; background: var(--marker); color: var(--marker-ink); font: 800 12px/22px var(--font-body); text-align: center; margin-top: 1px; }
+  .note { font-size: 14.5px; }
+  .note h4 { font: 800 12px/1.2 var(--font-body); letter-spacing: .1em; text-transform: uppercase; color: var(--ink-2); margin: 0 0 4px; }
+  .note p { margin: 0 0 10px; }
+  .done-box { background: var(--plate); border: 1px solid var(--rule); border-radius: 14px; padding: 12px 16px; margin-top: 18px; }
+  .done-box h3 { font: 800 14px/1.2 var(--font-body); margin: 0 0 6px; letter-spacing: .02em; }
+  .done-box ul { margin: 0; padding-inline-start: 18px; }
+  .done-box li { margin: 2px 0; }
+  .mk { position: absolute; z-index: 9; width: 20px; height: 20px; border-radius: 999px; background: var(--marker); color: var(--marker-ink); font: 800 11.5px/20px var(--font-body); text-align: center; box-shadow: 0 0 0 2px #fff, 0 3px 8px rgba(0,0,0,.25); }
+  .scroll { overflow-x: auto; padding-bottom: 6px; -webkit-overflow-scrolling: touch; }
+
+  /* ── The app's own material ─────────────────────────────────────────── */
+  .phone { width: 260px; border-radius: 30px; border: 8px solid #0f172a; background: #f8fafc; overflow: hidden; }
+  .ph-top { background: #1e3a5f; color: #fff; padding: 10px 12px; font-size: 12.5px; font-weight: 800; }
+  .stage { --pip: #6b7280; }
+  .ans { margin-top: 52px; }
+  .ans h2 { font: 800 26px/1.15 var(--font-display); margin: 0 0 6px; }
+  .q { background: var(--plate); border: 1px solid var(--rule); border-radius: 14px; padding: 12px 16px; margin-top: 10px; }
+  .q h3 { margin: 0 0 8px; font: 700 15.5px/1.35 var(--font-body); display: flex; gap: 10px; align-items: flex-start; }
+  .q h3 .n { flex-shrink: 0; font: 700 26px/.9 var(--font-hand); color: var(--marker); width: 28px; text-align: center; }
+  .q ul { list-style: none; margin: 0; padding: 0 0 0 38px; display: grid; gap: 4px; }
+  .q li { font-size: 14.5px; }
+  .q li.star::before { content: '★ '; color: var(--marker); }
+  .q li:not(.star)::before { content: '○ '; color: var(--ink-2); }
+  .group-h { font: 600 26px/1.1 var(--font-hand); color: var(--marker); margin: 28px 0 0; }
+  .final { margin-top: 26px; background: var(--plate); border: 1px dashed var(--marker); border-radius: 18px; padding: 16px 20px; }
+  .final .say { font: 600 26px/1.2 var(--font-hand); color: var(--marker); margin: 4px 0 0; }
+  .final p { margin: 4px 0; max-width: 70ch; }
+  /* The worker's phone, drawn in the app's own material */
+  .phone { width: 280px; flex-shrink: 0; }
+  .ph-body { background: #fff; padding: 12px; font-family: var(--font-app); color: #1e293b; min-height: 380px; display: flex; flex-direction: column; gap: 10px; }
+  .ph-q { font-size: 15px; font-weight: 800; text-align: center; color: #0f172a; }
+  .ph-sub { font-size: 11.5px; text-align: center; color: #64748b; margin-top: -6px; }
+  .yn { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .yn span { text-align: center; padding: 11px 0; border-radius: 12px; font-weight: 800; font-size: 14px; border: 1.5px solid #e2e8f0; color: #334155; }
+  .yn span.on { background: #22c55e; border-color: #22c55e; color: #fff; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .chip { font-size: 12px; font-weight: 700; padding: 6px 10px; border-radius: 999px; border: 1.5px solid #e2e8f0; color: #334155; background: #fff; }
+  .chip.on { background: #1e3a5f; border-color: #1e3a5f; color: #fff; }
+  .chip.half { background: #fff7ed; border-color: #f97316; color: #c2410c; }
+  .chip.dim { opacity: .45; text-decoration: none; }
+  .row3 { display: grid; grid-template-columns: 1fr auto; gap: 6px; align-items: center; font-size: 12.5px; padding: 6px 8px; border: 1px solid #e2e8f0; border-radius: 10px; }
+  .tri { display: inline-flex; border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden; }
+  .tri span { font-size: 10.5px; font-weight: 800; padding: 4px 7px; color: #475569; border-inline-start: 1px solid #e2e8f0; }
+  .tri span:first-child { border: 0; }
+  .tri span.on.g { background: #16a34a; color: #fff; }
+  .tri span.on.o { background: #f97316; color: #fff; }
+  .send { margin-top: auto; text-align: center; padding: 12px 0; border-radius: 12px; background: #22c55e; color: #fff; font-weight: 800; font-size: 14px; }
+  .pics { border: 2px solid #eab308; border-radius: 12px; padding: 8px; text-align: center; font-size: 12.5px; font-weight: 700; }
+  .pics b { color: #ca8a04; }
+  .box { border: 1px solid #e2e8f0; border-radius: 10px; padding: 8px 10px; font-size: 12px; color: #94a3b8; }
+  /* the notebook, small */
+  .nb { width: 560px; padding: 10px; }
+  .nb-grid { display: grid; grid-template-columns: 80px repeat(4, 1fr); gap: 3px; font-size: 11px; }
+  .nb-grid > div { min-height: 44px; border-radius: 6px; background: #f8fafc; padding: 4px; }
+  .nb-grid .h { min-height: 0; background: #f1f5f9; font-weight: 800; color: #1e3a5f; text-align: center; }
+  .nb-grid .p { background: #ede9fe; font-weight: 800; display: flex; align-items: center; gap: 4px; }
+  .nb-grid .div { grid-column: 1 / -1; min-height: 0; background: none; font-size: 9.5px; font-weight: 800; color: #94a3b8; letter-spacing: .08em; padding: 2px 0; }
+  .bar { border: 2px solid #6366f1; background: #fff; border-radius: 6px; padding: 3px 5px; font-weight: 800; font-size: 10.5px; }
+  .bar.ghost { border-style: dashed; opacity: .55; }
+  .bar.dw { border-color: #0d9488; }
+  .bar small { display: block; font-weight: 600; color: #64748b; }
+  .arrow { color: var(--marker); font: 700 22px var(--font-hand); }
+  .dlg { width: 340px; padding: 14px; font-family: var(--font-app); }
+  .dlg h4 { margin: 0 0 8px; font-size: 14.5px; font-weight: 800; color: #0f172a; }
+  .dlg p { margin: 0 0 8px; font-size: 12.5px; color: #334155; }
+  .opt { display: block; border: 1.5px solid #e2e8f0; border-radius: 10px; padding: 8px 10px; margin-top: 6px; font-size: 12.5px; font-weight: 700; color: #334155; }
+  .opt.on { border-color: #1e3a5f; background: #eff6ff; }
+  .opt small { display: block; font-weight: 500; color: #64748b; }
+</style>
+
+<div class="wrap" lang="en">
+  <p class="eyebrow">From your recordings · 15 October 2026, 14:13 and 14:17</p>
+  <h1 class="title">More Than the Task Said</h1>
+  <p class="lede">On the phone you said: <q>the secretary thought he's doing just the fans there, but he ended up doing some more stuff as well… it should ask him, did you do more stuff today?… let's say he did a small action of one of the stages, just connections for the concealed units… or a job that doesn't have concealed units at all, but there is a stage on that workspace… we need solutions for these scenarios.</q></p>
+  <p class="lede">And on the notebook: <q>by mistake I moved this to drywall. It should understand that if it's moving to drywall, it's a new task… the stage of the Geves, the drywall. I need to understand how this would work.</q></p>
+  <p class="small">This page is a plan. Nothing on it is built yet. All names on it are made up.</p>
+
+  <div class="done-box">
+    <h3>Already live, from the same three recordings</h3>
+    <ul>
+      <li>The big "Wrong apartment? Move it" button is gone; a small icon beside the apartment's name asks first, Yes or No.</li>
+      <li>The closing screen asks one question over the message box: "Anything the office should know?"</li>
+      <li>Dragging a task bar to another day or person asks first: "Move the task you gave Yaakov on Sunday to Thursday?" — and says so when the row belongs to another trade.</li>
+      <li>A person can be hidden from the notebook from its pencil, and shown again.</li>
+      <li>Active jobs: a task moved on the notebook counts as notebook activity; the little squares are icons now; the tiles fill the widget's width, with a Tile size slider.</li>
+    </ul>
+    <p class="small" style="margin-top:6px">Also under way from the same recording: undo and redo checked across the whole app, so adding, removing or moving a task can be undone.</p>
+  </div>
+
+  <!-- ── A · anything else today ─────────────────────────────────────── -->
+  <section class="sec" id="more">
+    <div class="sec-head">
+      <div class="letter" aria-hidden="true">A</div>
+      <div class="sec-text">
+        <h2 class="sec-title">"Did you do anything else here today?"</h2>
+        <p class="caption">one more question when he closes, before the pictures</p>
+      </div>
+    </div>
+    <div class="plate" style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start">
+      <div class="phone app"><div class="ph-top">Closing the job · 16 — Halberd</div>
+        <div class="ph-body">
+          <div class="ph-q">Did you finish doing Fans and Concealed Units?</div>
+          <div class="yn"><span class="on">Yes</span><span>No</span></div>
+          <div class="ph-q" style="margin-top:8px">Did you do anything else here today?</div>
+          <div class="yn"><span class="on">Yes</span><span>No</span></div>
+          <div class="send" style="background:#cbd5e1">Next</div>
+        </div>
+      </div>
+      <div class="arrow" aria-hidden="true" style="align-self:center">→</div>
+      <div class="phone app"><div class="ph-top">Is it one of these?</div>
+        <div class="ph-body">
+          <div class="ph-sub" style="margin:0">the stages still open here · pick one or more</div>
+          <div class="chips">
+            <span class="chip" style="border-style:dashed">Not on this list…</span><span class="chip on">Wall Units</span><span class="chip">Outdoor Units</span><span class="chip">Registers</span>
+          </div>
+          <div class="row3"><span><b>Wall Units</b></span><span class="tri"><span>All of it</span><span class="on o">Part of it</span></span></div>
+          <div class="box" style="border-color:#f97316;color:#334155">🎤 What did you do? <b>needed for part of it</b><br>"hung the brackets only"</div>
+          <div class="send">Next</div>
+        </div>
+      </div>
+      <div class="arrow" aria-hidden="true" style="align-self:center">→</div>
+      <div class="phone app"><div class="ph-top">Not on this list</div>
+        <div class="ph-body">
+          <div class="ph-q">What else did you do?</div>
+          <div class="box" style="color:#334155">🎤 "took out garbage, there was a lot of it"</div>
+          <div class="ph-sub" style="margin:0">a picture is welcome, not required</div>
+          <div class="send">Next — pictures</div>
+        </div>
+      </div>
+      <div class="arrow" aria-hidden="true" style="align-self:center">→</div>
+      <div class="phone app"><div class="ph-top">Pictures</div>
+        <div class="ph-body">
+          <div class="pics">Pictures of <b>Fans</b><br><span style="font-weight:500;color:#64748b">finished · 0/3</span></div>
+          <div class="pics">Pictures of <b>Concealed Units</b><br><span style="font-weight:500;color:#64748b">finished · 0/3</span></div>
+          <div class="pics" style="border-color:#f97316">Wall Units<br><span style="font-weight:500;color:#64748b">part of it · a picture is welcome, not required</span></div>
+          <div class="box">Anything the office should know?</div>
+          <div class="send">Send and close the job</div>
+        </div>
+      </div>
+    </div>
+    <div class="lower">
+      <ol class="marks">
+        <li><b class="k">1</b><span>The first question names the task's own stages — <b>"Did you finish doing Fans and Concealed Units?"</b> Then <b>"Did you do anything else here today?"</b> No goes straight to the pictures, as today.</span></li>
+        <li><b class="k">2</b><span>Yes asks <b>"Is it one of these?"</b> — the stages still open on this apartment, with <b>Not on this list…</b> as the first bubble in the same row. He picks one or more. For each stage: <b>All of it</b> or <b>Part of it</b>.</span></li>
+        <li><b class="k">3</b><span><b>All of it</b> ticks the stage done and asks for its three pictures, like every finished stage. <b>Part of it</b> cannot go on until he says what he did — typed or spoken.</span></li>
+      </ol>
+      <div class="note">
+        <h4>Where it lands</h4>
+        <p>Everything he adds rides on the task he is closing, so the office sees one closed task: Fans + Concealed Units done, Wall Units (part — "hung the brackets only"), and "also: took out garbage".</p>
+        <h4>The notebook</h4>
+        <p>The tile for that day shows every stage; the half-done one wears the orange clock until somebody finishes it.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── B · a small part of a stage ──────────────────────────────────── -->
+  <section class="sec" id="part">
+    <div class="sec-head">
+      <div class="letter" aria-hidden="true">B</div>
+      <div class="sec-text">
+        <h2 class="sec-title">A small part of a stage</h2>
+        <p class="caption">"just connections for the concealed units"</p>
+      </div>
+    </div>
+    <div class="lower" style="margin-top:0">
+      <ol class="marks">
+        <li><b class="k">4</b><span><b>Part of it</b> marks the stage <b>half done</b> (the orange clock you already have). He must say what he did — typed or spoken — and it stays right on the stage: "connections only".</span></li>
+        <li><b class="k">5</b><span>No pictures are required for a part, so a two-minute job does not cost him three photos. One is welcome.</span></li>
+        <li><b class="k">6</b><span>Later, if you want it: each stage could have its own <b>steps</b> set by the office (Concealed Units: hang · connect · test). He ticks the step he did and the stage shows 1/3. That is question 3, not in the plan unless you pick it.</span></li>
+      </ol>
+      <div class="note">
+        <h4>Why not just "done"</h4>
+        <p>Ticking it done would tell the office the stage is finished when only the connections are. Half done with his words is the honest record, and the office clears it when the rest is done.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── C · a stage this apartment does not have ─────────────────────── -->
+  <section class="sec" id="notlisted">
+    <div class="sec-head">
+      <div class="letter" aria-hidden="true">C</div>
+      <div class="sec-text">
+        <h2 class="sec-title">"Not on this list…"</h2>
+        <p class="caption">a stage this apartment lacks — or work that is no stage at all, like taking out garbage</p>
+      </div>
+    </div>
+    <div class="lower" style="margin-top:0">
+      <ol class="marks">
+        <li><b class="k">7</b><span>The list only shows <b>this apartment's own stages</b> — a stage switched off for it, or not in its tipus, is not offered, so he cannot tick something that does not exist there.</span></li>
+        <li><b class="k">8</b><span><b>Not on this list…</b> asks "What else did you do?" He types it or says it — "took out garbage". Nothing is ticked on the apartment, no picture is required, and his close carries on as normal.</span></li>
+        <li><b class="k">9</b><span>His words stay with the closed task as <b>"Also: took out garbage"</b> — on the green done card, in the task's messages (in your language), and in "Who did what". The office gets the usual ping, marked <b>not on the list</b>.</span></li>
+        <li><b class="k">10</b><span>At the office the line has two small buttons. Neither has to be pressed — left alone, it is simply a record of what he did.</span></li>
+      </ol>
+      <div class="dlg app" style="background:#fff;border:1px solid #e2e8f0;border-radius:14px">
+        <h4>Not on the list · Yaakov · 16 — Halberd</h4>
+        <p>"Took out garbage, there was a lot of it"</p>
+        <span class="opt">That was a stage…<small>Pick which. It is switched on for this apartment and shows as done.</small></span>
+        <span class="opt">Make it its own task<small>A separate closed task for today, so extra work can be counted or billed.</small></span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── D · onto another trade's row ─────────────────────────────────── -->
+  <section class="sec" id="trade">
+    <div class="sec-head">
+      <div class="letter" aria-hidden="true">D</div>
+      <div class="sec-text">
+        <h2 class="sec-title">A task dropped on another trade's row</h2>
+        <p class="caption">an AC task dragged onto a drywall worker</p>
+      </div>
+    </div>
+    <div class="plate scroll" style="display:flex;gap:16px;align-items:flex-start">
+      <div class="nb app">
+        <div class="nb-grid">
+          <div class="h"></div><div class="h">Sun 18</div><div class="h">Mon 19</div><div class="h">Tue 20</div><div class="h">Wed 21</div>
+          <div class="div">AC</div>
+          <div class="p">● Yaakov</div><div><div class="bar">Halberd<small>AC installation · 2 days</small></div></div><div></div><div></div><div></div>
+          <div class="div">DRYWALL</div>
+          <div class="p">● Max</div><div></div><div></div><div><div class="bar dw ghost">Halberd<small>dropped here</small></div></div><div></div>
+        </div>
+      </div>
+      <div class="dlg app">
+        <h4>Max does drywall, not AC</h4>
+        <p>You dropped <b>Halberd</b> — Yaakov's AC installation on Sunday — on <b>Max, Tuesday</b>.</p>
+        <span class="opt on">★ New drywall task for Max on Tuesday<small>Stage: Installation of Geves (the next drywall stage). Yaakov's AC task stays where it is.</small></span>
+        <span class="opt">Give this task to Max as it is<small>What happens today: the AC task moves to Max, stages unchanged.</small></span>
+        <span class="opt">Cancel</span>
+      </div>
+    </div>
+    <div class="lower">
+      <ol class="marks">
+        <li><b class="k">11</b><span>Every stage gets a small setting in Settings → Stages: <b>who does it</b> — AC, Drywall or General.</span></li>
+        <li><b class="k">12</b><span>A task dropped on a worker of another trade asks, and the first answer makes a <b>new task</b> for him on that day, on the job's next stage of <b>his</b> trade. The original task is not touched.</span></li>
+        <li><b class="k">13</b><span>Dropping onto someone of the same trade stays exactly as it works today (the "move this task?" question).</span></li>
+      </ol>
+      <div class="note">
+        <h4>Why a new task</h4>
+        <p>The drywall work is different work: its own worker, stage, pictures and close. Moving the AC task would leave the AC work without anybody on it.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Questions ──────────────────────────────────────────────────── -->
+  <section class="ans" id="questions">
+    <h2>Your answers</h2>
+    <p class="small">★ is what I recommend. Answer only the ones you want different, or say "all stars, build it".</p>
+
+    <p class="group-h">Closing with more work</p>
+    <div class="q"><h3><span class="n">1</span>Ask "Did you do anything else here today?"</h3><ul>
+      <li class="star">Yes, on every close, right after "Did you finish doing &lt;the task's stages&gt;?" — then "Is it one of these?"</li>
+      <li>No — he uses "I'm going to work here" for extra work instead</li></ul></div>
+    <div class="q"><h3><span class="n">2</span>Which stages can he pick for the extra work?</h3><ul>
+      <li class="star">The stages still open on this apartment, with "Not on this list…" first</li>
+      <li>Every stage of the workspace</li></ul></div>
+    <div class="q"><h3><span class="n">3</span>A small part of a stage</h3><ul>
+      <li class="star">"Part of it" → half done (orange clock); he must say what he did; no pictures required</li>
+      <li>"Part of it" needs one picture</li>
+      <li>Steps per stage set by the office (hang · connect · test) and he ticks the step</li></ul></div>
+    <div class="q"><h3><span class="n">4</span>He did a stage this apartment does not have</h3><ul>
+      <li class="star">"Not on this list…" — his words go on the task; the office switches the stage on if it was one</li>
+      <li>He can switch the stage on himself</li></ul></div>
+    <div class="q"><h3><span class="n">8</span>Work that is not a stage at all ("took out garbage")</h3><ul>
+      <li class="star">A line on the closed task, nothing more — the office can make it its own task with one press</li>
+      <li>Always becomes its own small closed task, so every extra is counted</li></ul></div>
+    <div class="q"><h3><span class="n">5</span>Pictures for an extra stage he finished</h3><ul>
+      <li class="star">The same three per finished stage</li>
+      <li>One is enough for an extra stage</li></ul></div>
+
+    <p class="group-h">The notebook</p>
+    <div class="q"><h3><span class="n">6</span>A task dropped on another trade's worker</h3><ul>
+      <li class="star">Ask; first answer makes a new task for him on his trade's next stage, the original stays</li>
+      <li>Move it as it is (today's behaviour, with the warning)</li>
+      <li>Refuse — a task can only move within its trade</li></ul></div>
+    <div class="q"><h3><span class="n">7</span>How a stage knows which trade does it</h3><ul>
+      <li class="star">A "who does it" setting on each stage in Settings → Stages</li>
+      <li>Guess it from the stage's name</li></ul></div>
+
+    <div class="final">
+      <p class="say">Say "all stars, build it" — or change any number.</p>
+    </div>
+  </section>
+</div>
