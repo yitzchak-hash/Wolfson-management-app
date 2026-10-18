@@ -233,6 +233,12 @@ export interface BoardSetting {
    */
   portalDomain?: string;
   /**
+   * Closing with work done in PART ("Part of it", owner 2026-10-18): does
+   * that stage need one picture? Absent = yes (the owner's default); false
+   * lets the worker's words stand alone. In the app-wide `__tv` bag.
+   */
+  partNeedsPicture?: boolean;
+  /**
    * Which board the wallboard shows. Empty is the workspace's main board.
    * Set by the top-level admin in app settings — never on the TV, which has no
    * keyboard and is read-only by design.
@@ -324,6 +330,12 @@ export interface User {
   createdAt: string;
   /** Their colour on the rota. Falls back to one derived from the name. */
   color?: string;
+  /**
+   * The kinds of question this person answers (owner, 2026-10-18) — a job
+   * waiting on one of them glows on the notebook while they are signed in.
+   * Absent = an admin answers every kind, anybody else none.
+   */
+  answers?: QuestionKind[];
 }
 
 /**
@@ -1453,6 +1465,22 @@ export interface ContractorAssignment {
    */
   stagesUnfinished?: string[];
   /**
+   * "Did you do anything else here today?" (owner, 2026-10-18): the stages
+   * he added at the close beyond the task's own — already folded into
+   * `stagesWorked` (and the part ones into `stagesUnfinished`), kept here so
+   * every screen can say "also did". `partWords` holds what he said he did
+   * on each stage done in PART — required, so a half-done tick always comes
+   * with its words.
+   */
+  extraStages?: string[];
+  partWords?: Record<string, string>;
+  /**
+   * "Not on this list…": work he did that is no stage on the list — "took
+   * out garbage". Nothing is ticked; each item waits for the office's answer
+   * (it glows on the notebook for whoever answers that kind of question).
+   */
+  offList?: OffListItem[];
+  /**
    * The apartment's stage marks the moment the worker STARTED this task
    * ("I'm going to work here", owner 2026-10-08) — so that if he picked the
    * wrong apartment by mistake and moves the task to the right one, the
@@ -1502,6 +1530,23 @@ export interface ContractorAssignment {
    */
   problem?: ProblemInfo;
 }
+
+/**
+ * One piece of work the worker said was not on the list (owner, 2026-10-18).
+ * `answer` is the office's decision: it was one of the stages (switched on
+ * and ticked done), it became a task of its own, or it stays as a note.
+ * No answer = the question is still open.
+ */
+export interface OffListItem {
+  id: string;
+  text: string;
+  at: string;
+  by?: string;
+  answer?: { kind: 'stage' | 'task' | 'note'; stageId?: string; taskId?: string; by: string; at: string };
+}
+
+/** The kinds of question the office answers — Settings → Users picks who answers which. */
+export type QuestionKind = 'offList';
 
 export interface ProblemInfo {
   /** Must the worker send pictures (the standing three) to close it? */

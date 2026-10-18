@@ -51,6 +51,7 @@ import { cachedPlanAspect, measurePlanAspect } from '../../data/planAspect';
 const PlanAnnotator = lazy(() =>
   import('../plans/PlanAnnotator').then(m => ({ default: m.PlanAnnotator })));
 import { ContractorStatusPanel } from './ContractorStatusPanel';
+import { OffListQuestion } from '../tasks/OffListQuestion';
 import { MoveTaskDialog, officeMoveWords, fill } from '../tasks/MoveTaskDialog';
 import { DeleteTaskDialog } from '../tasks/DeleteTaskDialog';
 import { placeLabel } from '../../data/taskMove';
@@ -295,6 +296,8 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
    * live task, the standing re-resolve rule.
    */
   const [movingTaskId, setMovingTaskId] = useState<string | null>(null);
+  /** The office answering "not on the list" work from a task's card. */
+  const [offAsk, setOffAsk] = useState<{ task: ContractorAssignment; itemId: string } | null>(null);
   /** The office's "Not finished" on a task card (owner, 2026-10-11): the same three questions the worker answers. */
   const [nfTaskId, setNfTaskId] = useState<string | null>(null);
   const [nfText, setNfText] = useState('');
@@ -1698,6 +1701,11 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
       })()}
       {/* Move a task to another apartment / delete one, saying what goes
           with it. Both portal themselves above the panel (z-[130]/[140]). */}
+      {offAsk && (() => {
+        const t = contractorAssignments.find(x => x.id === offAsk.task.id) ?? offAsk.task;
+        const it = t.offList?.find(i => i.id === offAsk.itemId);
+        return it ? <OffListQuestion projectId={currentProjectId} task={t} item={it} onClose={() => setOffAsk(null)} /> : null;
+      })()}
       {movingTaskId && (() => {
         const t = contractorAssignments.find(x => x.id === movingTaskId);
         if (!t) return null;
@@ -2702,6 +2710,44 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                                     )}
                                   </div>
                                 )}
+                                {/* What he did beyond the task (owner, 2026-10-18): the
+                                    part stages' own words, and work that wasn't on the
+                                    list — which waits for the office's answer. */}
+                                {done && a.partWords && Object.keys(a.partWords).length > 0 && (
+                                  <div data-task-part-words className="mt-1.5 space-y-0.5">
+                                    {Object.entries(a.partWords).map(([sid, words]) => {
+                                      const st = sortedStages.find(x => x.id === sid);
+                                      return (
+                                        <p key={sid} className="m-0 text-[12px] text-gray-700">
+                                          <b>{st ? getStageName(st, ui.isRtl) : ''}</b>
+                                          {' · '}{ui.isRtl ? 'חלק' : 'part of it'}{words ? ': ' : ''}
+                                          {words && <Translated text={words} to={ui.isRtl ? 'he' : 'en'} />}
+                                        </p>
+                                      );
+                                    })}
+                                  </div>
+                                )}
+                                {(a.offList ?? []).map(it => (
+                                  <div key={it.id} data-task-offlist={it.id} data-answered={it.answer ? '1' : undefined}
+                                    className={`mt-1.5 rounded-lg border px-2 py-1.5 text-[12px] ${it.answer ? 'border-gray-200 bg-white text-gray-700' : 'border-violet-300 bg-violet-50 text-slate-800'}`}>
+                                    <span className="font-semibold">{ui.isRtl ? 'עבודה שלא הייתה ברשימה: ' : "Work that wasn't on the list: "}</span>
+                                    <Translated text={it.text} to={ui.isRtl ? 'he' : 'en'} />
+                                    {it.answer ? (
+                                      <span className="block text-[11px] text-gray-500 mt-0.5">
+                                        {it.answer.kind === 'stage'
+                                          ? (ui.isRtl ? 'נספר כשלב: ' : 'Counted as the stage ') + (sortedStages.find(x => x.id === it.answer!.stageId) ? getStageName(sortedStages.find(x => x.id === it.answer!.stageId)!, ui.isRtl) : '')
+                                          : it.answer.kind === 'task' ? (ui.isRtl ? 'נעשתה ממנו משימה נפרדת' : 'Made a task of its own')
+                                          : (ui.isRtl ? 'נשאר כהערה' : 'Kept as a note')}
+                                        {' · '}{it.answer.by}
+                                      </span>
+                                    ) : (
+                                      <button data-task-offlist-answer={it.id} onClick={() => setOffAsk({ task: a, itemId: it.id })}
+                                        className="ms-2 px-2 py-0.5 rounded-full bg-[#7c3aed] text-white text-[11px] font-bold">
+                                        {ui.isRtl ? 'לענות' : 'Answer'}
+                                      </button>
+                                    )}
+                                  </div>
+                                ))}
                                 <div className="flex items-center gap-1.5 mt-1 flex-wrap">
                                   {/* A multi-day task shows its RANGE — "Sep 1–2 · 2
                                       days" — and swallows the bare date beside it.

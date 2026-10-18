@@ -973,6 +973,19 @@ interface AppState {
    */
   setApartmentMarks: (id: string, marks: Record<string, StageMark> | undefined, user: User, opts?: { quiet?: boolean }) => void;
   /**
+   * setApartmentMarks for an apartment of ANY workspace — the open one goes
+   * through setApartmentMarks; another is written to its own collection and
+   * local snapshot, with the same history line the app would write there.
+   */
+  setApartmentMarksInProject: (projectId: string, id: string, marks: Record<string, StageMark>, user: User) => void;
+  /**
+   * The office answers a piece of "not on the list" work (owner, 2026-10-18):
+   * it was one of the stages (switched on for the apartment and ticked done),
+   * it becomes a closed task of its own, or it stays a note. One undo step.
+   */
+  answerOffList: (projectId: string, taskId: string, itemId: string,
+    choice: { kind: 'stage'; stageId: string } | { kind: 'task' } | { kind: 'note' }) => void;
+  /**
    * Moves every record in the open workspace onto the set model — explicit
    * marks, `bubbles: true` — and gives the workspace's stages a kind (work
    * or marker) if none has one yet. Idempotent; returns how many records
@@ -1915,6 +1928,68 @@ export const useStore = create<AppState>((set, get) => ({
     const pid = get().currentProjectId;
     const sorted = stagesOfProject(pid, get().stages);
     get().updateApartment(id, applyMarks(existing, marks, sorted, setContextOf(pid, get().boardSettings)), user, opts);
+  },
+
+  setApartmentMarksInProject: (projectId, id, marks, user) => {
+    if (projectId === get().currentProjectId) { get().setApartmentMarks(id, marks, user); return; }
+    const key = `${projectId}_app_data`;
+    const snap = loadFromStorage<Record<string, unknown>>(key, {});
+    const list = Array.isArray(snap.apartments) ? snap.apartments as Apartment[] : [];
+    const existing = list.find(a => a.id === id);
+    if (!existing) return;
+    const sorted = stagesOfProject(projectId, get().stages);
+    const ctx = setContextOf(projectId, get().boardSettings);
+    const now = new Date().toISOString();
+    const next = { ...existing, ...applyMarks(existing, marks, sorted, ctx), updatedAt: now } as Apartment;
+    saveToStorage(key, { ...snap, apartments: list.map(a => (a.id === id ? next : a)) });
+    fsSet(projectCollection(projectId, 'apartments'), id, next);
+    const changed = stageChangesOf(existing, next, sorted, ctx);
+    if (changed.length) {
+      const log: ActivityLog = {
+        id: generateId(), createdAt: now, userId: user.id, userName: user.name || 'Office',
+        buildingId: existing.buildingId, apartmentId: id,
+        apartmentNumber: existing.displayName || existing.apartmentNumber || '',
+        actionType: 'stage_marks', fieldChanged: 'stageMarks', previousValue: '', newValue: '',
+        stageId: changed[0].id, marks: changed,
+      } as ActivityLog;
+      log.newValue = plainSummary(log, get().stages);
+      fsSet(projectCollection(projectId, 'activityLogs'), log.id, log);
+    }
+    set(st => ({ snapshotTick: st.snapshotTick + 1 }));
+  },
+
+  answerOffList: (projectId, taskId, itemId, choice) => {
+    const live = projectId === get().currentProjectId;
+    const tasks = live ? get().contractorAssignments : loadProjectSnapshot(projectId).assignments;
+    const t = tasks.find(a => a.id === taskId);
+    const item = t?.offList?.find(i => i.id === itemId);
+    if (!t || !item || item.answer) return;
+    const user = get().currentUser;
+    const who: User = user ?? ({ id: 'office', name: 'Office', code: '', role: 'admin', active: true, createdAt: '' } as User);
+    const at = new Date().toISOString();
+    const verb = choice.kind === 'stage' ? 'counted as a stage' : choice.kind === 'task' ? 'made a task of its own' : 'kept as a note';
+    trackUndo({ weight: 'content', label: `Answered: "${item.text.slice(0, 40)}"`,
+      explain: `Undo takes back the answer to "${item.text.slice(0, 60)}" (${verb}).` }, () => {
+      let newTask: string | undefined;
+      if (choice.kind === 'task') {
+        const d = new Date(item.at);
+        const day = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+        newTask = get().addAssignmentToProject(projectId, {
+          contractorId: t.contractorId, apartmentId: t.apartmentId, buildingId: t.buildingId,
+          taskDescription: item.text, dueDate: day, stageId: null, completedAt: item.at,
+          createdBy: who.id, createdByName: who.name, ...(t.general ? { general: t.general } : {}),
+        } as never);
+      }
+      if (choice.kind === 'stage' && t.apartmentId) {
+        const apts = live ? get().apartments : loadProjectSnapshot(projectId).apartments;
+        const apt = apts.find(a => a.id === t.apartmentId);
+        if (apt) get().setApartmentMarksInProject(projectId, apt.id, { ...(apt.stageMarks ?? {}), [choice.stageId]: 'done' }, who);
+      }
+      const answer = { kind: choice.kind, by: who.name, at,
+        ...(choice.kind === 'stage' ? { stageId: choice.stageId } : {}), ...(newTask ? { taskId: newTask } : {}) };
+      const offList = (t.offList ?? []).map(i => (i.id === itemId ? { ...i, answer } : i));
+      get().updateAssignmentInProject(projectId, taskId, { offList });
+    });
   },
 
   migrateStageSets: () => {
@@ -2861,7 +2936,7 @@ export const useStore = create<AppState>((set, get) => ({
      * next to the fact that raises it, and drawn by the admin layout;
      * session-only, never persisted, and the worker portal never renders it.
      */
-    if (a.dueDate && a.contractorId && a.apartmentId) {
+    if (a.dueDate && a.contractorId && a.apartmentId && !a.completedAt) {
       const mine = daysOf(a);
       const clash = get().contractorAssignments.find(o =>
         o.id !== a.id && o.apartmentId === a.apartmentId && !o.completedAt

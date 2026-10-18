@@ -29,6 +29,7 @@ import { MessageBox } from '../components/ui/MessageBox';
 import { PushBanner, ArrivalWatcher } from '../components/portal/PortalAlerts';
 import { problemStates, isLiveProblem, problemDaysLate, problemStateOf } from '../data/problems';
 import { stageSetOf, liveStateOf, taskStageIds, setMark, isStartStage } from '../data/stageMarks';
+import { enoughMedia, extraStageChoices, extrasLine } from '../data/closeExtras';
 import type { User, StageMark } from '../types';
 import { WazeIcon, wazeUrl } from '../components/ui/BrandIcons';
 import { RecordedMemo } from '../data/voiceMemo';
@@ -798,6 +799,22 @@ export function ContractorPortal() {
   const [closeUnfinished, setCloseUnfinished] = useState<string[]>([]);
   const [closePhotoIdx, setClosePhotoIdx] = useState(0);
   const closeStageRef = useRef<string | null>(null);
+  /**
+   * "Did you do anything else here today?" (owner, 2026-10-18, "More Than
+   * the Task Said"): asked on every close after "Did you finish doing …?".
+   * Yes → "Is it one of these?" — the stages still open on this apartment,
+   * with "Not on this list…" first. Each picked stage is All of it (done,
+   * three pictures) or Part of it (half done; his words are required, and
+   * one picture unless the office switched that off). Not on this list
+   * takes his words and ticks nothing — the office answers it.
+   */
+  const [moreAsk, setMoreAsk] = useState<'yes' | 'no' | null>(null);
+  const [extraPick, setExtraPick] = useState<Record<string, 'all' | 'part'>>({});
+  const [partWords, setPartWords] = useState<Record<string, string>>({});
+  const [offOn, setOffOn] = useState(false);
+  const [offText, setOffText] = useState('');
+  const [moreDone, setMoreDone] = useState(false);
+  const partNeedsPicture = useStore(st => st.boardSettings.__tv?.partNeedsPicture !== false);
   const tipusStagesPortal = useStore(st => st.boardSettings[st.currentProjectId]?.tipusStages);
   /** The worker as a User, for writes the store attributes to a person. */
   const workerUser = (): User => ({
@@ -1518,12 +1535,16 @@ export function ContractorPortal() {
       const liveA = contractorAssignments.find(x => x.id === selectedAssignment.id) ?? selectedAssignment;
       // Everything he STARTED (the set model) — else the task's own stages.
       const worked = liveA.stagesWorked?.length ? liveA.stagesWorked : taskStageIds(liveA);
-      const seed = worked.length ? worked : (getApt(liveA.apartmentId)?.currentStageId ? [getApt(liveA.apartmentId)!.currentStageId!] : []);
+      // Only a stage REPORT falls back to the apartment's own stage; an ordinary
+      // task with no stages of its own has nothing to ask "did you finish" about.
+      const seed = worked.length ? worked
+        : (liveA.stageReport && getApt(liveA.apartmentId)?.currentStageId ? [getApt(liveA.apartmentId)!.currentStageId!] : []);
       setCloseStages(seed);
       setCloseFinished('yes');
       setCloseAsked(false);
       setCloseUnfinished([]);
       setClosePhotoIdx(0);
+      setMoreAsk(null); setExtraPick({}); setPartWords({}); setOffOn(false); setOffText(''); setMoreDone(false);
       closeStageRef.current = null;
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1537,11 +1558,21 @@ export function ContractorPortal() {
     // store's completion rule marks the stages (done or half done) and moves
     // the unit in the same motion. An ordinary task goes to its stageWhenDone.
     const liveA = contractorAssignments.find(x => x.id === selectedAssignment.id) ?? selectedAssignment;
-    if (liveA.stageReport && !liveA.problem && closeStages.length) {
-      const unfinished = closeStages.filter(id => closeUnfinished.includes(id));
-      updateContractorAssignment(selectedAssignment.id, {
-        stagesWorked: closeStages, stagesUnfinished: unfinished, stagesFinished: unfinished.length === 0,
-      });
+    if (!liveA.problem && !liveA.general) {
+      // Everything he did, written BEFORE the close: the task's own stages
+      // (unfinished ones half done), the extra stages ("Is it one of these?"),
+      // the part ones half done with his words, and any "not on the list" work.
+      const extraIds = moreAsk === 'yes' ? Object.keys(extraPick) : [];
+      const partIds = extraIds.filter(id => extraPick[id] === 'part');
+      const worked = [...closeStages, ...extraIds.filter(id => !closeStages.includes(id))];
+      const unfinished = [...closeStages.filter(id => closeUnfinished.includes(id)), ...partIds];
+      const off = moreAsk === 'yes' && offOn && offText.trim() ? offText.trim() : '';
+      const patch: Partial<ContractorAssignment> = {};
+      if (worked.length) Object.assign(patch, { stagesWorked: worked, stagesUnfinished: unfinished, stagesFinished: unfinished.length === 0 });
+      if (extraIds.length) patch.extraStages = extraIds;
+      if (partIds.length) patch.partWords = Object.fromEntries(partIds.map(id => [id, (partWords[id] ?? '').trim()]));
+      if (off) patch.offList = [...(liveA.offList ?? []), { id: `OL-${Date.now().toString(36)}`, text: off, at: completedAt, by: contractor?.name ?? '' }];
+      if (Object.keys(patch).length) updateContractorAssignment(selectedAssignment.id, patch);
     }
     updateContractorAssignment(selectedAssignment.id, { completedAt });
     addActivityLog({
@@ -1629,7 +1660,15 @@ export function ContractorPortal() {
    */
   function postClosingNote() {
     if (!selectedAssignment) return;
-    const text = closingComment.trim();
+    // The extras ride at the top of the closing message, in English (a stored
+    // record is English; every screen translates it for its reader).
+    const extraIds = moreAsk === 'yes' ? Object.keys(extraPick) : [];
+    const extras = extraIds.map(id => {
+      const st = wsStageList.find(x => x.id === id);
+      return { name: st?.name ?? '', part: extraPick[id] === 'part', words: (partWords[id] ?? '').trim() };
+    }).filter(e => e.name);
+    const off = moreAsk === 'yes' && offOn && offText.trim() ? [offText.trim()] : [];
+    const text = [extrasLine(extras, off), closingComment.trim()].filter(Boolean).join('\n\n');
     const newPhotoIds = getMedia(selectedAssignment.id)
       .map(m => m.id)
       .filter(id => !preClosingIds.current.has(id));
@@ -1744,16 +1783,48 @@ export function ContractorPortal() {
    * stages go up with his words.
    */
   const liveSel = selectedAssignment ? (contractorAssignments.find(x => x.id === selectedAssignment.id) ?? selectedAssignment) : null;
-  const isReportClose = !!liveSel && !!liveSel.stageReport && !selProblem && !liveSel.general && closeStages.length > 0;
-  const closeFinishedIds = closeStages.filter(id => !closeUnfinished.includes(id));
-  const closeCountFor = (sid: string) => selMedia.filter(m => m.stageId === sid).length;
-  const reportOk = !isReportClose || (closeAsked && (!photosNeeded || closeFinishedIds.every(sid => closeCountFor(sid) >= MIN_CLOSE_MEDIA)));
-  const canComplete = (isReportClose ? reportOk : (selMedia.length >= MIN_CLOSE_MEDIA || !photosNeeded))
-    && !selectedAssignment?.completedAt && selProblem?.status !== 'waiting';
   /** This workspace's stages, in order — the closing screen's "what stage now" row. */
   const wsStageList = stages
     .filter(st => (currentProjectId === 'general' ? st.projectId === 'general' : !st.projectId) && st.active)
     .sort((a, b) => a.order - b.order);
+  /**
+   * Every close but a problem's walks the same questions now (2026-10-18):
+   * "Did you finish doing <the task's stages>?" (skipped when the task names
+   * none), "Did you do anything else here today?", then the pictures, one
+   * step per thing that needs them.
+   */
+  const stageClose = !!liveSel && !selProblem && !liveSel.general;
+  const isReportClose = stageClose && !!liveSel?.stageReport && closeStages.length > 0;
+  const hasOwnStages = closeStages.length > 0;
+  const closeFinishedIds = closeStages.filter(id => !closeUnfinished.includes(id));
+  const finishedOk = !hasOwnStages || closeAsked;
+  const extraChoices = stageClose && liveSel
+    ? extraStageChoices(getApt(liveSel.apartmentId), wsStageList, closeStages, { tipusStages: tipusStagesPortal })
+    : [];
+  const extraIds = extraChoices.filter(st => extraPick[st.id]).map(st => st.id);
+  const moreValid = (extraIds.length > 0 || offOn)
+    && extraIds.every(id => extraPick[id] === 'all' || !!(partWords[id] ?? '').trim())
+    && (!offOn || !!offText.trim());
+  const moreOk = moreAsk === 'no' || (moreAsk === 'yes' && moreDone);
+  type PhotoStep = { id: string; ids: string[]; need: number; part?: boolean; loose?: boolean };
+  const photoSteps: PhotoStep[] = !stageClose ? [] : [
+    // A stage REPORT: three pictures for each stage he finished.
+    ...(isReportClose ? closeFinishedIds.map(id => ({ id, ids: [id], need: MIN_CLOSE_MEDIA })) : []),
+    // An ordinary task: three for the job, as always — tagged to its first stage.
+    ...(!isReportClose && (!hasOwnStages || closeFinishedIds.length)
+      ? [{ id: closeFinishedIds[0] ?? '', ids: closeFinishedIds, need: MIN_CLOSE_MEDIA, loose: true }] : []),
+    ...(moreAsk === 'yes' ? extraIds.flatMap(id => extraPick[id] === 'part'
+      ? (partNeedsPicture ? [{ id, ids: [id], need: 1, part: true }] : [])
+      : [{ id, ids: [id], need: MIN_CLOSE_MEDIA }]) : []),
+  ];
+  const stepMedia = (st: PhotoStep) => selMedia.filter(m => (m.stageId ? st.ids.includes(m.stageId) : !!st.loose));
+  const stepOk = (st: PhotoStep) => st.need >= MIN_CLOSE_MEDIA ? enoughMedia(stepMedia(st), st.need) : stepMedia(st).length >= st.need;
+  const closeCountFor = (sid: string) => selMedia.filter(m => m.stageId === sid).length;
+  void closeCountFor;
+  const canComplete = (stageClose
+    ? finishedOk && moreOk && (!photosNeeded || photoSteps.every(stepOk))
+    : (enoughMedia(selMedia, MIN_CLOSE_MEDIA) || !photosNeeded))
+    && !selectedAssignment?.completedAt && selProblem?.status !== 'waiting';
 
   type FilterKey = 'yesterday' | 'today' | 'tomorrow' | 'week' | 'all';
   // ALL leads, per the owner — the everything view is the anchor the eye
@@ -3673,46 +3744,49 @@ export function ContractorPortal() {
                     </div>
                   ) : (
                     <div className="max-w-md mx-auto w-full space-y-6">
-                      {/* 0 · A STAGE REPORT ("I'm going to work here") asks two
-                          things at the close (owner, 2026-09-16): which stages
-                          he did — several — and whether he finished them all.
-                          Yes → done; no → half done. An ordinary task is not
-                          asked: it moves to the stage chosen when it was made. */}
-                      {isReportClose && (() => {
+                      {/* 0 · The close asks, one step at a time (owner,
+                          2026-10-18): "Did you finish doing <the task's
+                          stages>?" → "Did you do anything else here today?" →
+                          "Is it one of these?" → the pictures each thing needs. */}
+                      {stageClose && (() => {
                         const nm = (id: string) => { const st = wsStageList.find(x => x.id === id); return st ? stageNameIn(st, readLang) : ''; };
-                        const stepStage = closeFinishedIds[closePhotoIdx] ? wsStageList.find(x => x.id === closeFinishedIds[closePhotoIdx]) : null;
-                        closeStageRef.current = closeAsked && photosNeeded && stepStage ? stepStage.id : null;
+                        const names = closeStages.map(nm).filter(Boolean);
+                        const andWord = w(' and ', ' ו', ' и ');
+                        const joined = names.length > 1 ? `${names.slice(0, -1).join(', ')}${andWord}${names[names.length - 1]}` : (names[0] ?? '');
+                        const showSteps = finishedOk && moreOk && photosNeeded;
+                        const step = showSteps ? photoSteps[Math.min(closePhotoIdx, Math.max(0, photoSteps.length - 1))] : undefined;
+                        closeStageRef.current = step && step.id ? step.id : null;
+                        const stepName = (st: PhotoStep) => st.ids.length ? st.ids.map(nm).join(' · ') : (apt ? aptLabel(apt) : '');
+                        const stepColor = (st: PhotoStep) => wsStageList.find(x => x.id === st.ids[0])?.color ?? '#1e3a5f';
+                        const yn = (on: boolean, tone: 'g' | 'o') => on
+                          ? { backgroundColor: tone === 'g' ? '#16a34a' : '#f97316', borderColor: tone === 'g' ? '#16a34a' : '#f97316', color: '#fff' }
+                          : { borderColor: '#e5e7eb', color: '#374151', backgroundColor: '#fff' };
                         return (
-                          <div data-close-stage className="space-y-4">
-                            {/* 1 · Did you finish everything you started? */}
-                            <div data-close-finished>
-                              <p className="text-center font-extrabold text-gray-800 mb-1" style={{ fontSize: 17, lineHeight: 1.3 }}>
-                                {w('Did you finish everything you started?', 'סיימת את כל מה שהתחלת?', 'Вы закончили всё, что начали?')}
-                              </p>
-                              <p className="text-center text-gray-500 mb-3" style={{ fontSize: 13 }}>
-                                {closeStages.map(nm).join(' · ')}
-                              </p>
-                              <div className="grid grid-cols-2 gap-2">
-                                <button data-close-finished-pick="yes" data-on={closeAsked && closeFinished === 'yes' ? '1' : undefined}
-                                  onClick={() => { setCloseFinished('yes'); setCloseUnfinished([]); setCloseAsked(true); setClosePhotoIdx(0); }}
-                                  className="py-3.5 rounded-xl text-base font-extrabold border active:scale-[0.98]"
-                                  style={closeAsked && closeFinished === 'yes'
-                                    ? { backgroundColor: '#16a34a', borderColor: '#16a34a', color: '#fff' }
-                                    : { borderColor: '#e5e7eb', color: '#374151', backgroundColor: '#fff' }}>
-                                  {w('Yes', 'כן', 'Да')}
-                                </button>
-                                <button data-close-finished-pick="no" data-on={closeFinished === 'no' ? '1' : undefined}
-                                  onClick={() => { setCloseFinished('no'); setCloseAsked(false); setClosePhotoIdx(0); }}
-                                  className="py-3.5 rounded-xl text-base font-extrabold border active:scale-[0.98]"
-                                  style={closeFinished === 'no'
-                                    ? { backgroundColor: '#f97316', borderColor: '#f97316', color: '#fff' }
-                                    : { borderColor: '#e5e7eb', color: '#374151', backgroundColor: '#fff' }}>
-                                  {w('No', 'לא', 'Нет')}
-                                </button>
+                          <div data-close-stage className="space-y-5">
+                            {/* 1 · Did you finish doing …? */}
+                            {hasOwnStages && (
+                              <div data-close-finished>
+                                <p data-close-finished-q className="text-center font-extrabold text-gray-800 mb-3" style={{ fontSize: 17, lineHeight: 1.3 }}>
+                                  {w('Did you finish doing', 'סיימת לעשות', 'Вы закончили')} {joined}?
+                                </p>
+                                <div className="grid grid-cols-2 gap-2">
+                                  <button data-close-finished-pick="yes" data-on={closeAsked && closeFinished === 'yes' ? '1' : undefined}
+                                    onClick={() => { setCloseFinished('yes'); setCloseUnfinished([]); setCloseAsked(true); setClosePhotoIdx(0); }}
+                                    className="py-3.5 rounded-xl text-base font-extrabold border active:scale-[0.98]"
+                                    style={yn(closeAsked && closeFinished === 'yes', 'g')}>
+                                    {w('Yes', 'כן', 'Да')}
+                                  </button>
+                                  <button data-close-finished-pick="no" data-on={closeFinished === 'no' ? '1' : undefined}
+                                    onClick={() => { setCloseFinished('no'); setCloseAsked(false); setClosePhotoIdx(0); }}
+                                    className="py-3.5 rounded-xl text-base font-extrabold border active:scale-[0.98]"
+                                    style={yn(closeFinished === 'no', 'o')}>
+                                    {w('No', 'לא', 'Нет')}
+                                  </button>
+                                </div>
                               </div>
-                            </div>
-                            {/* 2 · Which didn't you finish? — only the ones he started. */}
-                            {closeFinished === 'no' && (
+                            )}
+                            {/* 1b · Which didn't you finish? — only the task's own. */}
+                            {hasOwnStages && closeFinished === 'no' && (
                               <div data-close-unfinished>
                                 <p className="text-center font-extrabold text-gray-800 mb-2" style={{ fontSize: 16, lineHeight: 1.35 }}>
                                   {w("Which didn't you finish?", 'מה לא סיימת?', 'Что вы не закончили?')}
@@ -3735,9 +3809,6 @@ export function ContractorPortal() {
                                     );
                                   })}
                                 </div>
-                                <p className="text-center text-gray-400 mt-1.5" style={{ fontSize: 12 }}>
-                                  {w('only the ones you started', 'רק מה שהתחלת', 'только то, что вы начали')}
-                                </p>
                                 {!closeAsked && (
                                   <button data-close-carry-on disabled={!closeUnfinished.length}
                                     onClick={() => { setCloseAsked(true); setClosePhotoIdx(0); }}
@@ -3748,21 +3819,140 @@ export function ContractorPortal() {
                                 )}
                               </div>
                             )}
-                            {/* 3 · Three pictures for EACH finished stage, one screen at a time. */}
-                            {closeAsked && photosNeeded && closeFinishedIds.length > 0 && stepStage && (
-                              <div data-close-photo-step={stepStage.id} className="rounded-2xl border-2 p-3" style={{ borderColor: stepStage.color }}>
+                            {/* 2 · Did you do anything else here today? */}
+                            {finishedOk && (
+                              <div data-close-more>
+                                <p className="text-center font-extrabold text-gray-800 mb-3" style={{ fontSize: 17, lineHeight: 1.3 }}>
+                                  {w('Did you do anything else here today?', 'עשית עוד משהו כאן היום?', 'Вы сделали здесь сегодня что-то ещё?')}
+                                </p>
+                                <div className="grid grid-cols-2 gap-2">
+                                  <button data-close-more-pick="yes" data-on={moreAsk === 'yes' ? '1' : undefined}
+                                    onClick={() => { setMoreAsk('yes'); setMoreDone(false); setClosePhotoIdx(0); }}
+                                    className="py-3.5 rounded-xl text-base font-extrabold border active:scale-[0.98]"
+                                    style={yn(moreAsk === 'yes', 'g')}>
+                                    {w('Yes', 'כן', 'Да')}
+                                  </button>
+                                  <button data-close-more-pick="no" data-on={moreAsk === 'no' ? '1' : undefined}
+                                    onClick={() => { setMoreAsk('no'); setMoreDone(false); setClosePhotoIdx(0); }}
+                                    className="py-3.5 rounded-xl text-base font-extrabold border active:scale-[0.98]"
+                                    style={yn(moreAsk === 'no', 'g')}>
+                                    {w('No', 'לא', 'Нет')}
+                                  </button>
+                                </div>
+                              </div>
+                            )}
+                            {/* 3 · Is it one of these? — the stages still open here, "Not on this list…" first. */}
+                            {finishedOk && moreAsk === 'yes' && !moreDone && (
+                              <div data-close-extras className="rounded-2xl border border-gray-200 p-3 space-y-3">
+                                <div>
+                                  <p className="text-center font-extrabold text-gray-800" style={{ fontSize: 16, lineHeight: 1.3 }}>
+                                    {w('Is it one of these?', 'זה אחד מאלה?', 'Это одно из этих?')}
+                                  </p>
+                                  <p className="text-center text-gray-500" style={{ fontSize: 12.5 }}>
+                                    {w('pick one or more', 'אפשר לבחור כמה', 'можно выбрать несколько')}
+                                  </p>
+                                </div>
+                                <div className="flex flex-wrap justify-center gap-1.5">
+                                  <button data-close-offlist data-on={offOn ? '1' : undefined}
+                                    onClick={() => setOffOn(v => !v)}
+                                    className="px-3 py-2 rounded-full text-[14px] font-bold border-2 border-dashed active:scale-[0.98]"
+                                    style={offOn ? { backgroundColor: '#1e3a5f', borderColor: '#1e3a5f', color: '#fff' } : { borderColor: '#94a3b8', color: '#334155', backgroundColor: '#fff' }}>
+                                    {w('Not on this list…', 'לא ברשימה…', 'Нет в списке…')}
+                                  </button>
+                                  {extraChoices.map(st => {
+                                    const on = !!extraPick[st.id];
+                                    return (
+                                      <button key={st.id} data-close-extra={st.id} data-on={on ? '1' : undefined}
+                                        onClick={() => setExtraPick(prev => { const n = { ...prev }; if (n[st.id]) delete n[st.id]; else n[st.id] = 'all'; return n; })}
+                                        className="flex items-center gap-1.5 px-3 py-2 rounded-full text-[14px] font-bold border active:scale-[0.98]"
+                                        style={on ? { backgroundColor: st.color, borderColor: st.color, color: '#fff' } : { borderColor: '#e5e7eb', color: '#374151', backgroundColor: '#fff' }}>
+                                        <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: on ? '#fff' : st.color }} />
+                                        {stageNameIn(st, readLang)}
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                                {extraIds.map(id => {
+                                  const st = wsStageList.find(x => x.id === id)!;
+                                  const part = extraPick[id] === 'part';
+                                  return (
+                                    <div key={id} data-close-extra-row={id} className="rounded-xl border border-gray-200 p-2.5 space-y-2">
+                                      <div className="flex items-center justify-between gap-2">
+                                        <span className="font-bold text-gray-800 flex items-center gap-1.5 min-w-0" style={{ fontSize: 14 }}>
+                                          <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: st.color }} />
+                                          <span className="truncate">{stageNameIn(st, readLang)}</span>
+                                        </span>
+                                        <span className="inline-flex rounded-lg border border-gray-200 overflow-hidden flex-shrink-0">
+                                          <button data-close-extra-all={id} data-on={!part ? '1' : undefined}
+                                            onClick={() => setExtraPick(prev => ({ ...prev, [id]: 'all' }))}
+                                            className="px-2.5 py-1.5 text-[12.5px] font-extrabold"
+                                            style={!part ? { backgroundColor: '#16a34a', color: '#fff' } : { color: '#475569' }}>
+                                            {w('All of it', 'הכול', 'Всё')}
+                                          </button>
+                                          <button data-close-extra-part={id} data-on={part ? '1' : undefined}
+                                            onClick={() => setExtraPick(prev => ({ ...prev, [id]: 'part' }))}
+                                            className="px-2.5 py-1.5 text-[12.5px] font-extrabold border-s border-gray-200"
+                                            style={part ? { backgroundColor: '#f97316', color: '#fff' } : { color: '#475569' }}>
+                                            {w('Part of it', 'חלק', 'Часть')}
+                                          </button>
+                                        </span>
+                                      </div>
+                                      {part && (
+                                        <div data-close-part-words={id}>
+                                          <p className="text-gray-600 mb-1" style={{ fontSize: 12.5 }}>
+                                            {w('What did you do? (needed)', 'מה עשית? (חובה)', 'Что вы сделали? (обязательно)')}
+                                          </p>
+                                          <MessageBox hook={`part-words-${id}`} rows={2} value={partWords[id] ?? ''}
+                                            onChange={v => setPartWords(prev => ({ ...prev, [id]: v }))}
+                                            onTranscript={t => setPartWords(prev => (prev[id]?.trim() ? prev : { ...prev, [id]: t }))}
+                                            lang={readLang} fontSize={15}
+                                            placeholder={w('e.g. connections only', 'למשל: רק חיבורים', 'например: только подключения')} />
+                                        </div>
+                                      )}
+                                    </div>
+                                  );
+                                })}
+                                {offOn && (
+                                  <div data-close-offlist-box>
+                                    <p className="font-bold text-gray-800 mb-1" style={{ fontSize: 14 }}>
+                                      {w('What else did you do?', 'מה עוד עשית?', 'Что ещё вы сделали?')}
+                                    </p>
+                                    <MessageBox hook="offlist-words" rows={2} value={offText} onChange={setOffText}
+                                      onTranscript={t => setOffText(prev => (prev.trim() ? prev : t))}
+                                      lang={readLang} fontSize={15}
+                                      placeholder={w('e.g. took out the garbage', 'למשל: הוצאתי את הזבל', 'например: вынес мусор')} />
+                                  </div>
+                                )}
+                                <button data-close-more-next disabled={!moreValid}
+                                  onClick={() => { setMoreDone(true); setClosePhotoIdx(0); }}
+                                  className="w-full py-3 rounded-xl text-base font-bold text-white disabled:opacity-40"
+                                  style={{ background: 'linear-gradient(135deg, #1e3a5f, #2c4f78)' }}>
+                                  {w('Next', 'הבא', 'Дальше')}
+                                </button>
+                              </div>
+                            )}
+                            {finishedOk && moreAsk === 'yes' && moreDone && (
+                              <button data-close-more-edit onClick={() => setMoreDone(false)}
+                                className="w-full text-center text-sm font-bold text-[#1e3a5f] underline">
+                                {w('Change what else you did', 'לשנות מה עוד עשית', 'Изменить, что ещё сделано')}
+                              </button>
+                            )}
+                            {/* 4 · The pictures, one step per thing that needs them. */}
+                            {step && (
+                              <div data-close-photo-step={step.id || 'job'} data-step-need={step.need} className="rounded-2xl border-2 p-3" style={{ borderColor: stepColor(step) }}>
                                 <p className="text-center font-extrabold text-gray-800" style={{ fontSize: 17, lineHeight: 1.3 }}>
-                                  {w('Pictures of', 'תמונות של', 'Фотографии')} <span style={{ color: stepStage.color }}>{stageNameIn(stepStage, readLang)}</span>
+                                  {w('Pictures of', 'תמונות של', 'Фотографии')} <span style={{ color: stepColor(step) }}>{stepName(step)}</span>
                                 </p>
                                 <p className="text-center text-gray-500 mb-2" style={{ fontSize: 12.5 }}>
-                                  {w('stage', 'שלב', 'этап')} {closePhotoIdx + 1} {w('of', 'מתוך', 'из')} {closeFinishedIds.length} {w('you finished', 'שסיימת', 'что вы закончили')}
+                                  {step.part
+                                    ? w('part of it · one picture', 'חלק · תמונה אחת', 'часть · одна фотография')
+                                    : w('3 pictures — or 1 picture and 1 video', '3 תמונות — או תמונה וסרטון', '3 фото — или 1 фото и 1 видео')}
+                                  {photoSteps.length > 1 && <> · {closePhotoIdx + 1}/{photoSteps.length}</>}
                                 </p>
                                 <div className="flex items-center justify-center gap-2 mb-1">
                                   <span data-close-count className="px-3 py-1 rounded-full text-sm font-black tabular-nums"
-                                    style={closeCountFor(stepStage.id) >= MIN_CLOSE_MEDIA
-                                      ? { backgroundColor: '#dcfce7', color: '#15803d' }
-                                      : { backgroundColor: '#fef3c7', color: '#92400e' }}>
-                                    {closeCountFor(stepStage.id)}/{MIN_CLOSE_MEDIA}
+                                    style={stepOk(step) ? { backgroundColor: '#dcfce7', color: '#15803d' } : { backgroundColor: '#fef3c7', color: '#92400e' }}>
+                                    {stepOk(step) && stepMedia(step).length < step.need ? '✓' : `${stepMedia(step).length}/${step.need}`}
                                   </span>
                                 </div>
                                 <div className="flex gap-2 mt-2">
@@ -3770,18 +3960,18 @@ export function ContractorPortal() {
                                     <button data-close-photo-prev onClick={() => setClosePhotoIdx(i => i - 1)}
                                       className="px-3 py-2 rounded-xl text-sm font-bold text-gray-600 border border-gray-200">‹</button>
                                   )}
-                                  {closePhotoIdx < closeFinishedIds.length - 1 && (
-                                    <button data-close-photo-next disabled={closeCountFor(stepStage.id) < MIN_CLOSE_MEDIA}
+                                  {closePhotoIdx < photoSteps.length - 1 && (
+                                    <button data-close-photo-next disabled={!stepOk(step)}
                                       onClick={() => setClosePhotoIdx(i => i + 1)}
                                       className="flex-1 py-2 rounded-xl text-sm font-bold text-white disabled:opacity-40"
                                       style={{ backgroundColor: '#1e3a5f' }}>
-                                      {w('Next stage →', 'לשלב הבא ←', 'Следующий этап →')}
+                                      {w('Next →', 'הבא ←', 'Дальше →')}
                                     </button>
                                   )}
                                 </div>
                               </div>
                             )}
-                            {closeAsked && closeFinishedIds.length === 0 && (
+                            {finishedOk && moreOk && photosNeeded && photoSteps.length === 0 && (
                               <p data-close-nothing-finished className="text-center text-gray-500" style={{ fontSize: 13 }}>
                                 {w('Nothing finished — no pictures needed. Write what is left below.', 'לא סיימת כלום — אין צורך בתמונות. כתוב למטה מה נשאר.', 'Ничего не закончено — фото не нужны. Напишите ниже, что осталось.')}
                               </p>
@@ -3792,7 +3982,7 @@ export function ContractorPortal() {
                       {/* 1 · the pictures — the rule names MIN_CLOSE_MEDIA, so
                           changing the constant changes the sentence. */}
                       <div>
-                        {photosNeeded && !isReportClose && (
+                        {photosNeeded && !stageClose && (
                           <p className="text-center font-extrabold text-gray-800 mb-3"
                             style={{ fontSize: 16, lineHeight: 1.35 }}>
                             {(s.addPicturesRule || (s.isRtl
@@ -3810,7 +4000,7 @@ export function ContractorPortal() {
                             <Camera size={17} />
                             {uploading ? s.uploading : s.tapToAddMedia}
                           </button>
-                          {photosNeeded && !isReportClose && (
+                          {photosNeeded && !stageClose && (
                             <span data-close-count
                               className="flex-shrink-0 px-3 py-2 rounded-xl text-sm font-black tabular-nums"
                               style={selMedia.length >= MIN_CLOSE_MEDIA

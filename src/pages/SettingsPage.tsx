@@ -1,5 +1,6 @@
 import React, { useState, useRef, useMemo, useEffect } from 'react';
 import { useStore, loadProjectSnapshot } from '../data/store';
+import { QUESTION_KINDS, answersKind } from '../data/closeExtras';
 import {
   Plus, Trash2, Save, Palette, ChevronUp, ChevronDown, Shield, Sun, Moon,
   Copy, Check, Download, Upload, HardDrive, X, HardDriveDownload, ToggleLeft, ToggleRight,
@@ -947,7 +948,7 @@ function UserSettings({ users, updateUser, addUser, onToast }: {
     <div>
       <div className="space-y-3 mb-6">
         {users.map(user => (
-          <div key={user.id} className="bg-white border border-gray-200 rounded-xl p-4 flex items-center gap-3">
+          <div key={user.id} className="bg-white border border-gray-200 rounded-xl p-4 flex flex-wrap items-center gap-3">
             <PersonColor
               name={user.name}
               color={user.color}
@@ -965,6 +966,25 @@ function UserSettings({ users, updateUser, addUser, onToast }: {
               className={`text-xs px-3 py-1.5 rounded-lg border font-medium transition-all flex-shrink-0 ${user.active ? 'bg-green-50 border-green-200 text-green-700' : 'bg-gray-100 border-gray-200 text-gray-500'}`}>
               {user.active ? s.activeLabel : s.hiddenLabel}
             </button>
+            {/* Which questions this person answers (owner, 2026-10-18): a job
+                waiting on one of them glows on the notebook while they are
+                signed in. Absent = an admin answers them all. */}
+            <div data-user-answers={user.id} className="basis-full flex flex-wrap items-center gap-2 text-xs text-gray-600 ps-11">
+              <span className="font-semibold">{s.isRtl ? 'עונה על שאלות:' : 'Answers questions about:'}</span>
+              {QUESTION_KINDS.map(k => {
+                const on = answersKind(user, k.id);
+                return (
+                  <button key={k.id} data-user-answers-kind={k.id} data-on={on ? '1' : undefined}
+                    onClick={() => {
+                      const cur = QUESTION_KINDS.filter(q => answersKind(user, q.id)).map(q => q.id);
+                      updateUser(user.id, { answers: on ? cur.filter(x => x !== k.id) : [...cur, k.id] });
+                    }}
+                    className={`px-2.5 py-1 rounded-full border font-semibold ${on ? 'bg-[#1e3a5f] border-[#1e3a5f] text-white' : 'bg-white border-gray-200 text-gray-600'}`}>
+                    {on ? '✓ ' : ''}{s.isRtl ? k.he : k.en}
+                  </button>
+                );
+              })}
+            </div>
           </div>
         ))}
       </div>
@@ -1017,6 +1037,7 @@ function ContractorsTab({ onToast }: { onToast: (msg: string, type?: 'success' |
   const projects = useStore(st => st.projects);
   const stages = useStore(st => st.stages);
   const currentProjectId = useStore(st => st.currentProjectId);
+  const partNeedsPicture = useStore(st => st.boardSettings.__tv?.partNeedsPicture !== false);
   /** Which worker's "maps" / "stages" panel is open — one at a time. */
   const [reachOpen, setReachOpen] = useState<{ id: string; what: 'maps' | 'stages' | 'self' } | null>(null);
   const [openPerms, setOpenPerms] = useState<string | null>(null);
@@ -1058,6 +1079,12 @@ function ContractorsTab({ onToast }: { onToast: (msg: string, type?: 'success' |
 
   return (
     <div className="space-y-6">
+      {/* Closing with work done in part (owner, 2026-10-18): one picture by default. */}
+      <label data-part-needs-picture className="flex items-center gap-2 bg-white border border-gray-200 rounded-xl px-4 py-3 text-sm text-gray-700 cursor-pointer">
+        <input type="checkbox" checked={partNeedsPicture} onChange={e => setTvSetting('partNeedsPicture', e.target.checked ? undefined : false)} />
+        <span><b>{s.isRtl ? 'עבודה חלקית צריכה תמונה אחת' : 'A stage done in part needs one picture'}</b>
+          <span className="text-gray-500"> — {s.isRtl ? 'כשהעובד סוגר עבודה ואומר שעשה רק חלק משלב' : 'when a worker closes a job and says he did only part of a stage'}</span></span>
+      </label>
       {/*
         The address box has moved to the TV tab, next to the other one.
 

@@ -5,6 +5,8 @@ import { ChevronUp, ChevronDown, Plus, X, CalendarDays, Maximize2, Eye, EyeOff, 
 import {
   Apartment, CanvasElement, Contractor, User, ContractorAssignment, Stage, personColor,
   aptLabel, getStageName, stageNameIn, generalBuildingsText, projectShortName, projectColor } from '../../types';
+import { asksUser, openOffList } from '../../data/closeExtras';
+import { OffListQuestion } from '../tasks/OffListQuestion';
 import { BUNDLE_MIN, BundleBar, BundleInfo, BundleItem, BundlePopup, bundleWords, noMenu, StagePill, useTileMeasure } from './TaskBundle';
 import {
   registerRota, onRotaHover, rotaCellAt, setRotaHover, RotaHit,
@@ -399,6 +401,13 @@ export function PlannerWidget({
    * never whether they are allowed.
    */
   const ro = !!readOnly;
+  /**
+   * A task waiting on an office answer GLOWS for whoever answers that kind
+   * of question (owner, 2026-10-18 — "not on the list" work); pressing it
+   * asks the question instead of opening the job. Never on a read-only sheet.
+   */
+  const nbUser = useStore(st => st.currentUser);
+  const [offAsk, setOffAsk] = useState<{ pid: string; task: ContractorAssignment; itemId: string } | null>(null);
   const mode = data.mode === 'month' ? 'month' : 'week';
   const span = num(data.span, 5, 1, 7);
   const weekStart = Number(data.weekStart) === 1 ? 1 : 0;
@@ -1026,7 +1035,7 @@ export function PlannerWidget({
     for (const [key, list] of map) {
       const groups = new Map<string, TaskBarSeg[]>();
       for (const bar of list) {
-        if (bar.len !== 1 || bar.taskId === held || daysOf(bar.task).length !== 1) continue;
+        if (bar.len !== 1 || bar.taskId === held || daysOf(bar.task).length !== 1 || openOffList(bar.task).length) continue;
         const gk = `${bar.startIdx}|${bar.projectId ?? currentProjectId}`;
         const g = groups.get(gk);
         if (g) g.push(bar); else groups.set(gk, [bar]);
@@ -1891,12 +1900,18 @@ export function PlannerWidget({
                                       </div>
                                     );
                                   }
+                                  const asks = !ro && asksUser(bar.task, nbUser);
                                   return (
                                     <div key={`bar-${bar.id}`} style={at}>
                                       <TaskBar bar={bar} z={z} size={textSize} strip={strips} onMeasure={measureBar}
                                         onHeld={h => { heldBarRef.current = h ? bar.taskId : null; }}
                                         readOnly={ro || state === 'ending'} isRtl={LT === 'he-IL'} lang={lang}
-                                        onOpen={() => openBar(bar)}
+                                        question={asks}
+                                        onOpen={() => {
+                                          const it = asks ? openOffList(bar.task)[0] : undefined;
+                                          if (it) setOffAsk({ pid: bar.projectId ?? currentProjectId, task: bar.task, itemId: it.id });
+                                          else openBar(bar);
+                                        }}
                                         onDropTo={t => askMoveBar(bar, t)}
                                         onDragOff={() => setBarAsk(bar)}
                                         onRemove={() => removeBar(bar)}
@@ -2131,6 +2146,10 @@ export function PlannerWidget({
         );
       })()}
 
+      {offAsk && (() => {
+        const it = offAsk.task.offList?.find(i => i.id === offAsk.itemId);
+        return it ? <OffListQuestion projectId={offAsk.pid} task={offAsk.task} item={it} onClose={() => setOffAsk(null)} /> : null;
+      })()}
       {moveAsk && createPortal((() => {
         const { bar, target } = moveAsk;
         const fromPid = `c:${bar.task.contractorId}`;
@@ -2291,8 +2310,10 @@ export interface TaskBarSeg {
  * elsewhere. Drawn from the FIRST cell of its stretch and laid over the
  * cells to its right, which leave that lane's height free.
  */
-function TaskBar({ bar, z, size, strip, readOnly, isRtl, lang, onOpen, onDropTo, onDragOff, onRemove, onResizeTo, onHeld, onMeasure }: {
+function TaskBar({ bar, z, size, strip, readOnly, isRtl, lang, question, onOpen, onDropTo, onDragOff, onRemove, onResizeTo, onHeld, onMeasure }: {
   bar: TaskBarSeg;
+  /** Waiting on an answer from the person looking — it glows, and a press asks. */
+  question?: boolean;
   /** Told the tile's natural height (tiles only) — what its lane is sized from. */
   onMeasure?: (id: string, h: number) => void;
   /** Told when a drag goes live and when it ends — the widget never bundles a held bar. */
@@ -2459,7 +2480,8 @@ function TaskBar({ bar, z, size, strip, readOnly, isRtl, lang, onOpen, onDropTo,
         {...handlers}
         {...noMenu}
         data-no-drag data-el-action data-task-bar={bar.taskId} data-bar-days={bar.len} data-bar-look="tile"
-        className="group/bar relative rounded-lg min-w-0 flex-shrink-0 z-[3] hover:z-[30]"
+        data-bar-question={question ? '1' : undefined}
+        className={`group/bar relative rounded-lg min-w-0 flex-shrink-0 z-[3] hover:z-[30]${question ? ' question-glow' : ''}`}
         title={title}
         style={{
           position: 'relative',
@@ -2509,6 +2531,15 @@ function TaskBar({ bar, z, size, strip, readOnly, isRtl, lang, onOpen, onDropTo,
                 backgroundColor: '#16a34a', color: '#fff',
               }}>
                 <Check size={Math.max(8, Math.round(z(8.5)))} strokeWidth={3.5} />{doneWord}
+              </span>
+            )}
+            {question && (
+              <span data-bar-question-tag className="flex-shrink-0 inline-flex items-center rounded-full" style={{
+                padding: `0 ${Math.max(3, z(5))}px`,
+                fontSize: Math.max(z(6.5), size - z(2.5)), fontWeight: 800, lineHeight: 1.35,
+                backgroundColor: '#7c3aed', color: '#fff',
+              }}>
+                {isRtl ? 'צריך תשובה' : 'needs an answer'}
               </span>
             )}
           </div>
@@ -2581,7 +2612,8 @@ function TaskBar({ bar, z, size, strip, readOnly, isRtl, lang, onOpen, onDropTo,
       // here means nothing, and saying nothing is better than two menus.
       {...noMenu}
       data-no-drag data-el-action data-task-bar={bar.taskId} data-bar-days={bar.len}
-      className="group/bar relative rounded-md min-w-0 flex-shrink-0"
+      data-bar-question={question ? '1' : undefined}
+      className={`group/bar relative rounded-md min-w-0 flex-shrink-0${question ? ' question-glow' : ''}`}
       // The FULL unit label first — a narrow cell cuts "15 — Family-name" to
       // "15 — Fam…", and hovering the bar is the cheap way to read it all.
       title={`${bar.label}${bar.desc ? ` — ${bar.desc}` : ''}\n${bar.done ? 'Done — kept on the sheet as the record'
