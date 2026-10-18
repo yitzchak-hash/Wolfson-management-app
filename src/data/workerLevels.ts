@@ -26,6 +26,8 @@ export interface PermissionDef {
   label: string;
   hint: string;
   group: 'Work' | 'The site' | 'Everyone else';
+  /** A sub-switch: drawn indented under this one, and meaningless while it is off. */
+  parent?: WorkerPermission;
 }
 
 export const WORKER_PERMISSIONS: PermissionDef[] = [
@@ -51,6 +53,14 @@ export const WORKER_PERMISSIONS: PermissionDef[] = [
   { key: 'moveOwnWork', label: 'Move their own work to another apartment', group: 'Work',
     hint: '"Wrong apartment? Move it" on a task of their own — the task, its photos and its '
       + 'messages go to the apartment they really worked in, inside the same workspace.' },
+  // Owner, recording 2026-10-18: "a permission to be able to delete his own
+  // tasks … with a sub permission — only for tasks he added himself, or
+  // including tasks that the office added for him."
+  { key: 'deleteOwnTasks', label: 'Delete their own tasks', group: 'Work',
+    hint: 'A small bin on the task. Only tasks they added themselves, unless the switch below is on. '
+      + 'Its photos and messages go with it; the files stay in Google Drive.' },
+  { key: 'deleteOfficeTasks', label: 'Including tasks the office gave them', group: 'Work', parent: 'deleteOwnTasks',
+    hint: 'Also the tasks somebody in the office made for them.' },
 
   // ── The site ──────────────────────────────────────────────────────────────
   { key: 'seeDiagrams', label: 'See the building diagrams', group: 'The site',

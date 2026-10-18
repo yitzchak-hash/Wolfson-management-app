@@ -1251,6 +1251,7 @@ export type WorkerPermission =
   | 'workHere'
   | 'assignOthers'
   | 'moveOwnWork'
+  | 'deleteOwnTasks' | 'deleteOfficeTasks'
   | 'seeDiagrams' | 'seeAllApartments' | 'seePlans' | 'seeAnyPlan' | 'markUpPlans' | 'seeSnags'
   | 'allTasks' | 'seePlanner' | 'seeSchedule' | 'seeContacts' | 'switchProject';
 

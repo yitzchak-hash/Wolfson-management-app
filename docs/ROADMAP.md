@@ -95,3 +95,4 @@ under the set model). `round28.mjs` is green again (10-08).
 - ☑ "A newer version is ready — Reload" note in the office app (2026-10-18).
 - ☑ Sold/Start never named as finished in any sentence (2026-10-18).
 - ☑ Plans on the worker's building map: the plan on the "I'm going to work here" sheet; "any plan" switch; Standard bubble (2026-10-18).
+- ☑ Recording 14:28: the worker's sheet header, "When did you finish?", delete permission, closing-screen picture steps (2026-10-18).

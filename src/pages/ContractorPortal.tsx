@@ -19,7 +19,7 @@ import {
   Plus, Send, AlertCircle, X, Play, File as FileIcon, MapPin,
   BookOpen, Download, Paperclip, MessageSquare, CloudUpload,
   ChevronLeft, ChevronRight, ChevronDown, History, PenLine, Mic,
-  Settings as SettingsIcon, Bell, Info, ArrowRightLeft, Video, FolderOpen,
+  Settings as SettingsIcon, Bell, Info, ArrowRightLeft, Video, FolderOpen, Trash2,
 } from 'lucide-react';
 import { BuildingDiagram } from '../components/diagram/BuildingDiagram';
 import { permsOf } from '../data/workerLevels';
@@ -582,7 +582,7 @@ export function ContractorPortal() {
     contractors, contractorAssignments, contractorNotes, contractorPhotos,
     apartments, stages, stageNotes, buildings,
     addContractorNote, addContractorPhoto, deleteContractorPhoto,
-    updateContractorAssignment, addContractorAssignment, addActivityLog,
+    updateContractorAssignment, deleteContractorAssignment, addContractorAssignment, addActivityLog,
     updateApartment, setApartmentMarks,
     contractorUiStrings, planAnnotations,
     workerLevels, updateContractor, canvasElements, users,
@@ -829,6 +829,12 @@ export function ContractorPortal() {
    */
   const [closeAsked, setCloseAsked] = useState(false);
   const [closeUnfinished, setCloseUnfinished] = useState<string[]>([]);
+  /**
+   * A task whose last day has passed asks first WHEN it was finished (owner,
+   * recording 2026-10-18): on that day — the task keeps its days — or today,
+   * and today joins the task's days. Null until answered.
+   */
+  const [closeWhen, setCloseWhen] = useState<'past' | 'today' | null>(null);
   const [closePhotoIdx, setClosePhotoIdx] = useState(0);
   const closeStageRef = useRef<string | null>(null);
   /**
@@ -897,6 +903,7 @@ export function ContractorPortal() {
   const [movingTask, setMovingTask] = useState(false);
   /** The small icon's "is this the wrong apartment?" ask, before the move window. */
   const [moveAsk, setMoveAsk] = useState(false);
+  const [deleteAsk, setDeleteAsk] = useState(false);
   const [movedTo, setMovedTo] = useState<string | null>(null);
   useEffect(() => {
     if (!movedTo) return;
@@ -904,7 +911,7 @@ export function ContractorPortal() {
     return () => clearTimeout(t);
   }, [movedTo]);
   // Another task opened (or the sheet closed): the move belongs to the old one.
-  useEffect(() => { setMovingTask(false); setMoveAsk(false); setMovedTo(null); }, [selectedAssignment?.id]);
+  useEffect(() => { setMovingTask(false); setMoveAsk(false); setDeleteAsk(false); setMovedTo(null); }, [selectedAssignment?.id]);
   /**
    * The message box on the task sheet opens on "Send a note or message to
    * the office" (owner, 2026-10-07) — closed again for every task opened.
@@ -1108,6 +1115,20 @@ export function ContractorPortal() {
     [contractorAssignments, contractorId]);
   /** Work he began himself on the map ("I'm going to work here") — his to move, no permission needed. */
   const startedByHim = (a: ContractorAssignment) => !!a.stageReport && a.createdBy === contractorId;
+  /**
+   * The sheet's title (owner, recording 2026-10-18): "Building 1 · Apartment 15
+   * - Skidelsky, Oren" — the building and the apartment in words, a plain dash
+   * before the family. A Job Board job has no building and reads its name.
+   */
+  const sheetPlace = (a: ContractorAssignment, apt: Apartment | undefined) => {
+    if (!apt) return whereLabel(a, apt, currentWsName);
+    const num = apt.apartmentNumber?.trim() ?? '';
+    const name = apt.displayName?.trim() ?? '';
+    const fam = name && name !== num ? name : '';
+    if (apt.buildingId === 'G' || !num) return fam || num || '?';
+    const bNum = (apt.buildingId.match(/\d+/)?.[0]) ?? apt.buildingId;
+    return `${w('Building', 'בניין', 'Корпус')} ${bNum} · ${w('Apartment', 'דירה', 'Квартира')} ${num}${fam ? ` - ${fam}` : ''}`;
+  };
   /** "Apt 47" — or "Work at Wolfson" for a general job. */
   const whereLabel = (a: ContractorAssignment, apt: Apartment | undefined, ws: string) =>
     a.general ? workAtLabel(readLang, ws) : `${w('Apt', 'דירה', 'Кв.')} ${aptLabel(apt)}`;
@@ -1704,6 +1725,7 @@ export function ContractorPortal() {
       setCloseFinished('yes');
       setCloseAsked(false);
       setCloseUnfinished([]);
+      setCloseWhen(null);
       setClosePhotoIdx(0);
       setMoreAsk(null); setExtraPick({}); setPartWords({}); setOffOn(false); setOffText(''); setMoreDone(false);
       closeStageRef.current = null;
@@ -1735,7 +1757,11 @@ export function ContractorPortal() {
       if (off) patch.offList = [...(liveA.offList ?? []), { id: `OL-${Date.now().toString(36)}`, text: off, at: completedAt, by: contractor?.name ?? '' }];
       if (Object.keys(patch).length) updateContractorAssignment(selectedAssignment.id, patch);
     }
-    updateContractorAssignment(selectedAssignment.id, { completedAt });
+    // Finished on the task's own (past) day: its days stand as they are —
+    // naming them keeps the store's late-close rule from adding today.
+    updateContractorAssignment(selectedAssignment.id, closeWhen === 'past'
+      ? { completedAt, days: liveA.days }
+      : { completedAt });
     addActivityLog({
       apartmentId: selectedAssignment.apartmentId,
       apartmentNumber: apt?.apartmentNumber ?? '',
@@ -2027,7 +2053,15 @@ export function ContractorPortal() {
   const isReportClose = stageClose && !!liveSel?.stageReport && closeStages.length > 0;
   const hasOwnStages = closeStages.length > 0;
   const closeFinishedIds = closeStages.filter(id => !closeUnfinished.includes(id));
-  const finishedOk = !hasOwnStages || closeAsked;
+  const closeUnfinishedIds = closeStages.filter(id => closeUnfinished.includes(id));
+  /** The task's last day, when it has already gone by — the "when did you finish?" ask. */
+  const closePastDay = (() => {
+    if (!stageClose || !liveSel) return null;
+    const last = daysOf(liveSel).slice(-1)[0];
+    return last && last < dayIso(new Date()) ? last : null;
+  })();
+  const whenOk = !closePastDay || !!closeWhen;
+  const finishedOk = whenOk && (!hasOwnStages || closeAsked);
   const extraChoices = stageClose && liveSel
     ? extraStageChoices(getApt(liveSel.apartmentId), wsStageList, closeStages, { tipusStages: tipusStagesPortal })
     : [];
@@ -2036,13 +2070,16 @@ export function ContractorPortal() {
     && extraIds.every(id => extraPick[id] === 'all' || !!(partWords[id] ?? '').trim())
     && (!offOn || !!offText.trim());
   const moreOk = moreAsk === 'no' || (moreAsk === 'yes' && moreDone);
-  type PhotoStep = { id: string; ids: string[]; need: number; part?: boolean; loose?: boolean };
+  type PhotoStep = { id: string; ids: string[]; need: number; part?: boolean; loose?: boolean; sofar?: boolean };
   const photoSteps: PhotoStep[] = !stageClose ? [] : [
     // A stage REPORT: the close minimum for each stage he finished.
     ...(isReportClose ? closeFinishedIds.map(id => ({ id, ids: [id], need: MIN_CLOSE_MEDIA })) : []),
     // An ordinary task: the close minimum for the job — tagged to its first stage.
     ...(!isReportClose && (!hasOwnStages || closeFinishedIds.length)
       ? [{ id: closeFinishedIds[0] ?? '', ids: closeFinishedIds, need: MIN_CLOSE_MEDIA, loose: true }] : []),
+    // What he left half done of his OWN stages shows too — one picture, like
+    // "part of it" (owner: "what about the work we did in the fans?").
+    ...(partNeedsPicture ? closeUnfinishedIds.map(id => ({ id, ids: [id], need: 1, part: true, sofar: true })) : []),
     ...(moreAsk === 'yes' ? extraIds.flatMap(id => extraPick[id] === 'part'
       ? (partNeedsPicture ? [{ id, ids: [id], need: 1, part: true }] : [])
       : [{ id, ids: [id], need: MIN_CLOSE_MEDIA }]) : []),
@@ -3446,6 +3483,12 @@ plansPdfFileId && (
         // the office gave him still needs the `moveOwnWork` switch.
         const canMoveHere = (perms.moveOwnWork || startedByHim(a)) && a.contractorId === contractorId
           && !!a.apartmentId && !a.general && !a.problem && !!apt;
+        // Delete (owner, recording 2026-10-18): his own tasks with the switch;
+        // the office's tasks for him only with the sub-switch too. Never a
+        // problem (the office's record of a fault) or a general job.
+        const canDeleteHere = perms.deleteOwnTasks && a.contractorId === contractorId
+          && !a.general && !a.problem
+          && (a.createdBy === contractorId || perms.deleteOfficeTasks);
         const dueBadge = getDueBadge(effectiveDue(a), dueWords);
         // The starred plan — or, when nobody starred one, the app's guess:
         // the plans folder's latest-activity sheet, marked in red as a guess.
@@ -3528,89 +3571,112 @@ plansPdfFileId && (
 
               {/* Sheet header */}
               <div className="px-5 pb-3 border-b border-gray-100 flex-shrink-0">
-                <div className="flex items-start justify-between">
-                  <div>
-                    <div className="flex items-center gap-2 mb-1 flex-wrap">
-                      <Building2 size={16} className="text-[#4aa8d8]" />
-                      <span className="font-bold text-[#1e3a5f] text-lg" data-sheet-where>
-                        {whereLabel(a, apt, currentWsName)}
-                      </span>
-                      {!a.general && <span className="text-gray-400 text-sm">{a.buildingId}</span>}
-                      {/* Wrong apartment — a SMALL icon beside the place's
-                          name (owner, 2026-10-15: "remove it from here … just
-                          a little tiny icon"). A press asks first; Yes opens
-                          the move window. */}
-                      {canMoveHere && (
-                        <button type="button" data-task-move={a.id}
-                          onClick={() => setMoveAsk(v => !v)}
-                          title={workerMoveWords(s, readLang).mvAction}
-                          aria-label={workerMoveWords(s, readLang).mvAction}
-                          className={`w-7 h-7 flex items-center justify-center rounded-full border ${moveAsk ? 'bg-amber-100 border-amber-300 text-amber-800' : 'border-gray-200 text-gray-400 hover:text-amber-700 hover:border-amber-300'}`}>
-                          <ArrowRightLeft size={13} />
-                        </button>
-                      )}
-                    </div>
-                    {stage && (
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs px-2.5 py-1 rounded-full font-medium"
-                          style={{ backgroundColor: stage.color + '22', color: stage.color, border: `1px solid ${stage.color}33` }}>
-                          {stageNameIn(stage, readLang)}
-                        </span>
-                        {apt?.stageDates && Object.keys(apt.stageDates).length > 0 && (
-                          <button
-                            onClick={() => setShowHistory(v => !v)}
-                            className={`flex items-center gap-1 text-xs px-2 py-1 rounded-full border transition-all ${showHistory ? 'bg-[#1e3a5f] text-white border-[#1e3a5f]' : 'text-gray-400 border-gray-200 hover:border-gray-300'}`}
-                          >
-                            <History size={11} />
-                          </button>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                  <button onClick={() => { setSelectedAssignment(null); setShowCompleteConfirm(false); setFinishAsk(null); }} className="p-1.5 rounded-full hover:bg-gray-100">
+                {/* ROW 1 (owner, recording 2026-10-18): the place in words —
+                    "Building 1 · Apartment 15 - family", a plain dash — then
+                    Standard, the move and delete icons and the X, all on ONE row. */}
+                <div data-sheet-head className="flex items-center gap-2">
+                  <Building2 size={16} className="text-[#4aa8d8] flex-shrink-0" />
+                  <span className="font-bold text-[#1e3a5f] text-[17px] leading-snug min-w-0 flex-1" data-sheet-where>
+                    {a.general ? whereLabel(a, apt, currentWsName) : sheetPlace(a, apt)}
+                  </span>
+                  {apt?.classification === 'standard' && (
+                    <span data-sheet-standard className="flex-shrink-0 px-2 py-0.5 rounded-full text-[11px] font-bold"
+                      style={{ backgroundColor: '#e0f2fe', color: '#0c4a6e', border: '1px solid #bae6fd' }}>
+                      {w('Standard', 'סטנדרט', 'Стандарт')}
+                    </span>
+                  )}
+                  {/* Wrong apartment — a SMALL icon (owner, 2026-10-15). A press asks first. */}
+                  {canMoveHere && (
+                    <button type="button" data-task-move={a.id}
+                      onClick={() => { setDeleteAsk(false); setMoveAsk(v => !v); }}
+                      title={workerMoveWords(s, readLang).mvAction}
+                      aria-label={workerMoveWords(s, readLang).mvAction}
+                      className={`flex-shrink-0 w-7 h-7 flex items-center justify-center rounded-full border ${moveAsk ? 'bg-amber-100 border-amber-300 text-amber-800' : 'border-gray-200 text-gray-400 hover:text-amber-700 hover:border-amber-300'}`}>
+                      <ArrowRightLeft size={13} />
+                    </button>
+                  )}
+                  {canDeleteHere && (
+                    <button type="button" data-task-delete={a.id}
+                      onClick={() => { setMoveAsk(false); setDeleteAsk(v => !v); }}
+                      title={w('Delete this task', 'למחוק את המשימה', 'Удалить задачу')}
+                      aria-label={w('Delete this task', 'למחוק את המשימה', 'Удалить задачу')}
+                      className={`flex-shrink-0 w-7 h-7 flex items-center justify-center rounded-full border ${deleteAsk ? 'bg-red-100 border-red-300 text-red-700' : 'border-gray-200 text-gray-400 hover:text-red-600 hover:border-red-300'}`}>
+                      <Trash2 size={13} />
+                    </button>
+                  )}
+                  <button onClick={() => { setSelectedAssignment(null); setShowCompleteConfirm(false); setFinishAsk(null); }} className="flex-shrink-0 p-1.5 rounded-full hover:bg-gray-100">
                     <X size={20} className="text-gray-500" />
                   </button>
                 </div>
-                {/* WHEN and WHERE on ONE line (owner, 2026-10-07: "these
-                    should all be in one line — consolidate the space"): the
-                    day with its Today/Overdue badge, then the address and the
-                    Waze icon. It wraps only when a long address must. */}
-                {(a.dueDate || apt?.address?.trim()) && (
-                  <div data-sheet-when-where className="flex items-start gap-3 text-xs mt-2">
-                    {a.dueDate && (
-                      <span data-sheet-when className={`flex items-center gap-1.5 flex-wrap font-medium flex-shrink-0 max-w-[58%] ${isOverdue ? 'text-red-500' : 'text-gray-500'}`}>
-                        <CalendarDays size={13} className="flex-shrink-0" />
-                        <span>
-                          {a.days?.length
-                            ? a.days.map(d => format(parseISO(d), 'EEE d MMM')).join(' · ')
-                            : format(parseISO(a.dueDate), 'EEE d MMM')}
-                        </span>
-                        {dueBadge && !a.completedAt && (
-                          <span className={`px-1.5 py-0.5 rounded border font-semibold text-[11px] ${dueBadge.cls}`}>
-                            {dueBadge.text}
-                          </span>
-                        )}
+                {/* ROW 2: the stage, the day and where — one row; a long address wraps inside it. */}
+                <div data-sheet-when-where className="flex items-start gap-2.5 text-xs mt-2">
+                  {stage && (
+                    <span className="flex items-center gap-1.5 flex-shrink-0">
+                      <span data-sheet-stage className="text-xs px-2.5 py-1 rounded-full font-medium"
+                        style={{ backgroundColor: stage.color + '22', color: stage.color, border: `1px solid ${stage.color}33` }}>
+                        {stageNameIn(stage, readLang)}
                       </span>
-                    )}
-                    {/* The address takes the rest of the row and wraps INSIDE
-                        it, so the line stays one line however long it is. */}
-                    {apt?.address?.trim() && (
-                      <span data-sheet-where-line className="flex items-start gap-1 text-gray-600 min-w-0 flex-1">
-                        <MapPin size={13} className="text-[#4aa8d8] flex-shrink-0 mt-0.5" />
-                        <span className="leading-snug min-w-0">{apt.address}</span>
-                        {/* Waze, at the end of the address — one press on site and
-                            the phone is navigating. An icon, nothing more. */}
-                        <a
-                          href={wazeUrl(apt.address)}
-                          target="_blank" rel="noopener noreferrer"
-                          title="Waze"
-                          onClick={e => e.stopPropagation()}
-                          className="flex-shrink-0 p-0.5 rounded hover:bg-sky-50"
+                      {apt?.stageDates && Object.keys(apt.stageDates).length > 0 && (
+                        <button
+                          onClick={() => setShowHistory(v => !v)}
+                          className={`flex items-center gap-1 text-xs px-2 py-1 rounded-full border transition-all ${showHistory ? 'bg-[#1e3a5f] text-white border-[#1e3a5f]' : 'text-gray-400 border-gray-200 hover:border-gray-300'}`}
                         >
-                          <WazeIcon size={16} />
-                        </a>
+                          <History size={11} />
+                        </button>
+                      )}
+                    </span>
+                  )}
+                  {a.dueDate && (
+                    <span data-sheet-when className={`flex items-center gap-1.5 flex-wrap font-medium flex-shrink-0 max-w-[45%] pt-1 ${isOverdue ? 'text-red-500' : 'text-gray-500'}`}>
+                      <CalendarDays size={13} className="flex-shrink-0" />
+                      <span>
+                        {a.days?.length
+                          ? a.days.map(d => format(parseISO(d), 'EEE d MMM')).join(' · ')
+                          : format(parseISO(a.dueDate), 'EEE d MMM')}
                       </span>
-                    )}
+                      {dueBadge && !a.completedAt && (
+                        <span className={`px-1.5 py-0.5 rounded border font-semibold text-[11px] ${dueBadge.cls}`}>
+                          {dueBadge.text}
+                        </span>
+                      )}
+                    </span>
+                  )}
+                  {apt?.address?.trim() && (
+                    <span data-sheet-where-line className="flex items-start gap-1 text-gray-600 min-w-0 flex-1 pt-1">
+                      <MapPin size={13} className="text-[#4aa8d8] flex-shrink-0 mt-0.5" />
+                      <span className="leading-snug min-w-0">{apt.address}</span>
+                      {/* Waze, at the end of the address — one press on site and the phone navigates. */}
+                      <a
+                        href={wazeUrl(apt.address)}
+                        target="_blank" rel="noopener noreferrer"
+                        title="Waze"
+                        onClick={e => e.stopPropagation()}
+                        className="flex-shrink-0 p-0.5 rounded hover:bg-sky-50"
+                      >
+                        <WazeIcon size={16} />
+                      </a>
+                    </span>
+                  )}
+                </div>
+                {canDeleteHere && deleteAsk && (
+                  <div data-task-delete-ask className="mt-2.5 rounded-xl border-2 px-3 py-2.5" style={{ borderColor: '#fca5a5', backgroundColor: '#fef2f2' }}>
+                    <div className="text-[14px] font-bold text-red-800">
+                      {w('Delete this task? Its photos and messages go with it.',
+                        'למחוק את המשימה? התמונות וההודעות שלה יימחקו איתה.',
+                        'Удалить эту задачу? Её фото и сообщения удалятся вместе с ней.')}
+                    </div>
+                    <div className="flex gap-2 mt-2">
+                      <button type="button" data-task-delete-yes
+                        onClick={() => { setDeleteAsk(false); deleteContractorAssignment(a.id); setSelectedAssignment(null); }}
+                        className="flex-1 py-2 rounded-lg font-bold text-white text-sm bg-red-600">
+                        {w('Delete', 'מחק', 'Удалить')}
+                      </button>
+                      <button type="button" data-task-delete-no
+                        onClick={() => setDeleteAsk(false)}
+                        className="flex-1 py-2 rounded-lg font-bold text-sm border border-gray-200 bg-white text-gray-700">
+                        {w('No', 'לא', 'Нет')}
+                      </button>
+                    </div>
                   </div>
                 )}
                 {/* Recorded on the wrong apartment — only HIS OWN work, never a
@@ -3655,8 +3721,10 @@ plansPdfFileId && (
                 <div>
                   {/* ONE line (owner, 2026-10-07: "TASK should be with two
                       dots"): "Task: installation", not a heading above the words. */}
+                  {/* "Task" big and dramatic (owner, recording 2026-10-18) — so
+                      there is no doubt which words are the job to do. */}
                   <p className="text-gray-800 text-[15px] leading-relaxed" data-task-line>
-                    <span className="font-extrabold text-[#1e3a5f]">{s.sectionTask}:</span>{' '}
+                    <span data-task-word className="font-black text-[#1e3a5f] uppercase tracking-tight align-baseline" style={{ fontSize: 22 }}>{s.sectionTask}:</span>{' '}
                     <span data-task-text><Translated text={a.taskDescription} to={readLang} /></span>
                   </p>
                   {a.general && (a.visits?.length ?? 0) > 0 && (
@@ -3963,7 +4031,7 @@ plansPdfFileId && (
                       {s.closingTitle || (w('Closing the job', 'סגירת העבודה', 'Закрытие работы'))}
                     </div>
                     <div className="truncate opacity-70" style={{ fontSize: 12.5 }}>
-                      {apt ? aptLabel(apt) : a.buildingId}
+                      {apt ? sheetPlace(a, apt) : a.buildingId}
                     </div>
                   </div>
                 </div>
@@ -4024,8 +4092,37 @@ plansPdfFileId && (
                           : { borderColor: '#e5e7eb', color: '#374151', backgroundColor: '#fff' };
                         return (
                           <div data-close-stage className="space-y-5">
+                            {/* 0 · The task's day has gone by: when did you finish? */}
+                            {closePastDay && (
+                              <div data-close-when>
+                                <p className="text-center font-extrabold text-gray-800 mb-3" style={{ fontSize: 17, lineHeight: 1.3 }}>
+                                  {w('When did you finish?', 'מתי סיימת?', 'Когда вы закончили?')}
+                                </p>
+                                <div className="grid grid-cols-2 gap-2">
+                                  <button data-close-when-pick="past" data-on={closeWhen === 'past' ? '1' : undefined}
+                                    onClick={() => { setCloseWhen('past'); setClosePhotoIdx(0); }}
+                                    className="py-3.5 px-2 rounded-xl text-base font-extrabold border active:scale-[0.98]"
+                                    style={yn(closeWhen === 'past', 'g')}>
+                                    {daysBetween(closePastDay, dayIso(new Date())) === 1
+                                      ? w('Yesterday', 'אתמול', 'Вчера')
+                                      : format(parseDay(closePastDay), 'EEE d MMM')}
+                                  </button>
+                                  <button data-close-when-pick="today" data-on={closeWhen === 'today' ? '1' : undefined}
+                                    onClick={() => { setCloseWhen('today'); setClosePhotoIdx(0); }}
+                                    className="py-3.5 px-2 rounded-xl text-base font-extrabold border active:scale-[0.98]"
+                                    style={yn(closeWhen === 'today', 'g')}>
+                                    {w('Today', 'היום', 'Сегодня')}
+                                  </button>
+                                </div>
+                                {closeWhen === 'today' && (
+                                  <p data-close-when-note className="text-center text-gray-500 mt-2" style={{ fontSize: 12.5 }}>
+                                    {w('Today is added to the task.', 'היום נוסף למשימה.', 'Сегодня добавлено к задаче.')}
+                                  </p>
+                                )}
+                              </div>
+                            )}
                             {/* 1 · Did you finish doing …? */}
-                            {hasOwnStages && (
+                            {hasOwnStages && whenOk && (
                               <div data-close-finished>
                                 <p data-close-finished-q className="text-center font-extrabold text-gray-800 mb-3" style={{ fontSize: 17, lineHeight: 1.3 }}>
                                   {w('Did you finish doing', 'סיימת לעשות', 'Вы закончили')} {joined}?
@@ -4038,7 +4135,12 @@ plansPdfFileId && (
                                     {w('Yes', 'כן', 'Да')}
                                   </button>
                                   <button data-close-finished-pick="no" data-on={closeFinished === 'no' ? '1' : undefined}
-                                    onClick={() => { setCloseFinished('no'); setCloseAsked(false); setClosePhotoIdx(0); }}
+                                    onClick={() => {
+                                      setCloseFinished('no'); setClosePhotoIdx(0);
+                                      // One stage: "No" already says which — never ask "which didn't you finish?".
+                                      if (closeStages.length === 1) { setCloseUnfinished([closeStages[0]]); setCloseAsked(true); }
+                                      else setCloseAsked(false);
+                                    }}
                                     className="py-3.5 rounded-xl text-base font-extrabold border active:scale-[0.98]"
                                     style={yn(closeFinished === 'no', 'o')}>
                                     {w('No', 'לא', 'Нет')}
@@ -4047,7 +4149,7 @@ plansPdfFileId && (
                               </div>
                             )}
                             {/* 1b · Which didn't you finish? — only the task's own. */}
-                            {hasOwnStages && closeFinished === 'no' && (
+                            {hasOwnStages && whenOk && closeStages.length > 1 && closeFinished === 'no' && (
                               <div data-close-unfinished>
                                 <p className="text-center font-extrabold text-gray-800 mb-2" style={{ fontSize: 16, lineHeight: 1.35 }}>
                                   {w("Which didn't you finish?", 'מה לא סיימת?', 'Что вы не закончили?')}
@@ -4205,7 +4307,9 @@ plansPdfFileId && (
                                   {w('Pictures of', 'תמונות של', 'Фотографии')} <span style={{ color: stepColor(step) }}>{stepName(step)}</span>
                                 </p>
                                 <p className="text-center text-gray-500 mb-2" style={{ fontSize: 12.5 }}>
-                                  {step.part
+                                  {step.sofar
+                                    ? w('what you did so far · one picture or video', 'מה שעשית עד עכשיו · תמונה או סרטון', 'что сделано пока · одно фото или видео')
+                                    : step.part
                                     ? w('part of it · one picture or video', 'חלק · תמונה או סרטון', 'часть · одно фото или видео')
                                     : needWords(step.need)}
                                   {photoSteps.length > 1 && <> · {closePhotoIdx + 1}/{photoSteps.length}</>}
@@ -4215,6 +4319,16 @@ plansPdfFileId && (
                                     style={stepOk(step) ? { backgroundColor: '#dcfce7', color: '#15803d' } : { backgroundColor: '#fef3c7', color: '#92400e' }}>
                                     {countText(stepMedia(step), step.need)}
                                   </span>
+                                </div>
+                                {/* Take photo · Record video · Choose files live INSIDE the step (owner, 2026-10-18). */}
+                                <div data-close-step-media className="mt-2">
+                                  {addMediaRow(null)}
+                                  {pendingTray}
+                                  {uploadError && (
+                                    <div className="flex items-center gap-2 text-xs text-amber-700 bg-amber-50 rounded-lg px-3 py-2 mt-2 border border-amber-200">
+                                      <AlertCircle size={13} className="flex-shrink-0" /> {uploadError}
+                                    </div>
+                                  )}
                                 </div>
                                 <div className="flex gap-2 mt-2">
                                   {closePhotoIdx > 0 && (
@@ -4242,6 +4356,10 @@ plansPdfFileId && (
                       })()}
                       {/* 1 · the pictures — the rule names MIN_CLOSE_MEDIA, so
                           changing the constant changes the sentence. */}
+                      {/* The add-files row stands on its own only where there is no picture
+                          step to hold it: a problem's close, or once every question is
+                          answered and nothing needs a picture (photos optional / nothing finished). */}
+                      {(!stageClose || (finishedOk && moreOk && !(photosNeeded && photoSteps.length))) && (
                       <div>
                         {photosNeeded && !stageClose && (
                           <p className="text-center font-extrabold text-gray-800 mb-3"
@@ -4268,6 +4386,7 @@ plansPdfFileId && (
                           </div>
                         )}
                       </div>
+                      )}
 
                       {/* 2 · one comment box — paperclip and microphone
                           INSIDE it, bottom corner, the General-notes idiom. */}

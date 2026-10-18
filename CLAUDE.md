@@ -10458,3 +10458,56 @@ the same way. Guards: `round49-probe` (a flat with only Sold/Start done reads
   (`data-work-standard`) and on its plan's title (`data-plan-standard`).
 Harness: `scratchpad/workerplans-probe.mjs` (16). `round39-probe`'s two reds
 (Today on arrival, the old stage filter) are pre-existing and superseded.
+
+---
+
+# v2 — recording 2026-10-18 14:28: the worker's sheet and the closing screen
+
+## STANDING RULE (owner, 2026-10-18): after every new video, launch a helper to sort the Drive folder
+The recordings folder holds **Processed** (`1Kjlc67zz0JWCo1gXH1qXPxzF2VdiAfds`) and **Not processed**
+(`1-JKwIti9EMzQj2UzFwAJb9KXXwxQnHxa`). On every new video, launch a background helper that makes sure
+both exist and puts every recording where the ledger says it belongs (done → Processed; anything else
+→ Not processed). **The Google Drive connector can only change files it created itself** — moving the
+owner's recordings is refused ("The caller does not have permission") although his account is an
+organizer. So the helper creates and lists; the owner drags. Never copy, delete or trash a recording to
+get round it. "Check the folder" looks in the top level AND in Not processed. The download for watching
+is the app's own `/api/drive-fetch` (the bundle's public key), and the whisper models are cached:
+`HF_HUB_OFFLINE=1` with `Systran/faster-whisper-large-v3` and `mobiuslabsgmbh/faster-whisper-large-v3-turbo`
+(running python with `-I` hides `certifi` and fails).
+
+## The close asks WHEN first, for a task whose day has gone by
+`closeWhen` / `closePastDay` in ContractorPortal: when the task's LAST day (`daysOf`) is before today,
+`[data-close-when]` asks "When did you finish?" — `[data-close-when-pick=past]` (Yesterday, or the day's
+date) / `[data-close-when-pick=today]`. Nothing else is asked until it is answered (`whenOk` gates
+`finishedOk`). Today = the store's standing late-close rule (`closeDayFields` adds today to `days`);
+past = the close write names `days: liveA.days`, which the store's `'days' in changes` test reads as
+"the caller decided" — so nothing is added. `completedAt` is always the real moment.
+
+## The closing screen
+- **One own stage + "No"** sets it unfinished and goes on — "Which didn't you finish?" only for two or more.
+- **An own stage left unfinished gets a one-picture step** (`PhotoStep.sofar`, "what you did so far"),
+  behind the same `partNeedsPicture` setting as "part of it".
+- **Take photo / Record video / Choose files live INSIDE the picture step box** (`data-close-step-media`,
+  with the upload tray and its error). The stand-alone row is drawn only where no step can hold it: a
+  problem's close, or once every question is answered and nothing needs a picture.
+- `extraStageChoices` never offers Sold/Start (`isStartStage`).
+Harnesses that close a task must answer `[data-close-when-pick]` when present (multiday re-encoded), and
+an unfinished stage now adds a step (bubbles-probe re-encoded).
+
+## The worker's task sheet header
+Row one (`data-sheet-head`): `sheetPlace()` — "Building 1 · Apartment 15 - family" (the building id's
+digits, a PLAIN dash; a Job Board job reads its name; a general job its workspace), `data-sheet-standard`,
+the move icon, the delete icon, the X. Row two (`data-sheet-when-where`): `data-sheet-stage` + history,
+the day with its badge, the address + Waze (wrapping inside itself, one line). `data-task-word` is TASK at
+22px heavy capitals. The closing header's subtitle uses `sheetPlace` too.
+
+## Delete their own tasks
+`deleteOwnTasks` + `deleteOfficeTasks` (WorkerPermission). `PermissionDef.parent` makes a sub-switch —
+drawn indented in both permission lists (`[data-perm]`). The bin (`data-task-delete`) shows when
+`deleteOwnTasks` and (the task was created by him OR `deleteOfficeTasks`); never on a problem or a general
+job. `data-task-delete-ask` → `data-task-delete-yes` → `deleteContractorAssignment` (the standing cascade).
+Shipped: off on Contractor and Technician, on for Manager.
+
+Harness: `scratchpad/closewhen-probe.mjs` (30). Green: closemore, portal-r48 (re-encoded: TASK is capitals),
+portalround, multiday, bubbles-probe, round52, workerplans, doneline, notfinished, media-r53, the audits.
+

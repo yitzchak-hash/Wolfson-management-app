@@ -30,6 +30,39 @@ export interface WhatsNewEntry {
 
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    date: '2027-02-11',
+    title: 'Closing a job, clearer',
+    items: [
+      {
+        title: '"When did you finish?"',
+        body: 'When a task\'s day has already gone by, closing it first asks whether the work was finished on that '
+          + 'day or today. Today is added to the task, so the notebook and every calendar show the job on the day it '
+          + 'was really finished.',
+        demo: 'tap',
+      },
+      {
+        title: 'Pictures as a step of their own',
+        body: 'Take photo, Record video and Choose files now sit inside the picture step, never under the questions. '
+          + 'A stage the worker did not finish gets its own step too — one picture of what was done so far. And with '
+          + 'only one stage, "No" no longer asks which one.',
+        demo: 'list',
+      },
+      {
+        title: 'The task\'s first row says where',
+        body: 'The worker\'s task now opens with "Building 1 · Apartment 15 - name", the Standard bubble and the '
+          + 'buttons on one row, the stage and the day on the next, and TASK in big letters.',
+        demo: 'sparkle',
+      },
+      {
+        title: 'Deleting a task from the phone',
+        body: 'New worker switches in Settings → Workers: "Delete their own tasks", and under it "Including tasks the '
+          + 'office gave them". A small bin appears on the task and asks first. Off for contractors and technicians, '
+          + 'on for managers.',
+        demo: 'tap',
+      },
+    ],
+  },
+  {
     date: '2027-02-10',
     title: 'Plans on the building map',
     items: [

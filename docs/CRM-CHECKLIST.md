@@ -117,6 +117,12 @@ Legend: ☑ shipped · ☐ decided, not built · ◐ built in part · ✎ needs 
 - ☑ Dictation into the message box in the worker's language (2026-09-03)
 - ☑ Search tile and header search take voice (browser speech recognition)
 
+## The worker's task sheet and close (2026-10-18, recording 14:28)
+- ☑ Past-due task asks "When did you finish?" — Today joins the task's days
+- ☑ Sheet title "Building 1 · Apartment 15 - family", Standard + move + delete + X on one row; stage, day, address on row two; TASK big
+- ☑ Worker switches: delete their own tasks, and (sub-switch) the office's tasks for them
+- ☑ Closing: one stage never asks "which"; unfinished stage gets a picture; camera buttons only inside the picture step; no Sold/Start in the extras
+
 ## Office side
 - ☑ Notebook add-a-job: a general job's which-building step offers All and ticks several buildings at once; the task carries the set and every label reads it (2026-09-16)
 - ☑ The bare domain is the Job Board: `/` switches to the board workspace before drawing; login from the bare address lands there; typed addresses still go where they say (2026-09-16)

@@ -23,5 +23,15 @@ ask built or answered) · **not this app** (a recording of another project — r
 | 11 | Recording 2026-10-15 141727.mp4 (112.6 MB) | `1uqukg5k_BOCXQRMsL_DvXypSPwmSKvv5` | 3:36 | open (the other-trade drop waits on his answers) | [2026-10-15-141727.md](2026-10-15-141727.md) |
 | 12 | Recording 2026-10-15 141950.mp4 (14.7 MB) | `1VmLFg_WG4DoiI60NLA0fQT53R2uxsuUG` | 0:28 | done | [2026-10-15-141950.md](2026-10-15-141950.md) |
 | 13 | Recording 2026-10-15 153941.mp4 (5.1 MB) | `1s7HntfimA6EXgI6F6gyy9ygqMYaFXe_w` | 0:18 | done | [2026-10-15-153941.md](2026-10-15-153941.md) |
+| 14 | Recording 2026-10-18 142856.mp4 (42.2 MB, 1920×1032) | `1W9ZWOx1520Kg5Flz6V7I53VGOiPXB7bb` | 2:53 | done | [2026-10-18-142856.md](2026-10-18-142856.md) |
 
-Folder last listed: 2026-10-15.
+Folder last listed: 2026-10-18.
+
+## The folder's two subfolders (owner, 2026-10-18)
+After every new video a helper sorts the folder: **Processed**
+(`1Kjlc67zz0JWCo1gXH1qXPxzF2VdiAfds`) and **Not processed**
+(`1-JKwIti9EMzQj2UzFwAJb9KXXwxQnHxa`). "Check the folder" looks in the top
+of the folder AND in Not processed. The Drive connector can only move files it
+created itself, so the recordings (made by the owner's own account) cannot be
+moved from here — the helper creates the folders, lists what belongs where, and
+the owner drags them; a recording counts as processed when its row here says done.

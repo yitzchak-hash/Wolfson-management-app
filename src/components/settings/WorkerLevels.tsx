@@ -168,7 +168,7 @@ function Switch({ def, on, onToggle, inherited }: {
   inherited?: boolean;
 }) {
   return (
-    <label className="flex items-start gap-2 px-2 py-1 rounded-lg hover:bg-gray-50 cursor-pointer">
+    <label data-perm={def.key} className={`flex items-start gap-2 px-2 py-1 rounded-lg hover:bg-gray-50 cursor-pointer ${def.parent ? 'ms-6 border-s-2 border-gray-200' : ''}`}>
       <input type="checkbox" checked={on} onChange={e => onToggle(e.target.checked)}
         className="mt-0.5 flex-shrink-0" />
       <span className="min-w-0">

@@ -10,7 +10,7 @@
  */
 import type { Apartment, ContractorAssignment, OffListItem, QuestionKind, Stage, User } from '../types';
 import { shotKindOf } from './sitePhotos';
-import { stageSetOf, stageStateOf, type SetContext } from './stageMarks';
+import { stageSetOf, stageStateOf, isStartStage, type SetContext } from './stageMarks';
 
 /**
  * How many files a close step needs (owner, 2026-10-18: "a minimum of one
@@ -50,6 +50,9 @@ export function extraStageChoices(apt: Apartment | undefined, sorted: Stage[], t
   if (!apt) return [];
   return stageSetOf(apt, sorted, ctx).filter(st => {
     if (taskStages.includes(st.id)) return false;
+    // Sold/Start ticks itself the moment any later work begins — never a
+    // thing a worker reports doing (owner, recording 2026-10-18).
+    if (isStartStage(st)) return false;
     const s = stageStateOf(apt, st.id, sorted);
     return s !== 'done' && s !== 'off';
   });

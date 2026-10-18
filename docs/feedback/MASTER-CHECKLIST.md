@@ -266,3 +266,15 @@ rewritten).
 | C-67 | 2026-10-18 | New switch: open ANY engineered plan from the building diagram — tap an apartment, see the plan on the "I'm going to work here" sheet, expand it like usual, see all the info | Done | `seeAnyPlan` (Technician + Manager ship on) · floor, type, stage on the sheet · workerplans-probe |
 | C-68 | 2026-10-18 | A small Standard bubble on a standard apartment's plan | Done | on the plan title and the map sheet · workerplans-probe |
 | C-65 | 2026-10-18 | "Why does it say finished Sold/Start? … We shouldn't see Sold/Start anywhere other than an initial stage" | Done | dropped from the busy-day window, task sentences, the done card, Who did what, the day story and the history lines · round49-probe, activitywords-test |
+| V14-1 | 2026-10-18 | Closing a task whose day passed asks "did you finish yesterday or today?" — today extends the task to today | Done | `data-close-when` · closewhen-probe §1 |
+| V14-2 | 2026-10-18 | The task sheet's information on one row; the date on a second row | Done | `data-sheet-head` / `data-sheet-when-where` · closewhen-probe |
+| V14-3 | 2026-10-18 | Permission to delete his own tasks, with a sub-permission for tasks the office gave him | Done | `deleteOwnTasks` / `deleteOfficeTasks` · closewhen-probe §B–D |
+| V14-4 | 2026-10-18 | The word TASK big and dramatic | Done | `data-task-word` 22px |
+| V14-5 | 2026-10-18 | Standard on the top row | Done | `data-sheet-standard` |
+| V14-6 | 2026-10-18 | "Building 1 · Apartment 15 - name", a regular dash | Done | `sheetPlace` (sheet + closing header) |
+| V14-8 | 2026-10-18 | One stage → never ask "which didn't you finish?" | Done | closewhen-probe §2 |
+| V14-9 | 2026-10-18 | What if he picks something already done? | Done | answered: the list holds only stages not done; Sold/Start removed from it |
+| V14-10 | 2026-10-18 | Take photo / Record video / Choose files — a step of their own, inside the box | Done | `data-close-step-media` · closewhen-probe §4 |
+| V14-11 | 2026-10-18 | Pictures for the work done on a stage he did not finish | Done | one-picture step (`sofar`) · closewhen-probe §3 · bubbles-probe |
+| V14-Q | 2026-10-18 | The shared stage list has old and new names side by side (e.g. "Concealed Units Installed" + "Concealed Units") | Waiting | question to the owner |
+| C-69 | 2026-10-18 | After a new video, launch a helper to sort the Drive folder into Processed / Not processed | Partly | folders made; the connector cannot move his own files — he drags them (LEDGER.md) |

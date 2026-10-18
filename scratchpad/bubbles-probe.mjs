@@ -200,11 +200,18 @@ await page.waitForTimeout(300);
 await page.locator('[data-close-more-pick="no"]').click();   // 2026-10-18: "anything else here today?"
 await page.waitForTimeout(400);
 check(await page.locator('[data-close-photo-step="S3"]').count() === 1 && await page.locator('[data-close-photo-step]').count() === 1,
-  'a picture step for Concealed units — the one he finished — and none for Extra drainage');
+  'a picture step for Concealed units first — the one he finished');
 check((await page.locator('[data-close-count]').innerText()).trim() === '0/1' && await page.locator('[data-close-now]').isDisabled(), '0/1 (one file by default since 2026-10-18), Send locked');
 await page.locator('input[type="file"][accept*="video"][accept*=".zip"]').setInputFiles(files(3));
 await page.waitForTimeout(2500);
 check((await page.locator('[data-close-count]').innerText()).trim() === '✓ 3', '✓ 3 after three pictures');
+// 2026-10-18 (recording 14:28): what he left unfinished gets a one-picture step too.
+check(await page.locator('[data-close-now]').isDisabled(), 'Send still waits — the unfinished stage needs its own picture');
+await page.locator('[data-close-photo-next]').click();
+await page.waitForTimeout(300);
+check(await page.locator(`[data-close-photo-step="${custom.id}"]`).count() === 1, 'the next step is Extra drainage, one picture');
+await page.locator('input[type="file"][accept*="video"][accept*=".zip"]').setInputFiles(files(1));
+await page.waitForTimeout(1800);
 check(!(await page.locator('[data-close-now]').isDisabled()), 'Send unlocks');
 d = await store(page);
 const tagged = d.contractorPhotos.filter(p => p.assignmentId === report.id && p.stageId === 'S3').length;

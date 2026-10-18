@@ -46,7 +46,7 @@ day still stands, after the numbered list.)
 3. `npx tsc --noEmit -p .` and `npx vite build`. 4. The audits:
    `node scratchpad/loopaudit.mjs`, `backupaudit.mjs`, `navaudit.mjs`, `apilimit.mjs`.
 5. A What's New entry (`src/data/whatsNew.tsx`, dates run AHEAD of the clock;
-   newest is `2027-02-06` — the next entry must be a later date (an older
+   newest is `2027-02-11` — the next entry must be a later date (an older
    entry lower down also wears `2026-12-20`; the marker compares only the TOP
    entry's date, so never reuse a date that appears anywhere in the file)). 6. A CLAUDE.md
    round record. 7. A line in `docs/CRM-CHECKLIST.md`, tick `docs/ROADMAP.md`, date a line in `docs/DECISIONS.md` when he decided something. 8. Rewrite THIS file.
@@ -64,7 +64,23 @@ with starred recommendations is published first; the owner says "approved" /
 "all yes" / answers by number; then it is built. Never build a redesign
 unasked.
 
-## Where things stand (2026-10-18, latest — plans on the worker's building map)
+## Where things stand (2026-10-18, latest — recording 14:28: the task sheet and the closing screen)
+New standing rule (his words): "you always have to launch a helper after a new video to organize the
+drive into subfolders of processed and not processed." Done this round: the folder now has **Processed**
+and **Not processed** (ids in docs/feedback/LEDGER.md). The Drive connector refuses to move files it did
+not create, so the recordings themselves could not be moved — he drags them; nothing was copied or deleted.
+Every later round: launch the helper anyway (it re-checks and creates what is missing), and look for new
+videos in the top of the folder AND in Not processed.
+The recording (docs/feedback/2026-10-18-142856.md) — all built: a past-due task's close asks "When did you
+finish?" (Today adds today to the task); one stage + No skips "Which didn't you finish?"; an unfinished
+stage gets its own one-picture step; Take photo / Record video / Choose files live only inside the picture
+step; Sold/Start off the extras list; the sheet's row one = "Building 1 · Apartment 15 - family" +
+Standard + move + delete + X, row two = stage + day + address; TASK big; new switches **Delete their own
+tasks** + **Including tasks the office gave them** (off on Contractor and Technician, on for Manager).
+Waiting on him: the shared stage list carries old and new names of the same work side by side
+("Concealed Units Installed" + "Concealed Units" …) — shown in the video, not touched.
+
+## Where things stand (2026-10-18 — plans on the worker's building map)
 His last message, in his words: "open the engineered plans — I wanna change it to open the engineered
 plans for the units they are working in, and … another: open any engineered plans from the building
 diagram, so they can click on an apartment and on the screen that says I'm going to work here they see

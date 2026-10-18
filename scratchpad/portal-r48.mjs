@@ -321,7 +321,7 @@ const BASE = { seeSchedule: true, markUpPlans: true };
   // ── 5 · the sheet ─────────────────────────────────────────────────────────
   await shot(page, '5a-sheet');
   const line = (await page.locator('[data-task-line]').innerText()).replace(/\s+/g, ' ').trim();
-  check(/^Задача: /.test(line), 'the task reads on ONE line: "Задача: …"', line.slice(0, 60));
+  check(/^Задача: /i.test(line), 'the task reads on ONE line: "Задача: …"', line.slice(0, 60));
   const ww = await page.evaluate(() => {
     const when = document.querySelector('[data-sheet-when]')?.getBoundingClientRect();
     const where = document.querySelector('[data-sheet-where-line]')?.getBoundingClientRect();

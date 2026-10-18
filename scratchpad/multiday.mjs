@@ -187,6 +187,8 @@ await page.waitForTimeout(600);
 await page.locator('[data-close-job]').first().click();
 await page.waitForTimeout(300);
 // 2026-10-18: every close asks "Did you finish doing …?" and "anything else?"
+// 2026-10-18 (recording 14:28): a task whose days have all gone by asks when first.
+if (await page.locator('[data-close-when-pick="today"]').count()) await page.locator('[data-close-when-pick="today"]').click();
 if (await page.locator('[data-close-finished-pick="yes"]').count()) await page.locator('[data-close-finished-pick="yes"]').click();
 await page.locator('[data-close-more-pick="no"]').click();
 await page.waitForTimeout(200);
