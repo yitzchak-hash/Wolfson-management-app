@@ -10240,3 +10240,47 @@ the job's next stage of that trade, original untouched, one undo step), `data-mo
 Harnesses: `scratchpad/closemore-probe.mjs` (36) · `scratchpad/crosstrade-probe.mjs` (31).
 Its trap: the closing screen has MessageBox paperclip inputs now — the MEDIA input is
 `input[type="file"][accept*="video"][accept*=".zip"]`, never the panel's first file input.
+
+---
+
+# v2 — This Week First, built (2026-10-18, "start")
+
+The plan is the "This Week First" artifact (`docs/artifacts/2026-10-18-this-week-first.html`); the
+owner kept A, struck the folded last-week bar and "Open last week", and asked that a drag HELD over a
+week chip turns the notebook to that week, and that the TV gets the same chips.
+
+## The week ribbon (`src/components/board/WeekRibbon.tsx`)
+- **`weekView`** on the notebook's data: absent = the ribbon (the new default for every notebook),
+  `'all'` = the old long oldest-first scroll, kept exactly as it was (hidden weeks, the plus and the
+  eye). **Harnesses that seed a notebook on FIXED past dates must seed `weekView: 'all'`** — the
+  ribbon only draws the chosen week and the next.
+- `WeekRibbon`: chips for two weeks back → three ahead (`data-week-chip=<iso>`, `data-on`,
+  `data-this-week`, `data-week-chip-count` "tasks · done✓", a green done bar), `data-week-older`
+  (a portalled list of earlier weeks, `data-week-older-pick`) and `data-week-today` while elsewhere.
+  Counts are every task of the sheet's people with a day in that week, every workspace (live +
+  snapshots, `snapTick`).
+- **What is drawn**: the focus week and the next (`data.weeksShown`, 1–4, default 2), straight under
+  the chips; each week block wears `data-week=<iso>`. The run (`firstWeek`/`weekCount`) is topped up
+  to this week + 3 by itself (never on a read-only copy); `hiddenWeeks` is left alone and not
+  consulted in this view.
+- **Memory**: `nb_week_<host node id>[:ro]` in localStorage, `{week, at}` — honoured only while
+  `at` is still this week, so Sunday turns every screen's page (`useThisWeek` re-reads the clock every
+  minute and on tab return; a TV left on overnight turns too). `PlannerWidget.viewKey` is the HOST
+  node's id (a projection renders the main's element — `el.id` cannot tell two copies apart).
+- **Drag-hold**: every drag already asks the rota probes on each move (board tiles, list rows,
+  notebook cards, task bars), so the probe hit-tests the chips first (`dwellAt`): a 550ms timer while
+  the pointer stays on one chip (`data-holding`, the `.week-hold-fill` sweep), cancelled off the chip
+  or by a release. **The weeks on screen when the page turns stay MOUNTED, invisible**
+  (`ghostWeeks`, `data-ghost-week`, never a drop target) until the hand comes off — a held task bar
+  would otherwise unmount with its week, lose its pointer capture, and drop nowhere.
+- `hideHeader` leaves out the notebook's own title row for a host card.
+
+## The Dashboard's "This week" card (`NotebookWeekCard.tsx`, widget `notebook-week`)
+The Job Board's MAIN notebook, read-only, one week, with the chips — live on the Job Board, from its
+snapshot elsewhere (the open workspace's units first in `jobs`, because its live tasks are resolved
+against that list). "Open the full notebook" switches to the Job Board. Seeded once per dashboard as
+`CE-week-dash` (tombstone-guarded, z −1 so it leads). Registered in all five places.
+
+Harness: `scratchpad/weekribbon-probe.mjs` (33 — chips, drawn weeks, counts, the run top-up, a pick
+remembered and forgotten, Older, a board tile and a task bar each HELD over a chip then dropped there,
+the old view, the TV, the Dashboard card). `SHOTS=<dir>` writes screenshots.

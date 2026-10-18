@@ -2,7 +2,7 @@ import React from 'react';
 import {
   Globe2, Flame, Images, Rows3, Trophy, Disc3, Grid3x3, PartyPopper, Calculator,
   Fingerprint, Map as MapIcon, CloudSun, Music2, Building2, Search,
-  GitCommitHorizontal, Inbox, ListChecks, Pin,
+  GitCommitHorizontal, Inbox, ListChecks, Pin, CalendarDays,
 } from 'lucide-react';
 import { UnitCard } from '../components/board/UnitCard';
 import { WidgetDef } from './widgets';
@@ -15,6 +15,7 @@ import { WeatherWidget } from '../components/board/WeatherWidget';
 import { TikTokWidget } from '../components/board/TikTokWidget';
 import { PhotosAlbumWidget } from '../components/board/PhotosAlbumWidget';
 import { GoalsWidget } from '../components/board/GoalsWidget';
+import { NotebookWeekCard } from '../components/board/NotebookWeekCard';
 import { SearchTileWidget } from '../components/board/SearchTileWidget';
 import { FileTrayWidget } from '../components/board/FileTrayWidget';
 import { PinBoardWidget } from '../components/board/PinBoardWidget';
@@ -217,6 +218,13 @@ export const MORE_WIDGETS: WidgetDef[] = [
     blurb: 'The shared goals board, live — running timers, start and finish from the tiles.',
     data: {},
     render: (el, c) => <GoalsWidget el={el} c={c} />,
+  },
+  {
+    id: 'notebook-week', rank: 29, name: 'This week (notebook)', category: 'live',
+    icon: CalendarDays, w: 620, h: 340,
+    blurb: 'The Job Board’s weekly notebook, this week, with the week chips — for the Dashboard page.',
+    data: {},
+    render: (el, c) => <NotebookWeekCard el={el} c={c} />,
   },
   {
     id: 'btu-hp', rank: 18, name: 'BTU and horsepower', category: 'plan',

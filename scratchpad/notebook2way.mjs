@@ -31,7 +31,7 @@ await ctx.addInitScript(() => {
   const book = (id, y, extra) => ({
     id, type: 'widget', widget: 'rota',
     x: 60, y, w: 700, h: 280, text: '', color: '#ffffff',
-    data: {
+    data: { weekView: 'all',
       people: ['n:Moshe', 'n:Dovid'], firstWeek: '2026-08-16', weekCount: 1, span: 5,
       cells: {
         'n:Moshe|2026-08-17': [{ id: 'e-solo', jobId: 'G-t0' }],
@@ -226,13 +226,13 @@ check(start.mainN === 3, 'the main notebook has three cards', String(start.mainN
         // The RICHER one, and the older one.
         { id: 'CE-a', type: 'widget', widget: 'rota', addedAt: '2026-01-01',
           x: 60, y: 40, w: 700, h: 280, text: '', color: '#ffffff',
-          data: { people: ['n:Moshe'], firstWeek: '2026-08-16', weekCount: 1, span: 5,
+          data: { weekView: 'all', people: ['n:Moshe'], firstWeek: '2026-08-16', weekCount: 1, span: 5,
                   cells: { 'n:Moshe|2026-08-17': [{ id: 'm1', jobId: 'G-m0' }],
                            'n:Moshe|2026-08-18': [{ id: 'm2', jobId: 'G-m1' }] } } },
         // A second MAIN — no role, its own thinner copy of the data.
         { id: 'CE-b', type: 'widget', widget: 'rota', addedAt: '2026-02-01',
           x: 60, y: 360, w: 700, h: 280, text: '', color: '#ffffff',
-          data: { people: ['n:Moshe'], firstWeek: '2026-08-16', weekCount: 1, span: 5,
+          data: { weekView: 'all', people: ['n:Moshe'], firstWeek: '2026-08-16', weekCount: 1, span: 5,
                   cells: { 'n:Moshe|2026-08-19': [{ id: 'b1', jobId: 'G-m0' }] } } },
       ],
     }));

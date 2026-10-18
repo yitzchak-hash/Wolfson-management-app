@@ -1,0 +1,277 @@
+<title>The Done Line</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@700;800;900&family=IBM+Plex+Sans:wght@400;500;600;700&family=Caveat:wght@500;600;700&family=Inter:wght@400;500;600;700;800;900&display=swap">
+<style>
+  /* The drafting desk, as on the earlier plan pages: the worker's phone is
+     drawn in the app's own material (white cards, navy, green done tick) and
+     lies on the desk; everything that explains is desk chrome — paper grey
+     and china-marker red. */
+  :root {
+    --desk: #d8dde4; --plate: #e7ebf0; --ink: #17212d; --ink-2: #4a5665; --rule: #b8c1cc;
+    --marker: #c2402f; --marker-ink: #ffffff;
+    --app-bg: #f3f5f8; --app-card: #ffffff; --app-ink: #1e293b; --app-sub: #64748b; --app-line: #d1d5db;
+    --navy: #1e3a5f; --accent: #4aa8d8; --green: #16a34a; --green-bg: #f0fdf4;
+    --font-display: 'Archivo', 'Arial Narrow', 'Helvetica Neue', Arial, sans-serif;
+    --font-body: 'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif;
+    --font-hand: 'Caveat', 'Segoe Print', 'Bradley Hand', 'Comic Sans MS', cursive;
+    --font-app: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --desk: #181d24; --plate: #222932; --ink: #e7ebf0; --ink-2: #a8b3c1; --rule: #3a4451;
+      --marker: #ff8a74; --marker-ink: #1a0f0d; color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --desk: #181d24; --plate: #222932; --ink: #e7ebf0; --ink-2: #a8b3c1; --rule: #3a4451;
+    --marker: #ff8a74; --marker-ink: #1a0f0d; color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--desk); color: var(--ink); font-family: var(--font-body); font-size: 15px; line-height: 1.5; -webkit-font-smoothing: antialiased; }
+  .wrap { max-width: 1120px; margin: 0 auto; padding-block: 30px 90px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+  .eyebrow { font: 600 12px/1.3 var(--font-body); letter-spacing: .12em; text-transform: uppercase; color: var(--ink-2); margin: 0; }
+  .title { font: 900 clamp(32px, 6vw, 50px)/1 var(--font-display); letter-spacing: -.015em; margin: 8px 0 14px; text-wrap: balance; }
+  .lede { max-width: 70ch; color: var(--ink-2); font-size: 16px; margin: 0 0 10px; }
+  .lede q { color: var(--ink); font-style: italic; }
+  .sec { margin-top: 48px; }
+  .sec-head { display: flex; align-items: flex-end; gap: 6px 16px; flex-wrap: wrap; margin-bottom: 14px; }
+  .letter { font: 700 92px/.78 var(--font-hand); color: var(--marker); transform: rotate(-5deg); flex-shrink: 0; width: 64px; text-align: center; }
+  .sec-text { flex: 1 1 280px; min-width: 0; }
+  .sec-title { font: 800 23px/1.15 var(--font-display); margin: 0; text-wrap: balance; }
+  .caption { font: 600 23px/1.15 var(--font-hand); color: var(--marker); margin: 4px 0 0; transform: rotate(-.6deg); }
+  .plate { background: var(--plate); border: 1px solid var(--rule); border-radius: 18px; padding: 18px; display: flex; gap: 22px; flex-wrap: wrap; align-items: flex-start; }
+  .side { flex: 1 1 280px; min-width: 0; }
+  .marks { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+  .marks li { display: flex; gap: 10px; align-items: flex-start; font-size: 14.5px; }
+  .marks li b.k { flex-shrink: 0; width: 22px; height: 22px; border-radius: 999px; background: var(--marker); color: var(--marker-ink); font: 800 12px/22px var(--font-body); text-align: center; margin-top: 1px; }
+  .try { font: 600 22px/1.1 var(--font-hand); color: var(--marker); margin: 14px 0 0; }
+
+  /* ── the phone, in the app's own material ───────────────────────────── */
+  .phone { width: 340px; max-width: 100%; flex-shrink: 0; border-radius: 34px; background: #0b1220; padding: 10px; box-shadow: 0 18px 40px -18px rgba(15,23,42,.55); }
+  .screen { border-radius: 26px; background: var(--app-bg); overflow: hidden; height: 600px; display: flex; flex-direction: column; font-family: var(--font-app); color: var(--app-ink); }
+  .bar { background: var(--navy); color: #fff; padding: 12px 14px 10px; display: flex; align-items: center; gap: 8px; }
+  .bar b { font-size: 15px; font-weight: 800; }
+  .bar span { font-size: 11px; opacity: .7; }
+  .list { flex: 1; overflow-y: auto; padding: 10px 12px 18px; display: flex; flex-direction: column; gap: 8px; scrollbar-width: thin; }
+  .card { background: var(--app-card); border: 1px solid #eef1f5; border-radius: 16px; padding: 10px 12px; box-shadow: 0 1px 2px rgba(15,23,42,.05); }
+  .card .t { font-size: 14px; font-weight: 800; }
+  .card .s { font-size: 11.5px; color: var(--app-sub); margin-top: 2px; }
+  .card.done { background: var(--green-bg); border-color: #bbf7d0; }
+  .card.done .t::before { content: "✓ "; color: var(--green); }
+  .pill { display: inline-block; font-size: 10px; font-weight: 800; padding: 1px 7px; border-radius: 999px; background: #e0f2fe; color: var(--navy); margin-inline-end: 4px; }
+  .group-h { font-size: 10.5px; font-weight: 900; letter-spacing: .08em; color: #94a3b8; text-transform: uppercase; padding: 4px 2px 0; }
+
+  /* the done line, three ways */
+  .dl { display: flex; align-items: center; gap: 4px; padding: 10px 0 2px; user-select: none; }
+  .dl .rule { flex: 1; height: 1px; background: var(--app-line); min-width: 4px; }
+  .dl .lab { display: inline-flex; align-items: center; gap: 5px; font-size: 13px; font-weight: 800; color: #6b7280; white-space: nowrap; }
+  .dl .lab i { font-style: normal; color: var(--green); font-size: 14px; }
+  .arrow { border: 0; background: transparent; color: #9ca3af; width: 24px; height: 26px; border-radius: 999px; display: grid; place-items: center; cursor: pointer; flex-shrink: 0; transition: transform .18s ease, color .15s; }
+  .arrow:hover { color: var(--navy); background: #e5e7eb; }
+  .arrow.folded { transform: rotate(-90deg); }
+  .arrow:focus-visible, .f:focus-visible, .chip:focus-visible, .sort:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  /* A: words on the line itself */
+  .f { border: 0; background: transparent; padding: 2px 3px; font: 600 11px/1.2 var(--font-app); color: #9ca3af; cursor: pointer; border-radius: 6px; white-space: nowrap; }
+  .f:hover { color: var(--navy); }
+  .f.on { color: var(--navy); font-weight: 800; text-decoration: underline; text-decoration-color: var(--accent); text-decoration-thickness: 2px; text-underline-offset: 3px; }
+  .dot { color: #d1d5db; font-size: 10px; }
+  /* B: tiny chips under the line */
+  .chips { display: flex; gap: 5px; flex-wrap: wrap; padding: 2px 0 4px; }
+  .chip { border: 1px solid #e5e7eb; background: #fff; border-radius: 999px; padding: 2px 9px; font: 600 11px/1.6 var(--font-app); color: #6b7280; cursor: pointer; }
+  .chip.on { background: var(--navy); border-color: var(--navy); color: #fff; }
+  /* C: one quiet sort chip */
+  .sort { border: 1px solid #e5e7eb; background: #fff; border-radius: 999px; padding: 1px 8px; font: 700 11px/1.6 var(--font-app); color: var(--navy); cursor: pointer; white-space: nowrap; }
+  .menu { position: relative; }
+  .menu-pop { position: absolute; top: 26px; inset-inline-end: 0; z-index: 3; background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; box-shadow: 0 12px 28px -12px rgba(15,23,42,.35); padding: 4px; min-width: 160px; }
+  .menu-pop button { display: flex; width: 100%; border: 0; background: transparent; text-align: start; font: 600 12.5px/1.2 var(--font-app); color: var(--app-ink); padding: 8px 10px; border-radius: 8px; cursor: pointer; }
+  .menu-pop button:hover { background: #f1f5f9; }
+  .menu-pop button.on::after { content: "✓"; margin-inline-start: auto; color: var(--green); }
+  .folded-note { font-size: 11.5px; color: #9ca3af; text-align: center; padding: 6px 0 0; }
+
+  .ask { margin-top: 48px; }
+  .q { background: var(--plate); border: 1px solid var(--rule); border-radius: 14px; padding: 12px 16px; margin-top: 10px; }
+  .q h3 { margin: 0 0 6px; font: 800 15px/1.25 var(--font-body); display: flex; gap: 8px; align-items: baseline; }
+  .q h3 .n { font: 700 24px/1 var(--font-hand); color: var(--marker); }
+  .q ul { margin: 0; padding-inline-start: 20px; }
+  .q li { margin: 2px 0; }
+  .q li.star::marker { content: "★ "; color: var(--marker); }
+  .final { font: 600 26px/1.2 var(--font-hand); color: var(--marker); margin: 26px 0 0; }
+  @media (prefers-reduced-motion: reduce) { .arrow { transition: none; } }
+</style>
+
+<div class="wrap">
+  <p class="eyebrow">Plan · Sunday 18 October 2026 · the worker's phone</p>
+  <h1 class="title">The Done Line</h1>
+  <p class="lede">You said: <q>on the page where it starts a list of his done tasks, it says Done and then the tasks. That should be collapsible with a tiny little arrow at the edge, and little tiny filter buttons that are very, very clean and subtle on that line.</q></p>
+  <p class="lede">Three ways to do it, drawn with the phone's own cards. Every phone below works — press the arrow, press the filters. All names are made up. Nothing here is built yet.</p>
+
+  <section class="sec">
+    <div class="sec-head">
+      <div class="letter">A</div>
+      <div class="sec-text">
+        <h2 class="sec-title">The words sit on the line itself</h2>
+        <p class="caption">my pick — nothing new on the screen, just quiet words</p>
+      </div>
+    </div>
+    <div class="plate">
+      <div class="phone"><div class="screen" id="phoneA"></div></div>
+      <div class="side">
+        <ol class="marks">
+          <li><b class="k">1</b><span>The line reads <b>✓ Done · 24</b> as today, then three grey words: <b>Latest · Today · This week</b>. The chosen one turns navy and underlined. No boxes, no colours — on a phone they read as part of the line.</span></li>
+          <li><b class="k">2</b><span>The tiny arrow sits at the line's far edge. Press it and the done list folds away to just the line; press again and it opens. The phone remembers which way he left it.</span></li>
+          <li><b class="k">3</b><span><b>Latest</b> is the newest closed first — the job he closed ten minutes ago is on top. <b>Today</b> and <b>This week</b> keep only what he closed then, with the count on the line changing to match.</span></li>
+        </ol>
+        <p class="try">try it → press "Today", then the arrow</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="sec">
+    <div class="sec-head">
+      <div class="letter">B</div>
+      <div class="sec-text">
+        <h2 class="sec-title">Tiny chips under the line</h2>
+        <p class="caption">easier to hit with a thumb, a bit more on screen</p>
+      </div>
+    </div>
+    <div class="plate">
+      <div class="phone"><div class="screen" id="phoneB"></div></div>
+      <div class="side">
+        <ol class="marks">
+          <li><b class="k">4</b><span>Five small white chips in one row under the line: <b>Latest · Oldest · Today · This week · By building</b>. Bigger targets than A, at the cost of one more thin row.</span></li>
+          <li><b class="k">5</b><span><b>By building</b> groups the done jobs under small grey headings — A1, A2, A3 — for a worker who did a whole floor in one tower.</span></li>
+        </ol>
+      </div>
+    </div>
+  </section>
+
+  <section class="sec">
+    <div class="sec-head">
+      <div class="letter">C</div>
+      <div class="sec-text">
+        <h2 class="sec-title">One small "Latest ▾" button</h2>
+        <p class="caption">the quietest — one word, the rest in a menu</p>
+      </div>
+    </div>
+    <div class="plate">
+      <div class="phone"><div class="screen" id="phoneC"></div></div>
+      <div class="side">
+        <ol class="marks">
+          <li><b class="k">6</b><span>Only one small button on the line, saying what the list is sorted by. Pressing it opens a short menu with every choice: Latest, Oldest, Today, This week, Last week, By building, By workspace.</span></li>
+          <li><b class="k">7</b><span>Nothing to see until he wants it — but every choice takes two presses instead of one.</span></li>
+        </ol>
+      </div>
+    </div>
+  </section>
+
+  <section class="ask">
+    <h2 class="sec-title">Your answers</h2>
+    <p class="lede">★ is what I recommend. Answer only the ones you want different, or say "all stars, build it".</p>
+    <div class="q"><h3><span class="n">1</span>Which look</h3><ul>
+      <li class="star">A — grey words on the line itself</li><li>B — tiny chips under the line</li><li>C — one "Latest ▾" button with a menu</li></ul></div>
+    <div class="q"><h3><span class="n">2</span>Which filters show on the line</h3><ul>
+      <li class="star">Latest · Today · This week</li><li>Latest · Oldest · Today · This week · By building</li><li>Just Latest and Oldest</li></ul></div>
+    <div class="q"><h3><span class="n">3</span>What the list opens on</h3><ul>
+      <li class="star">Latest — the one he closed last is on top</li><li>The day each job was planned for, newest first</li></ul></div>
+    <div class="q"><h3><span class="n">4</span>Folded or open when he opens the app</h3><ul>
+      <li class="star">The way he left it, remembered on his phone (open the first time)</li><li>Always folded — open work only, done is one press away</li><li>Always open</li></ul></div>
+    <div class="q"><h3><span class="n">5</span>The words in his language</h3><ul>
+      <li class="star">Yes — Russian, Hebrew or English, the same as the rest of his phone</li></ul></div>
+    <p class="final">Say "all stars, build it" — or change any number.</p>
+  </section>
+</div>
+
+<script>
+(() => {
+  const now = new Date(2026, 9, 18, 12, 0);
+  const h = n => new Date(now.getTime() - n * 3600e3);
+  const OPEN = [
+    { t: '3/18 — Mizrahi', s: 'Wall Units · today' },
+    { t: '1/22 — Ben David', s: 'Fans · tomorrow' },
+  ];
+  // Made-up done jobs, closed at different times.
+  const DONE = [
+    { t: '3/16 — Halevi', b: 'A3', st: 'Fans', at: h(0.4) },
+    { t: '3/15 — Katz', b: 'A3', st: 'Concealed Units', at: h(2) },
+    { t: '1/9 — Peretz', b: 'A1', st: 'Piping', at: h(5) },
+    { t: '2/27 — Amar', b: 'A2', st: 'Wall Units', at: h(27) },
+    { t: '2/26 — Gold', b: 'A2', st: 'Wall Units', at: h(30) },
+    { t: '3/12 — Shalev', b: 'A3', st: 'Outdoor Units', at: h(76) },
+    { t: '1/4 — Lavi', b: 'A1', st: 'Thermostats', at: h(150) },
+    { t: '2/11 — Doron', b: 'A2', st: 'Drilling', at: h(200) },
+  ];
+  const startOfDay = new Date(2026, 9, 18);
+  const startOfWeek = new Date(2026, 9, 18);   // a Sunday
+  const startLastWeek = new Date(2026, 9, 11);
+  const when = d => {
+    const mins = Math.round((now - d) / 60000);
+    if (mins < 60) return `${mins} min ago`;
+    if (d >= startOfDay) return `today ${d.toTimeString().slice(0, 5)}`;
+    return d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
+  };
+  const apply = (f) => {
+    let list = [...DONE];
+    if (f === 'today') list = list.filter(x => x.at >= startOfDay);
+    if (f === 'week') list = list.filter(x => x.at >= startOfWeek);
+    if (f === 'lastweek') list = list.filter(x => x.at >= startLastWeek && x.at < startOfWeek);
+    list.sort((a, b) => f === 'oldest' ? a.at - b.at : b.at - a.at);
+    return list;
+  };
+  const NAMES = { latest: 'Latest', oldest: 'Oldest', today: 'Today', week: 'This week', lastweek: 'Last week', building: 'By building', ws: 'By workspace' };
+  const read = (k, d) => { try { return localStorage.getItem(k) ?? d; } catch { return d; } };
+  const save = (k, v) => { try { localStorage.setItem(k, v); } catch { /* fine */ } };
+  const arrowSvg = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>';
+
+  function card(x, done) {
+    return `<div class="card${done ? ' done' : ''}"><div class="t">${x.t}</div><div class="s">${done
+      ? `<span class="pill">${x.st}</span>closed ${when(x.at)}` : x.s}</div></div>`;
+  }
+  function body(f, folded, groups) {
+    if (folded) return '';
+    const list = apply(f === 'building' || f === 'ws' ? 'latest' : f);
+    if (!list.length) return '<div class="folded-note">Nothing closed then.</div>';
+    if (f === 'building' || groups) {
+      const by = {};
+      list.forEach(x => (by[x.b] = by[x.b] || []).push(x));
+      return Object.keys(by).sort().map(b => `<div class="group-h">${b}</div>${by[b].map(x => card(x, true)).join('')}`).join('');
+    }
+    return list.map(x => card(x, true)).join('');
+  }
+  function mount(id, kind) {
+    const el = document.getElementById(id);
+    let f = read(`dl_${id}_f`, 'latest');
+    let folded = read(`dl_${id}_fold`, '0') === '1';
+    let menu = false;
+    const render = () => {
+      const count = (f === 'building' || f === 'ws') ? DONE.length : apply(f).length;
+      const arrow = `<button class="arrow${folded ? ' folded' : ''}" data-act="fold" aria-label="${folded ? 'Show' : 'Hide'} done jobs" aria-expanded="${!folded}">${arrowSvg}</button>`;
+      let line = '';
+      if (kind === 'A') {
+        const opts = ['latest', 'today', 'week'].map(k => `<button class="f${f === k ? ' on' : ''}" data-f="${k}">${NAMES[k]}</button>`).join('<span class="dot">·</span>');
+        line = `<div class="dl"><span class="lab"><i>✓</i>Done · ${count}</span><span class="rule"></span>${opts}${arrow}</div>`;
+      } else if (kind === 'B') {
+        line = `<div class="dl"><span class="rule"></span><span class="lab"><i>✓</i>Done · ${count}</span><span class="rule"></span>${arrow}</div>`
+          + (folded ? '' : `<div class="chips">${['latest', 'oldest', 'today', 'week', 'building'].map(k => `<button class="chip${f === k ? ' on' : ''}" data-f="${k}">${NAMES[k]}</button>`).join('')}</div>`);
+      } else {
+        const pop = menu ? `<div class="menu-pop">${Object.keys(NAMES).map(k => `<button class="${f === k ? 'on' : ''}" data-f="${k}">${NAMES[k]}</button>`).join('')}</div>` : '';
+        line = `<div class="dl"><span class="lab"><i>✓</i>Done · ${count}</span><span class="rule"></span><span class="menu"><button class="sort" data-act="menu" aria-expanded="${menu}">${NAMES[f]} ▾</button>${pop}</span>${arrow}</div>`;
+      }
+      el.innerHTML = `<div class="bar"><b>Yaakov</b><span>· 2 to do</span></div><div class="list">${OPEN.map(x => card(x, false)).join('')}${line}${body(f, folded, f === 'ws')}${folded ? '<div class="folded-note">Done jobs are folded away — press the arrow.</div>' : ''}</div>`;
+    };
+    el.addEventListener('click', e => {
+      const b = e.target.closest('button');
+      if (!b) { if (menu) { menu = false; render(); } return; }
+      if (b.dataset.act === 'fold') { folded = !folded; save(`dl_${id}_fold`, folded ? '1' : '0'); }
+      else if (b.dataset.act === 'menu') { menu = !menu; }
+      else if (b.dataset.f) { f = b.dataset.f; menu = false; folded = false; save(`dl_${id}_f`, f); save(`dl_${id}_fold`, '0'); }
+      render();
+    });
+    render();
+  }
+  mount('phoneA', 'A');
+  mount('phoneB', 'B');
+  mount('phoneC', 'C');
+})();
+</script>

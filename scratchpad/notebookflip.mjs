@@ -29,7 +29,7 @@ await ctx.addInitScript(() => {
     canvasElements: [{
       id: 'CE-main', type: 'widget', widget: 'rota', x: 100, y: 160, w: 900, h: 460,
       text: '', color: '#ffffff',
-      data: { people: ['c:C-jo'], firstWeek: '2026-07-05', weekCount: 8, span: 5, cells: {} },
+      data: { weekView: 'all', people: ['c:C-jo'], firstWeek: '2026-07-05', weekCount: 8, span: 5, cells: {} },
     }],
   }));
 });

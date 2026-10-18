@@ -129,6 +129,27 @@ export function DashboardPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [allApartments.length, dashWidgets]);
 
+  /**
+   * The "This week" notebook card, once, the same way (owner, 2026-10-18 —
+   * "This Week First" answer 9). Fixed id per dashboard, tombstone-guarded so
+   * a removed one stays removed.
+   */
+  const weekSeedTried = useRef(false);
+  useEffect(() => {
+    if (!allApartments.length) return;
+    if (dashWidgets.some(e => e.widget === 'notebook-week')) return;
+    if (isTombstoned('CE-week-dash')) return;
+    if (weekSeedTried.current) return;
+    weekSeedTried.current = true;
+    addCanvasElement({
+      addedAt: new Date().toISOString(),
+      id: 'CE-week-dash', type: 'widget', widget: 'notebook-week', board: DASHBOARD_BOARD,
+      x: 0, y: 0, w: 1200, h: 360, z: -1,
+      text: '', color: '#ffffff', data: {},
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [allApartments.length, dashWidgets]);
+
   const dashCtx: WidgetCtx = useMemo(() => ({
     jobs: apartments.filter(a => isCountableApartment(a)),
     stages: sortedStages,

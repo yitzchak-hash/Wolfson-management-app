@@ -39,6 +39,7 @@ const SIZE_KEY = 'widget_store_scale';
  * being news.
  */
 const RECENT: string[] = [
+  'notebook-week',
   'pin-board', 'who-did-what', 'active-jobs', 'notes-board',
   'open-snags', 'no-date', 'gone-quiet', 'nobody-booked', 'backlog-trend',
   'no-plan', 'floor-by-floor', 'duplicates',
@@ -101,7 +102,7 @@ const SHELF: Record<string, string> = {
   'who-did-what': 'Finding and following',
   'activity-feed': 'Finding and following',
   // Who is where, and the week's plan.
-  rota: 'People and the week', 'week-planner': 'People and the week',
+  rota: 'People and the week', 'notebook-week': 'People and the week', 'week-planner': 'People and the week',
   'team-today': 'People and the week', 'tap-in': 'People and the week',
   'contractor-links': 'People and the week',
   'crew-race': 'People and the week', 'tv-load': 'People and the week',

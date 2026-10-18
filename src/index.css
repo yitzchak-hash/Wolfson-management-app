@@ -841,3 +841,8 @@ main > * { min-width: 0; }
 @media (prefers-reduced-motion: reduce) {
   .question-glow { animation: none; box-shadow: 0 0 0 3px rgba(124, 58, 237, .8); }
 }
+
+/* The week chip a drag is holding over fills across while it waits (WeekRibbon). */
+.week-hold-fill { width: 0; animation: weekHoldFill 550ms linear forwards; }
+@keyframes weekHoldFill { to { width: 100%; } }
+@media (prefers-reduced-motion: reduce) { .week-hold-fill { animation: none; width: 100%; } }

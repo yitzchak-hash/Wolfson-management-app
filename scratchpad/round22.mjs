@@ -64,14 +64,14 @@ await ctx.addInitScript(() => {
     canvasElements: [
       { id: 'CE-main', type: 'widget', widget: 'rota',
         x: 560, y: 120, w: 760, h: 420, text: '', color: '#ffffff',
-        data: {
+        data: { weekView: 'all',
           people: ['c:C-jo'],
           firstWeek: '2026-08-16', weekCount: 2, span: 5,
           cells: { 'c:C-jo|2026-08-18': [{ id: 'e-h', jobId: 'G-w1', taskId: 'T-dup' }] },
         } },
       { id: 'CE-proj', type: 'widget', widget: 'rota',
         x: 560, y: 580, w: 760, h: 300, text: '', color: '#ffffff',
-        data: { role: 'projection' } },
+        data: { weekView: 'all', role: 'projection' } },
     ],
   }));
 });

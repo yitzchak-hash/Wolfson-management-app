@@ -2909,6 +2909,7 @@ function PlannerHost({ el, c }: { el: CanvasElement; c: WidgetCtx }) {
   return (
     <div className="relative w-full h-full">
       <PlannerWidget
+        viewKey={el.id}
         el={src}
         data={(src.data ?? {}) as PlannerData}
         jobs={plannerJobs}

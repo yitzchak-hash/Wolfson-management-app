@@ -30,7 +30,7 @@ await ctx.addInitScript(([sun]) => {
     canvasElements: [
       { id: 'CE-rota', type: 'widget', widget: 'rota', x: 260, y: 200, w: 700, h: 340,
         text: '', color: '#ffffff',
-        data: { people: ['c:C-a'], firstWeek: sun, weekCount: 1,
+        data: { weekView: 'all', people: ['c:C-a'], firstWeek: sun, weekCount: 1,
                 cells: { [`c:C-a|${sun}`]: [{ id: 'EN-1', jobId: 'G-r1' }] } } },
     ],
   }));

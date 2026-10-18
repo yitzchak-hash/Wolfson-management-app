@@ -496,6 +496,7 @@ export const WIDGET_FIELDS: Record<string, WidgetField[]> = {
       ],
     },
   ],
+  'notebook-week': [title()],
   goals: [
     title(),
     {
@@ -601,6 +602,25 @@ export const WIDGET_FIELDS: Record<string, WidgetField[]> = {
   }],
   rota: [
     title(),
+    {
+      key: 'weekView', label: 'Weeks', kind: 'select', group: 'People and days',
+      options: [
+        { value: '', label: 'This week first — the week chips on top' },
+        { value: 'all', label: 'Every week, one long scroll (the old way)' },
+      ],
+      hint: 'The chips on top pick which week this screen shows; nothing is written. '
+        + 'It opens on this week and turns the page by itself on Sunday. Hold a job '
+        + 'over a chip while dragging to go to that week and drop it on a day there.',
+    },
+    {
+      key: 'weeksShown', label: 'Weeks drawn under the chips', kind: 'select', group: 'People and days',
+      options: [
+        { value: '1', label: 'Just the chosen week' },
+        { value: '', label: 'The chosen week and the next one' },
+        { value: '3', label: 'Three weeks' },
+        { value: '4', label: 'Four weeks' },
+      ],
+    },
     {
       key: 'cardStyle', label: 'Cards', kind: 'select', group: 'People and days',
       options: [
@@ -1155,6 +1175,7 @@ export const WIDGET_PREVIEW: Record<string, Record<string, unknown>> = {
   // Canned tiles — the goals live in another app's iframe, and the store
   // makes no network calls.
   goals: { sample: 1 },
+  'notebook-week': { sample: 1 },
   // The tile IS the preview; sample keeps the shelf's press from opening the
   // real search window over the store.
   'file-tray': { sample: 1 },

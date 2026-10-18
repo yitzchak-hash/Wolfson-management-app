@@ -21,6 +21,7 @@ import { rowNumOf } from '../../data/floorRows';
 import { offOn, hatchOf, bandLine, timeOffOf, timeOffWords, offThisDay, backOnThisDay, kindWord, TimeOff, TIME_OFF_COLOR } from '../../data/timeOff';
 import { useTimeOff, saveTimeOff } from '../../data/useTimeOff';
 import { TimeOffDialog } from './TimeOffDialog';
+import { WeekRibbon, WeekStat, useThisWeek, readWeekPick, saveWeekPick, shiftWeek } from './WeekRibbon';
 
 /** "Floor 5" in the reader's language — the floor number as the diagram prints it. */
 /**
@@ -351,9 +352,17 @@ export interface PendingDrop {
 
 export function PlannerWidget({
   el, data, jobs, contractors, users, assignments, stages, readOnly, projection,
-  update, openJob, openUnit, onDropAsk, onRemoveTask, onShowAll, onLeaveNotebook, lang = 'en',
+  update, openJob, openUnit, onDropAsk, onRemoveTask, onShowAll, onLeaveNotebook, lang = 'en', viewKey, hideHeader,
 }: {
+  /** Leave out the notebook's own title row — a host card draws its own. */
+  hideHeader?: boolean;
   el: CanvasElement;
+  /**
+   * The HOST node's own id — which week a copy shows is remembered per copy,
+   * and a projection renders the MAIN's element, so `el.id` cannot tell the
+   * two apart. Absent = `el.id`.
+   */
+  viewKey?: string;
   /** The reader's language for day and month names — 'en' | 'he' | 'ru'. */
   lang?: string;
   data: PlannerData;
@@ -546,8 +555,50 @@ export function PlannerWidget({
   }, [data.hiddenWeeks]);
   const hidden = useMemo(() => new Set(hiddenKeys), [hiddenKeys]);
 
+  /**
+   * THIS WEEK FIRST (owner, 2026-10-18). Unless the notebook's own setting
+   * says "every week" (`weekView: 'all'` — the old long scroll, kept exactly
+   * as it was), the notebook draws the week the ribbon is on and the one
+   * after it, starting right under the ribbon. The run and the put-away list
+   * still exist and still mean what they meant; this view simply does not
+   * consult them, because the ribbon IS the navigation.
+   */
+  const ribbon = (d.weekView ?? '') !== 'all';
+  const thisWeek = useThisWeek(weekStart);
+  const memKey = `${viewKey ?? el.id}${ro ? ':ro' : ''}`;
+  const [pick, setPick] = useState<{ week: string; at: string } | null>(() => {
+    const wkNow = iso(weekStartOf(new Date(), weekStart));
+    const p = readWeekPick(memKey, wkNow);
+    return p ? { week: p, at: wkNow } : null;
+  });
+  // A pick made in an earlier week no longer counts — Sunday turns the page.
+  const focus = pick && pick.at === thisWeek ? pick.week : thisWeek;
+  const pickWeek = (wk: string) => {
+    setPick(wk === thisWeek ? null : { week: wk, at: thisWeek });
+    saveWeekPick(memKey, thisWeek, wk);
+  };
+  const weeksShown = Math.max(1, Math.min(4, Math.round(num(d.weeksShown, 2, 1, 4))));
+  /**
+   * Weeks kept MOUNTED while a drag that began in them is still live: a bar
+   * held from this week and carried to the "Last week" chip would otherwise
+   * unmount with its week, taking its pointer capture with it, and the drop
+   * would land nowhere. Drawn invisible; their squares are never a target.
+   */
+  const [ghostWeeks, setGhostWeeks] = useState<string[]>([]);
+  const viewWeeks = useMemo(() => {
+    const out: Date[] = [];
+    for (let i = 0; i < weeksShown; i++) out.push(new Date(`${shiftWeek(focus, i)}T00:00:00`));
+    return out;
+  }, [focus, weeksShown]);
   /** What is drawn. */
-  const weeks = useMemo(() => runWeeks.filter(w => !hidden.has(iso(w))), [runWeeks, hidden]);
+  const weeks = useMemo(() => {
+    if (!ribbon) return runWeeks.filter(w => !hidden.has(iso(w)));
+    const keys = new Set(viewWeeks.map(iso));
+    const ghosts = ghostWeeks.filter(k => !keys.has(k)).map(k => new Date(`${k}T00:00:00`));
+    return [...viewWeeks, ...ghosts];
+  }, [ribbon, runWeeks, hidden, viewWeeks, ghostWeeks]);
+  const ghostSet = useMemo(() => new Set(ribbon ? ghostWeeks.filter(k => !viewWeeks.some(w => iso(w) === k)) : []),
+    [ribbon, ghostWeeks, viewWeeks]);
   /**
    * Drawn OLDEST FIRST — the owner's reversal (2026-08-24, the secretary's
    * ask): a calendar reads downward, older weeks above, newer below, and the
@@ -557,6 +608,8 @@ export function PlannerWidget({
    * itself to today's week when it opens — see the mount effect below.
    */
   const drawn = weeks;
+  /** How many of `drawn` are really on screen — ghosts ride at the end. */
+  const shownN = weeks.length - ghostSet.size;
   /** What has been put away, oldest first. */
   const hiddenInRun = useMemo(() => runWeeks.filter(w => hidden.has(iso(w))), [runWeeks, hidden]);
 
@@ -610,6 +663,65 @@ export function PlannerWidget({
   const [hover, setHover] = useState<RotaHit | null>(null);
 
   /**
+   * Holding a drag over a week chip (owner, 2026-10-18: "drag it and hold it
+   * on last week, and then it moves to last week, and then I'll be able to
+   * drop it into a day last week"). Every drag in the app asks the rota
+   * probes what is under the pointer on each move — board tiles, list rows,
+   * notebook cards and task bars alike — so the probe is where the chips are
+   * hit-tested too. A held pointer sends no moves, hence the timer; a
+   * release cancels it.
+   */
+  const chipRefs = useRef(new Map<string, HTMLElement>());
+  const [dwellKey, setDwellKey] = useState<string | null>(null);
+  const dwellRef = useRef<{ key: string; timer: number } | null>(null);
+  const pickFromDragRef = useRef<(wk: string) => void>(() => {});
+  const cancelDwell = () => {
+    if (!dwellRef.current) return;
+    window.clearTimeout(dwellRef.current.timer);
+    dwellRef.current = null;
+    setDwellKey(null);
+  };
+  const dwellAt = useRef<(x: number, y: number) => boolean>(() => false);
+  dwellAt.current = (x, y) => {
+    if (!ribbon) return false;
+    let over: string | null = null;
+    for (const [wk, node] of chipRefs.current) {
+      const r = node.getBoundingClientRect();
+      if (x >= r.left && x <= r.right && y >= r.top && y <= r.bottom) { over = wk; break; }
+    }
+    if (!over) { cancelDwell(); return false; }
+    if (dwellRef.current?.key === over) return true;
+    cancelDwell();
+    if (over === focus) return true;   // already showing it
+    const key = over;
+    const timer = window.setTimeout(() => {
+      dwellRef.current = null;
+      setDwellKey(null);
+      pickFromDragRef.current(key);
+    }, 550);
+    dwellRef.current = { key, timer };
+    setDwellKey(key);
+    const stop = () => { cancelDwell(); window.removeEventListener('pointerup', stop, true); window.removeEventListener('pointercancel', stop, true); };
+    window.addEventListener('pointerup', stop, true);
+    window.addEventListener('pointercancel', stop, true);
+    return true;
+  };
+  pickFromDragRef.current = (wk: string) => {
+    // Keep the weeks on screen now mounted (invisibly) until the hand comes off.
+    const keep = viewWeeks.map(iso);
+    setGhostWeeks(g => [...new Set([...g, ...keep])]);
+    pickWeek(wk);
+    const clear = () => {
+      window.removeEventListener('pointerup', clear);
+      window.removeEventListener('pointercancel', clear);
+      window.setTimeout(() => setGhostWeeks([]), 60);
+    };
+    window.addEventListener('pointerup', clear);
+    window.addEventListener('pointercancel', clear);
+  };
+  useEffect(() => () => { if (dwellRef.current) window.clearTimeout(dwellRef.current.timer); }, []);
+
+  /**
    * This mounted notebook's own identity, which is NOT its element's id.
    *
    * A projection draws the MAIN notebook's element, so `el.id` is the same
@@ -631,7 +743,10 @@ export function PlannerWidget({
      */
     if (ro) return;
     return registerRota(probeId, (x, y) => {
+      // A drag held over a week chip turns the notebook to that week.
+      if (dwellAt.current(x, y)) return null;
       for (const [key, node] of cellRefs.current) {
+        if (node.closest('[data-ghost-week]')) continue;
         const r = node.getBoundingClientRect();
         if (x >= r.left && x <= r.right && y >= r.top && y <= r.bottom) {
           const [person, day] = key.split('|');
@@ -1516,12 +1631,67 @@ export function PlannerWidget({
   const label = new Date(`${shownMonth}-01T00:00:00`)
     .toLocaleDateString(LT, { month: 'long', year: 'numeric' });
 
+  /**
+   * How full each week is, for the ribbon: tasks on the sheet's people with a
+   * day in that week, and how many of them are closed. Every workspace — the
+   * same tasks the bars are drawn from.
+   */
+  const weekStats = useMemo(() => {
+    const out = new Map<string, WeekStat>();
+    if (!ribbon) return out;
+    const rows = new Set(people.filter(p => p.startsWith('c:')).map(p => p.slice(2)));
+    if (!rows.size) return out;
+    const seen = new Map<string, Set<string>>();
+    const count = (a: ContractorAssignment) => {
+      if (!a.contractorId || !rows.has(a.contractorId)) return;
+      for (const raw of daysOf(a)) {
+        const dd = new Date(`${String(raw).slice(0, 10)}T00:00:00`);
+        if (isNaN(dd.getTime())) continue;
+        const wk = iso(weekStartOf(dd, weekStart));
+        const ids = seen.get(wk) ?? new Set<string>();
+        if (ids.has(a.id)) continue;
+        ids.add(a.id); seen.set(wk, ids);
+        const st = out.get(wk) ?? { tasks: 0, done: 0 };
+        st.tasks++; if (a.completedAt) st.done++;
+        out.set(wk, st);
+      }
+    };
+    assignments.forEach(count);
+    for (const p of projects) {
+      if (p.id === currentProjectId) continue;
+      (loadProjectSnapshot(p.id).assignments ?? []).forEach(count);
+    }
+    return out;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ribbon, people, assignments, projects, currentProjectId, snapTick, weekStart]);
+
+  /**
+   * Three weeks ahead are always there (locked answer 5): the run is topped up
+   * by itself so the old every-week view, the quick-assign box and anything
+   * else that reads the run never find the coming weeks missing. A read-only
+   * copy (the TV) never writes; it draws whatever week the ribbon is on.
+   */
+  useEffect(() => {
+    if (!ribbon || ro) return;
+    const need = Math.round((new Date(`${shiftWeek(thisWeek, 3)}T00:00:00`).getTime() - firstWeek.getTime()) / (7 * 86_400_000)) + 1;
+    if (need > weekCount && need <= 520) write({ weekCount: need });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ribbon, ro, thisWeek, iso(firstWeek), weekCount]);
+
+  /** A new week on screen starts at its top — the ribbon's whole promise. */
+  useEffect(() => {
+    if (!ribbon) return;
+    const box = scrollRef.current;
+    if (box) box.scrollTo({ top: 0 });
+    readMonth();
+  }, [ribbon, focus, readMonth]);
+
   return (
     <div className="w-full h-full flex flex-col overflow-hidden">
       {/* The header row scrolls sideways rather than pushing its buttons off
           the edge. Squeezed narrow, the month arrows and the show-all button
           used to sit outside the node with nothing to reach them by. */}
-      <div className="flex items-center gap-1.5 px-2 pt-1.5 pb-1 flex-shrink-0 overflow-x-auto widget-scroll">
+      {!hideHeader && <div className="flex items-center gap-1.5 px-2 pt-1.5 pb-1 flex-shrink-0 overflow-x-auto widget-scroll">
         <CalendarDays size={12} className="text-gray-400 flex-shrink-0" />
         <span className="font-extrabold tracking-wide text-gray-500 truncate"
           style={{ fontSize: Math.max(z(9), textSize - z(1)) }}>
@@ -1539,7 +1709,16 @@ export function PlannerWidget({
             <Maximize2 size={12} />
           </button>
         )}
-      </div>
+      </div>}
+
+      {ribbon && people.length > 0 && (
+        <WeekRibbon
+          thisWeek={thisWeek} focus={focus} onPick={pickWeek} stats={weekStats}
+          lang={lang} locale={LT} fontSize={Math.max(z(9), textSize - z(1))}
+          chipRefs={chipRefs} dwellKey={dwellKey}
+          earliest={iso(firstWeek) < shiftWeek(thisWeek, -12) ? iso(firstWeek) : shiftWeek(thisWeek, -12)}
+        />
+      )}
 
       {/* The wheel scrolls the notebook when the pointer is over it, and the
           board must not also pan. `data-no-drag` keeps a press on the scrollbar
@@ -1548,7 +1727,7 @@ export function PlannerWidget({
       <div
         ref={scrollRef}
         onScroll={readMonth}
-        className="flex-1 min-h-0 overflow-auto px-2 pb-2 planner-scroll"
+        className="relative flex-1 min-h-0 overflow-auto px-2 pb-2 planner-scroll"
         data-no-drag
         data-wheel
       >
@@ -1564,7 +1743,7 @@ export function PlannerWidget({
             spent on a rare action. Adding and restoring weeks now lives in the
             tiny icons beside each week's put-away eye; only the pathological
             everything-is-hidden case still needs a way back drawn here. */}
-        {!ro && weeks.length === 0 && (
+        {!ro && !ribbon && weeks.length === 0 && (
           <div className="text-center text-gray-400 leading-snug py-6 px-4 flex flex-col items-center gap-2"
             style={{ fontSize: textSize }}>
             <span>Every week is put away. Nothing in them was removed.</span>
@@ -1586,13 +1765,17 @@ export function PlannerWidget({
           const cols = `${nameColW}px repeat(${span}, minmax(0, 1fr))`;
           // A rule wherever the month changes, so the run reads as months
           // rather than as an undifferentiated column of weeks.
-          const newMonth = wi > 0 && monthKey(wkStart) !== monthKey(drawn[wi - 1]);
+          const newMonth = wi > 0 && wi < shownN && monthKey(wkStart) !== monthKey(drawn[wi - 1]);
+          const ghost = ghostSet.has(iso(wkStart));
           return (
             <div
               key={iso(wkStart)}
-              ref={node => { if (node) weekRefs.current.set(iso(wkStart), node);
+              ref={node => { if (!ghost && node) weekRefs.current.set(iso(wkStart), node);
                              else weekRefs.current.delete(iso(wkStart)); }}
-              className={`group/wk ${wi ? 'mt-2.5' : ''}`}
+              data-week={iso(wkStart)}
+              data-ghost-week={ghost ? '' : undefined}
+              className={`group/wk ${wi && !ghost ? 'mt-2.5' : ''}`}
+              style={ghost ? { position: 'absolute', visibility: 'hidden', pointerEvents: 'none', height: 0, overflow: 'hidden', left: 0, right: 0 } : undefined}
             >
               {newMonth && (
                 <div className="flex items-center gap-2 my-2">
@@ -1658,7 +1841,7 @@ export function PlannerWidget({
                         <ChevronUp size={Math.max(11, Math.round(z(12)))} />
                       </button>
                     )}
-                    {wi < drawn.length - 1 && (
+                    {wi < shownN - 1 && (
                       <button
                         data-no-drag data-el-action data-week-down
                         onClick={() => scrollToWeek(iso(drawn[wi + 1]))}
@@ -1681,7 +1864,7 @@ export function PlannerWidget({
                       plus never appeared at all: the owner's "I can't add a
                       week in the future". A control for navigating time is
                       not a control to hunt for. */}
-                  {!ro && (
+                  {!ro && !ribbon && (
                     <span className="flex items-center gap-1.5">
                       {wi === 0 && (
                         <button

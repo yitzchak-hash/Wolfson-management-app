@@ -45,7 +45,7 @@ await ctx.addInitScript(() => {
     canvasElements: [{
       id: 'CE-rota', type: 'widget', widget: 'rota', x: 60, y: 420, w: 1050, h: 380,
       text: '', color: '#ffffff',
-      data: { people: ['c:C-jo'], firstWeek: '2026-08-23', weekCount: 2, span: 5, askOnDrop: '1', cells: {} },
+      data: { weekView: 'all', people: ['c:C-jo'], firstWeek: '2026-08-23', weekCount: 2, span: 5, askOnDrop: '1', cells: {} },
     }],
   }));
 });

@@ -45,7 +45,7 @@ await ctx.addInitScript(() => {
     apartments: [apt('G-cohen', 'Cohen', 620), apt('G-levi', 'Levi', 900)],
     canvasElements: [{
       id: 'CE-rota', type: 'widget', widget: 'rota', x: 60, y: 420, w: 1100, h: 420, text: '', color: '#ffffff',
-      data: {
+      data: { weekView: 'all',
         people: ['c:C-jo'], firstWeek: '2026-09-13', weekCount: 2, span: 5, askOnDrop: '1',
         // OLD-STYLE cards: the notebook's own copy of T-old, one per day.
         cells: {

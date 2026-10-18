@@ -78,7 +78,7 @@ const seed = ([SUN, MON, TUE, WED, THU]) => {
     }],
     canvasElements: [
       { id: 'CE-rota', type: 'widget', widget: 'rota', x: 160, y: 120, w: 1100, h: 760, text: '', color: '#ffffff',
-        data: { people: ['c:C-ig', 'c:C-mo'], firstWeek: SUN, weekCount: 1, span: 5 } },
+        data: { weekView: 'all', people: ['c:C-ig', 'c:C-mo'], firstWeek: SUN, weekCount: 1, span: 5 } },
       { id: 'CE-goals-board', type: 'widget', widget: 'goals', x: 40, y: 1900, w: 300, h: 200, text: '', color: '#ffffff', data: {} },
     ],
   }));
