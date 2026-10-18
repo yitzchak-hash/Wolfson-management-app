@@ -1,4 +1,9 @@
 {
+  "git": {
+    "deploymentEnabled": {
+      "claude/ui-widget-fixes-fosqdk": false
+    }
+  },
   "rewrites": [
     {
       "source": "/((?!api/).*)",

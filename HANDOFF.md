@@ -77,6 +77,9 @@ stage gets its own one-picture step; Take photo / Record video / Choose files li
 step; Sold/Start off the extras list; the sheet's row one = "Building 1 · Apartment 15 - family" +
 Standard + move + delete + X, row two = stage + day + address; TASK big; new switches **Delete their own
 tasks** + **Including tasks the office gave them** (off on Contractor and Technician, on for Manager).
+NOT LIVE YET: Vercel answered "Deployment rate limited — retry in 24 hours" (too many deployments today).
+The code is on both branches; the next production push or a Redeploy after the limit resets puts it live.
+`vercel.json` now stops the working branch from building, halving the count.
 Waiting on him: the shared stage list carries old and new names of the same work side by side
 ("Concealed Units Installed" + "Concealed Units" …) — shown in the video, not touched.
 

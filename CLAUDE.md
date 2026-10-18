@@ -10511,3 +10511,11 @@ Shipped: off on Contractor and Technician, on for Manager.
 Harness: `scratchpad/closewhen-probe.mjs` (30). Green: closemore, portal-r48 (re-encoded: TASK is capitals),
 portalround, multiday, bubbles-probe, round52, workerplans, doneline, notfinished, media-r53, the audits.
 
+## Vercel's daily deployment limit (2026-10-18)
+The Hobby plan caps deployments per day, and production answered "Deployment rate limited — retry in
+24 hours" after a day of many rounds — the push was fine, the site simply did not update (GitHub's commit
+status for the SHA says so: `gh api repos/yitzchak-hash/wolfson-management-app/commits/<sha>/statuses`).
+Every push to the session's working branch made a PREVIEW deployment that counted too, so `vercel.json`
+now carries `git.deploymentEnabled: { "claude/ui-widget-fixes-fosqdk": false }` — only production builds.
+When a deploy check never finds the new text, read that status before anything else.
+
