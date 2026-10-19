@@ -10469,7 +10469,7 @@ The recordings folder holds **Processed** (`1Kjlc67zz0JWCo1gXH1qXPxzF2VdiAfds`) 
 both exist and puts every recording where the ledger says it belongs (done → Processed; anything else
 → Not processed). **The Google Drive connector can only change files it created itself** — moving the
 owner's recordings is refused ("The caller does not have permission") although his account is an
-organizer. So the helper creates and lists; the owner drags. Never copy, delete or trash a recording to
+organizer. So the helper creates and lists; the owner's DESKTOP session moves them (Desktop Commander running PowerShell moves on the office PC's G: drive, which Drive for Desktop syncs) — hand him a ready prompt naming the files. Never copy, delete or trash a recording to
 get round it. "Check the folder" looks in the top level AND in Not processed. The download for watching
 is the app's own `/api/drive-fetch` (the bundle's public key), and the whisper models are cached:
 `HF_HUB_OFFLINE=1` with `Systran/faster-whisper-large-v3` and `mobiuslabsgmbh/faster-whisper-large-v3-turbo`

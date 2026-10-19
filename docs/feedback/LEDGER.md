@@ -41,7 +41,11 @@ Re-checked 2026-10-18 and 2026-10-19: refused both times ("The caller does not h
 The correct reason (2026-10-19): the connector signs in as the office's own account, which IS an organizer of
 the shared drive — but its Google access is the narrow kind that may only change files the connector itself
 created. It can put files into the two subfolders it made, and cannot touch a recording the owner uploaded.
-The app's service account is no help: it is not a member of the shared drive. (The 2026-10-18 note blamed
+The app's service account is no help: it is not a member of the shared drive.
+**How the recordings DO get moved (2026-10-19):** the owner's Claude DESKTOP session runs PowerShell
+move commands on the office PC through the Desktop Commander plugin, against the Google Drive for Desktop
+G: drive, which then syncs to Drive. A cloud session cannot reach that PC, so after each video it asks
+him to have the desktop session move the recordings the ledger marks done into Processed. (The 2026-10-18 note blamed
 membership alone; that was wrong for the connector.) Why he counted 14 after being told 13: recording 14 was
 uploaded three minutes before the subfolders were made and was still being worked when "13" was said. Audit the same day: every ask he SAID in recordings 1–14 is built; all 14 belong in
 **Processed**. Open shown-only items are kept in MASTER-CHECKLIST (video 8's Plans chooser, the Geves
