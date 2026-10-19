@@ -1714,7 +1714,8 @@ export function PlannerWidget({
       {ribbon && people.length > 0 && (
         <WeekRibbon
           thisWeek={thisWeek} focus={focus} onPick={pickWeek} stats={weekStats}
-          lang={lang} locale={LT} fontSize={Math.max(z(9), textSize - z(1))}
+          lang={lang} locale={LT}
+          fontSize={Math.round(Math.max(z(9), textSize - z(1)) * frac(d.weekChipSize, 1, 0.7, 1.8) * 10) / 10}
           chipRefs={chipRefs} dwellKey={dwellKey}
           earliest={iso(firstWeek) < shiftWeek(thisWeek, -12) ? iso(firstWeek) : shiftWeek(thisWeek, -12)}
         />

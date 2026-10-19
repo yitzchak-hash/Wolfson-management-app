@@ -30,6 +30,19 @@ export interface WhatsNewEntry {
 
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    date: '2027-02-13',
+    title: 'The week chips fill the top',
+    items: [
+      {
+        title: 'One row across the notebook',
+        body: 'The week chips on top of the weekly notebook now stretch across the whole top row, each the same '
+          + 'width, and grow and shrink with the notebook. A new "Week chip size" setting in the notebook\'s '
+          + 'pencil makes them bigger or smaller.',
+        demo: 'sparkle',
+      },
+    ],
+  },
+  {
     date: '2027-02-12',
     title: 'Adding to a finished stage',
     items: [

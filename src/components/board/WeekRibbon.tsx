@@ -110,8 +110,8 @@ export function WeekRibbon({
   for (let wk = shiftWeek(thisWeek, -3); wk >= earliest && older.length < 52; wk = shiftWeek(wk, -1)) older.push(wk);
 
   return (
-    <div data-week-ribbon className="flex items-stretch gap-1 px-2 pb-1.5 flex-shrink-0 overflow-x-auto widget-scroll no-bar"
-      data-no-drag>
+    <div data-week-ribbon className="flex items-stretch px-2 pb-1.5 flex-shrink-0 overflow-x-auto widget-scroll no-bar"
+      style={{ gap: Math.max(4, Math.round(fontSize * 0.35)) }} data-no-drag>
       {chips.map(wk => {
         const st = stats.get(wk);
         const on = wk === focus;
@@ -126,9 +126,16 @@ export function WeekRibbon({
             data-this-week={now ? '' : undefined} data-holding={holding ? '' : undefined}
             onClick={() => onPick(wk)}
             title={`${dateOf(wk)} · ${w.hold}`}
-            className="relative flex-shrink-0 flex flex-col items-start rounded-lg border px-2 pt-1 pb-1.5 text-start overflow-hidden transition-colors"
+            // One equal share of the row each — the chips are the notebook's
+            // top row, the way a week view's day headers are, and they grow
+            // and shrink with the widget (owner, 2026-10-19). A narrow widget
+            // keeps a readable floor and scrolls instead.
+            className="relative flex-1 basis-0 flex flex-col items-start rounded-lg border text-start overflow-hidden transition-colors"
             style={{
-              minWidth: Math.max(64, fontSize * 5.6),
+              minWidth: Math.max(56, fontSize * 5),
+              paddingInline: Math.round(fontSize * 0.7),
+              paddingTop: Math.round(fontSize * 0.3),
+              paddingBottom: Math.round(fontSize * 0.45),
               borderColor: on ? '#1e3a5f' : holding ? '#4aa8d8' : '#e2e8f0',
               backgroundColor: on ? '#1e3a5f' : holding ? '#e0f2fe' : '#fff',
               color: on ? '#fff' : '#334155',
@@ -147,8 +154,8 @@ export function WeekRibbon({
               style={{ fontSize: small, color: on ? '#cbd5e1' : '#64748b' }}>
               {st && st.tasks ? `${st.tasks} · ${st.done}✓` : w.empty}
             </span>
-            <span aria-hidden className="relative mt-1 h-[3px] w-full rounded-full overflow-hidden"
-              style={{ backgroundColor: on ? 'rgba(255,255,255,.22)' : '#eef2f7' }}>
+            <span aria-hidden className="relative w-full rounded-full overflow-hidden"
+              style={{ marginTop: Math.round(fontSize * 0.3), height: Math.max(3, Math.round(fontSize * 0.25)), backgroundColor: on ? 'rgba(255,255,255,.22)' : '#eef2f7' }}>
               <span className="block h-full rounded-full" style={{ width: `${Math.round(share * 100)}%`, backgroundColor: '#16a34a' }} />
             </span>
           </button>

@@ -10528,6 +10528,14 @@ completion rule and Who did what must not read it as finished again) and records
 The recordings folder: moving his files is refused for the connector AND the app's service account —
 the recordings are on the shared drive and neither is a member. He drags; the ledger is the record.
 
+## The week chips are the notebook's top row (2026-10-19)
+`WeekRibbon` chips are `flex-1 basis-0` — equal shares of the whole row, the way a week view's day
+headers are — with a `fontSize × 5` minimum so a narrow notebook scrolls instead of squeezing; padding,
+gap and the done bar all scale from `fontSize`. The notebook passes `fontSize × frac(d.weekChipSize)`
+(**`frac`, never `num`** — `num` rounds and turns 1.5 into 2); the pencil's "Week chip size" is a
+`scale` field (70–180%, 100% writes undefined). weekribbon-probe §1b checks the row is filled to its
+edge, the widths are equal, and 150% grows the words.
+
 ## Vercel's daily deployment limit (2026-10-18)
 The Hobby plan caps deployments per day, and production answered "Deployment rate limited — retry in
 24 hours" after a day of many rounds — the push was fine, the site simply did not update (GitHub's commit

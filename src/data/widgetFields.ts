@@ -622,6 +622,10 @@ export const WIDGET_FIELDS: Record<string, WidgetField[]> = {
       ],
     },
     {
+      key: 'weekChipSize', label: 'Week chip size', kind: 'scale', group: 'People and days',
+      hint: 'How big the week chips across the top are. They always fill the whole row.',
+    },
+    {
       key: 'cardStyle', label: 'Cards', kind: 'select', group: 'People and days',
       options: [
         { value: '', label: 'Tiles — as today' },

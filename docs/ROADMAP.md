@@ -97,3 +97,4 @@ under the set model). `round28.mjs` is green again (10-08).
 - ☑ Plans on the worker's building map: the plan on the "I'm going to work here" sheet; "any plan" switch; Standard bubble (2026-10-18).
 - ☑ Recording 14:28: the worker's sheet header, "When did you finish?", delete permission, closing-screen picture steps (2026-10-18).
 - ☑ The close: a finished stage shows greyed and still takes added work and pictures, into its own folder; a Job Board job on the worker's list reads its own name (2026-10-18).
+- ☑ The notebook's week chips fill the whole top row, equal widths, and a "Week chip size" setting (2026-10-19).

@@ -64,7 +64,14 @@ with starred recommendations is published first; the owner says "approved" /
 "all yes" / answers by number; then it is built. Never build a redesign
 unasked.
 
-## Where things stand (2026-10-18, latest — a finished stage takes added work; the recordings audited)
+## Where things stand (2026-10-19, latest — the week chips fill the notebook's top row)
+His ask: the week selector on top of the weekly notebook "should fill up the entire top, like row on top
+of the cal like the week view … scale normally … and we need a scaling setting in that widget". Built:
+the chips share the row equally and grow with the widget; pencil → "Week chip size". weekribbon-probe
+39/39. The previous round (commit 6b17c00, finished stage takes added work) was refused by Vercel's
+daily limit; this push should carry both live — a check-in is set for 2026-10-19 13:03 UTC.
+
+## Where things stand (2026-10-18 — a finished stage takes added work; the recordings audited)
 His ask: "if he already finished the stage and he clicks it, it should be grayed out, but still allow him
 to click it and add work to it … the pictures … go to the folder of the closed stage … it doesn't reopen
 the stage." Built (CLAUDE.md "A finished stage still takes added work"); addedwork-probe 24/24. Also: close

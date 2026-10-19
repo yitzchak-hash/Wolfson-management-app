@@ -86,6 +86,40 @@ const centre = async sel => { const bb = await page.locator(sel).first().boundin
 }
 
 if (process.env.SHOTS) await page.locator(N).screenshot({ path: `${process.env.SHOTS}/rib-board.png` });
+// ── 1b · the chips fill the whole top row, equally, and the size setting grows them ──
+{
+  const geo = async () => page.evaluate(sel => {
+    const rib = document.querySelector(`${sel} [data-week-ribbon]`);
+    const r = rib.getBoundingClientRect();
+    const kids = [...rib.children].map(c => c.getBoundingClientRect());
+    const chips = [...rib.querySelectorAll('[data-week-chip]')];
+    const cw = chips.map(c => c.getBoundingClientRect().width);
+    const pad = parseFloat(getComputedStyle(rib).paddingRight);
+    const lastRight = Math.max(...kids.map(k => k.right));
+    const font = parseFloat(getComputedStyle(chips[0].querySelector('span.font-extrabold') ?? chips[0]).fontSize);
+    return { gapRight: r.right - pad - lastRight, min: Math.min(...cw), max: Math.max(...cw), font, scroll: rib.scrollWidth - rib.clientWidth };
+  }, N);
+  const g1 = await geo();
+  check(g1.gapRight < 2, '1b · the chips run to the right edge of the row', `${Math.round(g1.gapRight)}px left over`);
+  check(g1.max - g1.min < 2, '1b · every chip is the same width', `${Math.round(g1.min)}–${Math.round(g1.max)}px`);
+  await page.evaluate(() => {
+    const d = JSON.parse(localStorage.getItem('general_app_data'));
+    const r = d.canvasElements.find(e => e.id === 'CE-rota');
+    window.__store?.getState().updateCanvasElement('CE-rota', { data: { ...r.data, weekChipSize: 1.5 } });
+  });
+  await page.waitForTimeout(400);
+  const g2 = await geo();
+  check(g2.font > g1.font * 1.35, '1b · "Week chip size" 150% makes the words bigger', `${g1.font} → ${g2.font}px`);
+  check(g2.gapRight < 2 || g2.scroll > 0, '1b · and they still fill the row (or scroll when too many)', `${Math.round(g2.gapRight)}px / scroll ${g2.scroll}`);
+  if (process.env.SHOTS) await page.locator(N).screenshot({ path: `${process.env.SHOTS}/rib-board-150.png` });
+  await page.evaluate(() => {
+    const d = JSON.parse(localStorage.getItem('general_app_data'));
+    const r = d.canvasElements.find(e => e.id === 'CE-rota');
+    const data = { ...r.data }; delete data.weekChipSize;
+    window.__store?.getState().updateCanvasElement('CE-rota', { data });
+  });
+  await page.waitForTimeout(400);
+}
 // ── 2 · a chip turns the page; the pick is remembered for this week only ─────
 {
   await page.locator(`${N} [data-week-chip="${LAST}"]`).click();
