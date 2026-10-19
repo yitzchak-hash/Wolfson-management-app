@@ -273,3 +273,6 @@ Legend: ☑ shipped · ☐ decided, not built · ◐ built in part · ✎ needs 
 - ☑ The worker's close: a stage already finished shows greyed in "Is it one of these?" and still takes added work + pictures, filed in that stage's folder; it is never reopened (2026-10-18)
 - ☑ Close pictures for another stage file into that stage's own Drive folder (2026-10-18)
 - ☑ Worker plan switches: "for the units they work in" (task sheet + that unit's map sheet) and "any engineered plan from the building diagram"; the plan, floor and type on the map sheet; a Standard bubble on a standard apartment (2026-10-18)
+- ☑ A job's second tile carries no "ghost" word; Add existing and the job menu say "another tile of the same job" (2026-10-19)
+- ☑ A tile carried across the board is drawn over every widget; a job's second tile pins onto a pin board too (2026-10-19)
+- ☑ Job Completed / Ready to start decided by name, not list order; every stage done reads Job Completed; "Mark the whole job as" (2026-10-19)

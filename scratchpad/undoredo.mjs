@@ -45,7 +45,7 @@ await ctx.addInitScript(() => {
       { id: 'CE-book', type: 'widget', widget: 'rota',
         x: 900, y: 520, w: 520, h: 300, text: '', color: '#ffffff',
         data: {
-          people: ['n:Moshe'], firstWeek: '2026-08-16', weekCount: 1, span: 5,
+          people: ['n:Moshe'], firstWeek: '2026-08-16', weekCount: 1, span: 5, weekView: 'all',
           cells: { 'n:Moshe|2026-08-17': [{ id: 'e-1', jobId: 'G-u1' }] },
         } },
     ],

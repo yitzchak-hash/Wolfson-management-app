@@ -4,7 +4,7 @@ import { progressOf } from '../data/stageMarks';
 import {
   Plus, Briefcase, MapPin, ExternalLink, Trash2, ClipboardList, FolderOpen,
   Copy, Scissors, Maximize, Minimize, StickyNote, Square, Palette, Pencil, X, AlertTriangle,
-  Ghost, ThumbsUp, ThumbsDown, ClipboardPaste, LayoutGrid, Columns3, Archive, CheckCircle2, PlayCircle,
+  ThumbsUp, ThumbsDown, ClipboardPaste, LayoutGrid, Columns3, Archive, CheckCircle2, PlayCircle,
   Image as ImageIcon, ImageOff, History, MoveUpRight, Unlink, FileText, Search, FolderPlus, Printer,
   Settings2 as Settings, BringToFront, SendToBack, ChevronUp, ChevronDown, Eye,
   Eraser, GripVertical, Lock, Unlock, Group, Ungroup, Info as InfoGlyph, CalendarDays, Crosshair, Maximize2,
@@ -2601,7 +2601,10 @@ export function GeneralJobsPage() {
     if (moved) edgePush(e.clientX, e.clientY); else stopEdgePush();
     setGhostDrag({ ...ghostDrag, dx, dy, moved });
     setHoverBin(binAt(w0.x, w0.y)?.id ?? null);
-    setRotaHover(anyRota() ? rotaCellAt(e.clientX, e.clientY) : null);
+    const overCell = anyRota() ? rotaCellAt(e.clientX, e.clientY) : null;
+    setRotaHover(overCell);
+    // A pin board lights for a second tile exactly as it does for the first.
+    setPinHover(moved && !overCell ? pinBoardAt(e.clientX, e.clientY)?.key ?? null : null);
   }
 
   function onGhostPointerUp(e: React.PointerEvent, job: Apartment) {
@@ -2625,6 +2628,28 @@ export function GeneralJobsPage() {
         dropOnRota(cell, [job.id]);
         setGhostDrag(null);
         setRotaHover(null);
+        setPinHover(null);
+        return;
+      }
+      /**
+       * A pin board takes a job's SECOND tile too (owner, 2026-10-19: "a lot
+       * of cards, I can't drag into the boards"). The tile carried in becomes
+       * the pin and leaves the board; the job's own tile stays where it was —
+       * both always were the same job, so nothing is held or moved but this
+       * one appearance.
+       */
+      const pin = pinBoardAt(e.clientX, e.clientY);
+      setPinHover(null);
+      if (pin) {
+        const gi = ghostDrag.index;
+        const msg = track({ weight: 'arrange', label: 'Pinned a job' }, () => {
+          const m = pin.place([job.id], undefined, { hold: false });
+          if (m) removeGhost(job.id, gi);
+          return m;
+        });
+        if (msg) setToast(msg);
+        setGhostDrag(null);
+        setHoverBin(null);
         return;
       }
       const bin = binAt(w0.x, w0.y);
@@ -7578,9 +7603,9 @@ function isPointerNode(el: CanvasElement | undefined): boolean {
                 </button>
                 <button onClick={() => handleCreateGhost(ctxMenu.ids)}
                   className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2.5"
-                  title="Show this same job in another place">
-                  <Ghost size={14} className="text-gray-400" />
-                  {ctxMenu.ids.length > 1 ? `Create ghosts (${ctxMenu.ids.length})` : 'Create ghost'}
+                  title="Another tile of the same job — both are the same job, not a copy">
+                  <Copy size={14} className="text-gray-400" />
+                  {ctxMenu.ids.length > 1 ? `Show in another place too (${ctxMenu.ids.length})` : 'Show in another place too'}
                 </button>
                 <button onClick={() => bumpThumbs('job', ctxMenu.ids, 1)}
                   className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2.5">
@@ -7714,7 +7739,7 @@ function isPointerNode(el: CanvasElement | undefined): boolean {
             ) : ctxMenu.kind === 'ghost' ? (
               <>
                 <div className="px-4 py-1.5 text-[10px] font-bold text-gray-400 tracking-wide">
-                  GHOST · same job, another place
+                  THE SAME JOB · shown in two places
                 </div>
                 <button onClick={() => { const j = jobs.find(x => x.id === ctxMenu.ids[0]); if (j) setSelectedJob(j); setCtxMenu(null); }}
                   className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2.5">
@@ -7722,10 +7747,10 @@ function isPointerNode(el: CanvasElement | undefined): boolean {
                 </button>
                 <button onClick={() => { removeGhost(ctxMenu.ids[0], ctxMenu.ghostIndex ?? 0); setCtxMenu(null); }}
                   className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2.5">
-                  <X size={14} className="text-gray-400" /> Remove this ghost
+                  <X size={14} className="text-gray-400" /> Remove this tile only
                 </button>
                 <div className="px-4 pb-2 pt-0.5 text-[10px] text-gray-400 leading-snug">
-                  Removing a ghost only removes this appearance. The job itself is untouched.
+                  Only this tile goes. The job and its other tile stay.
                 </div>
               </>
             ) : ctxMenu.kind === 'canvas' ? (

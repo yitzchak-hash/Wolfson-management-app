@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { Check, Clock, ChevronDown, ChevronRight, AlertTriangle, X, Plus, Hammer, CalendarDays } from 'lucide-react';
 import { Stage, MainUiStrings, Apartment, ContractorAssignment, Contractor, ContractorPhoto, StageMark, getStageName } from '../../types';
 import {
-  stageSetOf, liveStateOf, cycleMark, setMark, progressOf, isWorkStage, taskStageIds,
+  stageSetOf, liveStateOf, cycleMark, setMark, progressOf, isWorkStage, taskStageIds, markerRole,
   StageState, SetContext,
 } from '../../data/stageMarks';
 import { format, parseISO } from 'date-fns';
@@ -69,7 +69,10 @@ export function StagePicker({
   const progress = progressOf(apartment, stages, ctx);
   const stateOf = (id: string): StageState => liveStateOf(apartment, id, stages, tasks);
   const workStages = stages.filter(st => isWorkStage(st) && st.active);
-  const markers = stages.filter(st => !isWorkStage(st) && st.active);
+  // Opening marker first, closing last — by what each MEANS (`markerRole`),
+  // not by the list's order, which on the Job Board has them the other way round.
+  const markers = stages.filter(st => !isWorkStage(st) && st.active)
+    .sort((x, y) => (markerRole(x, stages) === 'closing' ? 1 : 0) - (markerRole(y, stages) === 'closing' ? 1 : 0));
   const off = workStages.filter(st => marks?.[st.id] === 'off');
   const notOnApt = workStages.filter(st => !set.some(x => x.id === st.id) && marks?.[st.id] !== 'off');
   const pendingCount = Object.values(marks ?? {}).filter(m => m === 'pending').length;
@@ -356,11 +359,13 @@ export function StagePicker({
             {/* The markers — the whole flat's state, not work anybody does. */}
             {markers.length > 0 && (
               <div className="mt-3 flex items-center gap-1.5 flex-wrap">
-                <span className="text-[9.5px] font-extrabold uppercase tracking-wider text-gray-400">{ui.setFlatIs}</span>
+                <span data-stage-marker-label className="text-[10.5px] font-bold text-gray-500">{apartment.buildingId === 'G' ? ui.setJobIs : ui.setFlatIs}</span>
                 {markers.map(m => {
                   const on = apartment.currentStageId === m.id;
                   return (
                     <button key={m.id} data-stage-marker={m.id} data-on={on ? '1' : undefined}
+                      data-marker-role={markerRole(m, stages)}
+                      title={markerRole(m, stages) === 'closing' ? ui.markerClosingHint : ui.markerOpeningHint}
                       onClick={() => { onMarker(m.id); setOpen(false); }}
                       className="text-[10.5px] font-bold px-2 py-0.5 rounded-full border"
                       style={on

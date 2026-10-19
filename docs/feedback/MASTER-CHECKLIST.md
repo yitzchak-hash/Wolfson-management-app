@@ -217,6 +217,13 @@ the job's own name) · addedwork-probe §5.
 | V14-12 | 2:41 | "The line should be inside" — the buttons inside the picture box | Done | `data-close-step-media` · closewhen-probe §4 |
 | V14-Q | — | The shared stage list has old and new names side by side (e.g. "Concealed Units Installed" + "Concealed Units") | Waiting | question to the owner |
 
+### Video 15 — Recording 2026-10-19 104054 ([feedback doc](2026-10-19-104054.md))
+| # | Time | Ask | Status | Proof |
+|---|------|-----|--------|-------|
+| V15-1 | 0:01 | A job 2/2 done still read "Ready to start" | Done | `markerRole` (by name, not order) + the heal in `migrateStageSets` · markerrole-test |
+| V15-2 | 0:26 | Pressing Job Completed took both ticks off | Done | `marksForCurrent` closing → all done · markerrole-test |
+| V15-3 | 0:14 | "What does 'the whole flat is' mean?" | Done | "Mark the whole job / apartment as", hover hints, opening first |
+
 ## From chat
 
 | # | Date | Ask | Status | Proof |
@@ -294,3 +301,6 @@ the job's own name) · addedwork-probe §5.
 | C-71 | 2026-10-18 | "Can you move the videos yourself … make sure we did all of them really?" | Partly | audit: every spoken ask of the 14 recordings is built (ledger rows 10–11 corrected); moving refused again — the recordings sit on the shared drive and neither the connector nor the app's Drive account is a member |
 | C-72 | 2026-10-19 | The week selector on top of the notebook should fill the entire top row, like the week view's top row, and scale normally | Done | `flex-1 basis-0` chips · weekribbon-probe §1b |
 | C-73 | 2026-10-19 | A scaling setting for the week chips in that widget | Done | pencil → "Week chip size" (`weekChipSize`) · weekribbon-probe §1b |
+| C-74 | 2026-10-19 | Add existing shows "ghost" — two tiles of one job are the same job; drop the word | Done | badge, icon, menu wording gone · pinsecond-probe §1, §4 |
+| C-75 | 2026-10-19 | Cards dragged onto the pin boards go behind them and don't pin (only Active jobs rows did) | Done | a carried tile draws above everything; a second tile pins (the job's own tile stays); hidden notebook squares never take a drop · pinsecond-probe §2–3 |
+| C-76 | 2026-10-19 | Told to drag 13 recordings but sees 14 — why can't you organise it, and did we miss any? | Partly | inventory: 14 at the top + recording 15 in Not processed, all 15 done, none missed; moving refused — the connector may only change files it created (LEDGER) |

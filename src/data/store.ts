@@ -30,7 +30,7 @@ import { DEFAULT_TIME_CLOCK, resolvePunch } from './timeClock';
 import { purgeJobsFromPlanner, isPlannerElement } from './plannerPurge';
 import { DEFAULT_WORKER_LEVELS } from './workerLevels';
 import { daysOf, closeDayFields } from './taskDays';
-import { applyMarks, marksForCurrent, migrateToBubbles, seedStageKinds, taskStageIds, isWorkStage, stageChangesOf } from './stageMarks';
+import { applyMarks, marksForCurrent, migrateToBubbles, seedStageKinds, taskStageIds, isWorkStage, stageChangesOf, markerRole, headlineStageId } from './stageMarks';
 import type { SetContext } from './stageMarks';
 import { planStageSplit, splitApartment, splitTask, splitStageNote, splitStageIdList, isSplitParent, firstChildOf } from './stageSplit';
 import { notifyWorker } from './pushNotify';
@@ -2001,17 +2001,34 @@ export const useStore = create<AppState>((set, get) => ({
     const sortedNow = stagesOfProject(pid, get().stages);
     const now = new Date().toISOString();
     const changed: Apartment[] = [];
+    const ctxNow = setContextOf(pid, get().boardSettings);
     const apartments = get().apartments.map(a => {
       const patch = migrateToBubbles(a, sortedNow);
-      if (!patch) return a;
-      const next = { ...a, ...patch, updatedAt: now };
+      let next: Apartment = patch ? { ...a, ...patch, updatedAt: now } : a;
+      /**
+       * A job left standing on an OPENING marker ("Ready to start") while its
+       * work is recorded takes the headline its marks say. The list's order
+       * used to make Ready to start the Job Board's closing marker, so a job
+       * with every stage done headlined "Ready to start" (owner's recording,
+       * 2026-10-19); the rule is fixed in `markerRole`, this heals the records
+       * it already wrote. Nothing but the headline changes.
+       */
+      const cur = sortedNow.find(st => st.id === next.currentStageId);
+      if (next.bubbles && cur && !isWorkStage(cur) && markerRole(cur, sortedNow) === 'opening'
+        && Object.values(next.stageMarks ?? {}).some(m => m === 'done' || m === 'doing' || m === 'pending')) {
+        const head = headlineStageId(next, sortedNow, ctxNow);
+        if (head && head !== next.currentStageId) next = { ...next, currentStageId: head, updatedAt: now };
+      }
+      if (next === a) return a;
       changed.push(next);
       return next;
     });
     if (!changed.length) return 0;
     set({ apartments });
     persist(get);
-    fsBatchSet(projectCollection(pid, 'apartments'), changed.map(a => ({ id: a.id, data: { stageMarks: a.stageMarks, bubbles: true, updatedAt: now } })));
+    fsBatchSet(projectCollection(pid, 'apartments'), changed.map(a => ({ id: a.id, data: {
+      stageMarks: a.stageMarks, bubbles: true, currentStageId: a.currentStageId ?? null, updatedAt: now,
+    } })));
     return changed.length;
   },
 

@@ -106,7 +106,12 @@ function pinsOf(el: CanvasElement | undefined): PinItem[] {
  * and comes back when the pin does. A job already held by a NOTEBOOK keeps
  * that holder (unpinning must not pull it out of the week too).
  */
-function pinJobs(elId: string, ids: string[], at: { x: number; y: number }, projectId?: string): number {
+/**
+ * `hold: false` pins the job WITHOUT taking it off the board — used when the
+ * hand carried a job's SECOND tile in: that tile becomes the pin, and the job's
+ * own tile stays where it was (owner, 2026-10-19).
+ */
+function pinJobs(elId: string, ids: string[], at: { x: number; y: number }, projectId?: string, hold = true): number {
   const st = useStore.getState();
   const el = st.canvasElements.find(e => e.id === elId);
   if (!el) return 0;
@@ -127,7 +132,7 @@ function pinJobs(elId: string, ids: string[], at: { x: number; y: number }, proj
   if (!n) return 0;
   st.updateCanvasElement(el.id, { data: { ...(el.data ?? {}), pins } });
   const user = st.currentUser;
-  if (user && !foreign) {
+  if (user && !foreign && hold) {
     for (const jobId of ids) {
       const j = st.apartments.find(a => a.id === jobId);
       if (!j) continue;
@@ -222,8 +227,8 @@ export function PinBoardWidget({ el, c }: { el: CanvasElement; c: WidgetCtx }) {
       const at = { x: (x - r.left) / r.width, y: (y - r.top) / r.height };
       return {
         key, elId: el.id,
-        place: (ids, projectId) => {
-          const n = pinJobs(el.id, ids, at, projectId);
+        place: (ids, projectId, opts) => {
+          const n = pinJobs(el.id, ids, at, projectId, opts?.hold !== false);
           if (!n) return null;
           return n === 1 ? 'Pinned' : `${n} pinned`;
         },

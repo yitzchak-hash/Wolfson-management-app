@@ -749,6 +749,10 @@ export function PlannerWidget({
         if (node.closest('[data-ghost-week]')) continue;
         const r = node.getBoundingClientRect();
         if (x >= r.left && x <= r.right && y >= r.top && y <= r.bottom) {
+          // A square scrolled out of the notebook's own view still has a
+          // rect — lying under whatever stands beside the notebook (a pin
+          // board, a list). Only a square the eye can see takes the drop.
+          if (!document.elementsFromPoint(x, y).includes(node)) continue;
           const [person, day] = key.split('|');
           return { elId: el.id, probeId, person, day };
         }

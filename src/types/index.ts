@@ -2639,6 +2639,9 @@ export interface MainUiStrings {
   setNotNeededAct: string;
   setPutBack: string;
   setFlatIs: string;
+  setJobIs: string;
+  markerOpeningHint: string;
+  markerClosingHint: string;
   setKindWork: string;
   setKindMarker: string;
   /** Settings → Stages: who performs this stage (Stage.trade). */
@@ -3616,7 +3619,10 @@ export const DEFAULT_MAIN_UI_STRINGS: MainUiStrings = {
   setWholeWorkspace: 'the whole workspace',
   setNotNeededAct: 'Not needed here',
   setPutBack: 'put back',
-  setFlatIs: 'The whole flat is',
+  setFlatIs: 'Mark the whole apartment as',
+  setJobIs: 'Mark the whole job as',
+  markerOpeningHint: 'Nothing has begun yet — this takes every tick off',
+  markerClosingHint: 'Everything is finished — this ticks every stage done',
   setKindWork: 'work',
   setKindMarker: 'marker',
   stageTradeLabel: 'Who does it',
@@ -4564,7 +4570,10 @@ export const HEBREW_MAIN_UI_STRINGS: MainUiStrings = {
   setWholeWorkspace: 'בכל סביבת העבודה',
   setNotNeededAct: 'לא נדרש כאן',
   setPutBack: 'להחזיר',
-  setFlatIs: 'הדירה כולה',
+  setFlatIs: 'סמנו את כל הדירה כ',
+  setJobIs: 'סמנו את כל העבודה כ',
+  markerOpeningHint: 'עוד לא התחילו — מוריד את כל הסימונים',
+  markerClosingHint: 'הכול הסתיים — מסמן כל שלב כגמור',
   setKindWork: 'עבודה',
   setKindMarker: 'סימון',
   stageTradeLabel: 'מי מבצע',

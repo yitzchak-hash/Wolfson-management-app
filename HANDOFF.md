@@ -64,7 +64,21 @@ with starred recommendations is published first; the owner says "approved" /
 "all yes" / answers by number; then it is built. Never build a redesign
 unasked.
 
-## Where things stand (2026-10-19, latest — the week chips fill the notebook's top row)
+## Where things stand (2026-10-19, latest — pin boards, no "ghost", Job Completed; recording 15)
+His asks (chat): Add existing showed "ghost" — "two cards, one card, they always point at the same
+thing"; cards dragged onto the pin boards "go in back of it" and do not pin, only Active-jobs rows did.
+Then: a new short video (recording 15, 0:37, he put it in Not processed) and "you told me to drag 13 but I
+see 14 — why can't you organise it, and did we miss any?". Built: no ghost badge/icon/word anywhere on
+screen; a carried tile draws above every widget; a job's second tile pins (the job's own tile stays);
+a notebook square scrolled out of view never takes a drop. Recording 15: a Job Board job 2/2 done read
+"Ready to start" and pressing Job Completed wiped the ticks — the Job Board's list has Job Completed at
+order 3 and Ready to start at 6 and the app took the LAST marker as the finish. Now by name
+(`markerRole`), with a heal for stuck jobs and "Mark the whole job as". Folder: 14 at the top (all done),
+Processed empty, recording 15 in Not processed (done) — 15 recordings, none missed. Moving refused again;
+the correct reason is in the LEDGER (the connector may change only files it created). Probes:
+pinsecond 13/13, markerrole 10/10, pinboard, round51, bubbles, grouplock green.
+
+## Where things stand (2026-10-19 — the week chips fill the notebook's top row)
 His ask: the week selector on top of the weekly notebook "should fill up the entire top, like row on top
 of the cal like the week view … scale normally … and we need a scaling setting in that widget". Built:
 the chips share the row equally and grow with the widget; pencil → "Week chip size". weekribbon-probe
@@ -1228,6 +1242,11 @@ Last commits, newest first (see `git log`):
   `npx vite --port 5173` and `VITE_DRIVE_API_KEY=test npx vite --port 5174`.
 
 ## The last reply the owner saw (so the next one continues it)
+**Newest (2026-10-19, pin boards + recording 15)**: numbered items — "ghost" gone; cards onto pin boards
+(drawn on top; second tile pins and the other stays); recording 15's Job Completed / Ready to start
+fix and the reworded line; the folder count (15, none missed) and why the move is refused; Rule;
+What I need from you (drag 15 into Processed; V14-Q old stage names); the link; the one-liner.
+
 **Newest (2026-10-13, the pin board)**: numbered bullets — the pin board (what it does, where to
 find it in the store), the AI search (built, waits only for the key + redeploy, with the clicks),
 then What I need from you, the link and the bold one-liner.

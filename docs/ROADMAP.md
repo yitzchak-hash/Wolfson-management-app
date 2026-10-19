@@ -98,3 +98,4 @@ under the set model). `round28.mjs` is green again (10-08).
 - ☑ Recording 14:28: the worker's sheet header, "When did you finish?", delete permission, closing-screen picture steps (2026-10-18).
 - ☑ The close: a finished stage shows greyed and still takes added work and pictures, into its own folder; a Job Board job on the worker's list reads its own name (2026-10-18).
 - ☑ The notebook's week chips fill the whole top row, equal widths, and a "Week chip size" setting (2026-10-19).
+- ☑ Recording 10:40 + chat: Job Completed means finished (markers by name), "Mark the whole job as"; no "ghost" wording; cards drop onto pin boards from either tile (2026-10-19).

@@ -10544,3 +10544,27 @@ Every push to the session's working branch made a PREVIEW deployment that counte
 now carries `git.deploymentEnabled: { "claude/ui-widget-fixes-fosqdk": false }` — only production builds.
 When a deploy check never finds the new text, read that status before anything else.
 
+
+## One job in two places, pin boards, and markers by name (2026-10-19)
+- **No "ghost" on screen.** A job's second tile (`Apartment.ghosts`, the field name stays) wears no
+  badge and no word — it IS the job. Add existing's rows wear a briefcase; the job menu reads "Show in
+  another place too", the second tile's menu "THE SAME JOB · shown in two places" / "Remove this tile only".
+- **A tile in the hand draws above everything** (`JobTile` z 2147480000 while `isDragging`). At 20 it slid
+  under any widget placed later (frontZ keeps climbing), so a job carried to a pin board vanished behind it.
+- **A second tile pins too** (`onGhostPointerUp` asks `pinBoardAt` after the notebook square): the carried
+  tile becomes the pin (`place(ids, undefined, { hold: false })`, `pinJobs(..., hold)`) and is removed; the
+  job's own tile stays and `inNotebook` is not set. One tracked `arrange` step. The ghost move lights the
+  board (`setPinHover`) the way the tile drag does.
+- **A notebook square scrolled out of view never takes a drop**: the rota probe now requires the square in
+  `document.elementsFromPoint` (clipped by its scroller) — a rect alone matched squares hidden under a
+  neighbouring widget.
+- **`markerRole(st, sorted)`** in stageMarks.ts decides a marker's meaning by NAME (Completed / Done /
+  Finished / הושלם → closing; Ready / Not started / מוכן → opening), falling back to "the last marker
+  closes" only when the names say neither. The Job Board's list has Job Completed at order 3 and Ready to
+  start at 6, so the order rule made every finished job headline "Ready to start" and made Job Completed
+  wipe the ticks. `headlineStageId` and `marksForCurrent` read it; `migrateStageSets` heals a record
+  standing on an opening marker while work is recorded (it now also writes `currentStageId`). The
+  picker's marker row is ordered by role and labelled "Mark the whole job / apartment as" with hover hints
+  (`setJobIs`, `markerOpeningHint`, `markerClosingHint`; hooks `data-stage-marker-label`,
+  `data-marker-role`).
+- Harnesses: `scratchpad/pinsecond-probe.mjs` (13) · `scratchpad/markerrole-test.mjs` (offline, 10).

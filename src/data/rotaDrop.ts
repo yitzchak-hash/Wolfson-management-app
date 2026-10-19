@@ -216,7 +216,7 @@ export interface PinHit {
   /** The board's element id — what a pinned job's `inNotebook` points at. */
   elId: string;
   /** Pin these jobs where the hand let go. Returns the toast, or null. */
-  place: (ids: string[], projectId?: string) => string | null;
+  place: (ids: string[], projectId?: string, opts?: { hold?: boolean }) => string | null;
 }
 
 type PinProbe = (clientX: number, clientY: number) => PinHit | null;

@@ -21,7 +21,7 @@ export function withAlpha(color: string, alpha = 0.45): string {
   }
   return color;
 }
-import { MapPin, ClipboardList, Trash2, Palette, Pencil, X, ThumbsUp, ThumbsDown, Ghost,
+import { MapPin, ClipboardList, Trash2, Palette, Pencil, X, ThumbsUp, ThumbsDown,
   Archive, CheckCircle2, PlayCircle, FolderOpen, Lock, Unlock, Group } from 'lucide-react';
 import { Apartment, CanvasElement, Stage, BinKind, BIN_META, binKeyOf, binLabelOf } from '../../types';
 import { Settings2, Mic, Crosshair } from 'lucide-react';
@@ -217,22 +217,15 @@ export const JobTile = React.memo(function JobTile({
         border: `4px solid ${isSelected ? '#4aa8d8' : problem ? PROBLEM_FILL[problem] : (stage?.color ?? fallbackBorder)}`,
         outline: isSelected && !isDragging ? '2px solid rgba(74,168,216,0.4)' : undefined,
         outlineOffset: '1px',
-        zIndex: isDragging ? 20 : isSelected ? 10 : 5,
+        // A tile in the hand is drawn over EVERYTHING on the board. At 20 it
+        // slid under any widget placed later (their z keeps climbing), so a
+        // job carried to a pin board vanished behind the board it was meant
+        // for (owner, 2026-10-19: "it goes in back of it").
+        zIndex: isDragging ? 2147480000 : isSelected ? 10 : 5,
       }}
     >
-      {/* The only thing that marks a ghost out. Everything else on the tile is
-          identical, because it IS the job — same colours, same links, same
-          counts, full opacity. */}
-      {isGhost && (
-        <span
-          className="absolute -top-2 left-2 flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-bold"
-          style={{ backgroundColor: '#eef2f7', color: '#64748b', border: '1px solid #dbe3ec' }}
-          title="The same job, shown in a second place. Editing it edits the job."
-        >
-          <Ghost size={9} /> ghost
-        </span>
-      )}
-
+      {/* A second tile of a job carries no mark of its own: it IS the job,
+          and both tiles point at the same record (owner, 2026-10-19). */}
 
       {/* Grouped — the ONLY visible sign of an invisible group. Pressing it
           takes just this tile out and leaves the rest grouped. Shown whenever

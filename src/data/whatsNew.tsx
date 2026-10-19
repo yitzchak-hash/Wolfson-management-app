@@ -30,6 +30,32 @@ export interface WhatsNewEntry {
 
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    date: '2027-02-14',
+    title: 'Pin boards, one job in two places, and Job Completed',
+    items: [
+      {
+        title: 'Every card goes onto a pin board',
+        body: 'A job carried across the board now rides on top of everything, so you can see it over a pin board '
+          + 'and drop it in. A job shown in two places can be pinned from either tile: that tile goes onto the '
+          + 'board and the job\'s other tile stays where it was.',
+        demo: 'drag',
+      },
+      {
+        title: 'No more "ghost"',
+        body: 'Adding an existing job puts another tile of the same job on the board — the same job, not a copy — '
+          + 'and it is no longer labelled "ghost". Its menu says "Remove this tile only".',
+        demo: 'sparkle',
+      },
+      {
+        title: 'Job Completed means finished',
+        body: 'A job with every stage ticked now reads Job Completed, never Ready to start. Pressing Job Completed '
+          + 'ticks every stage; pressing Ready to start means nothing has begun. The line above them now reads '
+          + '"Mark the whole job as".',
+        demo: 'tap',
+      },
+    ],
+  },
+  {
     date: '2027-02-13',
     title: 'The week chips fill the top',
     items: [

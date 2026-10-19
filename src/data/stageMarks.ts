@@ -40,6 +40,26 @@ export function isWorkStage(s: Stage): boolean {
 }
 
 /**
+ * What a MARKER means — the start of the line or its end — read from its NAME,
+ * never from its place in the list. The Job Board's list holds "Job Completed"
+ * at order 3 and "Ready to start" at order 6, so the old "the last marker is
+ * the closing one" rule read Ready to start as the finish: a job with every
+ * stage done headlined "Ready to start", and pressing Job Completed wiped the
+ * ticks (owner's recording, 2026-10-19). A list whose names say neither falls
+ * back to the order: the last marker closes.
+ */
+const CLOSING_RE = /complet|finish|\bdone\b|closed|הושלם|הסתיים|סיום|גמור/i;
+const OPENING_RE = /ready|not\s*started|\bstart|waiting|מוכן|ממתין|לא התחיל/i;
+export function markerRole(st: Stage, sortedStages: Stage[]): 'opening' | 'closing' {
+  const name = `${st.name ?? ''} ${st.nameHe ?? ''}`;
+  if (CLOSING_RE.test(name)) return 'closing';
+  if (OPENING_RE.test(name)) return 'opening';
+  const named = sortedStages.filter(x => !isWorkStage(x) && x.active && (x.projectId ?? '') === (st.projectId ?? ''));
+  if (named.some(x => x.id !== st.id && CLOSING_RE.test(`${x.name ?? ''} ${x.nameHe ?? ''}`))) return 'opening';
+  return named[named.length - 1]?.id === st.id ? 'closing' : 'opening';
+}
+
+/**
  * Is this stage on the apartment's OWN workspace list? A Job Board job
  * (building `G`) reads the Job Board's stages; every building workspace reads
  * the shared global list. The set rules decide this rather than the callers,
@@ -199,10 +219,10 @@ export function headlineStageId(apt: AptLike, sortedStages: Stage[], ctx?: SetCo
   const next = set.find(st => state(st.id) === 'todo');
   if (next) return next.id;
   // Everything in the set is done: the CLOSING marker ("Job completed") if
-  // the list has one — a marker ordered after the last work stage, never
-  // "Ready to start" at the top — else the last stage done.
-  const lastWorkOrder = set.length ? set[set.length - 1].order : -Infinity;
-  const closing = sortedStages.filter(s => !isWorkStage(s) && s.active && ownStage(apt, s) && s.order > lastWorkOrder);
+  // the list has one — decided by its name (`markerRole`), never by where it
+  // sits in the order — else the last stage done.
+  const closing = sortedStages.filter(s => !isWorkStage(s) && s.active && ownStage(apt, s)
+    && markerRole(s, sortedStages) === 'closing');
   if (closing.length) return closing[closing.length - 1].id;
   const lastDone = [...set].reverse().find(st => state(st.id) === 'done');
   return lastDone?.id ?? apt.currentStageId ?? null;
@@ -306,8 +326,7 @@ export function marksForCurrent(
   if (!isWorkStage(target)) {
     // "Job completed": everything in the set is done. "Ready to start": nothing is.
     const set = stageSetOf({ ...apt, stageMarks: marks }, sortedStages, ctx);
-    const last = sortedStages.filter(s => !isWorkStage(s) && s.active && ownStage(apt, s)).slice(-1)[0];
-    if (last && last.id === target.id && set.length) {
+    if (markerRole(target, sortedStages) === 'closing' && set.length) {
       for (const st of set) marks[st.id] = 'done';
     } else {
       for (const st of set) if (marks[st.id] && marks[st.id] !== 'off') delete marks[st.id];

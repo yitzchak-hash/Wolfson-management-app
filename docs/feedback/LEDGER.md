@@ -24,8 +24,9 @@ ask built or answered) · **not this app** (a recording of another project — r
 | 12 | Recording 2026-10-15 141950.mp4 (14.7 MB) | `1VmLFg_WG4DoiI60NLA0fQT53R2uxsuUG` | 0:28 | done | [2026-10-15-141950.md](2026-10-15-141950.md) |
 | 13 | Recording 2026-10-15 153941.mp4 (5.1 MB) | `1s7HntfimA6EXgI6F6gyy9ygqMYaFXe_w` | 0:18 | done | [2026-10-15-153941.md](2026-10-15-153941.md) |
 | 14 | Recording 2026-10-18 142856.mp4 (42.2 MB, 1920×1032) | `1W9ZWOx1520Kg5Flz6V7I53VGOiPXB7bb` | 2:53 | done | [2026-10-18-142856.md](2026-10-18-142856.md) |
+| 15 | Recording 2026-10-19 104054.mp4 (17.8 MB, 1920×1032) — he put it in **Not processed** | `1AZQaQuT3-drz29rjFdvITYHETw1TfZKF` | 0:37 | done | [2026-10-19-104054.md](2026-10-19-104054.md) |
 
-Folder last listed: 2026-10-18.
+Folder last listed: 2026-10-19 — 14 recordings at the top, **Processed** empty, recording 15 in **Not processed**. All 15 are done and belong in Processed.
 
 ## The folder's two subfolders (owner, 2026-10-18)
 After every new video a helper sorts the folder: **Processed**
@@ -36,9 +37,12 @@ created itself, so the recordings (made by the owner's own account) cannot be
 moved from here — the helper creates the folders, lists what belongs where, and
 the owner drags them; a recording counts as processed when its row here says done.
 
-Re-checked 2026-10-18 on his "can you move the videos yourself": refused again ("The caller does not
-have permission"). The recordings live on the shared drive, whose members are the office's own
-accounts; neither the connector nor the app's service account is one, so neither can move a file
-there. Audit the same day: every ask he SAID in recordings 1–14 is built; all 14 belong in
+Re-checked 2026-10-18 and 2026-10-19: refused both times ("The caller does not have permission").
+The correct reason (2026-10-19): the connector signs in as the office's own account, which IS an organizer of
+the shared drive — but its Google access is the narrow kind that may only change files the connector itself
+created. It can put files into the two subfolders it made, and cannot touch a recording the owner uploaded.
+The app's service account is no help: it is not a member of the shared drive. (The 2026-10-18 note blamed
+membership alone; that was wrong for the connector.) Why he counted 14 after being told 13: recording 14 was
+uploaded three minutes before the subfolders were made and was still being worked when "13" was said. Audit the same day: every ask he SAID in recordings 1–14 is built; all 14 belong in
 **Processed**. Open shown-only items are kept in MASTER-CHECKLIST (video 8's Plans chooser, the Geves
 list; V14-Q).

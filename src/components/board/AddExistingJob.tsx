@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { Search, Ghost, MapPin } from 'lucide-react';
+import { Search, Briefcase, MapPin } from 'lucide-react';
 import { Apartment, aptLabel, binKeyOf, binLabelOf, projectShortName } from '../../types';
 import { useStore, loadProjectSnapshot } from '../../data/store';
 import { searchJobs } from '../../data/searchIndex';
@@ -11,7 +11,7 @@ import { searchJobs } from '../../data/searchIndex';
  * search here").
  *
  * Nothing is copied. A Job Board job comes back as ANOTHER TILE OF THE SAME
- * RECORD — a ghost — so an edit through either is an edit to the job; that is
+ * RECORD (stored as a ghost position; never called that on screen) — so an edit through either is an edit to the job; that is
  * true even for a job filed in a group, a notebook or a pin board, which then
  * shows on the board as well without leaving where it is. A unit from another
  * workspace lands as a unit card, the board's standing pointer at it.
@@ -105,7 +105,7 @@ export function AddExistingJob({ onPick, onCancel }: {
             onClick={() => onPick({ job: r.job, projectId: r.projectId })}
             className="w-full text-start flex items-center gap-2.5 px-3 py-2 rounded-xl border border-gray-100 hover:border-[#4aa8d8] hover:bg-sky-50 transition-colors">
             {r.projectId ? <MapPin size={14} className="text-amber-600 flex-shrink-0" />
-              : <Ghost size={14} className="text-gray-400 flex-shrink-0" />}
+              : <Briefcase size={14} className="text-gray-400 flex-shrink-0" />}
             <span className="min-w-0 flex-1">
               <span className="block text-sm font-semibold text-gray-900 truncate">
                 {aptLabel(r.job) || r.job.displayName || (he ? 'עבודה' : 'Job')}
