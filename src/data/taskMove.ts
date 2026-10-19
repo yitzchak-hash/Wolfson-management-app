@@ -254,3 +254,30 @@ export function isMoveTarget(apt: Pick<Apartment, 'isUnnamed' | 'apartmentNumber
   if (apt.boardBin === 'trash') return false;
   return !!(apt.apartmentNumber?.trim() || apt.displayName?.trim());
 }
+
+/**
+ * UNDOING A TASK HE OPENED HIMSELF — the arithmetic, pure.
+ *
+ * The owner, 2026-10-19: "add an option for contractors to be able to delete
+ * jobs that they opened for themselves … where they pressed I work here, I did
+ * work here, add an option for them to undo that if they did it by mistake."
+ *
+ * Undoing is a move to NOWHERE: the apartment it was recorded on gets back
+ * exactly what a move would give it — the ticks this task wrote come off
+ * (back to the `marksBefore` snapshot when the start took one), a stage
+ * another task there stands behind stays, and a stage somebody changed by
+ * hand since is theirs. The same `planTaskMove`, so the two can never
+ * disagree about what the task left behind.
+ */
+export function planTaskUndo(
+  task: ContractorAssignment,
+  from: Apartment,
+  tasks: ContractorAssignment[],
+  sortedStages: Stage[],
+  ctx?: SetContext,
+): Pick<TaskMovePlan, 'off' | 'kept' | 'fromMarks' | 'fromChanged' | 'restored'> {
+  // A stand-in target nothing is ever written to.
+  const nowhere = { id: '__nowhere__', buildingId: from.buildingId, apartmentNumber: '', displayName: '', currentStageId: null, bubbles: true } as unknown as Apartment;
+  const p = planTaskMove(task, from, nowhere, tasks, sortedStages, ctx);
+  return { off: p.off, kept: p.kept, fromMarks: p.fromMarks, fromChanged: p.fromChanged, restored: p.restored };
+}

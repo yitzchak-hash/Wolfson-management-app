@@ -10568,3 +10568,15 @@ When a deploy check never finds the new text, read that status before anything e
   (`setJobIs`, `markerOpeningHint`, `markerClosingHint`; hooks `data-stage-marker-label`,
   `data-marker-role`).
 - Harnesses: `scratchpad/pinsecond-probe.mjs` (13) · `scratchpad/markerrole-test.mjs` (offline, 10).
+
+## A worker undoes a task he opened himself (2026-10-19)
+Owner: "add an option for them to undo that if they did it by mistake." Any task with `createdBy` = the
+worker ("I'm going to work here", a closed "I did work here", one he gave himself) wears an undo arrow on
+its sheet (`data-task-delete` + `data-task-undo-own`, Undo2 icon) with NO permission — the move icon's
+precedent; never on a problem. `undoOwnTask(taskId, user)` (store) reads `planTaskUndo` (taskMove.ts —
+`planTaskMove` to a stand-in target, so a move and an undo can never disagree about what the task left)
+BEFORE deleting: the apartment's marks go back through `applyMarks` (quiet), a general job's visit with
+that `reportTaskId` is dropped, one `task_deleted` line is written in the worker's name (with
+`restoredBefore`), and `deleteContractorAssignment` runs with `currentUser` cleared so an office login in
+the same browser is not credited. Office tasks for him still need `deleteOwnTasks` + `deleteOfficeTasks`.
+Probe: `scratchpad/undoown-probe.mjs` (17).

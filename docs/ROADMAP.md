@@ -5,6 +5,7 @@ asks for it. ☑ done · ☐ next · ✎ awaiting Yitzchak's word. (Standing ord
 6, 2026-09-23.) The full one-line-per-feature list is `docs/CRM-CHECKLIST.md`._
 
 ## Shipped (the shape of the app today)
+- ☑ A worker undoes a task he opened himself; the apartment goes back to how it was (2026-10-19).
 - ☑ Three workspaces, one login, workspace colours, home = the Job Board.
 - ☑ The Job Board canvas: tiles, groups (bins), widgets (74 after the
   dedupe), notes, drawing, undo/redo, layouts, named boards, culling for

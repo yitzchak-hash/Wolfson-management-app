@@ -64,7 +64,18 @@ with starred recommendations is published first; the owner says "approved" /
 "all yes" / answers by number; then it is built. Never build a redesign
 unasked.
 
-## Where things stand (2026-10-19, latest — pin boards, no "ghost", Job Completed; recording 15)
+## Where things stand (2026-10-19, latest — a worker undoes a task he opened himself)
+His ask (chat): "add an option for contractors to be able to delete jobs that they opened for themselves …
+where they pressed I work here, I did work here, add an option for them to undo that if they did it by
+mistake." Built: an undo arrow (`data-task-delete` + `data-task-undo-own`) on any task he created himself —
+open or closed, no permission — asks in his language, then `undoOwnTask` (store) puts the apartment's
+stages back through `planTaskUndo` (the move's rules: `marksBefore`, other tasks, hand changes), takes the
+visit off a general job, writes one `task_deleted` line in his name, and deletes the task with its photos
+and messages. Office tasks keep the two delete switches. Probe `undoown-probe` 17/17; `closewhen-probe`
+re-encoded (his own task now has the arrow with no switch). Still waiting: the desktop session moving the
+15 recordings into Processed; V14-Q (old vs new stage names).
+
+## Where things stand (2026-10-19 — pin boards, no "ghost", Job Completed; recording 15)
 His asks (chat): Add existing showed "ghost" — "two cards, one card, they always point at the same
 thing"; cards dragged onto the pin boards "go in back of it" and do not pin, only Active-jobs rows did.
 Then: a new short video (recording 15, 0:37, he put it in Not processed) and "you told me to drag 13 but I
@@ -1242,6 +1253,10 @@ Last commits, newest first (see `git log`):
   `npx vite --port 5173` and `VITE_DRIVE_API_KEY=test npx vite --port 5174`.
 
 ## The last reply the owner saw (so the next one continues it)
+**Newest (2026-10-19, undo own task)**: one numbered item — the undo arrow on a task he opened himself,
+what it puts back, that office tasks still need the switches; Rule; What I need from you (nothing new;
+recordings move + V14-Q still open); the link; the one-liner.
+
 **Newest (2026-10-19, pin boards + recording 15)**: numbered items — "ghost" gone; cards onto pin boards
 (drawn on top; second tile pins and the other stays); recording 15's Job Completed / Ready to start
 fix and the reworded line; the folder count (15, none missed) and why the move is refused; Rule;

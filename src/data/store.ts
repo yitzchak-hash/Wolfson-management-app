@@ -36,7 +36,7 @@ import { planStageSplit, splitApartment, splitTask, splitStageNote, splitStageId
 import { notifyWorker } from './pushNotify';
 import { plainSummary } from './activityWords';
 import { aptLabel } from '../types';
-import { planTaskMove, placeLabel } from './taskMove';
+import { planTaskMove, planTaskUndo, placeLabel } from './taskMove';
 import type { TaskMovePlan } from './taskMove';
 
 /** How many AUTOMATIC layout snapshots rotate, separate from the 10 manual. */
@@ -1108,6 +1108,14 @@ interface AppState {
   moveTaskToApartment: (taskId: string, toApartmentId: string, user: User, opts?: { moveMarks?: boolean }) => boolean;
   /** What that move would do to the two apartments' stage ticks — the confirm step reads it. Null when the move cannot be made. */
   taskMovePlan: (taskId: string, toApartmentId: string) => TaskMovePlan | null;
+  /**
+   * Take back a task the WORKER opened by mistake ("I'm going to work here",
+   * a task he gave himself) — owner, 2026-10-19. The apartment's stage ticks
+   * the task left go back to how they stood before he started (`planTaskUndo`,
+   * the move's own rules), the general job forgets the visit, and the task
+   * goes with its photos and messages. One history line, in the worker's name.
+   */
+  undoOwnTask: (taskId: string, user: User) => boolean;
   addContractorNote: (n: Omit<ContractorNote, 'id' | 'createdAt'>) => void;
   /** A field or two onto a note — the memo's transcript, once it is known. */
   updateContractorNote: (id: string, changes: Partial<ContractorNote>) => void;
@@ -3247,6 +3255,51 @@ export const useStore = create<AppState>((set, get) => ({
         if (now) get().updateApartment(to.id, applyMarks(now, plan.toMarks, sorted, ctx), user);
       }
     }
+    return true;
+  },
+
+  undoOwnTask: (taskId, user) => {
+    const st = get();
+    const task = st.contractorAssignments.find(a => a.id === taskId);
+    if (!task || task.problem) return false;
+    const pid = st.currentProjectId;
+    const sorted = stagesOfProject(pid, st.stages);
+    const ctx = setContextOf(pid, st.boardSettings);
+    const from = task.apartmentId ? st.apartments.find(a => a.id === task.apartmentId) : undefined;
+    // Read BEFORE the task goes — "another task stands behind this tick" must not count it.
+    const plan = from && !task.general ? planTaskUndo(task, from, st.contractorAssignments, sorted, ctx) : null;
+    trackUndo({ weight: 'content', label: 'Undid a task', explain: `Took back "${task.taskDescription}" and put the apartment's stages back.` }, () => {
+      if (plan?.fromChanged && from) {
+        const now = get().apartments.find(a => a.id === from.id);
+        // Quiet: the one history line below says what happened.
+        if (now) get().updateApartment(from.id, applyMarks(now, plan.fromMarks, sorted, ctx), user, { quiet: true });
+      }
+      // A general job that filed this report as one of its visits forgets it.
+      for (const host of get().contractorAssignments) {
+        if (host.id === taskId || !host.visits?.some(v => v.reportTaskId === taskId)) continue;
+        get().updateContractorAssignment(host.id, { visits: host.visits.filter(v => v.reportTaskId !== taskId) });
+      }
+      if (from) {
+        get().addActivityLog({
+          userId: user.id,
+          userName: user.name,
+          buildingId: from.buildingId,
+          apartmentId: from.id,
+          apartmentNumber: from.displayName || from.apartmentNumber || from.id,
+          actionType: 'task_deleted',
+          fieldChanged: 'task',
+          previousValue: task.taskDescription,
+          newValue: '',
+          stageId: task.stageId ?? '',
+          ...(plan?.restored && plan.fromChanged ? { restoredBefore: true } : {}),
+        });
+      }
+      // The office user, if any, is NOT who did this — the line above is the record.
+      const cur = get().currentUser;
+      if (cur) useStore.setState({ currentUser: null });
+      try { get().deleteContractorAssignment(taskId); }
+      finally { if (cur) useStore.setState({ currentUser: cur }); }
+    });
     return true;
   },
 

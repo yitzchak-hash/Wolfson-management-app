@@ -160,7 +160,11 @@ const openCard = async (page, id) => { await page.locator(`[data-task-card="${id
 {
   const { ctx, page } = await phone(undefined);
   await openCard(page, 'T-3');
-  check(await page.locator('[data-task-delete]').count() === 0, '7 · the shipped Contractor level has no bin');
+  // Owner, 2026-10-19: a task he opened himself can always be undone — no switch.
+  check(await page.locator('[data-task-delete="T-3"][data-task-undo-own]').count() === 1, '7 · with no switch, his OWN task still wears the undo icon');
+  await page.mouse.click(200, 30); await page.waitForTimeout(400);
+  await openCard(page, 'T-1');
+  check(await page.locator('[data-task-delete]').count() === 0, '7 · the shipped Contractor level has no bin on an office task');
   await ctx.close();
 }
 

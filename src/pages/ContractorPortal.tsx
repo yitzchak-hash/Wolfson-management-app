@@ -19,7 +19,7 @@ import {
   Plus, Send, AlertCircle, X, Play, File as FileIcon, MapPin,
   BookOpen, Download, Paperclip, MessageSquare, CloudUpload,
   ChevronLeft, ChevronRight, ChevronDown, History, PenLine, Mic,
-  Settings as SettingsIcon, Bell, Info, ArrowRightLeft, Video, FolderOpen, Trash2,
+  Settings as SettingsIcon, Bell, Info, ArrowRightLeft, Video, FolderOpen, Trash2, Undo2,
 } from 'lucide-react';
 import { BuildingDiagram } from '../components/diagram/BuildingDiagram';
 import { permsOf } from '../data/workerLevels';
@@ -3514,9 +3514,13 @@ plansPdfFileId && (
         // Delete (owner, recording 2026-10-18): his own tasks with the switch;
         // the office's tasks for him only with the sub-switch too. Never a
         // problem (the office's record of a fault) or a general job.
-        const canDeleteHere = perms.deleteOwnTasks && a.contractorId === contractorId
-          && !a.general && !a.problem
-          && (a.createdBy === contractorId || perms.deleteOfficeTasks);
+        // A task he OPENED HIMSELF ("I'm going to work here", one he gave
+        // himself) is always his to take back — no switch (owner, 2026-10-19:
+        // "an option for them to undo that if they did it by mistake"). Undoing
+        // puts the apartment's stages back to how they stood before he started.
+        const openedByHim = a.createdBy === contractorId && a.contractorId === contractorId && !a.problem;
+        const canDeleteHere = openedByHim || (perms.deleteOwnTasks && perms.deleteOfficeTasks
+          && a.contractorId === contractorId && !a.general && !a.problem);
         const dueBadge = getDueBadge(effectiveDue(a), dueWords);
         // The starred plan — or, when nobody starred one, the app's guess:
         // the plans folder's latest-activity sheet, marked in red as a guess.
@@ -3624,12 +3628,12 @@ plansPdfFileId && (
                     </button>
                   )}
                   {canDeleteHere && (
-                    <button type="button" data-task-delete={a.id}
+                    <button type="button" data-task-delete={a.id} data-task-undo-own={openedByHim ? '' : undefined}
                       onClick={() => { setMoveAsk(false); setDeleteAsk(v => !v); }}
-                      title={w('Delete this task', 'למחוק את המשימה', 'Удалить задачу')}
-                      aria-label={w('Delete this task', 'למחוק את המשימה', 'Удалить задачу')}
+                      title={openedByHim ? w('Undo — I opened this by mistake', 'ביטול — פתחתי בטעות', 'Отменить — открыл по ошибке') : w('Delete this task', 'למחוק את המשימה', 'Удалить задачу')}
+                      aria-label={openedByHim ? w('Undo — I opened this by mistake', 'ביטול — פתחתי בטעות', 'Отменить — открыл по ошибке') : w('Delete this task', 'למחוק את המשימה', 'Удалить задачу')}
                       className={`flex-shrink-0 w-7 h-7 flex items-center justify-center rounded-full border ${deleteAsk ? 'bg-red-100 border-red-300 text-red-700' : 'border-gray-200 text-gray-400 hover:text-red-600 hover:border-red-300'}`}>
-                      <Trash2 size={13} />
+                      {openedByHim ? <Undo2 size={13} /> : <Trash2 size={13} />}
                     </button>
                   )}
                   <button onClick={() => { setSelectedAssignment(null); setShowCompleteConfirm(false); setFinishAsk(null); }} className="flex-shrink-0 p-1.5 rounded-full hover:bg-gray-100">
@@ -3689,15 +3693,24 @@ plansPdfFileId && (
                 {canDeleteHere && deleteAsk && (
                   <div data-task-delete-ask className="mt-2.5 rounded-xl border-2 px-3 py-2.5" style={{ borderColor: '#fca5a5', backgroundColor: '#fef2f2' }}>
                     <div className="text-[14px] font-bold text-red-800">
-                      {w('Delete this task? Its photos and messages go with it.',
-                        'למחוק את המשימה? התמונות וההודעות שלה יימחקו איתה.',
-                        'Удалить эту задачу? Её фото и сообщения удалятся вместе с ней.')}
+                      {openedByHim
+                        ? w('Opened this by mistake? Undo it — the task goes, with its photos and messages, and the apartment goes back to how it was before you started.',
+                          'פתחת את זה בטעות? בטל — המשימה נמחקת עם התמונות וההודעות, והדירה חוזרת למצב שלפני שהתחלת.',
+                          'Открыли это по ошибке? Отмените — задача удалится вместе с фото и сообщениями, а квартира вернётся к тому, как было до начала работы.')
+                        : w('Delete this task? Its photos and messages go with it.',
+                          'למחוק את המשימה? התמונות וההודעות שלה יימחקו איתה.',
+                          'Удалить эту задачу? Её фото и сообщения удалятся вместе с ней.')}
                     </div>
                     <div className="flex gap-2 mt-2">
                       <button type="button" data-task-delete-yes
-                        onClick={() => { setDeleteAsk(false); deleteContractorAssignment(a.id); setSelectedAssignment(null); }}
+                        onClick={() => {
+                          setDeleteAsk(false);
+                          if (openedByHim) useStore.getState().undoOwnTask(a.id, workerUser());
+                          else deleteContractorAssignment(a.id);
+                          setSelectedAssignment(null);
+                        }}
                         className="flex-1 py-2 rounded-lg font-bold text-white text-sm bg-red-600">
-                        {w('Delete', 'מחק', 'Удалить')}
+                        {openedByHim ? w('Undo', 'בטל', 'Отменить') : w('Delete', 'מחק', 'Удалить')}
                       </button>
                       <button type="button" data-task-delete-no
                         onClick={() => setDeleteAsk(false)}

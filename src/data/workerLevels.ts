@@ -57,8 +57,9 @@ export const WORKER_PERMISSIONS: PermissionDef[] = [
   // tasks … with a sub permission — only for tasks he added himself, or
   // including tasks that the office added for him."
   { key: 'deleteOwnTasks', label: 'Delete their own tasks', group: 'Work',
-    hint: 'A small bin on the task. Only tasks they added themselves, unless the switch below is on. '
-      + 'Its photos and messages go with it; the files stay in Google Drive.' },
+    hint: 'A task they opened themselves ("I\'m going to work here", one they gave themselves) can ALWAYS be undone — '
+      + 'no switch needed, and the apartment goes back to how it was before they started. '
+      + 'This switch is for the tasks the office made for them, together with the one below.' },
   { key: 'deleteOfficeTasks', label: 'Including tasks the office gave them', group: 'Work', parent: 'deleteOwnTasks',
     hint: 'Also the tasks somebody in the office made for them.' },
 
