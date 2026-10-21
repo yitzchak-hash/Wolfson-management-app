@@ -276,4 +276,4 @@ Legend: ☑ shipped · ☐ decided, not built · ◐ built in part · ✎ needs 
 - ☑ A job's second tile carries no "ghost" word; Add existing and the job menu say "another tile of the same job" (2026-10-19)
 - ☑ A tile carried across the board is drawn over every widget; a job's second tile pins onto a pin board too (2026-10-19)
 - ☑ Job Completed / Ready to start decided by name, not list order; every stage done reads Job Completed; "Mark the whole job as" (2026-10-19)
-- ☑ A worker undoes a task he opened himself ("I'm going to work here" / "I did work here" / his own task) with no permission; the apartment's stages go back to how they were before he started (2026-10-19)
+- ☑ A worker undoes a task he opened himself ("I'm going to work here" / "I did work here" / his own task) with no permission (a trash can, "Delete"); the apartment's stages go back to how they were before he started (2026-10-19, icon 2026-10-21); worker guide PDF in EN + RU

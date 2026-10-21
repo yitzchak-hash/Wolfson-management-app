@@ -31,12 +31,12 @@ export interface WhatsNewEntry {
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
     date: '2027-02-15',
-    title: 'A worker can undo a task he opened by mistake',
+    title: 'A worker can delete a task he opened by mistake',
     items: [
       {
-        title: 'Undo "I\'m going to work here"',
+        title: 'Delete "I\'m going to work here"',
         body: 'On the worker\'s phone, any task he opened himself — "I\'m going to work here", "I did work here", or a task '
-          + 'he gave himself — now has a small undo arrow beside its name. One press asks first; then the task goes, with '
+          + 'he gave himself — now has a small trash can beside its name. One press asks first; then the task goes, with '
           + 'its photos and messages, and the apartment\'s stages go back to exactly how they were before he started. '
           + 'A stage another task is behind stays. No permission is needed. Tasks the office made for him still need '
           + 'the delete switches.',

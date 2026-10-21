@@ -10572,11 +10572,12 @@ When a deploy check never finds the new text, read that status before anything e
 ## A worker undoes a task he opened himself (2026-10-19)
 Owner: "add an option for them to undo that if they did it by mistake." Any task with `createdBy` = the
 worker ("I'm going to work here", a closed "I did work here", one he gave himself) wears an undo arrow on
-its sheet (`data-task-delete` + `data-task-undo-own`, Undo2 icon) with NO permission — the move icon's
+its sheet (`data-task-delete` + `data-task-undo-own`, a TRASH CAN — owner 2026-10-21, words "Delete") with NO permission — the move icon's
 precedent; never on a problem. `undoOwnTask(taskId, user)` (store) reads `planTaskUndo` (taskMove.ts —
 `planTaskMove` to a stand-in target, so a move and an undo can never disagree about what the task left)
 BEFORE deleting: the apartment's marks go back through `applyMarks` (quiet), a general job's visit with
 that `reportTaskId` is dropped, one `task_deleted` line is written in the worker's name (with
 `restoredBefore`), and `deleteContractorAssignment` runs with `currentUser` cleared so an office login in
 the same browser is not credited. Office tasks for him still need `deleteOwnTasks` + `deleteOfficeTasks`.
-Probe: `scratchpad/undoown-probe.mjs` (17).
+Probe: `scratchpad/undoown-probe.mjs` (18). The worker guide is `docs/guides/worker-delete-task-en-ru.pdf`
+(three steps + one warning, EN then RU), rebuilt by `scratchpad/undoguide-cap.mjs` + `undoguide-pdf.mjs`.

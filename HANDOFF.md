@@ -64,7 +64,13 @@ with starred recommendations is published first; the owner says "approved" /
 "all yes" / answers by number; then it is built. Never build a redesign
 unasked.
 
-## Where things stand (2026-10-19, latest — a worker undoes a task he opened himself)
+## Where things stand (2026-10-21, latest — the trash can, and the worker guide)
+His asks: a PDF with screenshots for the workers in English and Russian; then "change the undo icon to a trash
+can icon" and make the guide much simpler — step 1 open the task, step 2 the trash can, step 3 press it, and
+say it deletes all the messages. Built: the own-task control is a trash can with "Delete" words; the guide is
+`docs/guides/worker-delete-task-en-ru.pdf` (page 1 English, page 2 Russian, three steps + one red warning).
+
+## Where things stand (2026-10-19 — a worker undoes a task he opened himself)
 His ask (chat): "add an option for contractors to be able to delete jobs that they opened for themselves …
 where they pressed I work here, I did work here, add an option for them to undo that if they did it by
 mistake." Built: an undo arrow (`data-task-delete` + `data-task-undo-own`) on any task he created himself —
@@ -1253,6 +1259,8 @@ Last commits, newest first (see `git log`):
   `npx vite --port 5173` and `VITE_DRIVE_API_KEY=test npx vite --port 5174`.
 
 ## The last reply the owner saw (so the next one continues it)
+**Newest (2026-10-21, trash can + guide)**: the trash can and the 3-step EN/RU PDF sent as a file; nothing needed.
+
 **Newest (2026-10-19, undo own task)**: one numbered item — the undo arrow on a task he opened himself,
 what it puts back, that office tasks still need the switches; Rule; What I need from you (nothing new;
 recordings move + V14-Q still open); the link; the one-liner.
