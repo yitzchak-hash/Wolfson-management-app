@@ -30,6 +30,38 @@ export interface WhatsNewEntry {
 
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    date: '2027-02-16',
+    title: 'Stages in every language, what each one includes, and a mic in the bubble',
+    items: [
+      {
+        title: 'Every stage in Russian and Hebrew, and no more doubles',
+        body: 'The worker\'s list now reads every stage in his own language. The four old stages that had come back as '
+          + 'doubles ("Concealed Units Installed", "Inline Fans Installed", "Outdoor Units Installed", "Thermostats & '
+          + 'Haffala") are put away, and the order is right again. Drains is a new stage, after Piping. Registers and '
+          + 'Access Panels had their Hebrew names the wrong way round — fixed.',
+        demo: 'tap',
+      },
+      {
+        title: 'What each stage includes',
+        body: 'Settings → Stages: under every stage, add the small jobs it covers — Piping includes soldering, '
+          + 'connections, pipes. The worker sees them under the stage, in his language, so he knows which one to press.',
+        demo: 'tap',
+      },
+      {
+        title: '"I don\'t see what I did here"',
+        body: 'At the end of the worker\'s list. He writes one or two words and sends them to the office. They wait at '
+          + 'the top of Settings → Stages: pick the stage they belong to and they become one of its words.',
+        demo: 'tap',
+      },
+      {
+        title: 'Talk into a speech bubble',
+        body: 'In the plan studio, an open speech bubble has a tiny microphone in its bottom-right corner. Press it and '
+          + 'talk, in any language — the words fill the bubble as you speak. Press it again to finish.',
+        demo: 'tap',
+      },
+    ],
+  },
+  {
     date: '2027-02-15',
     title: 'A worker can delete a task he opened by mistake',
     items: [

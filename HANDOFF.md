@@ -64,7 +64,17 @@ with starred recommendations is published first; the owner says "approved" /
 "all yes" / answers by number; then it is built. Never build a redesign
 unasked.
 
-## Where things stand (2026-10-21, latest — the trash can, and the worker guide)
+## Where things stand (2026-10-21, latest — stages: languages, duplicates, includes, the bubble mic)
+His asks (Hebrew + English, with a photo of the Russian tablet): only Drilling was in Russian; add Drains; each stage
+should say what it includes (Piping: soldering, connections, pipes), updated daily; "I don't see what I did" at the end
+of the list sending a word or two to the office, applied to a stage in the Stages screen as small bubbles; remove the
+duplicate stages; a tiny mic bottom-right of the studio's speech bubble, live transcription, language detected.
+Built: the duplicates came from the first-run seed pushing a device's default stages over the shared list (18 Oct);
+the seed is guarded and the cloud fixed (backup in the session scratchpad `stagefix/backup`). `Stage.includes`,
+`StageSuggestion` + `stageSuggestions` collection, `BubbleMic.tsx`, `transcribeBlob`. Probe `stagesround-probe.mjs` (30).
+Guessed and listed for him: Drains placed after Piping; Thermostats renamed "Thermostats & Activation".
+
+## Where things stand (2026-10-21 — the trash can, and the worker guide)
 His asks: a PDF with screenshots for the workers in English and Russian; then "change the undo icon to a trash
 can icon" and make the guide much simpler — step 1 open the task, step 2 the trash can, step 3 press it, and
 say it deletes all the messages. Built: the own-task control is a trash can with "Delete" words; the guide is
@@ -1259,6 +1269,10 @@ Last commits, newest first (see `git log`):
   `npx vite --port 5173` and `VITE_DRIVE_API_KEY=test npx vite --port 5174`.
 
 ## The last reply the owner saw (so the next one continues it)
+**Newest (2026-10-21, stages round)**: six numbered items (Russian names, Drains, includes, not-on-the-list words,
+duplicates + the cause, the bubble mic); Rule; What I need from you (check Drains' place and the Thermostats name;
+recordings move + V14-Q still open); the link; the one-liner.
+
 **Newest (2026-10-21, trash can + guide)**: the trash can and the 3-step EN/RU PDF sent as a file; nothing needed.
 
 **Newest (2026-10-19, undo own task)**: one numbered item — the undo arrow on a task he opened himself,

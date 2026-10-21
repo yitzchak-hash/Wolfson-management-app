@@ -303,6 +303,12 @@ the job's own name) · addedwork-probe §5.
 | C-73 | 2026-10-19 | A scaling setting for the week chips in that widget | Done | pencil → "Week chip size" (`weekChipSize`) · weekribbon-probe §1b |
 | C-74 | 2026-10-19 | Add existing shows "ghost" — two tiles of one job are the same job; drop the word | Done | badge, icon, menu wording gone · pinsecond-probe §1, §4 |
 | C-75 | 2026-10-19 | Cards dragged onto the pin boards go behind them and don't pin (only Active jobs rows did) | Done | a carried tile draws above everything; a second tile pins (the job's own tile stays); hidden notebook squares never take a drop · pinsecond-probe §2–3 |
+| C-85 | 2026-10-21 | A tiny mic bottom-right of an open speech bubble in the studio; live transcribe, language detected | Done | stagesround-probe D (8/8) |
+| C-84 | 2026-10-21 | Remove the duplicate stages (Concealed Units Installed, Inline Fans Installed, Outdoor Units Installed …) | Done | cloud fix (4 retired, marks moved) + first-run seed guard |
+| C-83 | 2026-10-21 | "I don't see what I did on any bubble" at the end of the list → one or two words to the office → applied to a stage in the Stages screen as small bubbles | Done | stagesround-probe B+C |
+| C-82 | 2026-10-21 | Each stage says what it includes (Piping: soldering, connections, pipes), updated by the office | Done | stagesround-probe A+C |
+| C-81 | 2026-10-21 | Add a Drains (ניקוזים) stage | Done | cloud: order 4, after Piping |
+| C-80 | 2026-10-21 | On the Russian tablet only Drilling was in Russian; every stage needs Russian and Hebrew | Done | cloud names; stagesround-probe A |
 | C-79 | 2026-10-21 | The undo icon becomes a trash can; a much simpler 3-step guide (open the task, press the trash can, press Delete; it deletes all messages and files) | Done | undoown-probe 18/18, docs/guides/worker-delete-task-en-ru.pdf |
 | C-78 | 2026-10-21 | A simple PDF with screenshots of the worker's undo, in English and Russian | Done | replaced by C-79's simpler guide |
 | C-77 | 2026-10-19 | Let contractors delete / undo a task they opened themselves ("I work here", "I did work here") by mistake | Done | undo arrow on any task he created, no permission; stages back to before he started; office tasks still need the switches · undoown-probe 17/17, closewhen re-encoded |

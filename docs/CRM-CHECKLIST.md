@@ -276,4 +276,9 @@ Legend: ☑ shipped · ☐ decided, not built · ◐ built in part · ✎ needs 
 - ☑ A job's second tile carries no "ghost" word; Add existing and the job menu say "another tile of the same job" (2026-10-19)
 - ☑ A tile carried across the board is drawn over every widget; a job's second tile pins onto a pin board too (2026-10-19)
 - ☑ Job Completed / Ready to start decided by name, not list order; every stage done reads Job Completed; "Mark the whole job as" (2026-10-19)
+- ☑ Every stage named in English, Hebrew and Russian; the duplicate "… Installed" stages retired and the order restored; a global collection is never re-seeded from a device (2026-10-21)
+- ☑ Drains stage after Piping (2026-10-21)
+- ☑ A stage lists what it includes; the worker sees the words under the stage in his language (2026-10-21)
+- ☑ "I don't see what I did here" — a worker's few words to the office, filed under a stage in Settings → Stages (2026-10-21)
+- ☑ The plan studio's speech bubble has a mic that writes the words in as you talk, any language (2026-10-21)
 - ☑ A worker undoes a task he opened himself ("I'm going to work here" / "I did work here" / his own task) with no permission (a trash can, "Delete"); the apartment's stages go back to how they were before he started (2026-10-19, icon 2026-10-21); worker guide PDF in EN + RU

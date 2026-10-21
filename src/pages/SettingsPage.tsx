@@ -579,6 +579,89 @@ function TipusSettings({ onToast }: { onToast: (msg: string) => void }) {
 }
 const EMPTY_TIPUSIM: string[] = [];
 
+/**
+ * What a stage INCLUDES (owner, 2026-10-21): small words under the stage on
+ * the worker's pick list — "Piping includes soldering, connections, pipes" —
+ * kept up by the office day by day. Each chip's × takes it off; Enter or
+ * leaving the box adds what was typed.
+ */
+function StageIncludes({ stage, onChange }: { stage: Stage; onChange: (next: string[] | undefined) => void }) {
+  const s = useStore(state => state.mainUiStrings);
+  const [draft, setDraft] = useState('');
+  const list = stage.includes ?? [];
+  const add = () => {
+    const v = draft.trim();
+    setDraft('');
+    if (!v || list.some(w => w.toLowerCase() === v.toLowerCase())) return;
+    onChange([...list, v]);
+  };
+  return (
+    <div data-stage-includes={stage.id} className="flex flex-wrap items-center gap-1.5 px-4 pb-2.5 -mt-1">
+      <Tooltip text={s.stageIncludesHint}>
+        <span className="text-[11px] font-bold uppercase tracking-wide text-gray-400">{s.stageIncludesLabel}</span>
+      </Tooltip>
+      {list.map(w => (
+        <span key={w} data-stage-include-chip={w}
+          className="flex items-center gap-1 pl-2 pr-1 py-0.5 rounded-full text-[12px] font-semibold"
+          style={{ backgroundColor: `${stage.color}22`, color: '#374151' }}>
+          <span dir="auto">{w}</span>
+          <button type="button" data-stage-include-remove={w} aria-label={`Remove ${w}`}
+            onClick={() => { const next = list.filter(x => x !== w); onChange(next.length ? next : undefined); }}
+            className="w-4 h-4 rounded-full flex items-center justify-center text-gray-500 hover:bg-white/70"><X size={10} /></button>
+        </span>
+      ))}
+      <input data-stage-include-add value={draft} data-enter-own
+        onChange={e => setDraft(e.target.value)}
+        onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); add(); } }}
+        onBlur={add}
+        placeholder={s.stageIncludesAdd} dir="auto"
+        className="w-32 border border-dashed border-gray-300 rounded-full px-2.5 py-0.5 text-[12px] bg-white focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/20" />
+    </div>
+  );
+}
+
+/**
+ * Words the workers sent from "I don't see what I did here" — each one filed
+ * under a stage (it becomes one of that stage's "Includes" words) or put aside.
+ */
+function WorkerWordsCard({ stages, isGeneral }: { stages: Stage[]; isGeneral: boolean }) {
+  const s = useStore(state => state.mainUiStrings);
+  const all = useStore(state => state.stageSuggestions);
+  const resolve = useStore(state => state.resolveStageSuggestion);
+  const me = useStore(state => state.currentUser);
+  const contractors = useStore(state => state.contractors);
+  const open = all.filter(x => x.status === 'open' && (isGeneral ? x.projectId === 'general' : x.projectId !== 'general'));
+  const work = stages.filter(st => st.active && (st.kind ?? 'work') === 'work');
+  if (!open.length) return null;
+  return (
+    <div data-worker-words className="mb-5 rounded-xl border-2 p-3.5" style={{ borderColor: '#fcd34d', backgroundColor: '#fffbeb' }}>
+      <p className="text-sm font-bold text-amber-900">{s.workerWordsTitle} · {open.length}</p>
+      <p className="text-xs text-amber-800/80 mb-2.5">{s.workerWordsHint}</p>
+      <div className="space-y-2">
+        {open.map(sg => {
+          const who = contractors.find(c => c.id === sg.contractorId)?.name ?? sg.by;
+          return (
+            <div key={sg.id} data-worker-word={sg.id} className="flex flex-wrap items-center gap-2 bg-white rounded-lg border border-amber-200 px-3 py-2">
+              <span className="font-bold text-gray-800 text-[15px]" dir="auto">“{sg.text}”</span>
+              <span className="text-[11px] text-gray-400 flex-1 min-w-[120px]">
+                {s.workerWordsFrom.replace('{who}', who).replace('{when}', format(new Date(sg.at), 'd MMM HH:mm'))}
+              </span>
+              <select data-worker-word-stage defaultValue=""
+                onChange={e => { if (e.target.value) resolve(sg.id, { stageId: e.target.value }, me?.name ?? 'Office'); }}
+                className="border border-gray-300 rounded-lg px-2 py-1 text-xs bg-white">
+                <option value="">{s.workerWordsPick}</option>
+                {work.map(st => <option key={st.id} value={st.id}>{getStageName(st, s.isRtl)}</option>)}
+              </select>
+              <button data-worker-word-dismiss onClick={() => resolve(sg.id, 'dismiss', me?.name ?? 'Office')}
+                className="text-xs text-gray-500 underline">{s.workerWordsDismiss}</button>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function StageSettings({ stages, updateStage, addStage, deleteStage, onToast, currentProjectId }: {
   stages: Stage[]; updateStage: (id: string, c: Partial<Stage>) => void;
   addStage: (s: Stage) => void; deleteStage: (id: string) => void; onToast: (msg: string) => void;
@@ -719,6 +802,7 @@ function StageSettings({ stages, updateStage, addStage, deleteStage, onToast, cu
 
   return (
     <div>
+      <WorkerWordsCard stages={projectStages} isGeneral={isGeneral} />
       <div className="space-y-2 mb-6">
         {projectStages.map((stage, i) => {
           const edit = getEdit(stage.id);
@@ -856,6 +940,9 @@ function StageSettings({ stages, updateStage, addStage, deleteStage, onToast, cu
                     className="p-2 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg"><Trash2 size={16} /></button>
                 </Tooltip>
               </div>
+              {(stage.kind ?? 'work') === 'work' && (
+                <StageIncludes stage={stage} onChange={next => commit(stage, { includes: next })} />
+              )}
               {isExpanded && (
                 <div className="px-4 pb-4 border-t border-gray-100 pt-3 bg-gray-50">
                   <p className="text-xs font-medium text-gray-500 mb-2">{s.pickColor}</p>

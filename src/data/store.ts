@@ -7,7 +7,7 @@ import type { BoardSides, Side } from './undoBoard';
 import { describeUndo, BOOKKEEPING } from './undoWords';
 import type { UndoDiff, UndoWorld } from './undoWords';
 import { create } from 'zustand';
-import { Apartment, CanvasElement, ActivityLog, Project, Stage, StageNote, StageNoteEntry, StageNoteAttachment, StageNoteVersion, GeneralNoteVersion, User, Building, Contractor, ContractorAssignment, ContractorNote, ContractorPhoto, BackupSnapshot, DataSummary, OfficeNoteFile, BackupFrequency, DriveExportFrequency, BackupLogEntry, ContractorUiStrings, DEFAULT_CONTRACTOR_UI_STRINGS, MainUiStrings, DEFAULT_MAIN_UI_STRINGS, HEBREW_MAIN_UI_STRINGS, BoardSetting, BoardSettingKey, BoardLayout, PlanPin, PlanAnnotation, BoardView, Employee, TimePunch, TimeClockSettings, WorkerLevel, FocusIntent, StageMark } from '../types';
+import { Apartment, CanvasElement, ActivityLog, Project, Stage, StageNote, StageNoteEntry, StageNoteAttachment, StageNoteVersion, GeneralNoteVersion, User, Building, Contractor, ContractorAssignment, ContractorNote, ContractorPhoto, BackupSnapshot, DataSummary, OfficeNoteFile, BackupFrequency, DriveExportFrequency, BackupLogEntry, ContractorUiStrings, DEFAULT_CONTRACTOR_UI_STRINGS, MainUiStrings, DEFAULT_MAIN_UI_STRINGS, HEBREW_MAIN_UI_STRINGS, BoardSetting, BoardSettingKey, BoardLayout, PlanPin, PlanAnnotation, BoardView, Employee, TimePunch, TimeClockSettings, WorkerLevel, StageSuggestion, FocusIntent, StageMark } from '../types';
 import { ReportDef } from './reportModel';
 
 // Always merge stored mainUiStrings ON TOP of the fresh preset so code-added keys
@@ -940,6 +940,11 @@ interface AppState {
    * of person, not a kind of person on one site.
    */
   workerLevels: WorkerLevel[];
+  /** Workers' "not on the list" words, waiting for the office (global, bare). */
+  stageSuggestions: StageSuggestion[];
+  addStageSuggestion: (s: Omit<StageSuggestion, 'id' | 'at' | 'status'>) => void;
+  /** Files the words under a stage as an `includes` word, or puts them aside. */
+  resolveStageSuggestion: (id: string, choice: { stageId: string } | 'dismiss', byName: string) => void;
   addWorkerLevel: (l: Omit<WorkerLevel, 'id'>) => WorkerLevel;
   updateWorkerLevel: (id: string, changes: Partial<WorkerLevel>) => void;
   deleteWorkerLevel: (id: string) => void;
@@ -1374,6 +1379,7 @@ export const useStore = create<AppState>((set, get) => ({
   activityLogs: (stored?.activityLogs as ActivityLog[] | null) ?? [],
   contractors: (stored?.contractors as Contractor[] | null) ?? [],
   workerLevels: (stored?.workerLevels as WorkerLevel[] | null) ?? DEFAULT_WORKER_LEVELS,
+  stageSuggestions: (stored?.stageSuggestions as StageSuggestion[] | null) ?? [],
   employees: (stored?.employees as Employee[] | null) ?? [],
   timePunches: (stored?.timePunches as TimePunch[] | null) ?? [],
   timeClock: { ...DEFAULT_TIME_CLOCK, ...((stored?.timeClock as Partial<TimeClockSettings> | null) ?? {}) },
@@ -1455,6 +1461,7 @@ export const useStore = create<AppState>((set, get) => ({
       timePunches: state.timePunches,
       timeClock: state.timeClock,
       workerLevels: state.workerLevels,
+      stageSuggestions: state.stageSuggestions,
       autoBackup: state.autoBackup,
       backupFrequency: state.backupFrequency,
       backupDriveFolderLink: state.backupDriveFolderLink,
@@ -2769,6 +2776,37 @@ export const useStore = create<AppState>((set, get) => ({
     // not persisted — session-only
   },
 
+  addStageSuggestion: (fields) => {
+    const text = fields.text.trim().split(/\s+/).slice(0, 4).join(' ').slice(0, 40);
+    if (!text) return;
+    const sug: StageSuggestion = { ...fields, text, id: 'sg-' + generateId(), at: new Date().toISOString(), status: 'open' };
+    set(state => ({ stageSuggestions: [sug, ...state.stageSuggestions] }));
+    persist(get);
+    fsSet('stageSuggestions', sug.id, sug);
+  },
+
+  resolveStageSuggestion: (id, choice, byName) => {
+    const sug = get().stageSuggestions.find(x => x.id === id);
+    if (!sug) return;
+    const doneAt = new Date().toISOString();
+    const next: StageSuggestion = choice === 'dismiss'
+      ? { ...sug, status: 'dismissed', doneBy: byName, doneAt }
+      : { ...sug, status: 'applied', stageId: choice.stageId, doneBy: byName, doneAt };
+    trackUndo({ weight: 'content', label: 'Filed a worker\'s words',
+      explain: choice === 'dismiss' ? `Put aside "${sug.text}".` : `Added "${sug.text}" to a stage's list.` }, () => {
+      if (choice !== 'dismiss') {
+        const st = get().stages.find(x => x.id === choice.stageId);
+        if (st) {
+          const have = st.includes ?? [];
+          if (!have.some(w => w.toLowerCase() === sug.text.toLowerCase())) get().updateStage(st.id, { includes: [...have, sug.text] });
+        }
+      }
+      set(state => ({ stageSuggestions: state.stageSuggestions.map(x => (x.id === id ? next : x)) }));
+      persist(get);
+      fsSet('stageSuggestions', id, next);
+    });
+  },
+
   // ─── Contractor actions ────────────────────────────────────────────────────
   addWorkerLevel: (fields) => {
     const l: WorkerLevel = { ...fields, id: 'lvl-' + generateId() };
@@ -3431,6 +3469,7 @@ export const useStore = create<AppState>((set, get) => ({
       timePunches: state.timePunches,
       timeClock: state.timeClock,
       workerLevels: state.workerLevels,
+      stageSuggestions: state.stageSuggestions,
       contractorAssignments: state.contractorAssignments,
       contractorNotes: state.contractorNotes,
       contractorPhotos: state.contractorPhotos,
@@ -3491,6 +3530,7 @@ export const useStore = create<AppState>((set, get) => ({
         timePunches: data.timePunches ?? state.timePunches,
         timeClock: { ...DEFAULT_TIME_CLOCK, ...(data.timeClock ?? state.timeClock) },
         workerLevels: data.workerLevels ?? state.workerLevels,
+        stageSuggestions: data.stageSuggestions ?? state.stageSuggestions,
         contractorAssignments: data.contractorAssignments ?? [],
         contractorNotes: data.contractorNotes ?? [],
         contractorPhotos: data.contractorPhotos ?? [],
@@ -3904,6 +3944,10 @@ export const useStore = create<AppState>((set, get) => ({
       lean ? none() : G('timePunches', (docs) => {
         if (docs.length > 0) { set({ timePunches: docs as unknown as TimePunch[] }); persist(get); }
       }),
+      G('stageSuggestions', (docs) => {
+        set({ stageSuggestions: (docs as unknown as StageSuggestion[]).sort((a, b) => (b.at > a.at ? 1 : -1)) });
+        persist(get);
+      }),
       G('workerLevels', (docs) => {
         if (docs.length > 0) { set({ workerLevels: docs as unknown as WorkerLevel[] }); persist(get); }
       }),
@@ -4130,16 +4174,22 @@ export const useStore = create<AppState>((set, get) => ({
         fsBatchSet(col('canvasElements'), missingEls.map(e => ({ id: e.id, data: e })));
       }
     } else {
-      // First run — push everything from localStorage to Firestore
+      // First run of THIS WORKSPACE — push its records up. The GLOBAL
+      // collections (stages, users, workers, levels, the time clock, the app
+      // settings) are shared by every workspace and are pushed only when the
+      // cloud holds none of them: an empty new workspace once pushed a device's
+      // built-in stage list over the office's real one (2026-10-18) and
+      // brought four retired stages back as duplicates.
       const state = get();
+      const appDocThere = fbSettings.some(s => (s as Record<string, unknown>).id === 'app');
       await Promise.all([
         fsBatchSet(col('apartments'),  state.apartments.filter(a => ownsRecord(pid, a, state.buildings)).map(a => ({ id: a.id, data: a }))),
-        fsBatchSet('stages',           state.stages.map(s => ({ id: s.id, data: s }))),
-        fsBatchSet('users',            state.users.map(u => ({ id: u.id, data: u }))),
+        fbStages.length === 0 ? fsBatchSet('stages', state.stages.map(s => ({ id: s.id, data: s }))) : Promise.resolve(),
+        fbUsers.length === 0 ? fsBatchSet('users', state.users.map(u => ({ id: u.id, data: u }))) : Promise.resolve(),
         state.stageNotes.length > 0
           ? fsBatchSet(col('stageNotes'), state.stageNotes.map(n => ({ id: n.id, data: n })))
           : Promise.resolve(),
-        state.contractors.length > 0
+        state.contractors.length > 0 && fbContractors.length === 0
           ? fsBatchSet('contractors', state.contractors.map(c => ({ id: c.id, data: c })))
           : Promise.resolve(),
         state.contractorAssignments.length > 0
@@ -4166,14 +4216,14 @@ export const useStore = create<AppState>((set, get) => ({
         state.planAnnotations.length > 0
           ? fsBatchSet(col('planAnnotations'), state.planAnnotations.map(a => ({ id: a.id, data: a })))
           : Promise.resolve(),
-        state.employees.length > 0
+        state.employees.length > 0 && fbEmployees.length === 0
           ? fsBatchSet('employees', state.employees.map(e => ({ id: e.id, data: e })))
           : Promise.resolve(),
-        state.timePunches.length > 0
+        state.timePunches.length > 0 && fbPunches.length === 0
           ? fsBatchSet('timePunches', state.timePunches.map(pch => ({ id: pch.id, data: pch })))
           : Promise.resolve(),
-        fsBatchSet('workerLevels', state.workerLevels.map(l => ({ id: l.id, data: l }))),
-        fsSet('settings', 'app', {
+        fbLevels.length === 0 ? fsBatchSet('workerLevels', state.workerLevels.map(l => ({ id: l.id, data: l }))) : Promise.resolve(),
+        appDocThere ? Promise.resolve() : fsSet('settings', 'app', {
           autoBackup:            state.autoBackup,
           backupFrequency:       state.backupFrequency,
           backupDriveFolderLink: state.backupDriveFolderLink,
@@ -4333,6 +4383,7 @@ function persistNow(get: () => AppState) {
     timePunches: state.timePunches,
     timeClock: state.timeClock,
     workerLevels: state.workerLevels,
+    stageSuggestions: state.stageSuggestions,
     contractorAssignments: state.contractorAssignments,
     contractorNotes: state.contractorNotes,
     contractorPhotos: photosLean,

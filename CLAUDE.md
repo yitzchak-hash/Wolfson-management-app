@@ -10569,6 +10569,29 @@ When a deploy check never finds the new text, read that status before anything e
   `data-marker-role`).
 - Harnesses: `scratchpad/pinsecond-probe.mjs` (13) · `scratchpad/markerrole-test.mjs` (offline, 10).
 
+## Stages: languages, includes, workers' words, and a global list never re-seeded (2026-10-21)
+- **The first-run seed never pushes a GLOBAL collection the cloud already has.** `startFirebaseSync`'s "first run"
+  branch fires for a workspace whose own collections are empty; it pushed the device's whole local `stages` (often
+  `DEFAULT_STAGES`) over the shared list on 18 Oct, which brought back s2/s3/s5/s6 as duplicates and reset the order.
+  Stages, users, contractors, employees, punches, levels and `settings/app` are pushed only when `fbX.length === 0`.
+- **The live global list (Wolfson + Netiv)**: Sold/Start 1 · Drilling 2 · Piping 3 · Drains 4 (`s-drains`) ·
+  Concealed Units 5 · Fans 6 · Wall Units 7 · Outdoor Units 8 · Registers 9 · Access Panels 10 · Thermostats &
+  Activation 11; s1/s4/s7 and s2/s3/s5/s6 retired (orders 21–27). Every one has `nameHe` + `nameRu`.
+- **`Stage.includes?: string[]`** — what a stage covers, in the office's words; chips under the stage on the
+  worker's "What are you doing here today?" list (`data-work-stage-includes`, through `TrText` into his language);
+  edited by `StageIncludes` in Settings → Stages (`data-stage-includes`, `-include-add`, `-include-remove`).
+- **`StageSuggestion`** (global bare `stageSuggestions`, persist + export + import): the worker's
+  `data-not-listed` → one to four words → `addStageSuggestion`; `WorkerWordsCard` at the top of Settings → Stages
+  (`data-worker-word`, `-stage` select, `-dismiss`) → `resolveStageSuggestion` adds the words to the stage's
+  `includes` (one undo step). Shown per list: Job Board words on the Job Board's Stages, the rest on the global one.
+- **`BubbleMic`** (`src/components/plans/BubbleMic.tsx`): bottom-right of an open speech bubble
+  (`data-bubble-mic`, `data-state`); `transcribeBlob` sends the recording so far every 2.5 s and once more on stop;
+  `textDraft.micBase` keeps what was typed before. Mousedown is prevented so the balloon's textarea keeps focus
+  (its blur commits). The `transcribe` branch now names a bare filename by its mime (`memo` → `memo.webm`) — the
+  transcriber reads the format off the extension. A component's "alive" ref must be set TRUE in the effect body,
+  not only false in the cleanup — StrictMode's second mount otherwise runs dead.
+Harness: `scratchpad/stagesround-probe.mjs` (30; A–C on 5173, D on keyed 5174 with a fake microphone).
+
 ## A worker undoes a task he opened himself (2026-10-19)
 Owner: "add an option for them to undo that if they did it by mistake." Any task with `createdBy` = the
 worker ("I'm going to work here", a closed "I did work here", one he gave himself) wears an undo arrow on

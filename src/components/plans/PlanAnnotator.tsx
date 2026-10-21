@@ -1,3 +1,4 @@
+import { BubbleMic } from './BubbleMic';
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
@@ -1062,7 +1063,7 @@ function PlanEditor({
   const [penSource, setPenSource] = useState<string>('');
 
   const [saving, setSaving] = useState(false);
-  const [textDraft, setTextDraft] = useState<{ nx: number; ny: number; value: string; forId?: string } | null>(null);
+  const [textDraft, setTextDraft] = useState<{ nx: number; ny: number; value: string; forId?: string; /** What was typed before the mic started — its words go after it. */ micBase?: string } | null>(null);
 
   /** Where the pointer is, so the nib can be drawn at its real size under it. */
   const [nibAt, setNibAt] = useState<{ x: number; y: number } | null>(null);
@@ -4760,6 +4761,16 @@ function PlanEditor({
                           lineHeight: LINE,
                         } : { borderColor: color, color, minWidth: 180 }}
                       />
+                      {/* Talk into the balloon: the words fill it as you speak. */}
+                      {inBubble && (
+                        <BubbleMic color={host!.color}
+                          onWords={(text, final) => setTextDraft(prev => {
+                            if (!prev) return prev;
+                            const base = prev.micBase ?? prev.value;
+                            const value = base ? `${base.trimEnd()} ${text}` : text;
+                            return final ? { ...prev, value, micBase: undefined } : { ...prev, micBase: base, value };
+                          })} />
+                      )}
                     </div>
                   );
                 })()}

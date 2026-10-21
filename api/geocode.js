@@ -94,7 +94,15 @@ async function transcribe(req, res, body) {
     else if (body.audio) {
       const bytes = Buffer.from(String(body.audio), 'base64');
       if (bytes.length > TS_MAX_BYTES) return res.status(413).json({ error: 'recording too large' });
-      audio = { bytes, mime: String(body.mime || 'audio/webm'), name: String(body.filename || 'memo.webm') };
+      const mime = String(body.mime || 'audio/webm');
+      // The transcriber reads the format off the file's EXTENSION, and the
+      // client sends a bare name ("memo") — give it the one its type says.
+      let name = String(body.filename || 'memo');
+      if (!/\.[a-z0-9]{2,4}$/i.test(name)) {
+        const sub = (mime.split('/')[1] || 'webm').split(';')[0];
+        name += '.' + ({ mpeg: 'mp3', 'x-m4a': 'm4a', mp4: 'mp4', ogg: 'ogg', wav: 'wav', 'x-wav': 'wav', webm: 'webm' }[sub] || 'webm');
+      }
+      audio = { bytes, mime, name };
     } else return res.status(400).json({ error: 'Nothing to transcribe' });
 
     const form = new FormData();

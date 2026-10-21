@@ -70,6 +70,7 @@ asks for it. ☑ done · ☐ next · ✎ awaiting Yitzchak's word. (Standing ord
   Active jobs counts notebook moves, wears icons, and fills its width with a Tile size slider.
 - ☑ "More Than the Task Said" BUILT (2026-10-18, "all starred, build it"): the close asks "Did you finish doing <stages>?" → "anything else today?" → "Is it one of these?" (open stages, "Not on this list…" first); part of it needs words + one picture (setting); 1 picture + 1 video = 3; not-on-the-list work glows on the notebook for whoever answers that kind of question (Settings → Users) and asks in plain English; stages carry a trade and a cross-trade drop offers a new task.
 - ☑ 2026-10-12 ("all stars"): ONE calendar drawn like the notebook (tiles, bars, bundles, + opens the notebook's form, drag to move) and time off for anyone on the notebook (band, booked-task ask, task-form warning, his phone in his language).
+- ☑ 2026-10-21: stages in every language, the duplicates retired (and the seed that caused them closed), Drains, "includes" words, "I don't see what I did here", the speech bubble's mic.
 - ☐ Watch on production: the foreign photo listener (no Firebase in the
   container), the plan pane's Windows scrollbar re-fit, the Leads folder
   discovery, TikTok's player protocol end to end.

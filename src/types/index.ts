@@ -511,6 +511,14 @@ export interface Stage {
   order: number;
   active: boolean;
   description?: string; // kept for data compat; no longer shown in UI
+  /**
+   * What this stage INCLUDES, in the office's own words ("Soldering",
+   * "Connections") — small bubbles under the stage on the worker's pick list,
+   * so a worker who did one small job knows which stage it belongs to. The
+   * office adds to it daily, often straight from a worker's "not on the list"
+   * words (StageSuggestion). Shown translated into the reader's language.
+   */
+  includes?: string[];
   projectId?: string;   // if set, stage only appears in this project (e.g. 'general')
   /**
    * THE SET MODEL (owner's "bubbles" plan, built 2026-09-22 — on screen the
@@ -1261,6 +1269,26 @@ export type WorkerPermission =
  * Global, like users and contractors — a level describes a kind of person, not
  * a kind of person on one site.
  */
+/**
+ * A worker's "I don't see what I did on any stage" — one or two words sent from
+ * the "What are you doing here today?" list to the office, which files them
+ * under a stage as an `includes` word (Settings → Stages). Global and bare in
+ * Firestore, like the stages themselves.
+ */
+export interface StageSuggestion {
+  id: string;
+  text: string;
+  projectId: string;
+  apartmentId?: string;
+  contractorId?: string;
+  by: string;
+  at: string;
+  status: 'open' | 'applied' | 'dismissed';
+  stageId?: string;
+  doneBy?: string;
+  doneAt?: string;
+}
+
 export interface WorkerLevel {
   id: string;
   name: string;
@@ -3078,6 +3106,14 @@ export interface MainUiStrings {
   sitePhotosTitle: string;
   sitePhotosEmpty: string;
   stageAutoSaved: string;
+  stageIncludesLabel: string;
+  stageIncludesAdd: string;
+  stageIncludesHint: string;
+  workerWordsTitle: string;
+  workerWordsHint: string;
+  workerWordsPick: string;
+  workerWordsDismiss: string;
+  workerWordsFrom: string;
   importWindowOpen: string;
   importWindowTitle: string;
   importEarlier: string;
@@ -4049,6 +4085,14 @@ export const DEFAULT_MAIN_UI_STRINGS: MainUiStrings = {
   sitePhotosTitle: 'Live from site',
   sitePhotosEmpty: 'No photos yet',
   stageAutoSaved: 'Saved',
+  stageIncludesLabel: 'Includes',
+  stageIncludesAdd: 'Add a word…',
+  stageIncludesHint: 'The small jobs this stage covers — the worker sees them under the stage, in his own language.',
+  workerWordsTitle: 'Words from the workers',
+  workerWordsHint: 'A worker didn\'t see what he did on any stage. Pick the stage it belongs to and it is added to that stage\'s "Includes".',
+  workerWordsPick: 'Add to…',
+  workerWordsDismiss: 'Put aside',
+  workerWordsFrom: '{who} · {when}',
   importWindowOpen: 'See the jobs',
   importWindowTitle: 'Import from {date}',
   importEarlier: 'an earlier import',
@@ -5000,6 +5044,14 @@ export const HEBREW_MAIN_UI_STRINGS: MainUiStrings = {
   sitePhotosTitle: 'בזמן אמת מהשטח',
   sitePhotosEmpty: 'עדיין אין תמונות',
   stageAutoSaved: 'נשמר',
+  stageIncludesLabel: 'כולל',
+  stageIncludesAdd: 'הוסף מילה…',
+  stageIncludesHint: 'העבודות הקטנות שהשלב הזה כולל — העובד רואה אותן מתחת לשלב, בשפה שלו.',
+  workerWordsTitle: 'מילים מהעובדים',
+  workerWordsHint: 'עובד לא מצא את מה שעשה באף שלב. בחר לאיזה שלב זה שייך וזה יתווסף ל"כולל" של השלב.',
+  workerWordsPick: 'הוסף ל…',
+  workerWordsDismiss: 'הנח בצד',
+  workerWordsFrom: '{who} · {when}',
   importWindowOpen: 'הצג את העבודות',
   importWindowTitle: 'ייבוא מ־{date}',
   importEarlier: 'ייבוא קודם',

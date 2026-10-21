@@ -811,6 +811,13 @@ export function ContractorPortal() {
     partOf?: string | null;
   }>(null);
   /**
+   * "I don't see what I did on any stage" (owner, 2026-10-21): one or two
+   * words to the office, which files them under a stage as an "includes"
+   * word. Reset whenever the work sheet moves to another apartment.
+   */
+  const [notListed, setNotListed] = useState<{ open: boolean; text: string; sent?: string }>({ open: false, text: '' });
+  useEffect(() => { setNotListed({ open: false, text: '' }); }, [workHere?.aptId]);
+  /**
    * The closing screen's two questions for a stage report (owner, 2026-09-16):
    * WHICH stages he worked on (several), and whether he FINISHED them all.
    * An ordinary task is never asked a stage — it moves to the stage chosen
@@ -4876,7 +4883,19 @@ plansPdfFileId && (
                               style={{ border: `2.5px solid ${st.color}`, backgroundColor: on ? st.color : '#fff' }}>
                               {on && <span className="w-2 h-2 rounded-full bg-white" />}
                             </span>
-                            <span className="flex-1 text-[15px] font-bold text-gray-800">{stageNameIn(st, readLang)}</span>
+                            <span className="flex-1 min-w-0">
+                              <span className="block text-[15px] font-bold text-gray-800">{stageNameIn(st, readLang)}</span>
+                              {!!st.includes?.length && (
+                                <span data-work-stage-includes className="flex flex-wrap gap-1 mt-1">
+                                  {st.includes.map(word => (
+                                    <span key={word} className="px-1.5 py-[1px] rounded-full text-[11px] font-semibold"
+                                      style={{ backgroundColor: `${st.color}22`, color: '#374151' }}>
+                                      <TrText text={word} to={readLang} />
+                                    </span>
+                                  ))}
+                                </span>
+                              )}
+                            </span>
                             {state === 'pending' && <span className="text-[10px] font-bold uppercase" style={{ color: '#f97316' }}>{w('half done', 'חצי גמור', 'наполовину')}</span>}
                             {state === 'doing' && <span className="text-[10px] font-bold uppercase" style={{ color: st.color }}>{w('started', 'התחיל', 'начато')}</span>}
                           </button>
@@ -4886,6 +4905,50 @@ plansPdfFileId && (
                         <p className="text-center text-gray-400" style={{ fontSize: 13 }}>
                           {w('Nothing is left to do here.', 'לא נשאר כאן מה לעשות.', 'Здесь больше нечего делать.')}
                         </p>
+                      )}
+                      {/* NOT ON THE LIST — one or two words to the office, which
+                          files them under a stage (Settings → Stages). */}
+                      {notListed.sent ? (
+                        <p data-not-listed-sent className="text-center text-[13px] font-semibold rounded-xl px-3 py-2.5"
+                          style={{ backgroundColor: '#ecfdf5', color: '#047857' }}>
+                          {w('Sent to the office:', 'נשלח למשרד:', 'Отправлено в офис:')} “{notListed.sent}”
+                        </p>
+                      ) : !notListed.open ? (
+                        <button data-not-listed
+                          onClick={() => setNotListed({ open: true, text: '' })}
+                          className="w-full rounded-xl px-3.5 py-3 border-2 border-dashed text-[14px] font-bold text-gray-600"
+                          style={{ borderColor: '#cbd5e1', backgroundColor: '#f8fafc' }}>
+                          {w("I don't see what I did here", 'אני לא רואה פה מה שעשיתי', 'Я не вижу здесь того, что я сделал')}
+                        </button>
+                      ) : (
+                        <div data-not-listed-box className="rounded-xl border-2 p-3 space-y-2" style={{ borderColor: '#cbd5e1', backgroundColor: '#f8fafc' }}>
+                          <p className="text-[13px] font-bold text-gray-700">
+                            {w('Write what you did in one or two words — the office will add it to the right stage.',
+                              'כתוב מה עשית במילה או שתיים — המשרד יוסיף את זה לשלב הנכון.',
+                              'Напишите, что вы сделали, одним-двумя словами — офис добавит это к нужному этапу.')}
+                          </p>
+                          <input data-not-listed-input autoFocus maxLength={40} value={notListed.text}
+                            onChange={e => setNotListed({ ...notListed, text: e.target.value.split(/\s+/).slice(0, 4).join(' ') })}
+                            className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-[15px]" dir="auto" />
+                          <div className="flex gap-2">
+                            <button data-not-listed-cancel onClick={() => setNotListed({ open: false, text: '' })}
+                              className="flex-1 py-2.5 rounded-lg text-sm font-bold text-gray-600 border border-gray-200 bg-white">
+                              {w('Cancel', 'ביטול', 'Отмена')}
+                            </button>
+                            <button data-not-listed-send disabled={!notListed.text.trim()}
+                              onClick={() => {
+                                const text = notListed.text.trim();
+                                if (!text) return;
+                                useStore.getState().addStageSuggestion({ text, projectId: currentProjectId,
+                                  apartmentId: apt.id, contractorId, by: contractor?.name ?? 'Worker' });
+                                setNotListed({ open: false, text: '', sent: text });
+                              }}
+                              className="flex-1 py-2.5 rounded-lg text-sm font-bold text-white disabled:opacity-40"
+                              style={{ backgroundColor: '#1e3a5f' }}>
+                              {w('Send to the office', 'שלח למשרד', 'Отправить в офис')}
+                            </button>
+                          </div>
+                        </div>
                       )}
                       {/* Start ASKS first (below) — it never starts on its own. */}
                       <button data-work-start disabled={!picks.length && list.length > 0}

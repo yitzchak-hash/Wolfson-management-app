@@ -137,3 +137,32 @@ export function useTranscript(src: string, stored?: string | null, onKnown?: (te
 
 /** Test seam. */
 export function __resetTranscription() { serverOff = false; refused.clear(); mem.clear(); loaded = false; }
+
+/**
+ * Words for a recording still in this tab — no cache, no stored memo. The
+ * plan studio's speech-bubble mic sends the recording so far every few
+ * seconds while you talk, so the words fill the bubble as you go
+ * (owner, 2026-10-21). The server is told no language: the model hears it.
+ */
+export async function transcribeBlob(blob: Blob): Promise<string | null> {
+  if (!API_KEY || serverOff || !blob.size) return null;
+  const audio = await new Promise<string>((res, rej) => {
+    const r = new FileReader();
+    r.onload = () => { const s = String(r.result); res(s.slice(s.indexOf(',') + 1)); };
+    r.onerror = () => rej(r.error);
+    r.readAsDataURL(blob);
+  });
+  try {
+    const resp = await fetch('/api/geocode', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-api-key': API_KEY },
+      body: JSON.stringify({ transcribe: { audio, mime: (blob.type || 'audio/webm').split(';')[0], filename: 'bubble' } }),
+    });
+    if (resp.status === 501 || resp.status === 401) { serverOff = true; return null; }
+    if (!resp.ok) return null;
+    const data = await resp.json() as { text?: string };
+    return (data.text ?? '').trim() || null;
+  } catch {
+    return null;
+  }
+}
