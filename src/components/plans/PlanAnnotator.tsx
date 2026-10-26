@@ -4072,7 +4072,7 @@ function PlanEditor({
         <svg data-version-link key={linkedVersion ?? 'none'}
           className="absolute inset-0 w-full h-full pointer-events-none" style={{ zIndex: 60 }}>
           <path d={vlink.d} pathLength={100} className="vlink-path" fill="none"
-            stroke="#4ade80" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" />
+            stroke="#4ade80" strokeWidth={2.75} strokeLinecap="round" strokeLinejoin="round" />
           <circle cx={vlink.x2} cy={vlink.y2} r={3.5} fill="#4ade80" className="vlink-dot" />
         </svg>
       )}

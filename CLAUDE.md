@@ -10643,7 +10643,7 @@ return also cancels any in-flight render) — the owner's page-2 drawing under "
   (`data-studio-page="prev|next"`, hidden on one-page plans).
 - The version string ends at the sheet's left edge 20% down, CLAMPED into the stage's rectangle —
   zoomed in, it lands on the workspace edge instead of running up over the toolbars. The wave's
-  amplitude is `min(11, len × 0.06)` and the stroke 1.5.
+  amplitude is `min(11, len × 0.06)` and the stroke 2.75 (owner: "this line should be bigger").
 - The `sent` chip reads **Saved** with `CloudCheck`; the button (`data-save-lock`) is a Plus reading
   "Save v{n} & start v{n+1}" (compact: "v{n+1}"), bigger, with a plain tooltip. drivesave-probe
   re-encoded to the label.

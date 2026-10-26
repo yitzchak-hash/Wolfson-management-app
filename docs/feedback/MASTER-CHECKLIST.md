@@ -312,6 +312,7 @@ the job's own name) · addedwork-probe §5.
 | C-92 | 2026-10-26 | Arrows left and right in the studio to move between pages; bigger margin | Done | `data-studio-page` · studio53-probe |
 | C-93 | 2026-10-26 | (shown) "Mark up this plan" tooltip stuck over the studio | Done | Tooltip hides on press / when the pointer leaves its trigger · round53-probe §4 |
 | C-94 | 2026-10-26 | (shown) page 2 drawn while the pager said 1 / 7 | Done | stale page renders dropped |
+| C-95 | 2026-10-26 | The green version string should be a bigger (thicker) line, the wave still small | Done | stroke 1.5 → 2.75 |
 | C-85 | 2026-10-21 | A tiny mic bottom-right of an open speech bubble in the studio; live transcribe, language detected | Done | stagesround-probe D (8/8) |
 | C-84 | 2026-10-21 | Remove the duplicate stages (Concealed Units Installed, Inline Fans Installed, Outdoor Units Installed …) | Done | cloud fix (4 retired, marks moved) + first-run seed guard |
 | C-83 | 2026-10-21 | "I don't see what I did on any bubble" at the end of the list → one or two words to the office → applied to a stage in the Stages screen as small bubbles | Done | stagesround-probe B+C |
