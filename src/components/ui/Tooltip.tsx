@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 
 interface TooltipProps {
@@ -18,6 +18,24 @@ interface TooltipProps {
 export function Tooltip({ text, children, side = 'top' }: TooltipProps) {
   const wrapRef = useRef<HTMLSpanElement>(null);
   const [at, setAt] = useState<{ x: number; y: number } | null>(null);
+
+  // A bubble must never outlive the pointer being on its trigger. A press
+  // that opens a full-screen panel (the drawer's "Mark up" → the studio)
+  // covers the trigger without the trigger ever seeing a mouseleave, and the
+  // bubble then sat over the studio for minutes. While shown, every pointer
+  // move asks whether the pointer is still really over the trigger.
+  useEffect(() => {
+    if (!at) return;
+    const check = (e: PointerEvent) => {
+      const el = wrapRef.current;
+      const over = document.elementFromPoint(e.clientX, e.clientY);
+      if (!el || !over || !el.contains(over)) setAt(null);
+    };
+    const hide = () => setAt(null);
+    window.addEventListener('pointermove', check, true);
+    window.addEventListener('scroll', hide, true);
+    return () => { window.removeEventListener('pointermove', check, true); window.removeEventListener('scroll', hide, true); };
+  }, [at]);
 
   if (!text) return <>{children}</>;
 
@@ -46,6 +64,7 @@ export function Tooltip({ text, children, side = 'top' }: TooltipProps) {
       onMouseLeave={() => setAt(null)}
       onFocus={show}
       onBlur={() => setAt(null)}
+      onPointerDown={() => setAt(null)}
     >
       {children}
       {at && createPortal(

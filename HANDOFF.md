@@ -64,7 +64,17 @@ with starred recommendations is published first; the owner says "approved" /
 "all yes" / answers by number; then it is built. Never build a redesign
 unasked.
 
-## Where things stand (2026-10-21, latest — stages: languages, duplicates, includes, the bubble mic)
+## Where things stand (2026-10-26, latest — recording 16: full screen, Active search, heavy plans, the studio's Save)
+His asks (video, `docs/feedback/2026-10-26-094647.md`): board full screen — menus don't pop up, and picking a
+TV should jump to it; a little search in Active jobs; heavy plans jump and don't load properly when zooming (pane
+and studio); space round the studio's sheet so the version string always connects, a smaller squiggle; a "saved"
+icon, Save as a plus reading "Save v2 & start v3", bigger; page arrows left and right in the studio. Shown, not
+said: a stuck "Mark up this plan" tooltip over the studio; page 2 drawn under "1 / 7"; the AI search failing once.
+All built (CLAUDE.md "the recording of 26 Oct 09:46"). Probes round53 (13) and studio53 (10) new; the plan and
+board regressions re-run green. Folder: 14 at the top, 15 + 16 in Not processed — all 16 done; moving still his
+(desktop session). Still waiting: V14-Q (old vs new stage names).
+
+## Where things stand (2026-10-21 — stages: languages, duplicates, includes, the bubble mic)
 His asks (Hebrew + English, with a photo of the Russian tablet): only Drilling was in Russian; add Drains; each stage
 should say what it includes (Piping: soldering, connections, pipes), updated daily; "I don't see what I did" at the end
 of the list sending a word or two to the office, applied to a stage in the Stages screen as small bubbles; remove the

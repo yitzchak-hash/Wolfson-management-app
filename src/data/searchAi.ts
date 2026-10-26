@@ -46,13 +46,26 @@ export async function aiSearchTerms(query: string, lang: 'en' | 'he' = 'en'): Pr
   if (!q || !API_KEY || serverOff) return null;
   const hit = mem.get(q) ?? readCache()[q];
   if (hit) { mem.set(q, hit); return hit; }
+  // One quiet second try: a cold server or a busy model answers the first
+  // press with an error now and then (seen in the 26 Oct recording), and the
+  // person should not have to press again to find out it works.
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const terms = await askOnce(q, query, lang);
+    if (terms === 'off') return null;
+    if (terms) return terms;
+    if (attempt === 0) await new Promise(res => setTimeout(res, 700));
+  }
+  return null;
+}
+
+async function askOnce(q: string, query: string, lang: 'en' | 'he'): Promise<string[] | 'off' | null> {
   try {
     const r = await fetch('/api/geocode', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-api-key': API_KEY },
       body: JSON.stringify({ searchAi: { q: query.trim(), lang } }),
     });
-    if (r.status === 501 || r.status === 401) { serverOff = true; return null; }
+    if (r.status === 501 || r.status === 401) { serverOff = true; return 'off'; }
     if (!r.ok) return null;
     const data = await r.json() as { terms?: unknown };
     const terms = (Array.isArray(data.terms) ? data.terms : [])

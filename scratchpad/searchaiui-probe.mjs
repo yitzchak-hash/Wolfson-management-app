@@ -72,7 +72,8 @@ async function run(status) {
 {
   const { page, ctx } = await run(502);
   await page.locator('[data-search-ai]').click();
-  await page.waitForTimeout(700);
+  // 26 Oct: one quiet second try ~0.7s after the first error, then the words.
+  await page.waitForTimeout(2200);
   check(await page.locator('[data-search-ai-failed]').count() === 1, 'a failed AI answer says so (2026-10-15: it used to reset silently)');
   check(await page.locator('[data-search-ai]').count() === 1, 'and the button stays, to try again');
   await ctx.close();

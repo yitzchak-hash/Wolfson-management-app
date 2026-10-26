@@ -10604,3 +10604,61 @@ that `reportTaskId` is dropped, one `task_deleted` line is written in the worker
 the same browser is not credited. Office tasks for him still need `deleteOwnTasks` + `deleteOfficeTasks`.
 Probe: `scratchpad/undoown-probe.mjs` (18). The worker guide is `docs/guides/worker-delete-task-en-ru.pdf`
 (three steps + one warning, EN then RU), rebuilt by `scratchpad/undoguide-cap.mjs` + `undoguide-pdf.mjs`.
+
+---
+
+# v2 — the recording of 26 Oct 09:46 (full screen, Active search, heavy plans, the studio's Save)
+
+## Board full screen is the DOCUMENT, with the board pinned
+`toggleFullscreen` in GeneralJobsPage full-screens `document.documentElement` (marking it with
+`board-full-wanted` first) and the `fullscreenchange` handler sets `html.board-full`, which pins
+`[data-board-page-root]` `position: fixed; inset: 0; z-index: 60` (index.css). Full-screening the
+page root itself drew ONLY that subtree, so every menu and dialog portalled to `<body>` — the TV
+menu, tooltips, the drawer's windows — was invisible in full screen ("the menu doesn't pop up").
+Other surfaces that full-screen their own element (the plan studio, the reel, the viewer) never set
+the wanted mark, so `board-full` stays off for them.
+
+## Picking a TV flies there
+`TvFrameLayer` takes `onAim(rect)` and reports the frame's rectangle once per pick (keyed on the
+TV's id + ratio); `aimAtTv` in the page centres it and steps the zoom down through `zoomSteps()`
+until the whole frame fits (90% × 80% of the viewport), clamping at the NEW zoom
+(`clampPanRef.current(p, z)`).
+
+## Active jobs has a search
+A magnifier (`data-active-search-toggle`) opens `data-active-search-input`; the list (and the count)
+narrows by `searchJobs` over the active jobs plus the who/what of each job's last touch. Escape
+clears it. Local state — a search is a look, not a setting.
+
+## Heavy plans: the size is read AFTER the drawing
+`renderPage` computed the canvases' CSS size from `scaleRef` BEFORE awaiting pdf.js and applied it
+after — a sheet that took seconds to draw put itself back to the zoom it had when the render began
+(the jumps). It is read after the await now. `renderMs` (ms per 16 MP, measured on each render)
+picks the next pixel budget: >1.5 s → 7 MP, >0.8 s → 10 MP, else 16 MP. And a render for a page no
+longer on screen is dropped (`pageNow` ref checked right after the await; the early "already drawn"
+return also cancels any in-flight render) — the owner's page-2 drawing under "1 / 7".
+
+## The studio's workspace, arrows, string and Save
+- `workspaceGutter` (`!embedded && !compact && !locked`): the stage carries `my-3 mx-11 rounded-lg`,
+  a faint ring and darker ground (`data-plan-workspace`), and two page arrows sit in the side gutters
+  (`data-studio-page="prev|next"`, hidden on one-page plans).
+- The version string ends at the sheet's left edge 20% down, CLAMPED into the stage's rectangle —
+  zoomed in, it lands on the workspace edge instead of running up over the toolbars. The wave's
+  amplitude is `min(11, len × 0.06)` and the stroke 1.5.
+- The `sent` chip reads **Saved** with `CloudCheck`; the button (`data-save-lock`) is a Plus reading
+  "Save v{n} & start v{n+1}" (compact: "v{n+1}"), bigger, with a plain tooltip. drivesave-probe
+  re-encoded to the label.
+
+## A tooltip never outlives its trigger
+`Tooltip` hides on pointerdown, on scroll, and on any pointer move whose `elementFromPoint` is no
+longer inside the trigger — a press that opens a full-screen panel covers the trigger with no
+mouseleave, and "Mark up this plan" sat over the studio for minutes.
+
+## AI search retries once
+`aiSearchTerms` → `askOnce` twice, 0.7 s apart, before reporting a failure (501/401 still stand down
+at once). searchaiui-probe waits for the retry.
+
+Harnesses: `round53-probe.mjs` (board: Active search, full screen + TV menu on top, the fly, the
+tooltip) · `studio53-probe.mjs` (keyed 5174: workspace, arrows, page turn, string clamped while
+zoomed, Saved chip, the button's words). Their trap, paid twice: the drawer's plan pane stays
+mounted under the studio and carries buttons with the SAME titles ("Zoom in") and its own "1 / 2"
+pager — take the LAST match.

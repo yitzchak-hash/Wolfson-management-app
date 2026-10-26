@@ -7,7 +7,7 @@ import {
   Plus, Minus, Maximize2, Minimize2, Loader2, Pen, Pencil, Highlighter, Eraser, Minus as LineIcon,
   ArrowUpRight, Square, Circle, Type, Hand, Layers, FileDown, Check, ExternalLink,
   MessageSquare, Move, Layers2, ChevronsUpDown, User as UserIcon,
-  Monitor, ArrowRight, RotateCcw, RotateCw, MoreHorizontal, PenTool, Brush, Shapes,
+  Monitor, ArrowRight, RotateCcw, RotateCw, MoreHorizontal, PenTool, Brush, Shapes, CloudCheck,
 } from 'lucide-react';
 import './pdfCompat';   // must come before pdf.js
 import * as pdfjs from 'pdfjs-dist';
@@ -240,7 +240,9 @@ function scribblePath(x1: number, y1: number, x2: number, y2: number, seed: numb
   const len = Math.hypot(dx, dy) || 1;
   const n = Math.max(4, Math.min(9, Math.round(len / 80)));
   const px = -dy / len, py = dx / len;              // unit perpendicular
-  const amp = Math.min(24, len * 0.11);
+  // Kept small (owner, 26 Oct: "make this swiggle a little smaller so it
+  // doesn't cover stuff") — a wave, not a loop.
+  const amp = Math.min(11, len * 0.06);
   const pts: [number, number][] = [[x1, y1]];
   for (let i = 1; i < n; i++) {
     const t = i / n;
@@ -1000,6 +1002,9 @@ function PlanEditor({
   /** How much of a heavy plan has arrived, so the wait is visible. */
   const [got, setGot] = useState<{ bytes: number; total: number | null }>({ bytes: 0, total: null });
   const [page, setPage] = useState(initialWork?.page ?? 0);
+  /** The page on screen NOW — a render that finishes for any other page is stale. */
+  const pageNow = useRef(page);
+  pageNow.current = page;
   const [scale, setScale] = useState(initialWork?.scale ?? 1.25);
   // A tab coming back remembers its zoom; only a fresh one fits on open.
   const [fitting, setFitting] = useState(initialWork?.scale == null);
@@ -1036,6 +1041,8 @@ function PlanEditor({
   const [nat, setNat] = useState<{ w: number; h: number } | null>(null);
   /** What is actually painted on the canvas right now. */
   const drawnAt = useRef<{ page: number; s: number } | null>(null);
+  /** How long this sheet takes to draw, per 16 megapixels — the adaptive cap. */
+  const renderMs = useRef(0);
   useEffect(() => {
     if (Math.abs(scale - raster) < 0.001) return;
     // 280ms: a run of wheel notches is ONE redraw, not one per pause.
@@ -1463,10 +1470,20 @@ function PlanEditor({
         y2 = Math.round(Math.min(y1 - 24, sr.bottom - rr.top));
       } else {
         // Rounded endpoints, so a sub-pixel re-measure cannot rewrite the path.
+        // The end lands on the sheet's left edge, 20% down — but never past
+        // the WORKSPACE the sheet sits in: a zoomed sheet runs off the top
+        // of its stage, and the string used to follow it up over the
+        // toolbars (owner, 26 Oct). It now meets the workspace's own edge.
+        const st = stageRef.current?.getBoundingClientRect();
         x1 = Math.round(br.right - rr.left - 4);
         y1 = Math.round(br.top - rr.top + 8);                  // from the dot
-        x2 = Math.round(Math.max(x1 + 24, sr.left - rr.left)); // to the plan's edge
-        y2 = Math.round(sr.top - rr.top + sr.height * 0.2);    // 20% down the sheet
+        let ex = sr.left, ey = sr.top + sr.height * 0.2;
+        if (st) {
+          ex = Math.max(ex, st.left);
+          ey = Math.min(Math.max(ey, st.top + 14), st.bottom - 14);
+        }
+        x2 = Math.round(Math.max(x1 + 24, ex - rr.left));
+        y2 = Math.round(ey - rr.top);
       }
       const d = scribblePath(x1, y1, x2, y2, linkedVersion ?? 1);
       setVlink(prev => (prev && prev.d === d ? prev : { d, x2, y2 }));
@@ -1583,8 +1600,12 @@ function PlanEditor({
     // Nothing to redraw if the page is already on screen at this resolution.
     // Without this, fitting on open renders the sheet twice — once from the fit
     // and once when `raster` catches up to the number the fit just chose.
+    // A render still in flight for ANOTHER page is cancelled first, or it
+    // finishes after this early return and blits the wrong page over the
+    // right one — the owner's "1 / 7" over page two (26 Oct): he went to
+    // page 2 on a heavy sheet and back to 1 before page 2 had drawn.
     if (drawnAt.current && drawnAt.current.page === page
-      && Math.abs(drawnAt.current.s - s) < 0.001) return;
+      && Math.abs(drawnAt.current.s - s) < 0.001) { renderTask.current?.cancel(); renderTask.current = null; return; }
 
     const vp = p.getViewport({ scale: s });
     setSheetWide(vp.width > vp.height * 1.1);
@@ -1601,15 +1622,15 @@ function PlanEditor({
     // 16 MP, not 32 (owner's recording, 2026-10-12: a heavy commercial
     // sheet at 200% "freezing a bit … jumpy"): pdf.js draws on the main
     // thread, and halving the pixels halves every redraw a zoom asks for.
-    const MAX_PIXELS = 16e6;
+    // And ADAPTIVE (26 Oct, the same complaint on a hospital-sized sheet):
+    // a page that took over a second to draw is drawn at fewer pixels next
+    // time, so a heavy plan stays responsive while a light one stays crisp.
+    const lastMs = renderMs.current;
+    const MAX_PIXELS = lastMs > 1500 ? 7e6 : lastMs > 800 ? 10e6 : 16e6;
     const want = Math.min(Math.max(window.devicePixelRatio || 1, 2), 3);
     const area = vp.width * vp.height;
     const dpr = Math.max(1, Math.min(want, Math.sqrt(MAX_PIXELS / Math.max(1, area))));
     const w = Math.round(vp.width), h = Math.round(vp.height);
-    // The CSS size follows the LAYOUT scale, which may already have moved past
-    // the one being drawn — that is the whole point of the split.
-    const cssW = Math.round(natVp.width * scaleRef.current);
-    const cssH = Math.round(natVp.height * scaleRef.current);
 
     /**
      * The live layer is drawn at a LOWER resolution than the plan.
@@ -1645,7 +1666,19 @@ function PlanEditor({
       ...(ocRef.current ? { optionalContentConfigPromise: Promise.resolve(ocRef.current) } : {}),
     });
     renderTask.current = task;
+    const t0 = performance.now();
     try { await task.promise; } catch { return; /* superseded by a newer render */ }
+    // The page was turned while this drew: resizing the canvases would clear
+    // the page now on screen and blit the wrong one over it.
+    if (pageNow.current !== page) return;
+    renderMs.current = (performance.now() - t0) * (16e6 / Math.max(1, off.width * off.height));
+    // The CSS size follows the LAYOUT scale, which may already have moved past
+    // the one being drawn — that is the whole point of the split. Read it
+    // AFTER the render: a heavy sheet takes seconds to draw, and the size
+    // measured before the wait put the sheet back to the zoom it had when the
+    // render began — the jump the owner saw on big plans (26 Oct).
+    const cssW = Math.round(natVp.width * scaleRef.current);
+    const cssH = Math.round(natVp.height * scaleRef.current);
 
     for (const c of [pdfRef.current, inkRef.current, liveRef.current]) {
       if (!c) continue;
@@ -3112,6 +3145,10 @@ function PlanEditor({
    * updates v2), which read as a save that never happened.
    */
   const shownVersion = sketchVersion.current ?? nextVersion;
+  /** The studio's sheet zooms inside a framed WORKSPACE with a small gutter
+   *  round it, so the version string always has an edge to land on (owner,
+   *  26 Oct). Not in the read-only viewer or the drawer pane, nor on a phone. */
+  const workspaceGutter = !embedded && !compact && !locked;
 
   // The wrapper stashes a tab away by reading this — written every render so
   // it is always current, at the cost of nothing (a ref assignment).
@@ -4035,7 +4072,7 @@ function PlanEditor({
         <svg data-version-link key={linkedVersion ?? 'none'}
           className="absolute inset-0 w-full h-full pointer-events-none" style={{ zIndex: 60 }}>
           <path d={vlink.d} pathLength={100} className="vlink-path" fill="none"
-            stroke="#4ade80" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+            stroke="#4ade80" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" />
           <circle cx={vlink.x2} cy={vlink.y2} r={3.5} fill="#4ade80" className="vlink-dot" />
         </svg>
       )}
@@ -4262,18 +4299,19 @@ function PlanEditor({
 
         {!locked && (
           <button onClick={save} disabled={saving || (!strokes.length && !myPins.length)}
-            title={'File this markup in Drive (Annotated Plans) and LOCK it as this version — '
-              + 'your next mark starts the following version by itself. While a version is '
-              + 'open, the chip beside this keeps its one Drive file up to date automatically.'}
-            className={`flex items-center gap-1.5 rounded-lg text-[12px] font-bold text-white disabled:opacity-40 flex-shrink-0 ${
-              compact ? 'px-2.5 min-h-[38px]' : 'px-3 py-1.5'}`}
+            data-save-lock
+            title={`Lock version ${shownVersion} as it is now and start version ${shownVersion + 1} — `
+              + `version ${shownVersion} stays in Drive (Annotated Plans) exactly as it stands, and `
+              + `your next mark begins version ${shownVersion + 1} in a fresh file.`}
+            className={`flex items-center gap-1.5 rounded-lg font-bold text-white disabled:opacity-40 flex-shrink-0 ${
+              compact ? 'px-2.5 min-h-[38px] text-[12px]' : 'px-3.5 py-2 text-[13px]'}`}
             style={{ backgroundColor: ACCENT }}>
-            {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
-            {/* The word costs a fifth of a 390px row and says nothing the icon
-                does not. The version number is the part you check. */}
-            {saving ? (compact ? '' : 'Filing…') : compact ? `v${shownVersion}` : `Save v${shownVersion}`}
-            {/* WHERE it goes, answered by the mark everybody knows — the
-                owner's ask: "add a little Drive icon showing where it saves". */}
+            {/* A PLUS, not a disk (owner, 26 Oct): the open version already
+                files itself — the chip beside this says so — so what this
+                button really does is close it off and start the next one. */}
+            {saving ? <Loader2 size={15} className="animate-spin" /> : <Plus size={15} strokeWidth={2.75} />}
+            {saving ? (compact ? '' : 'Filing…') : compact ? `v${shownVersion + 1}`
+              : `Save v${shownVersion} & start v${shownVersion + 1}`}
             {!saving && <DriveIcon size={12} />}
           </button>
         )}
@@ -4549,6 +4587,23 @@ function PlanEditor({
             * in a strip above it. Only when there is nothing to mark up —
             * the studio has its own rail and two toolbars of its own.
             */}
+          {/* Page arrows on the workspace's two sides (owner, 26 Oct: "moving
+              between the plans — arrows left and right"). They sit in the
+              gutter round the sheet, so they never cover the drawing. */}
+          {workspaceGutter && doc && doc.numPages > 1 && (<>
+            <button data-studio-page="prev" onClick={() => setPage(p => Math.max(0, p - 1))}
+              disabled={page === 0} title={`Previous page (${page} of ${doc.numPages})`}
+              className="absolute left-1 top-1/2 -translate-y-1/2 z-20 w-9 h-14 rounded-xl flex items-center justify-center
+                         text-white bg-black/35 hover:bg-black/60 disabled:opacity-0 disabled:pointer-events-none transition">
+              <ChevronLeft size={22} />
+            </button>
+            <button data-studio-page="next" onClick={() => setPage(p => Math.min(doc.numPages - 1, p + 1))}
+              disabled={page >= doc.numPages - 1} title={`Next page (${page + 2} of ${doc.numPages})`}
+              className="absolute right-1 top-1/2 -translate-y-1/2 z-20 w-9 h-14 rounded-xl flex items-center justify-center
+                         text-white bg-black/35 hover:bg-black/60 disabled:opacity-0 disabled:pointer-events-none transition">
+              <ChevronRight size={22} />
+            </button>
+          </>)}
           {locked && doc && (
             <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-20 flex items-center gap-0.5
                             rounded-full px-1.5 py-1 shadow-lg backdrop-blur"
@@ -4607,13 +4662,15 @@ function PlanEditor({
               it fits and behaves like a normal scroll child once it does not.
             */
             className={`flex-1 min-h-0 overflow-auto flex ${
-              compact ? 'p-1' : 'p-4'}`}
+              compact ? 'p-1' : 'p-4'} ${workspaceGutter ? 'my-3 mx-11 rounded-lg' : ''}`}
             data-plan-stage
+            data-plan-workspace={workspaceGutter ? '' : undefined}
             onPointerDown={onStageDown}
             onPointerMove={onStageMove}
             onPointerUp={onStageUp}
             onPointerCancel={onStageUp}
-            style={{ touchAction: 'pan-x pan-y', cursor: locked || tool === 'pan' ? 'grab' : undefined }}>
+            style={{ touchAction: 'pan-x pan-y', cursor: locked || tool === 'pan' ? 'grab' : undefined,
+              ...(workspaceGutter ? { boxShadow: 'inset 0 0 0 1px rgba(255,255,255,.10)', backgroundColor: 'rgba(0,0,0,.12)' } : {}) }}>
             {loadErr ? (
               <div className="m-auto text-center text-gray-300 text-[13px] max-w-md">
                 <p className="font-semibold mb-1">This plan would not open.</p>
@@ -5307,11 +5364,12 @@ function SaveTrip({ state, secondsLeft, compact, onSendNow }: {
 
   if (state === 'sent') {
     return (
-      <span data-save-state="sent" title="Filed in Drive"
-        className="flex items-center gap-1 px-2 py-1.5 rounded-lg flex-shrink-0"
+      <span data-save-state="sent"
+        title="Saved in Drive. While this version is open, every mark you add keeps its Drive file up to date by itself."
+        className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg flex-shrink-0 text-[12px] font-bold"
         style={{ backgroundColor: 'rgba(74,222,128,.14)', color: '#86efac' }}>
-        <HardDrive size={15} />
-        <Check size={12} />
+        <CloudCheck size={16} />
+        Saved
       </span>
     );
   }

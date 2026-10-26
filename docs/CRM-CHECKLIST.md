@@ -282,3 +282,7 @@ Legend: ☑ shipped · ☐ decided, not built · ◐ built in part · ✎ needs 
 - ☑ "I don't see what I did here" — a worker's few words to the office, filed under a stage in Settings → Stages (2026-10-21)
 - ☑ The plan studio's speech bubble has a mic that writes the words in as you talk, any language (2026-10-21)
 - ☑ A worker undoes a task he opened himself ("I'm going to work here" / "I did work here" / his own task) with no permission (a trash can, "Delete"); the apartment's stages go back to how they were before he started (2026-10-19, icon 2026-10-21); worker guide PDF in EN + RU
+- ☑ Board full screen keeps menus; picking a TV flies to its frame (2026-10-26)
+- ☑ Active jobs widget: a small search over the active jobs (2026-10-26)
+- ☑ Heavy plans zoom without jumping; the right page always shown (2026-10-26)
+- ☑ Plan studio: framed workspace, page arrows, "Saved" chip, "Save v2 & start v3" (2026-10-26)

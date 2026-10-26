@@ -113,7 +113,7 @@ check((b1.strokes ?? []).some(s => s.tool === 'ellipse') && (b1.strokes ?? []).s
 let text = await page.evaluate(() => document.body.innerText);
 check(/filed in Drive.*locked/i.test(text) && /starts version 2/i.test(text),
   'the toast says v1 was filed AND locked, next mark starts v2');
-check((await saveBtn.textContent())?.trim() === 'Save v2',
+check((await saveBtn.textContent())?.trim() === 'Save v2 & start v3',
   `the button rolls to the NEXT version (${(await saveBtn.textContent())?.trim()}), was ${label0}`);
 
 // Nothing new on a sealed version: Save says so and sends nothing.
@@ -172,7 +172,7 @@ text = await page.evaluate(() => document.body.innerText);
 check(/Version 3 locked/i.test(text) && /starts version 4/i.test(text),
   'Save on an already-sent version locks it and announces v4');
 check(stampBodies.length === 4, 'without re-uploading anything');
-check((await saveBtn.textContent())?.trim() === 'Save v4', 'the button rolls to v4');
+check((await saveBtn.textContent())?.trim() === 'Save v4 & start v5', 'the button rolls to v4');
 
 console.log(fails ? `\n${fails} FAILURES` : '\nALL PASS');
 await browser.close();

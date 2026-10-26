@@ -2,7 +2,7 @@ import React from 'react';
 import {
   CalendarOff, EyeOff, UserX, TrendingUp, MapPinned, FileWarning,
   Layers3, CopyCheck, SkipForward, Activity, RefreshCw,
-  Eye, Pencil, ClipboardList, MessageSquare, Camera, FileText, BookOpen, HardDrive,
+  Eye, Pencil, ClipboardList, MessageSquare, Camera, FileText, BookOpen, HardDrive, Search, X as XIcon,
 } from 'lucide-react';
 import {
   Apartment, CanvasElement, ContractorAssignment,
@@ -21,6 +21,7 @@ import {
   touchesOf, foldByJob, rankJobs, bookedThisWeek, TouchKind, TouchFilter, TouchSort, TouchSources,
 } from './activityTouches';
 import { isUploadBackendConfigured } from './driveApi';
+import { searchJobs } from './searchIndex';
 
 /**
  * The widgets that answer a question nothing else in the app answers.
@@ -430,7 +431,26 @@ function ActiveJobs({ c, el }: { c: WidgetCtx; el: CanvasElement }) {
     if (bin) return binLabelOf(bin);
     return (BIN_META as Record<string, { label: string }>)[j.boardBin as BinKind]?.label ?? 'Group';
   };
-  const list = order.map(id => jobById.get(id)).filter((j): j is Apartment => !!j);
+  const ranked = order.map(id => jobById.get(id)).filter((j): j is Apartment => !!j);
+  /**
+   * The little search (owner, 26 Oct: "add a little search button here that
+   * searches based on the recent activity"): narrows THIS list — only jobs
+   * that were active in the window — by the board's own forgiving search over
+   * the job, plus the words of what happened and who did it.
+   */
+  const [q, setQ] = React.useState('');
+  const [searching, setSearching] = React.useState(false);
+  const list = React.useMemo(() => {
+    const t = q.trim();
+    if (!t) return ranked;
+    const hit = new Set(searchJobs(ranked, t).map(h => h.id));
+    const low = t.toLowerCase();
+    return ranked.filter(j => {
+      if (hit.has(j.id)) return true;
+      const h = fold.get(j.id);
+      return !!h && `${h.last.who} ${h.last.what}`.toLowerCase().includes(low);
+    });
+  }, [ranked, q, fold]);
   const [cap, setCap] = React.useState(ACTIVE_ROW_CAP);
   const shown = list.slice(0, cap);
   const title = `Active · last ${days} days`;
@@ -476,16 +496,38 @@ function ActiveJobs({ c, el }: { c: WidgetCtx; el: CanvasElement }) {
               {f.label}
             </button>
           ))}
+          <button type="button" data-no-drag data-el-action data-active-search-toggle
+            onClick={() => { setSearching(v => !v); if (searching) setQ(''); }}
+            title="Search the active jobs"
+            className={`ms-auto p-0.5 rounded ${searching || q ? 'text-[#1e3a5f]' : 'text-slate-400 hover:text-[#1e3a5f]'}`}>
+            <Search size={11} />
+          </button>
           <button type="button" data-no-drag data-el-action data-active-sort
             disabled={readOnly}
             onClick={() => setData({ sort: sort === 'newest' ? 'busiest' : 'newest' })}
             title="Newest touch first, or the busiest job first"
-            className="ms-auto text-[9px] font-bold text-slate-500 hover:text-[#1e3a5f]">
+            className="text-[9px] font-bold text-slate-500 hover:text-[#1e3a5f]">
             {sort === 'newest' ? 'Newest ▾' : 'Busiest ▾'}
           </button>
         </div>
+        {(searching || q) && (
+          <div className="flex items-center gap-1 flex-shrink-0 mb-1 px-1.5 py-0.5 rounded-md bg-slate-100" data-active-search>
+            <Search size={10} className="text-slate-400 flex-shrink-0" />
+            <input data-no-drag data-el-action data-active-search-input autoFocus value={q}
+              onChange={e => setQ(e.target.value)}
+              onKeyDown={e => { e.stopPropagation(); if (e.key === 'Escape') { setQ(''); setSearching(false); } }}
+              onPointerDown={e => e.stopPropagation()}
+              placeholder="Name, address, who, what…"
+              className="flex-1 min-w-0 bg-transparent text-[10px] outline-none text-slate-700" />
+            {q && (
+              <button type="button" data-no-drag data-el-action onClick={() => setQ('')}
+                title="Clear" className="text-slate-400 hover:text-slate-600"><XIcon size={10} /></button>
+            )}
+          </div>
+        )}
         <Scroll>
-          {list.length === 0 && <Empty>Nothing happened on any job in the last {days} days{filter !== 'all' ? ` (${FILTERS.find(f => f.id === filter)?.label.toLowerCase()})` : ''}</Empty>}
+          {list.length === 0 && q.trim() && <Empty>No active job matches "{q.trim()}"</Empty>}
+          {list.length === 0 && !q.trim() && <Empty>Nothing happened on any job in the last {days} days{filter !== 'all' ? ` (${FILTERS.find(f => f.id === filter)?.label.toLowerCase()})` : ''}</Empty>}
           {tiles && shown.length > 0 && (
             <div className="grid gap-1.5" data-active-tiles style={{ gridTemplateColumns: `repeat(auto-fill, minmax(${TILE_MIN}px, 1fr))` }}>
               {shown.map(j => {

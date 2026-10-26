@@ -303,6 +303,15 @@ the job's own name) · addedwork-probe §5.
 | C-73 | 2026-10-19 | A scaling setting for the week chips in that widget | Done | pencil → "Week chip size" (`weekChipSize`) · weekribbon-probe §1b |
 | C-74 | 2026-10-19 | Add existing shows "ghost" — two tiles of one job are the same job; drop the word | Done | badge, icon, menu wording gone · pinsecond-probe §1, §4 |
 | C-75 | 2026-10-19 | Cards dragged onto the pin boards go behind them and don't pin (only Active jobs rows did) | Done | a carried tile draws above everything; a second tile pins (the job's own tile stays); hidden notebook squares never take a drop · pinsecond-probe §2–3 |
+| C-86 | 2026-10-26 | Board full screen: menus don't pop up | Done | document full screen + `html.board-full` · round53-probe §2 |
+| C-87 | 2026-10-26 | Picking a TV from the menu should jump the board to that view | Done | `aimAtTv` · round53-probe §3 |
+| C-88 | 2026-10-26 | A little search in the Active jobs (recent activity) widget | Done | `data-active-search` · round53-probe §1 |
+| C-89 | 2026-10-26 | Heavy plans jump and don't load properly when zooming (pane and studio) | Done | size read after the render; adaptive pixel budget · planviewer/planzoom/tvzoom green |
+| C-90 | 2026-10-26 | Space round the studio's sheet so the version string always connects; smaller squiggle | Done | `data-plan-workspace` · studio53-probe |
+| C-91 | 2026-10-26 | A "saved" icon for the Drive chip; Save as a plus reading "Save v2 & start v3"; bigger | Done | `data-save-lock` · studio53-probe, drivesave-probe |
+| C-92 | 2026-10-26 | Arrows left and right in the studio to move between pages; bigger margin | Done | `data-studio-page` · studio53-probe |
+| C-93 | 2026-10-26 | (shown) "Mark up this plan" tooltip stuck over the studio | Done | Tooltip hides on press / when the pointer leaves its trigger · round53-probe §4 |
+| C-94 | 2026-10-26 | (shown) page 2 drawn while the pager said 1 / 7 | Done | stale page renders dropped |
 | C-85 | 2026-10-21 | A tiny mic bottom-right of an open speech bubble in the studio; live transcribe, language detected | Done | stagesround-probe D (8/8) |
 | C-84 | 2026-10-21 | Remove the duplicate stages (Concealed Units Installed, Inline Fans Installed, Outdoor Units Installed …) | Done | cloud fix (4 retired, marks moved) + first-run seed guard |
 | C-83 | 2026-10-21 | "I don't see what I did on any bubble" at the end of the list → one or two words to the office → applied to a stage in the Stages screen as small bubbles | Done | stagesround-probe B+C |

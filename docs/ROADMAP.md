@@ -101,3 +101,4 @@ under the set model). `round28.mjs` is green again (10-08).
 - ☑ The close: a finished stage shows greyed and still takes added work and pictures, into its own folder; a Job Board job on the worker's list reads its own name (2026-10-18).
 - ☑ The notebook's week chips fill the whole top row, equal widths, and a "Week chip size" setting (2026-10-19).
 - ☑ Recording 10:40 + chat: Job Completed means finished (markers by name), "Mark the whole job as"; no "ghost" wording; cards drop onto pin boards from either tile (2026-10-19).
+- ☑ Recording 2026-10-26: board full screen keeps menus, TV pick flies to its frame, Active jobs search, heavy plans zoom without jumping, studio workspace + page arrows + "Save v2 & start v3" (2026-10-26)

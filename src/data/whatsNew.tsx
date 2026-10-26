@@ -30,6 +30,37 @@ export interface WhatsNewEntry {
 
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    date: '2027-02-17',
+    title: 'Full screen that keeps its menus, smoother heavy plans, and a clearer Save',
+    items: [
+      {
+        title: 'Board full screen keeps every menu',
+        body: 'Menus and windows now open in board full screen. Picking a TV from the TV menu flies the board straight to '
+          + 'that TV\'s green frame.',
+        demo: 'tap',
+      },
+      {
+        title: 'Search the active jobs',
+        body: 'The Active jobs widget has a small magnifier: type a name, an address, who or what, and only the matching '
+          + 'active jobs stay.',
+        demo: 'tap',
+      },
+      {
+        title: 'Heavy plans zoom without jumping',
+        body: 'A big sheet no longer snaps back while it is still drawing, and a slow sheet draws a little lighter so the '
+          + 'computer keeps up. Turning pages fast never shows the wrong page.',
+        demo: 'tap',
+      },
+      {
+        title: 'The studio: a workspace, page arrows and a clearer Save',
+        body: 'The sheet sits in a framed workspace, so the green version string always lands on its edge, and arrows on '
+          + 'both sides turn the pages. The green chip simply says Saved, and the button says what it does: '
+          + '"Save v2 & start v3".',
+        demo: 'tap',
+      },
+    ],
+  },
+  {
     date: '2027-02-16',
     title: 'Stages in every language, what each one includes, and a mic in the bubble',
     items: [

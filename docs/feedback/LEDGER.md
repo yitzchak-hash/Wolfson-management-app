@@ -25,8 +25,9 @@ ask built or answered) · **not this app** (a recording of another project — r
 | 13 | Recording 2026-10-15 153941.mp4 (5.1 MB) | `1s7HntfimA6EXgI6F6gyy9ygqMYaFXe_w` | 0:18 | done | [2026-10-15-153941.md](2026-10-15-153941.md) |
 | 14 | Recording 2026-10-18 142856.mp4 (42.2 MB, 1920×1032) | `1W9ZWOx1520Kg5Flz6V7I53VGOiPXB7bb` | 2:53 | done | [2026-10-18-142856.md](2026-10-18-142856.md) |
 | 15 | Recording 2026-10-19 104054.mp4 (17.8 MB, 1920×1032) — he put it in **Not processed** | `1AZQaQuT3-drz29rjFdvITYHETw1TfZKF` | 0:37 | done | [2026-10-19-104054.md](2026-10-19-104054.md) |
+| 16 | Recording 2026-10-26 094647.mp4 (151.1 MB, 1920×1032) — in **Not processed** | `1aU3Sbyi88pKC-LvzYcna3PFO-mjv8nTS` | 4:45 | done | [2026-10-26-094647.md](2026-10-26-094647.md) |
 
-Folder last listed: 2026-10-19 — 14 recordings at the top, **Processed** empty, recording 15 in **Not processed**. All 15 are done and belong in Processed.
+Folder last listed: 2026-10-26 — 14 recordings at the top, **Processed** empty, recordings 15 and 16 in **Not processed**. All 16 are done and belong in Processed.
 
 ## The folder's two subfolders (owner, 2026-10-18)
 After every new video a helper sorts the folder: **Processed**

@@ -157,10 +157,13 @@ export function TvPickMenu({ anchor, ignore, current, onPick, onHide, onClose }:
  * The picked TV's green frame, laid over the real board — draggable and
  * resizable, writing straight into that panel's own settings.
  */
-export function TvFrameLayer({ pan, zoom, pick }: {
+export function TvFrameLayer({ pan, zoom, pick, onAim }: {
   pan: { x: number; y: number };
   zoom: number;
   pick: TvPick;
+  /** Told the frame's rectangle once per TV picked, so the board can fly to
+   *  it (owner, 26 Oct: "once I press this, the screen should jump to that view"). */
+  onAim?: (r: TvRect) => void;
 }) {
   const { apartments, canvasElements, boardSettings, setTvSetting } = useStore();
   const bag = boardSettings.__tv ?? {};
@@ -172,6 +175,15 @@ export function TvFrameLayer({ pan, zoom, pick }: {
 
   const [live, setLive] = useState<TvRect | null>(null);
   const dragRef = useRef<{ mode: 'move' | 'resize'; px: number; py: number; start: TvRect } | null>(null);
+  const aimRect = useRef<TvRect | null>(null);
+  const onAimRef = useRef(onAim);
+  onAimRef.current = onAim;
+  const pickKey = `${pick.id ?? ''}|${pick.ratio}`;
+  useEffect(() => {
+    // After this render has measured the frame (aimRect is written below).
+    const t = setTimeout(() => { if (aimRect.current) onAimRef.current?.(aimRect.current); }, 0);
+    return () => clearTimeout(t);
+  }, [pickKey]);
 
   /**
    * Where the wall would land with NOTHING set: the content box, the TV
@@ -212,6 +224,7 @@ export function TvFrameLayer({ pan, zoom, pick }: {
 
   /** What the panel actually shows — THE green frame. */
   const vis = live ?? tvVisibleRect(frameBox, pick.ratio, scale);
+  aimRect.current = vis;
 
   const commit = (v: TvRect) => {
     const r = regionForVisible(v, scale);

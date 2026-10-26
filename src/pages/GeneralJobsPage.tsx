@@ -1667,6 +1667,31 @@ export function GeneralJobsPage() {
    * plain ladder; on the owner's wide one it keeps stepping down until the
    * entire board, desk edges and all, is on screen.
    */
+  /**
+   * Picking a TV from the menu FLIES the board to that TV's green frame
+   * (owner, 26 Oct: "once I press this, the screen should jump to that view
+   * — it stays where it is"). The frame is centred, and the zoom steps down
+   * as far as needed for the whole frame to be on screen at once.
+   */
+  const aimAtTv = (r: { x: number; y: number; w: number; h: number }) => {
+    const vpEl = viewportRef.current;
+    if (!vpEl || r.w <= 0 || r.h <= 0) return;
+    const W = vpEl.clientWidth, H = vpEl.clientHeight;
+    const fits = (z: number) => r.w * z <= W * 0.9 && r.h * z <= H * 0.8;
+    let z = zoom;
+    if (!fits(z)) {
+      const steps = zoomSteps().filter(fits);
+      z = steps.length ? steps[steps.length - 1] : zoomSteps()[0];
+    }
+    setFlying(true);
+    if (z !== zoom) setZoom(z);
+    setPan(clampPanRef.current({
+      x: W / 2 - (r.x + r.w / 2) * z,
+      y: H / 2 + 30 - (r.y + r.h / 2) * z,
+    }, z));
+    setTimeout(() => setFlying(false), 620);
+  };
+
   const zoomSteps = (): number[] => {
     const fitZ = fitZoomRef.current;
     if (fitZ >= ZOOM_STEPS[0] - 0.001) return ZOOM_STEPS;
@@ -1866,15 +1891,29 @@ export function GeneralJobsPage() {
    * us, and a button stuck on "leave" reads as broken.
    */
   const pageRootRef = useRef<HTMLDivElement>(null);
+  // The WHOLE DOCUMENT goes full screen and the page root is pinned over the
+  // app's own chrome (`html.board-full` in index.css). Full-screening the page
+  // root itself hid every menu and window the app portals to <body> — the TV
+  // menu, the drawer's tooltips, the dialogs — because only the full-screen
+  // element's own subtree is drawn (owner, 26 Oct: "the menu doesn't pop up").
   const [isFull, setIsFull] = useState(false);
   useEffect(() => {
-    const on = () => setIsFull(!!document.fullscreenElement);
+    const on = () => {
+      const full = document.fullscreenElement === document.documentElement && document.documentElement.classList.contains('board-full-wanted');
+      if (!document.fullscreenElement) document.documentElement.classList.remove('board-full-wanted');
+      document.documentElement.classList.toggle('board-full', full);
+      setIsFull(full);
+    };
     document.addEventListener('fullscreenchange', on);
-    return () => document.removeEventListener('fullscreenchange', on);
+    return () => {
+      document.removeEventListener('fullscreenchange', on);
+      document.documentElement.classList.remove('board-full', 'board-full-wanted');
+    };
   }, []);
   function toggleFullscreen() {
-    if (document.fullscreenElement) void document.exitFullscreen();
-    else void (pageRootRef.current ?? document.documentElement).requestFullscreen?.();
+    if (document.fullscreenElement) { void document.exitFullscreen(); return; }
+    document.documentElement.classList.add('board-full-wanted');
+    void document.documentElement.requestFullscreen?.()?.catch?.(() => document.documentElement.classList.remove('board-full-wanted'));
   }
 
   /**
@@ -6317,7 +6356,7 @@ function isPointerNode(el: CanvasElement | undefined): boolean {
   const floatingHeader = viewMode !== 'stages';
 
   return (
-    <div ref={pageRootRef} className="flex-1 flex flex-col min-h-0 bg-gray-50 relative">
+    <div ref={pageRootRef} data-board-page-root className="flex-1 flex flex-col min-h-0 bg-gray-50 relative">
       {/* The way out of full screen on a touch screen — no Escape key there,
           and the header's own toggle is one small button in a scrolling strip.
           .touch-show keeps it off any screen that has a hover pointer. */}
@@ -6967,7 +7006,7 @@ function isPointerNode(el: CanvasElement | undefined): boolean {
             movable: drag to aim the TV, pull the corner to change how much
             it takes in. Writes go to that panel's own settings, so an open
             panel follows within seconds. */}
-        {tvPick && <TvFrameLayer pan={pan} zoom={zoom} pick={tvPick} />}
+        {tvPick && <TvFrameLayer pan={pan} zoom={zoom} pick={tvPick} onAim={aimAtTv} />}
 
         {/* One handle for a whole selection.
             Several things selected together read as one object, so they get one
