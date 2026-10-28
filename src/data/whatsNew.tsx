@@ -93,6 +93,17 @@ export const WHATS_NEW: WhatsNewEntry[] = [
   },
   {
     date: '2027-02-18',
+    title: 'A slim scrollbar on a zoomed plan',
+    items: [
+      {
+        title: 'A slim scrollbar when zoomed in',
+        body: 'Zoomed into a plan, the old grey scrollbar with arrows is gone \u2014 a thin rounded one stands in its place.',
+        demo: 'zoom',
+      },
+    ],
+  },
+  {
+    date: '2027-02-18',
     title: 'A plan prints clean',
     items: [
       {
