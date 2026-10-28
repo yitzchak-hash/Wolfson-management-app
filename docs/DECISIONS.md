@@ -394,3 +394,12 @@ Time off belongs to the person and lives in one shared list.
 - **2026-10-26 · Board full screen:** the whole document goes full screen and the board page is pinned over the app's header and sidebar (`html.board-full`), so every menu and window the app opens stays visible. Picking a TV from the TV menu flies the board to that TV's green frame, zooming out as far as the whole frame needs.
 - **2026-10-26 · The studio's Save:** the green Drive chip reads "Saved" (cloud tick); the button is a plus reading "Save v2 & start v3" — it locks the open version and the next mark begins the next one. The sheet zooms inside a framed workspace with a gutter (page arrows on both sides); the version string ends on the workspace edge and is half as wavy.
 - **2026-10-26 · Heavy plans:** a sheet that took over a second to draw is drawn at fewer pixels next time (7–16 MP, by measured speed), and a page turned away while drawing is never put on screen.
+
+## 2026-10-28 (recording 28 Oct, his chat answers)
+- **Wolfson tipus**: floors 1–13 A · B · C1 · C2 by position (number order); 14 = 53 A · 54 B; duplexes 55 A · 56 B; a
+  joined flat carries both (38/39 = B + C1). Source: our quote "W Residence Mini Merkazi" + plans in Drive. Pending his yes.
+- **Sold** = the flat has a family name; none = "Not sold" (the Drive folders' own naming).
+- Four sale filters, one at a time + All; no Upgrades button (only Bulk Update, Print); buildings read 1 · 2 · 3, no "A".
+- The apartment window: Building · Floor (read only) · Tipus · Apt # · Name / Standard–Upgraded / address · phone / Add
+  notes (folded) / every stage, always shown, with its `includes` parts / custom project buttons / Settings.
+- The tile keeps naming the stage being worked on, else "Sold".
