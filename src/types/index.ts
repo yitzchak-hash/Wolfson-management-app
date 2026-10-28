@@ -90,6 +90,12 @@ export interface AutoJobsSetting {
 export interface CustomButton {
   id: string;
   name: string;
+  /**
+   * Who may change this button's answer on an apartment (owner, 2026-10-28):
+   * user ids. Absent = everyone — "All" is never stored as a list, so a
+   * person added later is not silently locked out.
+   */
+  editors?: string[];
 }
 
 export type CustomAnswer = 'yes' | 'no' | 'unknown';
@@ -3422,6 +3428,9 @@ export interface MainUiStrings {
   customNo: string;
   customUnknown: string;
   customButtonNew: string;
+  customWhoCan: string;
+  customEveryone: string;
+  customOnlyFor: string;
   deleteAptShort: string;
   addTaskTooltip: string;
   hideShinuiBadgeTooltip: string;
@@ -4423,6 +4432,9 @@ export const DEFAULT_MAIN_UI_STRINGS: MainUiStrings = {
   customNo: 'No',
   customUnknown: "Don't know",
   customButtonNew: 'New button name…',
+  customWhoCan: 'Who can change it',
+  customEveryone: 'Everyone',
+  customOnlyFor: 'Only {names} can change this',
   deleteAptShort: 'Delete apartment',
   addTaskTooltip: 'Add task',
   hideShinuiBadgeTooltip: 'Hide the "C" badge on apartments with modifications',
@@ -5414,6 +5426,9 @@ export const HEBREW_MAIN_UI_STRINGS: MainUiStrings = {
   customNo: 'לא',
   customUnknown: 'לא יודע',
   customButtonNew: 'שם כפתור חדש…',
+  customWhoCan: 'מי יכול לשנות',
+  customEveryone: 'כולם',
+  customOnlyFor: 'רק {names} יכולים לשנות את זה',
   deleteAptShort: 'מחיקת דירה',
   addTaskTooltip: 'הוסף משימה',
   hideShinuiBadgeTooltip: 'הסתר תג שינוי בדירות',

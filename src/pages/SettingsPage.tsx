@@ -499,6 +499,73 @@ const EMPTY_CUSTOM_BUTTONS: CustomButton[] = [];
  * removing a button leaves the answers already given on the apartments,
  * where nothing reads them.
  */
+/**
+ * Who may change one custom button (owner, 2026-10-28: "a little permission
+ * drop-down … which users can change those buttons … an all option …
+ * multiple select or single select or all … show the list of the names").
+ * Everyone is the default; ticking people narrows it to them; unticking the
+ * last person, or ticking Everyone, goes back to everyone.
+ */
+function CustomButtonEditors({ button, onChange }: { button: CustomButton; onChange: (editors: string[] | undefined) => void }) {
+  const s = useStore(state => state.mainUiStrings);
+  const allUsers = useStore(st => st.users);
+  const users = useMemo(() => allUsers.filter(u => u.active || button.editors?.includes(u.id))
+    .sort((a, b) => a.name.localeCompare(b.name)), [allUsers, button.editors]);
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const down = (e: PointerEvent) => { if (!ref.current?.contains(e.target as Node)) setOpen(false); };
+    const key = (e: KeyboardEvent) => { if (e.key === 'Escape') { e.stopPropagation(); setOpen(false); } };
+    window.addEventListener('pointerdown', down, true);
+    window.addEventListener('keydown', key, true);
+    return () => { window.removeEventListener('pointerdown', down, true); window.removeEventListener('keydown', key, true); };
+  }, [open]);
+  const chosen = button.editors ?? [];
+  const everyone = chosen.length === 0;
+  const names = chosen.map(id => allUsers.find(u => u.id === id)?.name).filter(Boolean) as string[];
+  const face = everyone ? s.customEveryone : names.length <= 2 ? names.join(', ') : `${names.slice(0, 2).join(', ')} +${names.length - 2}`;
+  const toggle = (id: string) => {
+    const next = chosen.includes(id) ? chosen.filter(x => x !== id) : [...chosen, id];
+    onChange(next.length ? next : undefined);
+  };
+  const row = 'w-full flex items-center gap-2 px-3 py-1.5 text-sm text-start hover:bg-gray-50';
+  const tick = (on: boolean) => (
+    <span className={`w-4 h-4 rounded border flex items-center justify-center flex-shrink-0 ${on ? 'bg-[#1e3a5f] border-[#1e3a5f] text-white' : 'border-gray-300 bg-white'}`}>
+      {on && <Check size={11} />}
+    </span>
+  );
+  return (
+    <div ref={ref} className="relative flex-shrink-0">
+      <button type="button" data-custom-editors={button.id} data-custom-editors-face={everyone ? 'all' : chosen.join(',')}
+        aria-haspopup="listbox" aria-expanded={open} title={s.customWhoCan}
+        onClick={() => setOpen(o => !o)}
+        className="h-8 max-w-[11rem] inline-flex items-center gap-1.5 px-2.5 rounded-lg border border-gray-200 text-xs font-medium text-gray-700 hover:bg-gray-50">
+        <Shield size={12} className="text-gray-400 flex-shrink-0" />
+        <span className="truncate">{face}</span>
+        <ChevronDown size={12} className="text-gray-400 flex-shrink-0" />
+      </button>
+      {open && (
+        <div data-custom-editors-panel={button.id} role="listbox" aria-multiselectable
+          className="absolute z-30 end-0 mt-1 w-56 max-h-72 overflow-y-auto bg-white border border-gray-200 rounded-xl shadow-lg py-1">
+          <div className="px-3 pt-1 pb-1.5 text-[11px] font-semibold text-gray-400">{s.customWhoCan}</div>
+          <button type="button" data-custom-editor="all" aria-selected={everyone} className={row}
+            onClick={() => onChange(undefined)}>
+            {tick(everyone)}<span className="font-medium">{s.customEveryone}</span>
+          </button>
+          <div className="my-1 border-t border-gray-100" />
+          {users.map(u => (
+            <button key={u.id} type="button" data-custom-editor={u.id} aria-selected={chosen.includes(u.id)} className={row}
+              onClick={() => toggle(u.id)}>
+              {tick(chosen.includes(u.id))}<span className="truncate" dir="auto">{u.name}</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function CustomButtonSettings() {
   const s = useStore(state => state.mainUiStrings);
   const buttons = useStore(st => st.boardSettings[st.currentProjectId]?.customButtons ?? EMPTY_CUSTOM_BUTTONS);
@@ -521,7 +588,9 @@ function CustomButtonSettings() {
               onBlur={e => { const v = e.target.value.trim(); if (v && v !== b.name) write(buttons.map(x => x.id === b.id ? { ...x, name: v } : x)); else e.target.value = b.name; }}
               onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
               className="flex-1 min-w-0 border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30" />
-            <span className="text-xs text-gray-400 whitespace-nowrap">{s.customYes} · {s.customNo} · {s.customUnknown}</span>
+            <span className="hidden sm:inline text-xs text-gray-400 whitespace-nowrap">{s.customYes} · {s.customNo} · {s.customUnknown}</span>
+            <CustomButtonEditors button={b}
+              onChange={editors => write(buttons.map(x => x.id === b.id ? { ...x, editors } : x))} />
             <button data-custom-button-remove onClick={() => write(buttons.filter(x => x.id !== b.id))} title={s.delete} aria-label={s.delete}
               className="w-8 h-8 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 flex items-center justify-center">×</button>
           </div>

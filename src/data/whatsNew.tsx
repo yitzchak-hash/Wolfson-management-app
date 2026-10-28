@@ -40,6 +40,17 @@ export const WHATS_NEW: WhatsNewEntry[] = [
         demo: 'tap',
       },
       {
+        title: 'Who can change a custom button',
+        body: 'In Settings → Custom project buttons, each button has a small drop-down with everyone\'s names: pick one person, '
+          + 'several, or Everyone. Only the people picked can change that answer on an apartment.',
+        demo: 'tap',
+      },
+      {
+        title: 'Zoho dot: green or red',
+        body: 'At the top of an apartment, the Zoho button\'s dot is green when the apartment has a Zoho link and red when it has none.',
+        demo: 'tap',
+      },
+      {
         title: 'AI fills the other two languages',
         body: 'In Settings → Stages, type a stage\'s "includes" word in one language and a small AI button appears inside the '
           + 'other two boxes — press it and the word is translated for you. You can still correct it by hand.',

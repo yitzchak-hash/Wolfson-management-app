@@ -114,6 +114,7 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
   const isGeneralProject = currentProjectId === 'general';
   const tipusim = useStore(st => st.boardSettings[st.currentProjectId]?.tipusim ?? EMPTY_TIPUSIM);
   const customButtons = useStore(st => st.boardSettings[st.currentProjectId]?.customButtons ?? EMPTY_BUTTONS);
+  const users = useStore(st => st.users);
   // Who approved the plan, read LIVE — the board hands the drawer the record
   // captured at open, so an approval pressed a moment ago would not show.
   const plansApprovedBy = useStore(st => st.apartments.find(a => a.id === apartment?.id)?.plansApprovedBy);
@@ -1854,10 +1855,20 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                   </span>
                 </Tooltip>
               )}
-              {apartment.zohoLink && (
+              {/* The owner (2026-10-28): the dot is green when the apartment has
+                  a Zoho link and red when it has none — the chip is always there. */}
+              {apartment.zohoLink ? (
                 <Tooltip text="Open in Zoho">
-                  <a href={apartment.zohoLink} target="_blank" rel="noopener noreferrer" data-title-chip="zoho"
-                    className="flex items-center gap-1.5 px-2.5 py-1 min-h-[32px] rounded-lg bg-white/10 hover:bg-white/20 transition-colors text-[11.5px] font-semibold"><span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: '#ea6b13' }} />Zoho</a>
+                  <a href={apartment.zohoLink} target="_blank" rel="noopener noreferrer" data-title-chip="zoho" data-zoho-linked="1"
+                    className="flex items-center gap-1.5 px-2.5 py-1 min-h-[32px] rounded-lg bg-white/10 hover:bg-white/20 transition-colors text-[11.5px] font-semibold"><span data-zoho-dot className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: '#22c55e' }} />Zoho</a>
+                </Tooltip>
+              ) : (
+                <Tooltip text="No Zoho link yet">
+                  <span data-title-chip="zoho" data-zoho-linked="0"
+                    className="flex items-center gap-1.5 px-2.5 py-1 min-h-[32px] rounded-lg bg-white/5 text-[11.5px] font-semibold text-white/60">
+                    <span data-zoho-dot className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: '#ef4444' }} />
+                    Zoho
+                  </span>
                 </Tooltip>
               )}
               <Tooltip text="Print a job sheet">
@@ -2394,18 +2405,24 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                   <div className="text-sm font-bold text-gray-800">{ui.customButtonsTitle}</div>
                   {customButtons.map(cb => {
                     const ans = apartment.customAnswers?.[cb.id];
+                    // Only the people Settings picked may change it; nobody picked = everyone.
+                    const mayChange = !cb.editors?.length || cb.editors.includes(currentUser?.id);
+                    const lockTip = mayChange ? undefined : ui.customOnlyFor.replace('{names}',
+                      cb.editors!.map(id => users.find(u => u.id === id)?.name).filter(Boolean).join(', '));
                     return (
-                      <div key={cb.id} data-custom-button={cb.id} className="flex items-center gap-3 justify-between">
+                      <div key={cb.id} data-custom-button={cb.id} data-custom-locked={mayChange ? '0' : '1'} title={lockTip}
+                        className="flex items-center gap-3 justify-between">
                         <span className="text-sm text-gray-800 min-w-0 truncate">{cb.name}</span>
                         <span className="inline-flex border border-gray-200 rounded-lg overflow-hidden flex-shrink-0">
                           {(['yes', 'no', 'unknown'] as const).map(v => (
                             <button key={v} type="button" data-custom-answer={v} aria-pressed={ans === v}
+                              disabled={!mayChange}
                               onClick={() => {
                                 const nextAns = { ...(apartment.customAnswers ?? {}) };
                                 if (ans === v) delete nextAns[cb.id]; else nextAns[cb.id] = v;
                                 trackUndo(null, () => updateApartment(apartment.id, { customAnswers: nextAns }, currentUser));
                               }}
-                              className={`px-3 py-1.5 text-xs font-semibold border-s border-gray-200 first:border-s-0 ${ans === v ? 'bg-[#1e3a5f] text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>
+                              className={`px-3 py-1.5 text-xs font-semibold border-s border-gray-200 first:border-s-0 ${ans === v ? 'bg-[#1e3a5f] text-white' : 'bg-white text-gray-600 hover:bg-gray-50'} disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-white`}>
                               {v === 'yes' ? ui.customYes : v === 'no' ? ui.customNo : ui.customUnknown}
                             </button>
                           ))}

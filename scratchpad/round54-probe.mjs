@@ -35,6 +35,8 @@ await page.evaluate(() => {
   const raw = JSON.parse(localStorage.getItem('wolfson_app_data') || '{}');
   const at = '2026-01-01T00:00:00Z';
   raw.currentUser = { id: 'U-t', name: 'Tester', code: '999999', role: 'Admin', active: true, createdAt: at };
+  raw.users = [raw.currentUser, { id: 'U-e', name: 'Efrat', code: '111111', role: 'Office', active: true, createdAt: at },
+    { id: 'U-i', name: 'Igal', code: '222222', role: 'Office', active: true, createdAt: at }];
   raw.stages = [
     { id: 'skhtatb', name: 'Sold/Start', color: '#64748b', order: 0, active: true, createdAt: at, updatedAt: at },
     { id: 's-drilling', name: 'Drilling', color: '#0d9488', order: 1, active: true, createdAt: at, updatedAt: at },
@@ -162,6 +164,38 @@ check(/Drive/i.test(settingsText) && /Zoho/i.test(settingsText), 'window: Drive 
 const chips = await page.locator('[data-title-chip]').evaluateAll(els => els.filter(e => e.offsetParent).map(e => `${Math.round(e.getBoundingClientRect().height)}|${getComputedStyle(e).fontSize}`));
 check(new Set(chips).size === 1, 'window: the title buttons are one size and style', chips.join(' '));
 if (SHOTS) await page.screenshot({ path: `${SHOTS}/window.png` });
+// The Zoho dot (owner, 2026-10-28): red with no link, green with one.
+const zdot = async () => page.locator('[data-title-chip="zoho"]:visible [data-zoho-dot]').first().evaluate(e => getComputedStyle(e).backgroundColor);
+check(await page.locator('[data-title-chip="zoho"]:visible').count() === 1 && await zdot() === 'rgb(239, 68, 68)', 'window: no Zoho link → the Zoho chip is there with a RED dot', await zdot());
+
+// Who may change a custom button (owner, 2026-10-28).
+await page.goto(`${APP}/settings`);
+await page.waitForTimeout(2500);
+const ed = page.locator('[data-custom-editors="CB-wall"]');
+if (!(await ed.count())) { const x = page.getByRole('button', { name: /Stages|Board/ }).first(); if (await x.count()) { await x.click(); await page.waitForTimeout(600); } }
+check(await ed.count() === 1 && /Everyone/.test((await ed.textContent()) ?? ''), 'permissions: each custom button has a who-can drop-down, Everyone by default');
+await ed.click();
+const panel = page.locator('[data-custom-editors-panel="CB-wall"]');
+const ptext = (await panel.textContent()) ?? '';
+check(/Everyone/.test(ptext) && /Efrat/.test(ptext) && /Igal/.test(ptext) && /Tester/.test(ptext), 'permissions: the list shows Everyone and every name', ptext);
+const editorsNow = () => page.evaluate(() => JSON.parse(localStorage.getItem('wolfson_app_data') || '{}').boardSettings?.wolfson?.customButtons?.find(b => b.id === 'CB-wall')?.editors ?? null);
+await panel.locator('[data-custom-editor="U-e"]').click(); await page.waitForTimeout(300);
+check(JSON.stringify(await editorsNow()) === '["U-e"]', 'permissions: one person picked', JSON.stringify(await editorsNow()));
+await panel.locator('[data-custom-editor="U-i"]').click(); await page.waitForTimeout(300);
+check(JSON.stringify(await editorsNow()) === '["U-e","U-i"]', 'permissions: several people picked', JSON.stringify(await editorsNow()));
+check(/Efrat, Igal/.test((await ed.textContent()) ?? ''), 'permissions: the drop-down shows the names', await ed.textContent());
+await panel.locator('[data-custom-editor="all"]').click(); await page.waitForTimeout(300);
+check(await editorsNow() === null, 'permissions: Everyone goes back to all');
+await panel.locator('[data-custom-editor="U-e"]').click(); await page.waitForTimeout(300);
+await page.keyboard.press('Escape'); await page.waitForTimeout(200);
+check(await panel.count() === 0, 'permissions: Escape closes the drop-down');
+if (SHOTS) { await ed.click(); const cb = await page.locator('[data-custom-buttons-card]').boundingBox(); await page.screenshot({ path: `${SHOTS}/permissions.png`, clip: { x: cb.x, y: cb.y, width: cb.width, height: cb.height + 200 } }); await page.keyboard.press('Escape'); }
+await page.goto(`${APP}/project`);
+await page.waitForTimeout(3000);
+await page.locator(`[data-apt-id="${a2['47']}"]`).click();
+await page.waitForTimeout(900);
+check(await page.locator('[data-custom-button="CB-wall"][data-custom-locked="1"]').count() === 1
+  && await page.locator('[data-custom-button="CB-wall"] [data-custom-answer="no"]').isDisabled(), 'permissions: a user not picked cannot change the answer');
 
 await b.close();
 console.log(fails ? `\n${fails} FAILED` : '\nALL PASS');
