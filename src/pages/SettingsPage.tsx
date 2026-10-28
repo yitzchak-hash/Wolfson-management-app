@@ -5,6 +5,7 @@ import {
   Plus, Trash2, Save, Palette, ChevronUp, ChevronDown, Shield, Sun, Moon,
   Copy, Check, Download, Upload, HardDrive, X, HardDriveDownload, ToggleLeft, ToggleRight,
   Languages, Clock, RotateCcw, Wifi, WifiOff, Loader, Database, RefreshCw, CloudUpload, Search, BookOpen, ExternalLink, AlertTriangle, Tv, Building2,
+  Loader2, Sparkles,
 } from 'lucide-react';
 import { isFirebaseConfigured, db, fsSet, fsGetAll } from '../data/firebase';
 import { TvDashboard } from '../components/board/TvDashboard';
@@ -16,6 +17,7 @@ import { TV_DASH_BOARD } from '../types';
 import { portalLink, bareDomain, looksLikePreviewHost } from '../data/portalLink';
 import type { BoardAccess, PortalLang, CustomButton } from '../types';
 import { INCLUDE_LANGS, includeRow, langOfWord } from '../data/stageIncludes';
+import { requestTranslation, translationAvailable } from '../data/translate';
 import { personColor, projectColor, BoardView, Stage, User, Contractor, ContractorCategory, ContractorUiStrings, DEFAULT_CONTRACTOR_UI_STRINGS, HEBREW_CONTRACTOR_UI_STRINGS, MainUiStrings, DEFAULT_MAIN_UI_STRINGS, HEBREW_MAIN_UI_STRINGS, BackupFrequency, DriveExportFrequency, getStageName, Apartment, isCountableApartment, BoardSetting, CanvasElement } from '../types';
 import { loadTvScreens, forgetTvScreen, screenIsLive, shapeNameOf, TvScreenPresence } from '../data/tvScreens';
 import { Tooltip } from '../components/ui/Tooltip';
@@ -643,10 +645,61 @@ const EMPTY_TIPUSIM: string[] = [];
  * when it is left; × takes the whole word off.
  */
 const INCLUDE_LANG_NAMES: Record<PortalLang, string> = { en: 'English', he: 'עברית', ru: 'Русский' };
+
+/**
+ * The word to translate an empty box from: the box his own hand typed first
+ * (`prefer`) — never a box the AI filled, or a second translation would be a
+ * translation of a translation — else the first other box that has words.
+ */
+function sourceOf(row: Record<PortalLang, string>, to: PortalLang, prefer?: PortalLang | null): string {
+  if (prefer && prefer !== to && row[prefer].trim()) return row[prefer].trim();
+  for (const l of INCLUDE_LANGS) if (l !== to && row[l].trim()) return row[l].trim();
+  return '';
+}
+
+/**
+ * The small AI button inside an empty language box (owner, 2026-10-28: "type
+ * one language and it knows the other two alone"). It asks the same
+ * translator the workers' phones already use and drops the answer into the
+ * box — which then saves like a typed word, so the office can still correct
+ * it. Shown only while the box is empty, another box has words, and the
+ * translator is set up; a box the hand is typing into wins over a late answer.
+ */
+function AiFillBox({ lang, empty, source, onFill, children }: {
+  lang: PortalLang; empty: boolean; source: string; onFill: (v: string) => void; children: React.ReactNode;
+}) {
+  const s = useStore(state => state.mainUiStrings);
+  const [busy, setBusy] = useState(false);
+  const [failed, setFailed] = useState(false);
+  const show = empty && !!source && translationAvailable();
+  const go = async () => {
+    if (busy) return;
+    setBusy(true); setFailed(false);
+    const out = await requestTranslation(source, lang);
+    setBusy(false);
+    if (out && out.trim()) onFill(out.trim());
+    else setFailed(true);
+  };
+  const rtl = lang === 'he';
+  return (
+    <div className="relative min-w-0">
+      {children}
+      {show && (
+        <button type="button" data-ai-fill={lang} data-ai-busy={busy ? '1' : '0'} data-ai-failed={failed ? '1' : '0'}
+          onMouseDown={e => e.preventDefault()} onClick={go}
+          title={failed ? s.aiFillFailed : s.aiFillTip} aria-label={s.aiFillTip}
+          className={`absolute top-1/2 -translate-y-1/2 ${rtl ? 'left-1' : 'right-1'} w-6 h-6 rounded-md flex items-center justify-center ${failed ? 'text-red-500 hover:bg-red-50' : 'text-violet-600 hover:bg-violet-50'}`}>
+          {busy ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />}
+        </button>
+      )}
+    </div>
+  );
+}
 function StageIncludes({ stage, onChange }: { stage: Stage; onChange: (patch: Partial<Stage>) => void }) {
   const s = useStore(state => state.mainUiStrings);
   const blank = { en: '', he: '', ru: '' } as Record<PortalLang, string>;
   const [draft, setDraft] = useState<Record<PortalLang, string>>(blank);
+  const [draftFrom, setDraftFrom] = useState<PortalLang | null>(null);
   const list = stage.includes ?? [];
   const rowOf = (w: string) => {
     const r = includeRow(stage, w);
@@ -663,13 +716,13 @@ function StageIncludes({ stage, onChange }: { stage: Stage; onChange: (patch: Pa
   };
   const add = () => {
     const base = draft.en.trim() || draft.he.trim() || draft.ru.trim();
-    if (!base || list.some(w => w.toLowerCase() === base.toLowerCase())) { setDraft(blank); return; }
+    if (!base || list.some(w => w.toLowerCase() === base.toLowerCase())) { setDraft(blank); setDraftFrom(null); return; }
     const words: Partial<Record<PortalLang, string>> = {};
     for (const l of INCLUDE_LANGS) if (draft[l].trim()) words[l] = draft[l].trim();
     onChange({ includes: [...list, base], includesTr: { ...(stage.includesTr ?? {}), [base]: words } });
-    setDraft(blank);
+    setDraft(blank); setDraftFrom(null);
   };
-  const box = 'min-w-0 w-full border border-gray-200 rounded-lg px-2 py-1 text-[12.5px] bg-white focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/20';
+  const box = 'min-w-0 w-full border border-gray-200 rounded-lg px-2 pe-7 py-1 text-[12.5px] bg-white focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/20';
   return (
     <div data-stage-includes={stage.id} className="px-4 pb-3 -mt-1">
       <Tooltip text={s.stageIncludesHint}>
@@ -683,11 +736,14 @@ function StageIncludes({ stage, onChange }: { stage: Stage; onChange: (patch: Pa
           return (
             <React.Fragment key={w}>
               {INCLUDE_LANGS.map(l => (
-                <input key={l + '|' + r[l]} data-stage-include-word={w} data-lang={l} defaultValue={r[l]} data-enter-own
-                  dir={l === 'he' ? 'rtl' : 'ltr'}
-                  onBlur={e => writeWord(w, l, e.target.value)}
-                  onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
-                  className={box} style={{ borderColor: r[l] ? undefined : '#fcd34d' }} />
+                <AiFillBox key={l + '|' + r[l]} lang={l} empty={!r[l]} source={sourceOf(r, l, langOfWord(w))}
+                  onFill={v => writeWord(w, l, v)}>
+                  <input data-stage-include-word={w} data-lang={l} defaultValue={r[l]} data-enter-own
+                    dir={l === 'he' ? 'rtl' : 'ltr'}
+                    onBlur={e => writeWord(w, l, e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
+                    className={box} style={{ borderColor: r[l] ? undefined : '#fcd34d' }} />
+                </AiFillBox>
               ))}
               <button type="button" data-stage-include-remove={w} aria-label={`Remove ${w}`}
                 onClick={() => {
@@ -700,12 +756,16 @@ function StageIncludes({ stage, onChange }: { stage: Stage; onChange: (patch: Pa
           );
         })}
         {INCLUDE_LANGS.map(l => (
-          <input key={'new-' + l} data-stage-include-add={l === 'en' ? '' : undefined} data-stage-include-new={l}
-            value={draft[l]} data-enter-own dir={l === 'he' ? 'rtl' : 'ltr'}
-            onChange={e => setDraft(d => ({ ...d, [l]: e.target.value }))}
-            onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); add(); } }}
-            placeholder={l === 'en' ? s.stageIncludesAdd : INCLUDE_LANG_NAMES[l]}
-            className={box + ' border-dashed border-gray-300'} />
+          <AiFillBox key={'new-' + l} lang={l} empty={!draft[l].trim()} source={sourceOf(draft, l, draftFrom)}
+            onFill={v => setDraft(d => (d[l].trim() ? d : { ...d, [l]: v }))}>
+            <input data-stage-include-add={l === 'en' ? '' : undefined} data-stage-include-new={l}
+              value={draft[l]} data-enter-own dir={l === 'he' ? 'rtl' : 'ltr'}
+              onChange={e => { const v = e.target.value; setDraft(d => ({ ...d, [l]: v }));
+                if (v.trim() && !draftFrom) setDraftFrom(l); else if (!v.trim() && draftFrom === l) setDraftFrom(null); }}
+              onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); add(); } }}
+              placeholder={l === 'en' ? s.stageIncludesAdd : INCLUDE_LANG_NAMES[l]}
+              className={box + ' border-dashed border-gray-300'} />
+          </AiFillBox>
         ))}
         <button type="button" data-stage-include-go onClick={add}
           disabled={!draft.en.trim() && !draft.he.trim() && !draft.ru.trim()}

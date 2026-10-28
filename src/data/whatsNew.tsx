@@ -39,6 +39,17 @@ export const WHATS_NEW: WhatsNewEntry[] = [
           + 'the same job, with the blocks, the drawer and everything else the Sketcher has. Full screen\'s Mark up does the same.',
         demo: 'tap',
       },
+      {
+        title: 'AI fills the other two languages',
+        body: 'In Settings → Stages, type a stage\'s "includes" word in one language and a small AI button appears inside the '
+          + 'other two boxes — press it and the word is translated for you. You can still correct it by hand.',
+        demo: 'tap',
+      },
+      {
+        title: 'Bigger floor numbers',
+        body: 'The floor numbers down the side of the building board are bigger and darker, so a floor is easy to find.',
+        demo: 'tap',
+      },
     ],
   },
   {

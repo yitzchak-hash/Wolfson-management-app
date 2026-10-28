@@ -3131,6 +3131,8 @@ export interface MainUiStrings {
   stageAutoSaved: string;
   stageIncludesLabel: string;
   stageIncludesAdd: string;
+  aiFillTip: string;
+  aiFillFailed: string;
   stageIncludesHint: string;
   workerWordsTitle: string;
   workerWordsHint: string;
@@ -4140,6 +4142,8 @@ export const DEFAULT_MAIN_UI_STRINGS: MainUiStrings = {
   stageAutoSaved: 'Saved',
   stageIncludesLabel: 'Includes',
   stageIncludesAdd: 'Add a word…',
+  aiFillTip: 'Translate with AI',
+  aiFillFailed: 'The translation did not come back — press to try again',
   stageIncludesHint: 'The small jobs this stage covers — the worker sees them under the stage, in his own language.',
   workerWordsTitle: 'Words from the workers',
   workerWordsHint: 'A worker didn\'t see what he did on any stage. Pick the stage it belongs to and it is added to that stage\'s "Includes".',
@@ -5129,6 +5133,8 @@ export const HEBREW_MAIN_UI_STRINGS: MainUiStrings = {
   stageAutoSaved: 'נשמר',
   stageIncludesLabel: 'כולל',
   stageIncludesAdd: 'הוסף מילה…',
+  aiFillTip: 'תרגום עם AI',
+  aiFillFailed: 'התרגום לא חזר — לחצו לנסות שוב',
   stageIncludesHint: 'העבודות הקטנות שהשלב הזה כולל — העובד רואה אותן מתחת לשלב, בשפה שלו.',
   workerWordsTitle: 'מילים מהעובדים',
   workerWordsHint: 'עובד לא מצא את מה שעשה באף שלב. בחר לאיזה שלב זה שייך וזה יתווסף ל"כולל" של השלב.',

@@ -16,6 +16,13 @@ await ctx.addInitScript(() => {
     ] }));
   }
 });
+// The translator is stubbed (build with VITE_DRIVE_API_KEY set, or the AI button is rightly hidden).
+const DICT = { 'en|צנרת': 'Piping', 'ru|צנרת': 'Трубы', 'he|Insulation': 'בידוד', 'ru|Insulation': 'Изоляция' };
+await ctx.route('**/api/geocode', async r => {
+  const body = JSON.parse(r.request().postData() || '{}').translate;
+  await new Promise(res => setTimeout(res, 300));
+  r.fulfill({ json: { items: body.items.map(it => ({ id: it.id, text: DICT[body.target + '|' + it.text] ?? null })) } });
+});
 const page = await ctx.newPage();
 page.on('pageerror', e => { console.log('PAGE ERROR', e.message); fails++; });
 await page.goto(`${APP}/settings`);
@@ -45,6 +52,33 @@ await box.locator('[data-stage-include-remove="Soldering"]').click();
 await page.waitForTimeout(400);
 const st2 = await page.evaluate(() => JSON.parse(localStorage.getItem('wolfson_app_data') || '{}').stages.find(s => s.id === 's1-piping'));
 check(JSON.stringify(st2.includes) === '["Connections"]' && !st2.includesTr?.Soldering, 'removing a word takes its translations too');
+// The AI buttons (owner, 2026-10-28): type one language, the other two fill themselves on a press.
+check(await box.locator('[data-ai-fill]').count() === 0, 'ai: no AI button where every box is filled');
+await box.locator('[data-stage-include-new="he"]').fill('צנרת');
+check(await box.locator('[data-ai-fill="en"]').count() === 1 && await box.locator('[data-ai-fill="ru"]').count() === 1
+  && await box.locator('[data-ai-fill="he"]').count() === 0, 'ai: the two empty boxes of the new word show the AI button');
+const inside = await box.evaluate(el => { const btn = el.querySelector('[data-ai-fill="en"]').getBoundingClientRect(); const inp = el.querySelector('[data-stage-include-new="en"]').getBoundingClientRect();
+  return btn.left >= inp.left && btn.right <= inp.right && btn.top >= inp.top && btn.bottom <= inp.bottom; });
+check(inside, 'ai: the button sits INSIDE its box');
+await box.locator('[data-ai-fill="en"]').click();
+check(await box.locator('[data-ai-fill="en"][data-ai-busy="1"]').count() === 1, 'ai: it spins while the translation is on its way');
+await page.waitForTimeout(800);
+check(await box.locator('[data-stage-include-new="en"]').inputValue() === 'Piping', 'ai: the English box filled itself',
+  await box.locator('[data-stage-include-new="en"]').inputValue());
+await box.locator('[data-ai-fill="ru"]').click();
+await page.waitForTimeout(800);
+check(await box.locator('[data-stage-include-new="ru"]').inputValue() === 'Трубы', 'ai: the Russian box filled itself');
+await box.locator('[data-stage-include-go]').click();
+await page.waitForTimeout(500);
+await box.locator('[data-stage-include-new="en"]').fill('Insulation');
+await box.locator('[data-stage-include-go]').click();
+await page.waitForTimeout(500);
+await box.locator('[data-stage-include-word="Insulation"] ~ [data-ai-fill="he"], [data-ai-fill="he"]').first().click();
+await page.waitForTimeout(800);
+const st3 = await page.evaluate(() => JSON.parse(localStorage.getItem('wolfson_app_data') || '{}').stages.find(s => s.id === 's1-piping'));
+check(st3.includesTr?.['Piping']?.he === 'צנרת' && st3.includesTr?.['Piping']?.ru === 'Трубы', 'ai: the new word is saved in all three', JSON.stringify(st3.includesTr?.Piping));
+check(st3.includesTr?.Insulation?.he === 'בידוד', 'ai: an existing word\'s empty Hebrew box filled and SAVED', JSON.stringify(st3.includesTr?.Insulation));
+check(await box.locator('[data-stage-include-word="Insulation"][data-lang="he"]').inputValue() === 'בידוד', 'ai: and it shows in the box');
 await box.screenshot({ path: (process.env.SHOTS ?? '/tmp') + '/includes3.png' });
 await b.close();
 console.log(fails ? `\n${fails} FAILED` : '\nALL PASS');

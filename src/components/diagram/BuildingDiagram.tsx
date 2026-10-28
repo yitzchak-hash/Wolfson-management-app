@@ -974,9 +974,12 @@ function BuildingColumn({
               {!phone && (
                 <div className="flex items-center justify-center flex-shrink-0 text-gray-500"
                   data-floor-label={label}
-                  style={{ width: `${LABEL_W}px`, borderRight: '1px solid #e2e8f0', backgroundColor: rowBgOf(row), fontSize: '9px', fontWeight: 600 }}>
-                  <span style={{
-                    fontSize: row.kind === 'lobby' || row.kind === 'ground' ? '7px' : row.num.startsWith('-') ? '8px' : '9px',
+                  style={{ width: `${LABEL_W}px`, borderRight: '1px solid #e2e8f0', backgroundColor: rowBgOf(row), fontWeight: 700 }}>
+                  {/* The owner asked for bigger floor numbers (2026-10-28) — at 9px
+                      they were hard to find down the side of a tall building. */}
+                  <span className="text-gray-700" style={{
+                    fontSize: row.kind === 'lobby' || row.kind === 'ground' ? (compact ? '8px' : '10px')
+                      : row.num.startsWith('-') ? (compact ? '11px' : '13px') : (compact ? '12px' : '15px'),
                     textAlign: 'center', lineHeight: 1.1,
                   }}>
                     {label}
