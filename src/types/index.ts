@@ -3394,6 +3394,8 @@ export interface MainUiStrings {
   soldWord: string;
   notSoldWord: string;
   upgradedWord: string;
+  openInSketcher: string;
+  openInSketcherTip: string;
   notUpgradedWord: string;
   upgradedBadge: string;
   upgradedTooltip: string;
@@ -4391,6 +4393,8 @@ export const DEFAULT_MAIN_UI_STRINGS: MainUiStrings = {
   soldWord: 'Sold',
   notSoldWord: 'Not sold',
   upgradedWord: 'Upgraded',
+  openInSketcher: 'Open in Sketcher',
+  openInSketcherTip: 'Opens this plan in the Plan Sketcher, in a new tab',
   notUpgradedWord: 'Not upgraded',
   upgradedBadge: 'U',
   upgradedTooltip: 'Upgraded apartment',
@@ -5378,6 +5382,8 @@ export const HEBREW_MAIN_UI_STRINGS: MainUiStrings = {
   soldWord: 'נמכר',
   notSoldWord: 'לא נמכר',
   upgradedWord: 'משודרג',
+  openInSketcher: 'פתיחה בסקצ׳ר',
+  openInSketcherTip: 'פותח את התוכנית בסקצ׳ר, בלשונית חדשה',
   notUpgradedWord: 'לא משודרג',
   upgradedBadge: 'ש',
   upgradedTooltip: 'דירה משודרגת',

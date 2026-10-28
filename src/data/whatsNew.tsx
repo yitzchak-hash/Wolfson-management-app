@@ -30,6 +30,18 @@ export interface WhatsNewEntry {
 
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    date: '2027-02-21',
+    title: 'Plans are marked up in the Plan Sketcher',
+    items: [
+      {
+        title: 'Open in Sketcher',
+        body: 'The plan\'s Mark up button is now "Open in Sketcher": it opens the plan in the Plan Sketcher in a new tab, inside '
+          + 'the same job, with the blocks, the drawer and everything else the Sketcher has. Full screen\'s Mark up does the same.',
+        demo: 'tap',
+      },
+    ],
+  },
+  {
     date: '2027-02-20',
     title: 'Tiles laid out your way, and stage words in three languages',
     items: [

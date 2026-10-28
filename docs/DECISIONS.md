@@ -404,3 +404,9 @@ Time off belongs to the person and lives in one shared list.
   notes (folded) / every stage, always shown, with its `includes` parts / custom project buttons / Settings.
 - The tile keeps naming the stage being worked on, else "Sold".
 - The start stage "Sold/Start" is renamed "Sold" in the data (once, on open); `isStartStage` knows both names.
+
+## 2026-10-28 (chat) — the markup studio leaves the management app
+- "I don't want the markup studio to be in the Wolfson management app … it should say Open in Sketcher … a new tab … into
+  that job … open up the plan." The job window's Mark up (and full screen's) and the board file tray's open
+  `tzvi-air-plan-sketcher.vercel.app/sketch/<file>?name&job&project&folder` (`src/data/sketcherLink.ts`, `VITE_SKETCHER_URL`
+  overrides). The worker's phone keeps its own Mark up until he says otherwise.

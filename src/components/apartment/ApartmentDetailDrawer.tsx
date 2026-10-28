@@ -51,6 +51,7 @@ const PlanAnnotator = lazy(() =>
   import('../plans/PlanAnnotator').then(m => ({ default: m.PlanAnnotator })));
 import { ContractorStatusPanel } from './ContractorStatusPanel';
 import { StageSection } from './StageSection';
+import { openInSketcher } from '../../data/sketcherLink';
 import { buildingShort, realName } from '../../data/aptSale';
 import { OffListQuestion } from '../tasks/OffListQuestion';
 import { MoveTaskDialog, officeMoveWords, fill } from '../tasks/MoveTaskDialog';
@@ -709,6 +710,19 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
   const browsing = autoBrowse || !!browsePath;
   const paneFileId = browsePreview?.file.id ?? (browsing ? null : (shownPlanId ?? detectedPdfId));
   const studioFileId = browsePreview?.file.id ?? shownPlanId ?? detectedPdfId;
+  /**
+   * The markup studio lives in the PLAN SKETCHER now (owner, 2026-10-28):
+   * the button opens this plan there, in a new tab, inside this job.
+   */
+  function openPlanInSketcher() {
+    if (!studioFileId || !apartment) return;
+    const name = browsePreview?.file.id === studioFileId ? browsePreview.file.name
+      : (planSet.plans.find(p => p.id === studioFileId)?.name ?? availablePdfs[selectedPdfIdx]?.name);
+    openInSketcher({
+      fileId: studioFileId, name, jobId: apartment.id, projectId: currentProjectId,
+      folderId: driveLink ? extractFolderId(driveLink) : null,
+    });
+  }
   const starredPlanId = plansPdfLink ? extractFileId(plansPdfLink) : null;
   /** The shown plan is the app's latest-activity GUESS — nobody starred one. */
   // Read the LOCAL link state, not the prop: the board hands the drawer the
@@ -1320,11 +1334,11 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
           <DriveDesktopPath driveLink={planSet.plansFolderId} onToast={onToast} />
         )}
 
-        <Tooltip text="Mark up this plan">
-          <button onClick={() => setAnnotating('draw')}
+        <Tooltip text={ui.openInSketcherTip}>
+          <button onClick={openPlanInSketcher} data-open-sketcher
             className="flex items-center gap-1.5 px-2.5 py-1 min-h-[30px] rounded-lg text-[11px] font-bold text-white"
             style={{ backgroundColor: '#4aa8d8' }}>
-            <PenLine size={11} /> Mark up
+            <PenLine size={11} /> {ui.openInSketcher}
             {planVersionCount > 0 && (
               <span className="px-1 rounded-full text-[9px]" style={{ backgroundColor: 'rgba(255,255,255,.28)' }}>
                 v{planVersionCount}
@@ -3469,7 +3483,7 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
           onPickPlan={p => setShownPlanId(p.id)}
           authorName={currentUser.name}
           readOnly={annotating === 'view'}
-          onStartMarkup={() => setAnnotating('draw')}
+          onStartMarkup={() => { setAnnotating(null); openPlanInSketcher(); }}
           onClose={() => setAnnotating(null)}
           onToast={onToast}
         />
