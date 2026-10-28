@@ -1,0 +1,264 @@
+<title>Wolfson Tile Layout</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
+<style>
+/* Layout: the tile big on the left to drag pieces around, the real-size tiles on the right showing the result with long names. */
+:root {
+  --bg: #eef1f5; --panel: #ffffff; --ink: #111827; --muted: #5b6472; --line: #d7dce3;
+  --navy: #1e3a5f; --tile: #5d6a80; --teal: #0d9fa6; --amber: #f59e0b; --sel: #2563eb;
+  --body: 'Inter', 'Segoe UI', Arial, sans-serif;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bg: #151a21; --panel: #1f2630; --ink: #e8ecf1; --muted: #9aa4b2; --line: #343d49; color-scheme: dark } }
+:root[data-theme="dark"] { --bg: #151a21; --panel: #1f2630; --ink: #e8ecf1; --muted: #9aa4b2; --line: #343d49; color-scheme: dark }
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font-family: var(--body); }
+.wrap { max-width: 1240px; margin: 0 auto; padding-block: 22px 48px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+h1 { font-size: 26px; font-weight: 800; margin: 0 0 4px; color: var(--ink); }
+.lede { margin: 0 0 18px; color: var(--muted); font-size: 14px; max-width: 70ch; line-height: 1.5; }
+.grid { display: grid; grid-template-columns: minmax(0, 1fr) 590px; gap: 18px; align-items: start; }
+@media (max-width: 1080px) { .grid { grid-template-columns: 1fr; } }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 16px; min-width: 0; }
+.card h2 { font-size: 13px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin: 0 0 12px; font-weight: 700; }
+.stage { overflow: auto; padding: 8px; }
+.ed { position: relative; transform-origin: 0 0; }
+.tile { position: absolute; inset: 0; border-radius: 6px; overflow: hidden; border: 1.5px solid #4a5568; background: var(--tile); color: #fff; }
+.tile.teal { background: var(--teal); border-color: #0b7f85; }
+.tile.empty { background: #fff; color: #374151; border-color: #e2e8f0; }
+.el { position: absolute; white-space: nowrap; line-height: 1.15; user-select: none; touch-action: none; }
+.ed .el { cursor: grab; outline: 1px dashed rgba(255,255,255,.35); outline-offset: 1px; }
+.ed .tile.empty .el { outline-color: rgba(0,0,0,.25); }
+.ed .el.sel { outline: 2px solid var(--sel); outline-offset: 1px; z-index: 5; }
+.ed .el.dragging { cursor: grabbing; }
+.ed .el.off { display: none; }
+.el.wrap2 { white-space: normal; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.el.cut { overflow: hidden; text-overflow: ellipsis; }
+.badge { border-radius: 999px; background: var(--amber); color: #fff; font-weight: 800; display: flex; align-items: center; justify-content: center; border: 1.5px solid rgba(255,255,255,.9); }
+.plus { border-radius: 999px; background: rgba(255,255,255,.42); color: inherit; font-weight: 700; display: flex; align-items: center; justify-content: center; }
+.tile.empty .plus { background: transparent; color: #374151; }
+.chip { border-radius: 3px; background: rgba(255,255,255,.22); font-weight: 700; padding: 2px 6px; }
+.tile.empty .chip { background: #eef1f4; }
+.strip { display: flex; gap: 1px; }
+.strip i { flex: 1; border-radius: 1px; background: rgba(255,255,255,.55); }
+.strip i.d { background: #8ef0c1; }
+.tile.empty .strip i { background: #d1d5db; }
+.handle { position: absolute; right: -5px; top: 50%; width: 10px; height: 18px; margin-top: -9px; border-radius: 3px; background: var(--sel); cursor: ew-resize; display: none; }
+.el.sel .handle { display: block; }
+.tools { display: grid; gap: 8px; margin-top: 14px; }
+.row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 13px; }
+.row .name { font-weight: 600; min-width: 120px; }
+button, .tog { font: 600 13px var(--body); border-radius: 8px; border: 1px solid var(--line); background: var(--panel); color: var(--ink); padding: 6px 10px; cursor: pointer; }
+button:focus-visible { outline: 2px solid var(--sel); outline-offset: 2px; }
+button.primary { background: var(--navy); color: #fff; border-color: var(--navy); }
+button.small { padding: 3px 8px; min-width: 30px; }
+.pieces { display: flex; flex-wrap: wrap; gap: 6px; }
+.pieces button[aria-pressed="false"] { opacity: .45; text-decoration: line-through; }
+.pieces button.cur { border-color: var(--sel); box-shadow: 0 0 0 1px var(--sel); }
+.saved { font-size: 13px; color: var(--muted); }
+.prev { display: grid; gap: 4px; }
+.prow { display: grid; grid-template-columns: repeat(4, 132px); gap: 4px; overflow-x: auto; }
+.pt { position: relative; width: 132px; height: 100px; }
+.note { font-size: 12.5px; color: var(--muted); margin-top: 10px; line-height: 1.45; }
+.sizebox { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.sizebox label { font-size: 12.5px; color: var(--muted); }
+</style>
+
+<div class="wrap">
+  <h1>Wolfson Tile Layout</h1>
+  <p class="lede">Drag each piece where you want it on the big tile. Click a piece to pick it, then make it bigger or smaller, let the
+    name use two lines, or hide it. The small tiles on the right are the real size, with real-length names, so you can see if
+    anything gets cut off. Press Save when it looks right.</p>
+
+  <div class="grid">
+    <div class="card">
+      <h2>The tile, three times bigger</h2>
+      <div class="stage"><div class="ed" id="ed"></div></div>
+      <div class="tools">
+        <div class="row"><span class="name">Pieces</span><div class="pieces" id="pieces"></div></div>
+        <div class="row" id="selRow"><span class="name" id="selName">Pick a piece</span>
+          <span class="sizebox">
+            <label for="fs">Size</label>
+            <button class="small" id="fsDown" aria-label="Smaller">−</button>
+            <span id="fsVal">–</span>
+            <button class="small" id="fsUp" aria-label="Bigger">+</button>
+            <label><input type="checkbox" id="two"> Two lines</label>
+            <label><input type="checkbox" id="bold"> Bold</label>
+            <button class="small" id="center">Centre it</button>
+          </span>
+        </div>
+        <div class="row"><span class="name">Tile size</span>
+          <span class="sizebox">
+            <label for="th">Height</label>
+            <button class="small" id="thDown" aria-label="Shorter">−</button><span id="thVal"></span><button class="small" id="thUp" aria-label="Taller">+</button>
+          </span>
+        </div>
+        <div class="row">
+          <button class="primary" id="save">Save</button>
+          <button id="reset">Start from today's tile</button>
+          <span class="saved" id="saved"></span>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Real size, long names</h2>
+      <div class="prev" id="prev"></div>
+      <p class="note">These are the size of a tile on the office screen with all three buildings showing.</p>
+    </div>
+  </div>
+</div>
+
+<script>
+const SCALE = 3, W = 132;
+// Today's tile, as built on 28 Oct.
+const DEFAULT = {
+  h: 100,
+  els: {
+    badge: { x: 4, y: 4, w: 20, fs: 11, on: true, two: false, bold: true },
+    plus:  { x: 108, y: 4, w: 20, fs: 14, on: true, two: false, bold: true },
+    num:   { x: 4, y: 26, w: 26, fs: 12.5, on: true, two: false, bold: true },
+    name:  { x: 30, y: 26, w: 98, fs: 12.5, on: true, two: false, bold: true },
+    tipus: { x: 56, y: 46, w: 22, fs: 10, on: true, two: false, bold: true },
+    stage: { x: 46, y: 64, w: 40, fs: 9, on: true, two: false, bold: false },
+    task:  { x: 40, y: 76, w: 60, fs: 9, on: true, two: false, bold: true },
+    strip: { x: 3, y: 95, w: 126, fs: 3, on: true, two: false, bold: false },
+  },
+};
+const LABEL = { badge: 'Upgraded "U"', plus: '+ add task', num: 'Number', name: 'Family name', tipus: 'Tipus', stage: 'Stage', task: 'Worker / task', strip: 'Progress bar' };
+const SAMPLES = [
+  { num: '29', name: 'Braunstein, Eric J.', tipus: 'A', stage: 'Sold', task: '', up: true, kind: '' },
+  { num: '30', name: 'Rabinowitz, Simcha', tipus: 'B', stage: 'Sold', task: '', up: true, kind: '' },
+  { num: '25', name: 'Avraham, Yehoshua', tipus: 'A', stage: 'Drilling', task: '⏳ Igor', up: true, kind: 'teal' },
+  { num: '31', name: 'Not sold', tipus: 'C1', stage: '', task: '', up: false, kind: 'empty' },
+  { num: '21/24', name: 'Gold, Yoel', tipus: 'A+C2', stage: 'Drilling', task: '', up: true, kind: 'teal' },
+  { num: '16', name: 'Franklin, Menachem', tipus: 'C2', stage: 'Fans', task: '⏳ Max', up: false, kind: '' },
+  { num: '18/19', name: 'Miller, Benny', tipus: 'B+C1', stage: 'Wall Units', task: '', up: true, kind: '' },
+  { num: '23', name: 'Gabay, Nachum', tipus: 'C1', stage: 'Sold', task: '', up: true, kind: '' },
+];
+let state = JSON.parse(JSON.stringify(DEFAULT));
+let sel = null;
+
+function textOf(k, s) {
+  return k === 'badge' ? 'U' : k === 'plus' ? '+' : k === 'num' ? s.num : k === 'name' ? s.name : k === 'tipus' ? s.tipus
+    : k === 'stage' ? s.stage : k === 'task' ? s.task : '';
+}
+function drawTile(host, s, scale, editable) {
+  host.innerHTML = '';
+  host.style.width = W * scale + 'px'; host.style.height = state.h * scale + 'px';
+  const t = document.createElement('div');
+  t.className = 'tile' + (s.kind ? ' ' + s.kind : '');
+  t.style.borderRadius = 6 * scale + 'px';
+  host.appendChild(t);
+  for (const [k, e] of Object.entries(state.els)) {
+    if (!e.on && !editable) continue;
+    if (k === 'badge' && !s.up && !editable) continue;
+    const txt = textOf(k, s);
+    if (!txt && k !== 'strip' && !editable) continue;
+    const d = document.createElement('div');
+    d.className = 'el' + (k === 'badge' ? ' badge' : k === 'plus' ? ' plus' : k === 'tipus' ? ' chip' : k === 'strip' ? ' strip' : '')
+      + (e.two ? ' wrap2' : ' cut') + (editable && !e.on ? ' off' : '') + (editable && sel === k ? ' sel' : '');
+    d.dataset.k = k;
+    d.style.left = e.x * scale + 'px'; d.style.top = e.y * scale + 'px';
+    d.style.fontSize = e.fs * scale + 'px';
+    d.style.fontWeight = e.bold ? 700 : 500;
+    if (k === 'badge' || k === 'plus') { d.style.width = d.style.height = e.w * scale + 'px'; d.textContent = txt; }
+    else if (k === 'strip') { d.style.width = e.w * scale + 'px'; d.style.height = e.fs * scale + 'px';
+      d.innerHTML = Array.from({ length: 10 }, (_, i) => `<i class="${i < 2 ? 'd' : ''}"></i>`).join(''); }
+    else { d.style.maxWidth = e.w * scale + 'px'; if (k !== 'tipus') d.style.width = e.w * scale + 'px';
+      d.textContent = txt || (editable ? LABEL[k] : '');
+      if (k === 'name' && s.kind === 'empty') { d.style.fontStyle = 'italic'; d.style.fontWeight = 500; }
+      if (k === 'stage') d.style.opacity = .9;
+      if (k === 'task') d.style.color = s.kind === 'empty' ? '#f97316' : '#fed7aa';
+      if (k === 'name' || k === 'num' || k === 'stage' || k === 'task') d.style.textAlign = 'center';
+      if (k === 'tipus') { d.style.padding = `${2 * scale}px ${6 * scale}px`; d.style.borderRadius = 3 * scale + 'px'; } }
+    if (editable && (k === 'name' || k === 'stage' || k === 'task' || k === 'num' || k === 'strip')) {
+      const h = document.createElement('span'); h.className = 'handle'; h.dataset.handle = '1'; d.appendChild(h);
+    }
+    t.appendChild(d);
+  }
+}
+const ed = document.getElementById('ed');
+const editSample = { num: '29', name: 'Braunstein, Eric J.', tipus: 'A', stage: 'Drilling', task: '⏳ Igor', up: true, kind: '' };
+function render() {
+  drawTile(ed, editSample, SCALE, true);
+  const prev = document.getElementById('prev');
+  prev.innerHTML = '';
+  for (let r = 0; r < SAMPLES.length; r += 4) {
+    const row = document.createElement('div'); row.className = 'prow';
+    for (const s of SAMPLES.slice(r, r + 4)) { const p = document.createElement('div'); p.className = 'pt'; drawTile(p, s, 1, false); p.style.height = state.h + 'px'; row.appendChild(p); }
+    prev.appendChild(row);
+  }
+  const pc = document.getElementById('pieces'); pc.innerHTML = '';
+  for (const k of Object.keys(state.els)) {
+    const b = document.createElement('button'); b.textContent = LABEL[k]; b.setAttribute('aria-pressed', String(state.els[k].on));
+    b.className = sel === k ? 'cur' : ''; b.title = 'Click to pick · double-click to hide or show';
+    b.onclick = () => { sel = k; render(); };
+    b.ondblclick = () => { state.els[k].on = !state.els[k].on; render(); };
+    pc.appendChild(b);
+  }
+  const e = sel && state.els[sel];
+  document.getElementById('selName').textContent = sel ? LABEL[sel] + (e.on ? '' : ' (hidden)') : 'Pick a piece';
+  document.getElementById('fsVal').textContent = e ? (sel === 'strip' ? e.fs + ' px tall' : e.fs + ' px') : '–';
+  document.getElementById('two').checked = !!(e && e.two);
+  document.getElementById('bold').checked = !!(e && e.bold);
+  document.getElementById('thVal').textContent = state.h + ' px';
+  document.getElementById('selRow').style.opacity = sel ? 1 : .5;
+}
+// Dragging
+let drag = null;
+ed.addEventListener('pointerdown', ev => {
+  const el = ev.target.closest('.el'); if (!el) { sel = null; render(); return; }
+  const k = el.dataset.k; sel = k;
+  const e = state.els[k];
+  drag = { k, sx: ev.clientX, sy: ev.clientY, x: e.x, y: e.y, w: e.w, resize: !!ev.target.dataset.handle };
+  ed.setPointerCapture(ev.pointerId); render();
+  ed.querySelector(`.el[data-k="${k}"]`)?.classList.add('dragging');
+});
+ed.addEventListener('pointermove', ev => {
+  if (!drag) return;
+  const e = state.els[drag.k];
+  const dx = (ev.clientX - drag.sx) / SCALE, dy = (ev.clientY - drag.sy) / SCALE;
+  if (drag.resize) e.w = Math.max(10, Math.min(W, Math.round(drag.w + dx)));
+  else { e.x = Math.round(Math.max(-4, Math.min(W - 6, drag.x + dx))); e.y = Math.round(Math.max(-4, Math.min(state.h - 4, drag.y + dy))); }
+  render();
+});
+ed.addEventListener('pointerup', () => { drag = null; render(); });
+document.addEventListener('keydown', ev => {
+  if (!sel || ev.target.closest('input')) return;
+  const e = state.els[sel], m = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[ev.key];
+  if (m) { ev.preventDefault(); e.x += m[0]; e.y += m[1]; render(); }
+});
+const step = (k, d) => { const e = state.els[k]; e.fs = Math.max(2, Math.round((e.fs + d) * 2) / 2); if (k === 'badge' || k === 'plus') e.w = Math.max(10, e.w + d * 1.6); };
+document.getElementById('fsUp').onclick = () => { if (sel) { step(sel, 0.5); render(); } };
+document.getElementById('fsDown').onclick = () => { if (sel) { step(sel, -0.5); render(); } };
+document.getElementById('two').onchange = ev => { if (sel) { state.els[sel].two = ev.target.checked; render(); } };
+document.getElementById('bold').onchange = ev => { if (sel) { state.els[sel].bold = ev.target.checked; render(); } };
+document.getElementById('center').onclick = () => {
+  if (!sel) return; const node = ed.querySelector(`.el[data-k="${sel}"]`); if (!node) return;
+  const w = node.getBoundingClientRect().width / SCALE; state.els[sel].x = Math.round((W - w) / 2); render();
+};
+document.getElementById('thUp').onclick = () => { state.h = Math.min(160, state.h + 4); render(); };
+document.getElementById('thDown').onclick = () => { state.h = Math.max(60, state.h - 4); render(); };
+document.getElementById('reset').onclick = () => { state = JSON.parse(JSON.stringify(DEFAULT)); sel = null; render(); };
+
+// Saving — into the page's store, where Claude reads it back.
+const savedEl = document.getElementById('saved');
+let docRef = null;
+document.getElementById('save').onclick = async () => {
+  if (!docRef) { savedEl.textContent = 'Saving is not available in this view.'; return; }
+  savedEl.textContent = 'Saving…';
+  try { await docRef.set({ layout: JSON.stringify(state), savedAt: new Date().toISOString() }); savedEl.textContent = 'Saved ' + new Date().toLocaleTimeString(); }
+  catch (e) { savedEl.textContent = 'Could not save: ' + (e && e.message || e); }
+};
+render();
+(async () => {
+  const db = await window.claude?.use?.('db');
+  if (!db) { savedEl.textContent = 'Sign in to save.'; return; }
+  docRef = db.doc('layouts/tile');
+  try {
+    const snap = await docRef.get();
+    const d = snap.data();
+    if (d && d.layout) { state = JSON.parse(d.layout); render(); savedEl.textContent = 'Your saved layout · ' + new Date(d.savedAt).toLocaleString(); }
+  } catch { /* nothing saved yet */ }
+})();
+</script>
