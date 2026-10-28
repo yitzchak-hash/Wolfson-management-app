@@ -31,6 +31,23 @@ export interface WhatsNewEntry {
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
     date: '2027-02-18',
+    title: 'Plans open in the Plan Sketcher',
+    items: [
+      {
+        title: 'Open in Sketcher',
+        body: 'The plan bar\u2019s Mark up is now Open in Sketcher: the plan opens in the Plan Sketcher in its own tab \u2014 the '
+          + 'same markup tools, plus the blocks drawer \u2014 with this job and its Drive folder already chosen.',
+        demo: 'tap',
+      },
+      {
+        title: 'A slim scrollbar when zoomed in',
+        body: 'Zoomed into a plan, the old grey scrollbar with arrows is gone \u2014 a thin rounded one stands in its place.',
+        demo: 'zoom',
+      },
+    ],
+  },
+  {
+    date: '2027-02-18',
     title: 'A plan prints clean',
     items: [
       {

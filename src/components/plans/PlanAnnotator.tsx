@@ -4670,7 +4670,7 @@ function PlanEditor({
               zoomed sheet unreachable. `m-auto` centres exactly the same while
               it fits and behaves like a normal scroll child once it does not.
             */
-            className={`flex-1 min-h-0 overflow-auto flex ${
+            className={`plan-stage-scroll flex-1 min-h-0 overflow-auto flex ${
               compact ? 'p-1' : 'p-4'} ${workspaceGutter ? 'my-3 mx-11 rounded-lg' : ''}`}
             data-plan-stage
             data-plan-workspace={workspaceGutter ? '' : undefined}

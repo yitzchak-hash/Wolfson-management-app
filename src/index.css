@@ -88,6 +88,17 @@ html, body {
   padding-bottom: env(safe-area-inset-bottom, 0px);
 }
 
+/* The plan studio's stage (owner, 2026-10-28: "when you zoom in, there's a very old style slider that appears on the right"):
+   zoomed past the screen, the sheet scrolls — and Windows drew its classic 17px grey bars with arrow buttons. A slim rounded
+   thumb on a clear track instead, darker under the hand; no arrow buttons. */
+/* (Chrome ignores the ::-webkit-scrollbar rules once `scrollbar-width` is set — the standard pair is for Firefox only) */
+@supports not selector(::-webkit-scrollbar) { .plan-stage-scroll { scrollbar-width: thin; scrollbar-color: rgba(148,163,184,.55) transparent; } }
+.plan-stage-scroll::-webkit-scrollbar { width: 8px; height: 8px; }
+.plan-stage-scroll::-webkit-scrollbar-track, .plan-stage-scroll::-webkit-scrollbar-corner { background: transparent; }
+.plan-stage-scroll::-webkit-scrollbar-button { display: none; width: 0; height: 0; }
+.plan-stage-scroll::-webkit-scrollbar-thumb { background: rgba(148,163,184,.55); border-radius: 8px; border: 2px solid transparent; background-clip: padding-box; }
+.plan-stage-scroll::-webkit-scrollbar-thumb:hover { background: rgba(203,213,225,.85); background-clip: padding-box; }
+
 @layer utilities {
   .scrollbar-thin {
     scrollbar-width: thin;

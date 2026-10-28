@@ -4,6 +4,7 @@ import { Apartment, User, getStageName, TaskAttachment, TaskPriority, aptLabel, 
 import { TaskThread } from '../tasks/TaskThread';
 import { Translated } from '../ui/Translated';
 import { Send } from 'lucide-react';
+import { sketcherUrl } from '../../data/sketcherLink';
 import { useStore, trackUndo } from '../../data/store';
 import { peekTaskFocus, takeTaskFocus } from '../../data/taskFocus';
 import { TaskDaysPicker, daysFields } from '../tasks/TaskDaysPicker';
@@ -1309,11 +1310,21 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
           <DriveDesktopPath driveLink={planSet.plansFolderId} onToast={onToast} />
         )}
 
-        <Tooltip text="Mark up this plan">
-          <button onClick={() => setAnnotating('draw')}
+        {/* Owner, 2026-10-28: "Mark up … should actually be Open in Sketcher" — the plan opens in the Plan Sketcher (the same
+            studio plus the blocks drawer), in its own tab, with this job and its Drive folder, so its work files where this
+            app's would. With no plan found yet the button still opens this app's own studio, as before. */}
+        <Tooltip text="Open this plan in the Plan Sketcher — the markup studio with the blocks">
+          <button data-open-sketcher onClick={() => {
+            if (!studioFileId) { setAnnotating('draw'); return; }
+            const name = browsePreview?.file.id === studioFileId ? browsePreview.file.name
+              : (planSet.plans.find(p => p.id === studioFileId)?.name ?? availablePdfs[selectedPdfIdx]?.name);
+            const link = driveLink || apartment?.driveLink || '';
+            const folder = link ? extractFolderId(link) : null;
+            window.open(sketcherUrl({ fileId: studioFileId, name, jobId: apartment?.id, projectId: currentProjectId, folderId: folder }), '_blank', 'noopener');
+          }}
             className="flex items-center gap-1.5 px-2.5 py-1 min-h-[30px] rounded-lg text-[11px] font-bold text-white"
             style={{ backgroundColor: '#4aa8d8' }}>
-            <PenLine size={11} /> Mark up
+            <PenLine size={11} /> Open in Sketcher
             {planVersionCount > 0 && (
               <span className="px-1 rounded-full text-[9px]" style={{ backgroundColor: 'rgba(255,255,255,.28)' }}>
                 v{planVersionCount}
