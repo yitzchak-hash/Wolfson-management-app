@@ -16,6 +16,8 @@ function mergeFreshMainUi(ms: Partial<MainUiStrings> | null | undefined): MainUi
   const safe = ms ?? {};
   return { ...(safe.isRtl ? HEBREW_MAIN_UI_STRINGS : DEFAULT_MAIN_UI_STRINGS), ...safe };
 }
+import { wolfsonTipus, WOLFSON_TIPUSIM } from './wolfsonTipus';
+import { isWolfsonBuilding } from './floorRows';
 import {
   DEFAULT_BUILDINGS, DEFAULT_PROJECTS, DEFAULT_STAGES, DEFAULT_USERS, NETIV_BUILDINGS,
   buildDefaultApartments, buildNetivApartments, buildGroundFirstFloorSlots, migrateNetivApartments, DATA_VERSION,
@@ -999,6 +1001,8 @@ interface AppState {
   migrateStageSets: () => number;
   /** The Wolfson stage split (2026-09-22): three combined global stages → eight; marks copied onto the children. Idempotent. */
   splitCombinedStages: () => number;
+  /** Wolfson's tipus by rule, into every EMPTY field; the start stage renamed "Sold". */
+  fillWolfsonTipus: () => number;
   addApartment: (apt: Apartment) => void;
   /** Bulk add — one state set, one persist, one (chunked) Firestore batch. */
   importJobs: (jobs: Apartment[]) => void;
@@ -2009,6 +2013,7 @@ export const useStore = create<AppState>((set, get) => ({
 
   migrateStageSets: () => {
     const pid = get().currentProjectId;
+    get().fillWolfsonTipus();
     const sorted = stagesOfProject(pid, get().stages);
     // Kinds first: the seed is by name, once, and only while no line has one.
     for (const k of seedStageKinds(sorted)) get().updateStage(k.id, { kind: k.kind });
@@ -2045,6 +2050,42 @@ export const useStore = create<AppState>((set, get) => ({
       stageMarks: a.stageMarks, bubbles: true, currentStageId: a.currentStageId ?? null, updatedAt: now,
     } })));
     return changed.length;
+  },
+
+  fillWolfsonTipus: () => {
+    /**
+     * Owner, recording 2026-10-28 (the "Wolfson Tipus Map", approved): every
+     * Wolfson flat carries its tipus by the rule in `wolfsonTipus`, and the
+     * start stage reads "Sold" rather than "Sold/Start". Only EMPTY tipus
+     * fields are filled — one somebody set by hand is never touched — so this
+     * is safe to run on every open and does nothing after the first.
+     */
+    let n = 0;
+    const startStage = get().stages.find(st => /^\s*sold\s*\/\s*start\s*$/i.test(st.name || ''));
+    if (startStage) {
+      const nameHe = startStage.nameHe && /נמכר/.test(startStage.nameHe) ? 'נמכר' : startStage.nameHe;
+      get().updateStage(startStage.id, { name: 'Sold', ...(nameHe !== startStage.nameHe ? { nameHe } : {}) });
+      n++;
+    }
+    if (get().currentProjectId !== 'wolfson') return n;
+    if (!get().boardSettings.wolfson?.tipusim?.length) {
+      get().setBoardSetting('tipusim', [...WOLFSON_TIPUSIM]);
+      n++;
+    }
+    const now = new Date().toISOString();
+    const changed: Array<{ id: string; tipus: string }> = [];
+    const apartments = get().apartments.map(a => {
+      if (a.tipus?.trim() || a.isUnnamed || a.coveredBy || !isWolfsonBuilding(a.buildingId)) return a;
+      const tipus = wolfsonTipus(a);
+      if (!tipus) return a;
+      changed.push({ id: a.id, tipus });
+      return { ...a, tipus };
+    });
+    if (!changed.length) return n;
+    set({ apartments });
+    persist(get);
+    fsBatchSet(projectCollection('wolfson', 'apartments'), changed.map(c => ({ id: c.id, data: { tipus: c.tipus, updatedAt: now } })));
+    return n + changed.length;
   },
 
   splitCombinedStages: () => {

@@ -250,7 +250,9 @@ export const IMPLIED_DONE: ReadonlyArray<readonly [when: string, also: string]> 
  * Sold/Start" — nobody does Sold/Start on site, it follows from the work.
  */
 export function isStartStage(st: Pick<Stage, 'id' | 'name'>): boolean {
-  return st.id === 'skhtatb' || /^\s*sold\s*\/?\s*start\b/i.test(st.name || '');
+  // "Sold/Start" is called plain "Sold" since the owner's recording of
+  // 2026-10-28; both names are the start stage.
+  return st.id === 'skhtatb' || /^\s*sold(\s*\/?\s*start)?\s*$/i.test(st.name || '') || /^\s*sold\s*\/?\s*start\b/i.test(st.name || '');
 }
 
 export function withImpliedDone(

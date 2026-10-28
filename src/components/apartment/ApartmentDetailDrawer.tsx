@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef, lazy, Suspense } from 'react';
 import { Mic, X, Save, Building2, MessageSquare, AlertTriangle, Link, Unlink, ExternalLink, BookOpen, Download, Eye, EyeOff, Activity, RefreshCw, Paperclip, Trash2, ChevronDown, ChevronRight, ClipboardList, CheckCircle2, CalendarDays, FileText, UserCheck, Plus, Camera, Play, ChevronLeft, FolderOpen, Clock, RotateCcw, Edit2, BarChart3, PenLine, Maximize2, Printer, Phone as PhoneIcon, Loader2, Folder, Star, ArrowRightLeft } from 'lucide-react';
-import { Apartment, User, getStageName, TaskAttachment, TaskPriority, aptLabel, ContractorAssignment } from '../../types';
+import { Apartment, User, getStageName, TaskAttachment, TaskPriority, aptLabel, ContractorAssignment, CustomButton } from '../../types';
 import { TaskThread } from '../tasks/TaskThread';
 import { Translated } from '../ui/Translated';
 import { Send } from 'lucide-react';
@@ -36,7 +36,6 @@ import { photoSrcOf } from '../../data/photoSrc';
 import { shotKindOf } from '../../data/sitePhotos';
 import { printSheet, printEsc } from '../../data/printing';
 import { PlanAddressSuggest } from './PlanAddressSuggest';
-import { StagePicker } from './StagePicker';
 import { isWorkStage, progressOf, taskStageIds, recordStageIds, isStartStage } from '../../data/stageMarks';
 import { ProblemForm } from './ProblemForm';
 import { ProblemBand } from './ProblemBand';
@@ -51,6 +50,8 @@ import { cachedPlanAspect, measurePlanAspect } from '../../data/planAspect';
 const PlanAnnotator = lazy(() =>
   import('../plans/PlanAnnotator').then(m => ({ default: m.PlanAnnotator })));
 import { ContractorStatusPanel } from './ContractorStatusPanel';
+import { StageSection } from './StageSection';
+import { buildingShort, realName } from '../../data/aptSale';
 import { OffListQuestion } from '../tasks/OffListQuestion';
 import { MoveTaskDialog, officeMoveWords, fill } from '../tasks/MoveTaskDialog';
 import { DeleteTaskDialog } from '../tasks/DeleteTaskDialog';
@@ -85,6 +86,7 @@ function DriveImg({ src, alt, className }: { src: string; alt: string; className
 }
 
 const EMPTY_TIPUSIM: string[] = [];
+const EMPTY_BUTTONS: CustomButton[] = [];
 /** A stage colour with an alpha suffix — only for a six-digit hex, which can take one. */
 function tintHex(c: string | undefined, alpha: string): string {
   return c && /^#[0-9a-f]{6}$/i.test(c) ? c + alpha : (c || '#94a3b8');
@@ -110,6 +112,7 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
     contractorNotes, addContractorNote } = useStore();
   const isGeneralProject = currentProjectId === 'general';
   const tipusim = useStore(st => st.boardSettings[st.currentProjectId]?.tipusim ?? EMPTY_TIPUSIM);
+  const customButtons = useStore(st => st.boardSettings[st.currentProjectId]?.customButtons ?? EMPTY_BUTTONS);
   // Who approved the plan, read LIVE — the board hands the drawer the record
   // captured at open, so an approval pressed a moment ago would not show.
   const plansApprovedBy = useStore(st => st.apartments.find(a => a.id === apartment?.id)?.plansApprovedBy);
@@ -422,6 +425,8 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
   const [planWanted, setPlanWanted] = useState(true);
   const [showHealthCheck, setShowHealthCheck] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [notesOpen, setNotesOpen] = useState(false);
+  const [aptNoLocal, setAptNoLocal] = useState('');
   const [fetchingPdf, setFetchingPdf] = useState(false);
   const [availablePdfs, setAvailablePdfs] = useState<DriveFile[]>([]);
   const [selectedPdfIdx, setSelectedPdfIdx] = useState(0);
@@ -535,13 +540,14 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
   useEffect(() => {
     if (apartment) {
       basicSnapshot.current = {
-        familyName: apartment.displayName || '',
+        familyName: isGeneralProject ? (apartment.displayName || '') : realName(apartment),
         address: apartment.address ?? '',
         phone: apartment.phone ?? '',
         zoho: apartment.zohoLink ?? '',
         drive: apartment.driveLink ?? '',
       };
-      setFamilyName(apartment.displayName || '');
+      setFamilyName(isGeneralProject ? (apartment.displayName || '') : realName(apartment));
+      setAptNoLocal(apartment.apartmentNumber ?? '');
       setCurrentStageId(apartment.currentStageId ?? '');
       setClassification(apartment.classification);
       setNoteDraft('');
@@ -771,6 +777,11 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
     });
     onToast(`${ui.setNewCustom}: ${name}`);
   }
+  // How many notes sit behind the folded "Add notes" title.
+  const noteCount = apartment
+    ? (apartment.noteEntries ?? ((apartment.generalNotes ?? '').trim() ? [1] : [])).length
+      + officeNoteFiles.filter(f => f.apartmentId === apartment.id).length
+    : 0;
   const sortedStages = [...stages]
     // EXCLUSIVE per project. The old filter was
     //   (!s.projectId || (isGeneral && s.projectId === 'general'))
@@ -1785,12 +1796,13 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
             {isGeneralProject
               ? <span className="text-[#4aa8d8] font-semibold text-sm flex-shrink-0">{ui.jobLabel}</span>
               : <>
-                  <span className="text-[#4aa8d8] font-semibold text-sm flex-shrink-0">{apartment.buildingId}</span>
+                  <span data-drawer-building className="text-[#4aa8d8] font-semibold text-sm flex-shrink-0">{ui.buildingWord} {buildingShort(apartment.buildingId)}</span>
                   {/* The floor as the building diagram LABELS it — Wolfson's
                       towers print one lower than the stored floor, and the
                       window said "Floor 4" over a unit the diagram shows on 3. */}
                   {rowNumOf(apartment.buildingId, apartment.floor) && <span data-drawer-floor className="text-white/50 text-xs flex-shrink-0">· {ui.floorPrefix} {rowNumOf(apartment.buildingId, apartment.floor)}</span>}
-                  {apartment.tipus && <span data-tipus-chip className="text-white/85 text-xs font-bold flex-shrink-0 px-1.5 rounded bg-white/15">{apartment.apartmentNumber} — {apartment.tipus}</span>}
+                  {apartment.apartmentNumber && <span data-drawer-aptno className="text-white/50 text-xs flex-shrink-0">· {ui.aptPrefix} {apartment.apartmentNumber}</span>}
+                  {apartment.tipus && <span data-tipus-chip className="text-white/85 text-xs font-bold flex-shrink-0 px-1.5 rounded bg-white/15">{apartment.tipus}</span>}
                 </>
             }
             {mergedPartner && (
@@ -1804,15 +1816,14 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                 they act on and next to the close button, which is the one
                 place a mis-click is expensive. */}
             <span className="font-bold text-[15px] truncate min-w-0 ml-1">
-              {apartment.displayName?.trim() || apartment.apartmentNumber || ui.jobLabel}
+              {isGeneralProject ? (apartment.displayName?.trim() || apartment.apartmentNumber || ui.jobLabel) : (realName(apartment) || ui.notSoldWord)}
             </span>
 
             <span className="flex items-center gap-1 flex-shrink-0 ml-1">
               {apartment.driveLink ? (
                 <Tooltip text={driveTip}>
-                  <a href={apartment.driveLink} target="_blank" rel="noopener noreferrer"
-                    className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-white/10 hover:bg-white/20
-                               transition-colors text-[11.5px] font-semibold">
+                  <a href={apartment.driveLink} target="_blank" rel="noopener noreferrer" data-title-chip="drive"
+                    className="flex items-center gap-1.5 px-2.5 py-1 min-h-[32px] rounded-lg bg-white/10 hover:bg-white/20 transition-colors text-[11.5px] font-semibold">
                     {/* The light lives ON the button now, so one control answers
                         both "is there a folder" and "is it set up". */}
                     <span className="w-2 h-2 rounded-full flex-shrink-0"
@@ -1822,7 +1833,7 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                 </Tooltip>
               ) : (
                 <Tooltip text="No Drive folder linked yet">
-                  <span className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-white/5
+                  <span data-title-chip="drive" className="flex items-center gap-1.5 px-2.5 py-1 min-h-[32px] rounded-lg bg-white/5
                                    text-[11.5px] font-semibold text-white/40">
                     <span className="w-2 h-2 rounded-full bg-white/30" />
                     Drive
@@ -1831,17 +1842,15 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
               )}
               {apartment.zohoLink && (
                 <Tooltip text="Open in Zoho">
-                  <a href={apartment.zohoLink} target="_blank" rel="noopener noreferrer"
-                    className="px-2 py-1 rounded-lg bg-white/10 hover:bg-white/20 transition-colors
-                               text-[11.5px] font-semibold">Zoho</a>
+                  <a href={apartment.zohoLink} target="_blank" rel="noopener noreferrer" data-title-chip="zoho"
+                    className="flex items-center gap-1.5 px-2.5 py-1 min-h-[32px] rounded-lg bg-white/10 hover:bg-white/20 transition-colors text-[11.5px] font-semibold"><span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: '#ea6b13' }} />Zoho</a>
                 </Tooltip>
               )}
               <Tooltip text="Print a job sheet">
-                <button onClick={printJobSheet}
+                <button onClick={printJobSheet} data-title-chip="print"
                   /* min-h so a finger has something to hit: at py-1 this was
                      25px tall, and a 25px target on a tablet is a coin flip. */
-                  className="px-2.5 py-1 min-h-[32px] rounded-lg bg-white/10 hover:bg-white/20
-                             transition-colors text-[11.5px] font-semibold flex items-center gap-1.5">
+                  className="flex items-center gap-1.5 px-2.5 py-1 min-h-[32px] rounded-lg bg-white/10 hover:bg-white/20 transition-colors text-[11.5px] font-semibold">
                   <Printer size={13} /> Print
                 </button>
               </Tooltip>
@@ -1852,16 +1861,12 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
               <Tooltip text={ui.contractorStatusTitle}>
                 <button
                   onClick={() => setShowContractorStatus(true)}
-                  className="flex items-center gap-1.5 rounded-full px-2 py-0.5 flex-shrink-0 transition-colors hover:brightness-125"
-                  style={{
-                    backgroundColor: 'rgba(74,168,216,0.18)',
-                    border: '1px solid rgba(74,168,216,0.45)',
-                    color: '#cfe9f8',
-                    fontSize: '10px',
-                    fontWeight: 700,
-                  }}
+                  data-title-chip="workers"
+                  /* The same button as Drive and Print beside it (owner, recording
+                     2026-10-28: "all these buttons should look the same"). */
+                  className="flex items-center gap-1.5 px-2.5 py-1 min-h-[32px] rounded-lg bg-white/10 hover:bg-white/20 transition-colors text-[11.5px] font-semibold flex-shrink-0"
                 >
-                  <span className="w-1.5 h-1.5 rounded-full bg-green-400 flex-shrink-0" />
+                  <span className="w-2 h-2 rounded-full bg-green-400 flex-shrink-0" />
                   <span className="truncate">{ui.contractorStatusTitle}</span>
                 </button>
               </Tooltip>
@@ -1939,39 +1944,25 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
           {activeTab === 'details' && (
             <div className={isPhone ? 'space-y-2.5' : 'space-y-4'}>
               {/*
-                Top row: Apt# | Family Name | Classification | Stage.
-                It WRAPS. As one unwrapped line at 390px the four labels landed
-                on top of each other — "Family Name" printed through "Type" —
-                and the stage select ran 27px off the right edge. The minimums
-                below let it fall to two lines on a phone and stay one line in
-                the 1020px modal, with no phone flag needed.
+                The first row, in the owner's order (recording 2026-10-28):
+                Building · Floor — information, never edited here — then Tipus,
+                the apartment number and the name. Standard / Upgraded has its
+                own row under it, then the address and the phone. The stages
+                are their own section further down; there is no "current stage".
               */}
-              <div className="flex flex-wrap items-start gap-2">
-                {/* Apt number — read-only small */}
-                {!isGeneralProject && (
+              <div className="flex flex-wrap items-start gap-2" data-details-row1>
+                {!isGeneralProject && (<>
                 <div className="flex-shrink-0">
-                  <label className="block text-[10px] font-medium text-gray-500 mb-1">{ui.aptPrefix} #</label>
-                  {/* Linked pair shows both numbers with a slash, plus a link badge */}
-                  <div className={`flex items-center justify-center gap-1 border rounded-lg px-2 py-2 text-sm font-bold text-center ${
-                    mergedPartner
-                      ? 'border-blue-300 bg-blue-50 text-blue-700 min-w-[4.5rem]'
-                      : 'w-14 border-gray-200 bg-gray-50 text-gray-700'
-                  }`}>
-                    {mergedPartner && <Link size={12} className="flex-shrink-0 text-blue-500" />}
-                    <span>
-                      {mergedPartner
-                        ? [apartment.apartmentNumber, mergedPartner.apartmentNumber]
-                            .filter(Boolean)
-                            .sort((a, b) => (Number(a) || 0) - (Number(b) || 0))
-                            .join('/')
-                        : apartment.apartmentNumber}
-                    </span>
-                  </div>
+                  <label className="block text-[10px] font-medium text-gray-500 mb-1">{ui.buildingWord}</label>
+                  <div data-detail-building className="min-w-[3rem] border border-gray-100 bg-gray-50 rounded-lg px-2.5 py-2 text-sm font-bold text-gray-700 text-center">{buildingShort(apartment.buildingId)}</div>
                 </div>
-                )}
-
+                <div className="flex-shrink-0">
+                  <label className="block text-[10px] font-medium text-gray-500 mb-1">{ui.floorPrefix}</label>
+                  <div data-detail-floor className="min-w-[3rem] border border-gray-100 bg-gray-50 rounded-lg px-2.5 py-2 text-sm font-bold text-gray-700 text-center">{rowNumOf(apartment.buildingId, apartment.floor) || apartment.floor}</div>
+                </div>
+                </>)}
                 {/* Tipus — the apartment's type, between the number and the family name. */}
-                {!isGeneralProject && (tipusim.length > 0 || apartment.tipus) && (
+                {!isGeneralProject && (
                 <div className="flex-shrink-0">
                   <label className="block text-[10px] font-medium text-gray-500 mb-1">{ui.tipusLabel}</label>
                   <select
@@ -1988,6 +1979,43 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                 </div>
                 )}
 
+                {/* Apt number */}
+                {!isGeneralProject && (
+                <div className="flex-shrink-0">
+                  <label className="block text-[10px] font-medium text-gray-500 mb-1">{ui.aptPrefix} #</label>
+                  {/* Linked pair shows both numbers with a slash, plus a link badge;
+                      a single flat's number is typed straight in (owner, 2026-10-28:
+                      "apartment number, obviously changeable"). */}
+                  {!mergedPartner ? (
+                    <input data-aptno-input value={aptNoLocal}
+                      onChange={e => setAptNoLocal(e.target.value)}
+                      onBlur={() => {
+                        const v = aptNoLocal.trim();
+                        if (v && v !== apartment.apartmentNumber) trackUndo(null, () => updateApartment(apartment.id, { apartmentNumber: v }, currentUser));
+                        else setAptNoLocal(apartment.apartmentNumber);
+                      }}
+                      onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
+                      className="w-16 border border-gray-200 rounded-lg px-2 py-2 text-sm font-bold text-center focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30" />
+                  ) : (
+                  <div className={`flex items-center justify-center gap-1 border rounded-lg px-2 py-2 text-sm font-bold text-center ${
+                    mergedPartner
+                      ? 'border-blue-300 bg-blue-50 text-blue-700 min-w-[4.5rem]'
+                      : 'w-14 border-gray-200 bg-gray-50 text-gray-700'
+                  }`}>
+                    {mergedPartner && <Link size={12} className="flex-shrink-0 text-blue-500" />}
+                    <span>
+                      {mergedPartner
+                        ? [apartment.apartmentNumber, mergedPartner.apartmentNumber]
+                            .filter(Boolean)
+                            .sort((a, b) => (Number(a) || 0) - (Number(b) || 0))
+                            .join('/')
+                        : apartment.apartmentNumber}
+                    </span>
+                  </div>
+                  )}
+                </div>
+                )}
+
                 {/* Family name / Job name */}
                 <div className="flex-1 min-w-[150px]">
                   <label className="block text-[10px] font-medium text-gray-500 mb-1">{isGeneralProject ? ui.jobNameLabel : ui.familyName}</label>
@@ -1995,15 +2023,18 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                     value={familyName}
                     onChange={e => setFamilyName(e.target.value)}
                     onBlur={autoSave}
-                    placeholder={ui.familyNamePlaceholder}
+                    placeholder={isGeneralProject ? ui.familyNamePlaceholder : ui.notSoldWord}
+                    data-family-name
                     className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30"
                   />
                 </div>
 
+              </div>
+
                 {/* Classification toggle */}
                 {!isGeneralProject && (
+                <div data-details-row2>
                 <div className="flex-shrink-0">
-                  <label className="block text-[10px] font-medium text-gray-500 mb-1">{ui.typeField}</label>
                   <div className="flex gap-1">
                     <Tooltip text={ui.standardApt}>
                       <button
@@ -2012,53 +2043,27 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                           classification === 'standard' ? 'bg-[#1e3a5f] text-white border-[#1e3a5f]' : 'bg-white text-gray-500 border-gray-200 hover:border-gray-300'
                         }`}
                       >
-                        {ui.stdShort}
+                        {ui.standard}
                       </button>
                     </Tooltip>
-                    <Tooltip text={ui.hasModifications}>
+                    <Tooltip text={ui.upgradedTooltip}>
                       <button
                         onClick={() => handleClassificationChange('shinui')}
                         className={`px-2 py-2 rounded-lg text-xs font-medium border transition-all flex items-center gap-0.5 ${
                           classification === 'shinui' ? 'bg-amber-500 text-white border-amber-500' : 'bg-white text-gray-500 border-gray-200 hover:border-gray-300'
                         }`}
                       >
-                        <AlertTriangle size={10} /> {ui.chgShort}
+                        <AlertTriangle size={10} /> {ui.upgradedWord}
                       </button>
                     </Tooltip>
                   </div>
                 </div>
+                </div>
                 )}
 
-                {/* The apartment's STAGE BOARD (the set model): the field reads
-                    the headline and the fraction; the panel is the set, grouped
-                    by state. Marks write on the spot through the store's one
-                    writer, which re-derives the headline. */}
-                <div className="flex-1 min-w-[150px]">
-                  <label className="block text-[10px] font-medium text-gray-500 mb-1">{ui.currentStage}</label>
-                  <StagePicker
-                    apartment={apartments.find(a => a.id === apartment.id) ?? apartment}
-                    stages={sortedStages}
-                    tasks={contractorAssignments}
-                    ctx={setCtx}
-                    workers={contractors}
-                    photos={contractorPhotos}
-                    onMarks={next => setApartmentMarks(apartment.id, next, currentUser)}
-                    onMarker={id => {
-                      trackUndo(null, () => updateApartment(apartment.id, { currentStageId: id }, currentUser));
-                      setCurrentStageId(id);
-                    }}
-                    onAddCustom={({ name, color, where }) => addCustomStage(name, color, where)}
-                    ui={ui}
-                    onReportProblem={isGeneralProject ? undefined : () => setProblemFormOpen(true)}
-                    problem={problemState(apartment.id, contractorAssignments)}
-                  />
-                </div>
-              </div>
 
               {/* Address and phone — one row on desktop, stacked on a phone.
-                  The same block for apartments and General jobs on purpose:
-                  the Drive and Zoho links live in the shared pair below
-                  General Notes, so both kinds are edited the same way. */}
+                  The same block for apartments and General jobs on purpose. */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="min-w-0">
                   <label className="block text-[10px] font-medium text-gray-500 mb-1">{ui.addressLabel}</label>
@@ -2125,10 +2130,18 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                   and when, a memo or a file is a note card in the same list,
                   and ONE composer sits at the bottom in send mode. The old
                   tall textarea with buttons dangling off it is gone. */}
-              <div data-general-notes>
+              <div data-general-notes data-notes-open={notesOpen ? '1' : '0'}>
                 <div className="flex items-center justify-between mb-1">
                   <div className="flex items-center gap-2">
-                    <label className="block text-xs font-medium text-gray-600">{ui.generalNotes}</label>
+                    {/* "Add notes", folded behind a small arrow (owner, 2026-10-28).
+                        The count rides the title, so a folded box never hides
+                        that there is something in it. */}
+                    <button type="button" data-notes-toggle onClick={() => setNotesOpen(v => !v)}
+                      className="flex items-center gap-1 text-sm font-bold text-gray-800 hover:text-[#1e3a5f]">
+                      {notesOpen ? <ChevronDown size={15} /> : <ChevronRight size={15} className="rtl:rotate-180" />}
+                      {ui.addNotesTitle}
+                      {noteCount > 0 && <span data-notes-count className="ml-1 text-[11px] font-semibold text-gray-500 bg-gray-100 rounded-full px-1.5">{noteCount}</span>}
+                    </button>
                     {showSaved && (
                       <span className="inline-flex items-center gap-0.5 text-[10.5px] font-semibold text-green-600">
                         <CheckCircle2 size={11} /> {ui.apartmentSaved}
@@ -2150,7 +2163,7 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                     })()}
                   </div>
                 </div>
-                {apartment && (() => {
+                {notesOpen && apartment && (() => {
                   type NoteRow =
                     | { kind: 'text'; id: string; at: string; who: string; text: string }
                     | { kind: 'file'; id: string; at: string; who: string; file: typeof officeNoteFiles[number] };
@@ -2342,6 +2355,53 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                 />
               </div>
 
+              {/* The stages — always open, every one of them (owner, 2026-10-28). */}
+              <StageSection
+                apartment={apartments.find(a => a.id === apartment.id) ?? apartment}
+                stages={sortedStages}
+                tasks={contractorAssignments}
+                ctx={setCtx}
+                workers={contractors}
+                photos={contractorPhotos}
+                onMarks={next => setApartmentMarks(apartment.id, next, currentUser)}
+                onMarker={id => {
+                  trackUndo(null, () => updateApartment(apartment.id, { currentStageId: id }, currentUser));
+                  setCurrentStageId(id);
+                }}
+                onAddCustom={({ name, color, where }) => addCustomStage(name, color, where)}
+                ui={ui}
+                onReportProblem={isGeneralProject ? undefined : () => setProblemFormOpen(true)}
+                onOpenPhotos={(items, index) => setLightbox({ items, index })}
+              />
+
+              {/* The project's own information buttons — answer, nothing else. */}
+              {customButtons.length > 0 && (
+                <div data-custom-buttons className="space-y-1.5">
+                  <div className="text-sm font-bold text-gray-800">{ui.customButtonsTitle}</div>
+                  {customButtons.map(cb => {
+                    const ans = apartment.customAnswers?.[cb.id];
+                    return (
+                      <div key={cb.id} data-custom-button={cb.id} className="flex items-center gap-3 justify-between">
+                        <span className="text-sm text-gray-800 min-w-0 truncate">{cb.name}</span>
+                        <span className="inline-flex border border-gray-200 rounded-lg overflow-hidden flex-shrink-0">
+                          {(['yes', 'no', 'unknown'] as const).map(v => (
+                            <button key={v} type="button" data-custom-answer={v} aria-pressed={ans === v}
+                              onClick={() => {
+                                const nextAns = { ...(apartment.customAnswers ?? {}) };
+                                if (ans === v) delete nextAns[cb.id]; else nextAns[cb.id] = v;
+                                trackUndo(null, () => updateApartment(apartment.id, { customAnswers: nextAns }, currentUser));
+                              }}
+                              className={`px-3 py-1.5 text-xs font-semibold border-s border-gray-200 first:border-s-0 ${ans === v ? 'bg-[#1e3a5f] text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>
+                              {v === 'yes' ? ui.customYes : v === 'no' ? ui.customNo : ui.customUnknown}
+                            </button>
+                          ))}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
               {/* The Engineering Plans block used to live here AND on the right,
                   so every job with a plan showed it twice. It is on the right
                   only — see the plan pane, which carries the file chips too. */}
@@ -2358,121 +2418,13 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                   one line saying what is linked, the full controls under it.
                   items-start: a folded section beside an open one keeps its
                   own height instead of stretching to its neighbour's. */}
-              <div className={`grid gap-3 items-start ${isGeneralProject ? 'grid-cols-1' : 'grid-cols-1 md:grid-cols-2'}`}>
-                <LinkSection
-                  id="drive"
-                  icon={FolderOpen}
-                  label={ui.driveFolder}
-                  linked={!!driveLink.trim()}
-                  summary={driveLink.trim() ? (driveFolderName || ui.linkLinked) : ui.linkNotLinked}
-                  href={driveLink}
-                  toggleTitle={ui.linkFoldToggle}
-                  extra={<DriveStatus job={{ driveLink, plansPdfLink }} />}
-                >
-                <LinkField
-                  label={ui.driveFolder}
-                  icon={FolderOpen}
-                  value={driveLink}
-                  display={driveFolderName || 'Drive folder'}
-                  placeholder="https://drive.google.com/drive/folders/…"
-                  onSave={next => {
-                    setDriveLink(next);
-                    // A new folder: whatever the last check said was about the old one.
-                    dropHealth();
-                    if (!currentUser) return;
-                    updateApartment(apartment!.id, { driveLink: next || undefined }, currentUser);
-                    const folderId = next ? extractFolderId(next) : null;
-                    if (folderId && backendConfigured) {
-                      findOrCreateFolderViaBackend(folderId, 'Photos').then(id => ensureDriveShared(id)).catch(() => {});
-                      autoFillFamilyNameFromFolder(folderId);
-                      findPlanSetViaBackend(next).then(setPlanSet).catch(() => {});
-                      setFetchingPdf(true);
-                      // The guess is shown, never written — see the open effect.
-                      findAllPlansPdfsViaBackend(next)
-                        .then(pdfs => { setAvailablePdfs(pdfs); setSelectedPdfIdx(0); })
-                        .finally(() => setFetchingPdf(false));
-                    }
-                  }}
-                  /* On the row itself, beside the pencil — it acts on the
-                     folder the link points at, not on the link. */
-                  actions={<DriveDesktopPath driveLink={driveLink} onToast={onToast} />}
-                  hint={
-                    <span className="flex items-center gap-1.5 text-[10.5px] text-gray-400 flex-wrap">
-                      {/* The Drive light rides the section's own line now. */}
-                      {driveLink
-                        ? (detectedPdfId ? 'Plans found'
-                          : fetchingPdf ? 'Looking for plans…'
-                          /* An access failure must not read as an empty folder —
-                             that is exactly how a Leads-tree job "had no plans"
-                             while the plan sat right there in Drive. */
-                          : planSet.problem === 'unreachable'
-                            ? 'Drive would not let the app read this folder — check it is shared with the service account'
-                            : 'No plans in this folder yet')
-                        : 'Nothing linked'}
-                      {/* The deep status, back where it used to live — on the
-                          Drive row — with the refresh at the end of it. */}
-                      {driveLink && backendConfigured && (
-                        folderHealth === null ? (
-                          <button type="button" data-folder-status-btn onClick={runHealthCheck} disabled={checkingHealth}
-                            className="font-bold text-[#4aa8d8] hover:underline disabled:opacity-50">
-                            {checkingHealth ? ui.folderChecking : ui.folderStatusBtn}
-                          </button>
-                        ) : (() => {
-                          const issues = folderIssues(folderHealth, planShowing);
-                          const ok = issues.length === 0;
-                          return (
-                            <span data-folder-status={ok ? 'ok' : 'issues'}
-                              className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full font-bold"
-                              style={ok
-                                ? { backgroundColor: '#dcfce7', color: '#166534' }
-                                : { backgroundColor: '#fef3c7', color: '#92400e' }}>
-                              {ok ? ui.folderComplete : issues.join(' · ')}
-                              <button type="button" onClick={runHealthCheck} disabled={checkingHealth}
-                                title={ui.folderCheckAgain}
-                                className="disabled:opacity-50"
-                                style={{ color: 'inherit' }}>
-                                <RefreshCw size={10} className={checkingHealth ? 'animate-spin' : ''} />
-                              </button>
-                            </span>
-                          );
-                        })()
-                      )}
-                    </span>
-                  }
-                />
-                </LinkSection>
-
-                {/* Zoho, on every job rather than only on the job board. */}
-                <LinkSection
-                  id="zoho"
-                  icon={ExternalLink}
-                  label={ui.zohoLinkLabel}
-                  linked={!!zohoLinkLocal.trim()}
-                  summary={zohoLinkLocal.trim() ? ui.linkLinked : ui.linkNotLinked}
-                  href={zohoLinkLocal}
-                  toggleTitle={ui.linkFoldToggle}
-                >
-                <LinkField
-                  label={ui.zohoLinkLabel}
-                  icon={ExternalLink}
-                  value={zohoLinkLocal}
-                  display="Zoho record"
-                  placeholder="https://crm.zoho.com/…"
-                  accent="#ea6b13"
-                  onSave={next => {
-                    setZohoLinkLocal(next);
-                    if (currentUser) updateApartment(apartment!.id, { zohoLink: next || undefined }, currentUser);
-                  }}
-                />
-                </LinkSection>
-              </div>
-
               {/* No Save button — every field on this tab saves on its own:
                   text fields on blur, stage + classification the moment they change. */}
 
-              {/* Settings collapsible */}
-              {!isGeneralProject && (
-              <div className="border-t border-gray-100 pt-3">
+              {/* Settings collapsible — the Drive folder, the Zoho link, the
+                  connected unit and a small trash can live here now (owner,
+                  2026-10-28). Drive and Zoho still open from the title bar. */}
+              <div className="border-t border-gray-100 pt-3" data-details-settings>
                 <button
                   onClick={() => setShowSettings(v => !v)}
                   className="w-full flex items-center gap-2 text-sm font-medium text-gray-600 hover:text-gray-800 transition-colors"
@@ -2484,7 +2436,118 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
 
                 {showSettings && (
                   <div className="mt-3 space-y-4">
+                    <div className={`grid gap-3 items-start ${isGeneralProject ? 'grid-cols-1' : 'grid-cols-1 md:grid-cols-2'}`}>
+                      <LinkSection
+                        id="drive"
+                        icon={FolderOpen}
+                        label={ui.driveFolder}
+                        linked={!!driveLink.trim()}
+                        summary={driveLink.trim() ? (driveFolderName || ui.linkLinked) : ui.linkNotLinked}
+                        href={driveLink}
+                        toggleTitle={ui.linkFoldToggle}
+                        extra={<DriveStatus job={{ driveLink, plansPdfLink }} />}
+                      >
+                      <LinkField
+                        label={ui.driveFolder}
+                        icon={FolderOpen}
+                        value={driveLink}
+                        display={driveFolderName || 'Drive folder'}
+                        placeholder="https://drive.google.com/drive/folders/…"
+                        onSave={next => {
+                          setDriveLink(next);
+                          // A new folder: whatever the last check said was about the old one.
+                          dropHealth();
+                          if (!currentUser) return;
+                          updateApartment(apartment!.id, { driveLink: next || undefined }, currentUser);
+                          const folderId = next ? extractFolderId(next) : null;
+                          if (folderId && backendConfigured) {
+                            findOrCreateFolderViaBackend(folderId, 'Photos').then(id => ensureDriveShared(id)).catch(() => {});
+                            autoFillFamilyNameFromFolder(folderId);
+                            findPlanSetViaBackend(next).then(setPlanSet).catch(() => {});
+                            setFetchingPdf(true);
+                            // The guess is shown, never written — see the open effect.
+                            findAllPlansPdfsViaBackend(next)
+                              .then(pdfs => { setAvailablePdfs(pdfs); setSelectedPdfIdx(0); })
+                              .finally(() => setFetchingPdf(false));
+                          }
+                        }}
+                        /* On the row itself, beside the pencil — it acts on the
+                           folder the link points at, not on the link. */
+                        actions={<DriveDesktopPath driveLink={driveLink} onToast={onToast} />}
+                        hint={
+                          <span className="flex items-center gap-1.5 text-[10.5px] text-gray-400 flex-wrap">
+                            {/* The Drive light rides the section's own line now. */}
+                            {driveLink
+                              ? (detectedPdfId ? 'Plans found'
+                                : fetchingPdf ? 'Looking for plans…'
+                                /* An access failure must not read as an empty folder —
+                                   that is exactly how a Leads-tree job "had no plans"
+                                   while the plan sat right there in Drive. */
+                                : planSet.problem === 'unreachable'
+                                  ? 'Drive would not let the app read this folder — check it is shared with the service account'
+                                  : 'No plans in this folder yet')
+                              : 'Nothing linked'}
+                            {/* The deep status, back where it used to live — on the
+                                Drive row — with the refresh at the end of it. */}
+                            {driveLink && backendConfigured && (
+                              folderHealth === null ? (
+                                <button type="button" data-folder-status-btn onClick={runHealthCheck} disabled={checkingHealth}
+                                  className="font-bold text-[#4aa8d8] hover:underline disabled:opacity-50">
+                                  {checkingHealth ? ui.folderChecking : ui.folderStatusBtn}
+                                </button>
+                              ) : (() => {
+                                const issues = folderIssues(folderHealth, planShowing);
+                                const ok = issues.length === 0;
+                                return (
+                                  <span data-folder-status={ok ? 'ok' : 'issues'}
+                                    className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full font-bold"
+                                    style={ok
+                                      ? { backgroundColor: '#dcfce7', color: '#166534' }
+                                      : { backgroundColor: '#fef3c7', color: '#92400e' }}>
+                                    {ok ? ui.folderComplete : issues.join(' · ')}
+                                    <button type="button" onClick={runHealthCheck} disabled={checkingHealth}
+                                      title={ui.folderCheckAgain}
+                                      className="disabled:opacity-50"
+                                      style={{ color: 'inherit' }}>
+                                      <RefreshCw size={10} className={checkingHealth ? 'animate-spin' : ''} />
+                                    </button>
+                                  </span>
+                                );
+                              })()
+                            )}
+                          </span>
+                        }
+                      />
+                      </LinkSection>
+
+                      {/* Zoho, on every job rather than only on the job board. */}
+                      <LinkSection
+                        id="zoho"
+                        icon={ExternalLink}
+                        label={ui.zohoLinkLabel}
+                        linked={!!zohoLinkLocal.trim()}
+                        summary={zohoLinkLocal.trim() ? ui.linkLinked : ui.linkNotLinked}
+                        href={zohoLinkLocal}
+                        toggleTitle={ui.linkFoldToggle}
+                      >
+                      <LinkField
+                        label={ui.zohoLinkLabel}
+                        icon={ExternalLink}
+                        value={zohoLinkLocal}
+                        display="Zoho record"
+                        placeholder="https://crm.zoho.com/…"
+                        accent="#ea6b13"
+                        onSave={next => {
+                          setZohoLinkLocal(next);
+                          if (currentUser) updateApartment(apartment!.id, { zohoLink: next || undefined }, currentUser);
+                        }}
+                      />
+                      </LinkSection>
+                    </div>
+
+
                     {/* Connected unit */}
+                    {!isGeneralProject && (
                     <div>
                       <label className="block text-xs font-medium text-gray-600 mb-1.5 flex items-center gap-1.5">
                         <Link size={12} /> {ui.connectedUnit}
@@ -2521,20 +2584,23 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                         )}
                       </div>
                     </div>
+                    )}
+
+                    {/* Delete — a small trash can, not a big red button. */}
+                    <div className="flex justify-end">
+                      <button
+                        type="button"
+                        data-delete-apartment
+                        onClick={() => setShowDeleteConfirm(true)}
+                        title={isGeneralProject ? ui.deleteJobConfirm.replace('?', '') : ui.deleteAptShort}
+                        aria-label={isGeneralProject ? ui.deleteJobConfirm.replace('?', '') : ui.deleteAptShort}
+                        className="w-9 h-9 flex items-center justify-center rounded-lg border border-red-200 text-red-500 hover:bg-red-50 transition-colors"
+                      >
+                        <Trash2 size={15} />
+                      </button>
+                    </div>
                   </div>
                 )}
-              </div>
-              )}
-
-              {/* Danger zone — delete this apartment/job */}
-              <div className="pt-2 mt-2 border-t border-red-100">
-                <button
-                  onClick={() => setShowDeleteConfirm(true)}
-                  className="w-full flex items-center justify-center gap-2 py-2 rounded-lg border border-red-200 text-sm font-medium text-red-500 hover:bg-red-50 transition-colors"
-                >
-                  <Trash2 size={14} />
-                  {isGeneralProject ? ui.deleteJobConfirm.replace('?', '') : ui.deleteApartmentLabel}
-                </button>
               </div>
             </div>
           )}

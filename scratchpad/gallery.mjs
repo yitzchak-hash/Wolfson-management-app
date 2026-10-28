@@ -202,7 +202,7 @@ for (const [tag, W, H, phone, dpr] of PROFILES) {
   await page.locator('.drawer-panel button', { hasText: /^(Details|פרטים)/ }).first().click();
   await page.waitForTimeout(500);
   try {
-    await page.locator(inDrawer('[data-stage-picker]')).first().click();
+    await page.locator(inDrawer('[data-stage-section]')).first().scrollIntoViewIfNeeded();
     await page.waitForTimeout(400);
     await page.locator('[data-report-problem]').click();
     await page.waitForTimeout(600);

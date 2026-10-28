@@ -8,7 +8,7 @@
 import { chromium } from 'playwright';
 import { memoDataUrl } from './wav.mjs';
 
-const APP = 'http://localhost:5174';
+const APP = process.env.APP ?? 'http://localhost:5174';
 let fails = 0;
 const check = (ok, l, extra = '') => { console.log(`${ok ? 'PASS' : 'FAIL'} ${l}${extra ? ' — ' + extra : ''}`); if (!ok) fails++; };
 const iso = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -96,7 +96,8 @@ const problemTask = (contractorId, aptId, bld, desc, extra = {}) => ({
   await page.waitForTimeout(2800);
 
   // tipus on the diagram cell (seeded on A3-1)
-  check((await page.locator('[data-apt-id="A3-1"]').first().innerText()).includes('1 — B1'), 'the desktop cell prints "1 — B1" for a seeded tipus');
+  // 28 Oct: the tipus is its own line under the number and name.
+  check((await page.locator('[data-apt-id="A3-1"] [data-tipus-line]').first().innerText()).trim() === 'B1', 'the desktop cell prints the tipus B1 under the number');
   check(await page.locator('[data-tipus-filter]').count() === 1, "the filter bar has a Tipus group when the workspace keeps a list");
 
   await page.locator('[data-apt-id="A1-47"]').first().click();
@@ -104,7 +105,9 @@ const problemTask = (contractorId, aptId, bld, desc, extra = {}) => ({
   check(await page.locator('[data-tipus-select]').count() === 1, 'the window has the Tipus dropdown between the number and the family');
   await page.locator('[data-tipus-select]').selectOption('A2');
   await page.waitForTimeout(500);
-  check((await page.locator('[data-tipus-chip]').innerText()).includes('47 — A2'), 'the title wears "47 — A2"');
+  // 28 Oct: "· Apt 47" then the tipus chip.
+  check((await page.locator('[data-drawer-aptno]').innerText()).includes('47') && (await page.locator('[data-tipus-chip]').innerText()).trim() === 'A2', 'the title wears Apt 47 and A2');
+  await page.locator('[data-notes-toggle]').click();  // Add notes starts folded (28 Oct)
   check(await page.locator('[data-general-notes-box] [data-composer-input]').count() === 1 && await page.locator('[data-general-notes-box] [data-big-mic]').count() === 1,
     'the general notes are the message box with the big mic');
   // General notes are BULLETS now (owner, 2026-09-06): Send appends a line with
@@ -130,7 +133,7 @@ const problemTask = (contractorId, aptId, bld, desc, extra = {}) => ({
     'the trash on a bullet takes that line out of both', gnApt?.generalNotes);
 
   // report a problem from the stage picker
-  await page.locator('[data-stage-picker]').click();
+  /* always open (28 Oct) */ await page.locator('[data-stage-section]').first().scrollIntoViewIfNeeded();
   await page.waitForTimeout(400);
   check(await page.locator('[data-report-problem]').count() === 1, 'the stage list has a red "Report a problem" under it');
   await page.locator('[data-report-problem]').click();
@@ -162,8 +165,9 @@ const problemTask = (contractorId, aptId, bld, desc, extra = {}) => ({
   check(d.apartments.find(a => a.id === 'A1-47').currentStageId === 'st-pipe', 'the apartment\'s real stage is untouched');
   check(await page.locator('[data-problem-band][data-problem-status="open"]').count() === 1 && await page.locator('[data-problem-approve]').count() === 1,
     'the window wears the red band with Approve (an admin)');
-  check((await page.locator('[data-stage-picker]').innerText()).includes('PROBLEM') && (await page.locator('[data-stage-picker]').innerText()).includes('Piping'),
-    'the stage field reads PROBLEM · was Piping');
+  // 28 Oct: no stage field any more — the red band says it in the window and the tile says it on the board.
+  const tileTxt = await page.locator('[data-apt-id="A1-47"]').first().innerText();
+  check(tileTxt.includes('PROBLEM') && tileTxt.includes('Piping'), 'the tile reads PROBLEM · was Piping', tileTxt.replace(/\s+/g, ' '));
   await page.keyboard.press('Escape');
   await page.waitForTimeout(500);
   const cellBg = await bg(page, '[data-apt-id="A1-47"]');

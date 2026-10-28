@@ -102,3 +102,4 @@ under the set model). `round28.mjs` is green again (10-08).
 - ☑ The notebook's week chips fill the whole top row, equal widths, and a "Week chip size" setting (2026-10-19).
 - ☑ Recording 10:40 + chat: Job Completed means finished (markers by name), "Mark the whole job as"; no "ghost" wording; cards drop onto pin boards from either tile (2026-10-19).
 - ☑ Recording 2026-10-26: board full screen keeps menus, TV pick flies to its frame, Active jobs search, heavy plans zoom without jumping, studio workspace + page arrows + "Save v2 & start v3" (2026-10-26)
+- ☑ Wolfson tiles and the apartment window, re-planned (recording 2026-10-28): taller tiles with the tipus and a "U", Sold · Not sold · Upgraded · Not upgraded, a stage drop-down, buildings 1 · 2 · 3, the window in his order with every stage laid out, custom project buttons, the tipus filled by rule.

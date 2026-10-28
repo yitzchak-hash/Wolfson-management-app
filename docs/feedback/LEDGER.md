@@ -26,9 +26,9 @@ ask built or answered) · **not this app** (a recording of another project — r
 | 14 | Recording 2026-10-18 142856.mp4 (42.2 MB, 1920×1032) | `1W9ZWOx1520Kg5Flz6V7I53VGOiPXB7bb` | 2:53 | done | [2026-10-18-142856.md](2026-10-18-142856.md) |
 | 15 | Recording 2026-10-19 104054.mp4 (17.8 MB, 1920×1032) — he put it in **Not processed** | `1AZQaQuT3-drz29rjFdvITYHETw1TfZKF` | 0:37 | done | [2026-10-19-104054.md](2026-10-19-104054.md) |
 | 16 | Recording 2026-10-26 094647.mp4 (151.1 MB, 1920×1032) — in **Not processed** | `1aU3Sbyi88pKC-LvzYcna3PFO-mjv8nTS` | 4:45 | done | [2026-10-26-094647.md](2026-10-26-094647.md) |
-| 17 | Recording 2026-10-28 102505.mp4 (266.3 MB, 1920×1074) — in **Not processed** | `1244pyAr28lBecO_wlVssUuL9GFavzw0X` | 8:28 | open (print built; the rest drawn on "Wolfson Tiles and Details", waiting for his "build it" and six answers) | [2026-10-28-102505.md](2026-10-28-102505.md) |
+| 17 | Recording 2026-10-28 102505.mp4 (266.3 MB, 1920×1074) — in **Not processed** | `1244pyAr28lBecO_wlVssUuL9GFavzw0X` | 8:28 | done (built 2026-10-28 on his "build it"; tipus map approved) | [2026-10-28-102505.md](2026-10-28-102505.md) |
 
-Folder last listed: 2026-10-28 — 14 recordings at the top, **Processed** empty, recordings 15, 16 and 17 in **Not processed**. Recordings 1–16 are done and belong in Processed; 17 is open.
+Folder last listed: 2026-10-28 — 14 recordings at the top, **Processed** empty, recordings 15, 16 and 17 in **Not processed**. All 17 are done and belong in Processed.
 
 ## The folder's two subfolders (owner, 2026-10-18)
 After every new video a helper sorts the folder: **Processed**

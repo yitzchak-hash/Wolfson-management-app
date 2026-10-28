@@ -14,7 +14,7 @@ const APP = process.env.APP ?? 'http://localhost:5173';
 let fails = 0;
 const check = (ok, l, extra = '') => { console.log(`${ok ? 'PASS' : 'FAIL'} ${l}${extra ? ' — ' + extra : ''}`); if (!ok) fails++; };
 
-const b = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome' });
+const b = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' });
 const ctx = await b.newContext({ viewport: { width: 1440, height: 900 } });
 await ctx.addInitScript(() => {
   localStorage.setItem('active_project', 'general');
@@ -237,7 +237,7 @@ let madeId = null;
   await page.locator('.drawer-panel button:has-text("Details")').first().click();
   await page.waitForTimeout(300);
   const before = (await data()).apartments.find(a => a.id === 'G-orch').stageMarks?.['S-conc'] ?? 'todo';
-  await page.locator('[data-stage-picker]').click();
+  /* always open (28 Oct) */ await page.locator('[data-stage-section]').first().scrollIntoViewIfNeeded();
   await page.waitForTimeout(300);
   await page.locator('[data-stage-bubble="S-conc"]').click();
   await settle();

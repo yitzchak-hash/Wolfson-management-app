@@ -75,13 +75,13 @@ const a8 = d.apartments.find(a => a.id === 'A1-8');
 check(a8.bubbles === true && !a8.stageMarks && a8.currentStageId === 'S1', 'A1-8 (Ready to start) keeps its marker headline and no marks');
 
 // ── 2 · THE STAGE BOARD ───────────────────────────────────────────────────────
-check((await page.locator('[data-apt-id="A1-7"] [data-cell-fraction]').first().innerText()).trim() === '1/3',
+check((await page.locator('[data-apt-id="A1-7"] [data-cell-strip]').first().evaluate(e => `${e.dataset.done}/${e.dataset.total}`)) === '1/3',
   'the cell prints the fraction 1/3 (Piping done of Piping · Concealed · Wall units)');
 check(await page.locator('[data-apt-id="A1-7"] [data-cell-strip] > span').count() === 3, 'and a three-segment strip');
 await page.locator('[data-apt-id="A1-7"]').first().click();
 await page.waitForTimeout(900);
-check((await page.locator('[data-stage-fraction]').innerText()).trim() === '1/3', 'the field wears the fraction');
-await page.locator('[data-stage-picker]').click();
+check((await page.locator('[data-stage-next]').getAttribute('data-fraction')) === '1/3', 'the field wears the fraction');
+/* always open (28 Oct) */ await page.locator('[data-stage-section]').first().scrollIntoViewIfNeeded();
 await page.waitForTimeout(400);
 check(await page.locator('[data-stage-flow] [data-stage-state="todo"][data-stage-bubble]').count() === 2
   && await page.locator('[data-stage-flow] [data-stage-state="done"][data-stage-bubble="S2"]').count() === 1,
@@ -100,7 +100,7 @@ await page.waitForTimeout(600);
 a7 = await aptOf(page, 'A1-7');
 // Owner, 2026-10-08: a building unit shows the LAST stage done.
 check(a7.stageMarks?.S4 === 'done' && a7.currentStageId === 'S4', 'a second tap finishes it and the headline is the last stage done', `${a7.currentStageId} ${JSON.stringify(a7.stageMarks)}`);
-check((await page.locator('[data-stage-fraction]').innerText()).trim() === '2/3', 'fraction 2/3');
+check((await page.locator('[data-stage-next]').getAttribute('data-fraction')) === '2/3', 'fraction 2/3');
 // right-click: half done
 await page.locator('[data-stage-bubble="S3"]').click({ button: 'right' });
 await page.waitForTimeout(600);
@@ -113,12 +113,12 @@ await page.locator('[data-stage-bubble="S3"]').hover();
 await page.locator('[data-stage-off="S3"]').click();
 await page.waitForTimeout(600);
 a7 = await aptOf(page, 'A1-7');
-check(a7.stageMarks?.S3 === 'off' && (await page.locator('[data-stage-fraction]').innerText()).trim() === '2/2',
+check(a7.stageMarks?.S3 === 'off' && (await page.locator('[data-stage-next]').getAttribute('data-fraction')) === '2/2',
   '× takes it off this apartment and it stops counting (2/2)', JSON.stringify(a7.stageMarks));
 await page.locator('[data-stage-putback="S3"]').click();
 await page.waitForTimeout(600);
 a7 = await aptOf(page, 'A1-7');
-check(a7.stageMarks?.S3 === 'todo' && (await page.locator('[data-stage-fraction]').innerText()).trim() === '2/3', 'put back: it counts again');
+check(a7.stageMarks?.S3 === 'todo' && (await page.locator('[data-stage-next]').getAttribute('data-fraction')) === '2/3', 'put back: it counts again');
 // + add a stage → a custom one for this apartment only
 await page.locator('[data-stage-add]').click();
 await page.waitForTimeout(200);
@@ -133,7 +133,7 @@ const custom = d.stages.find(s => s.name === 'Extra drainage');
 check(!!custom && custom.custom === true && JSON.stringify(custom.onApartments) === JSON.stringify(['A1-7']),
   'the custom stage lives in the workspace list, flagged, on A1-7 alone', JSON.stringify(custom));
 check(await page.locator(`[data-stage-flow] [data-stage-state="todo"][data-stage-bubble="${custom?.id}"]`).count() === 1
-  && (await page.locator('[data-stage-fraction]').innerText()).trim() === '2/4',
+  && (await page.locator('[data-stage-next]').getAttribute('data-fraction')) === '2/4',
   'it shows in the line as to do and the fraction is 2/4');
 await page.keyboard.press('Escape');
 await page.waitForTimeout(300);
@@ -142,10 +142,10 @@ await page.waitForTimeout(600);
 // the OTHER apartment does not carry it
 await page.locator('[data-apt-id="A1-8"]').first().click();
 await page.waitForTimeout(900);
-check((await page.locator('[data-stage-fraction]').innerText()).trim() === '0/3', 'A1-8 carries the three ordinary stages only (0/3) — the custom one is hidden from it');
+check((await page.locator('[data-stage-next]').getAttribute('data-fraction')) === '0/3', 'A1-8 carries the three ordinary stages only (0/3) — the custom one is hidden from it');
 await page.keyboard.press('Escape');
 await page.waitForTimeout(500);
-check((await page.locator('[data-apt-id="A1-7"] [data-cell-fraction]').first().innerText()).trim() === '2/4', 'the cell agrees: 2/4');
+check((await page.locator('[data-apt-id="A1-7"] [data-cell-strip]').first().evaluate(e => `${e.dataset.done}/${e.dataset.total}`)) === '2/4', 'the cell agrees: 2/4');
 await page.close();
 
 // ── 4 · THE WORKER ────────────────────────────────────────────────────────────
@@ -233,7 +233,7 @@ page = await ctx.newPage();
 page.on('pageerror', e => { console.log('PAGE ERROR', e.message); fails++; });
 await page.goto(`${APP}/project`);
 await page.waitForTimeout(2800);
-check((await page.locator('[data-apt-id="A1-7"] [data-cell-fraction]').first().innerText()).trim() === '3/4', 'the cell reads 3/4');
+check((await page.locator('[data-apt-id="A1-7"] [data-cell-strip]').first().evaluate(e => `${e.dataset.done}/${e.dataset.total}`)) === '3/4', 'the cell reads 3/4');
 await page.locator('[data-apt-id="A1-7"]').first().click();
 await page.waitForTimeout(900);
 await page.locator('.drawer-panel button:has-text("Tasks")').first().click();
@@ -244,13 +244,13 @@ const pill = (await page.locator('[data-task-done-stage]').allInnerTexts()).join
 check(pill.includes('Concealed units') && pill.includes('Extra drainage'), 'the task row names both stages it was for', pill);
 await page.locator('.drawer-panel button:has-text("Details")').first().click();
 await page.waitForTimeout(400);
-await page.locator('[data-stage-picker]').click();
+/* always open (28 Oct) */ await page.locator('[data-stage-section]').first().scrollIntoViewIfNeeded();
 await page.waitForTimeout(400);
 check(await page.locator(`[data-stage-flow] [data-stage-state="pending"][data-stage-bubble="${custom.id}"]`).count() === 1, 'the office sees Extra drainage half done');
 await page.locator(`[data-stage-bubble="${custom.id}"]`).click();
 await page.waitForTimeout(600);
 a7 = await aptOf(page, 'A1-7');
-check(a7.stageMarks?.[custom.id] === 'done' && (await page.locator('[data-stage-fraction]').innerText()).trim() === '4/4',
+check(a7.stageMarks?.[custom.id] === 'done' && (await page.locator('[data-stage-next]').getAttribute('data-fraction')) === '4/4',
   'one office tap finishes it — 4/4', JSON.stringify(a7.stageMarks));
 check(a7.currentStageId === custom.id, 'everything done and no closing marker: the headline is the last stage done — never Ready to start', a7.currentStageId);
 await page.close();

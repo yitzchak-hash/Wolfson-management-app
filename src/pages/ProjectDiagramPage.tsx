@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useMemo, useEffect } from 'react';
-import { Search, X, ToggleLeft, CheckSquare, Printer, ChevronDown, SlidersHorizontal } from 'lucide-react';
+import { Search, X, CheckSquare, Printer, ChevronDown, SlidersHorizontal } from 'lucide-react';
 import { Navigate, useNavigate } from 'react-router-dom';
 import { redeemReturn } from '../data/unitTravel';
 import { Tooltip } from '../components/ui/Tooltip';
@@ -7,15 +7,16 @@ import { useStore, trackUndo } from '../data/store';
 import { Apartment, BuildingId, isCountableApartment } from '../types';
 import { setMark, isWorkStage } from '../data/stageMarks';
 import { problemStates } from '../data/problems';
-import { BuildingDiagram } from '../components/diagram/BuildingDiagram';
-import { StageLegend } from '../components/diagram/StageLegend';
+import { BuildingDiagram, SaleFilter } from '../components/diagram/BuildingDiagram';
+import { StageLegend, StageFilterMenu } from '../components/diagram/StageLegend';
+import { buildingShort } from '../data/aptSale';
 import { StageBar } from '../components/diagram/StageBar';
 import { ApartmentDetailDrawer } from '../components/apartment/ApartmentDetailDrawer';
 import { ProblemForm } from '../components/apartment/ProblemForm';
 import { QuickAddTaskPanel } from '../components/apartment/QuickAddTaskPanel';
 import { Toast } from '../components/ui/Toast';
 
-type ClassFilter = 'all' | 'standard' | 'shinui';
+type ClassFilter = SaleFilter;
 
 /**
  * Matches Tailwind's md breakpoint — the same line the sidebar/MobileNav swap
@@ -68,7 +69,7 @@ export function ProjectDiagramPage() {
   const [activeStageIds, setActiveStageIds] = useState<string[]>([]);
   const [classFilter, setClassFilter] = useState<ClassFilter>('all');
   const [searchQuery, setSearchQuery] = useState('');
-  const [showShinuiBadge, setShowShinuiBadge] = useState(true);
+  const showShinuiBadge = true;
   const [selectedApt, setSelectedApt] = useState<Apartment | null>(null);
   const [addTaskApt, setAddTaskApt] = useState<Apartment | null>(null);
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
@@ -453,7 +454,7 @@ export function ProjectDiagramPage() {
                     : 'bg-gray-100 text-gray-600 active:bg-gray-200'
                 }`}
               >
-                {b.id}
+                {buildingShort(b.id)}
               </button>
             ))}
             <span className="flex-shrink-0 pl-1 text-[11px] leading-tight text-gray-400 tabular-nums text-right">
@@ -492,16 +493,19 @@ export function ProjectDiagramPage() {
                       : 'text-gray-600 hover:text-gray-900'
                   }`}
                 >
-                  {b === 'all' ? s.all : b}
+                  {b === 'all' ? s.all : buildingShort(b)}
                 </button>
               ))}
             </div>
 
-            {/* Classification filter */}
-            <div className="flex items-center gap-1 bg-gray-100 rounded-xl p-1">
-              {(['all', 'standard', 'shinui'] as const).map(c => (
+            {/* Sale filter — Sold · Not sold · Upgraded · Not upgraded, one at a
+                time (owner, recording 2026-10-28). It replaced All · Standard ·
+                Changes and the separate Changes switch. */}
+            <div className="flex items-center gap-1 bg-gray-100 rounded-xl p-1" data-sale-filter>
+              {(['all', 'sold', 'unsold', 'shinui', 'standard'] as const).map(c => (
                 <button
                   key={c}
+                  data-sale={c}
                   onClick={() => setClassFilter(c)}
                   className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
                     classFilter === c
@@ -509,7 +513,7 @@ export function ProjectDiagramPage() {
                       : 'text-gray-600 hover:text-gray-900'
                   }`}
                 >
-                  {c === 'all' ? s.all : c === 'standard' ? s.standard : s.changes}
+                  {c === 'all' ? s.all : c === 'sold' ? s.soldWord : c === 'unsold' ? s.notSoldWord : c === 'shinui' ? s.upgradedWord : s.notUpgradedWord}
                 </button>
               ))}
             </div>
@@ -541,18 +545,16 @@ export function ProjectDiagramPage() {
               />
             </div>
 
-            {/* Changes badge toggle */}
-            <Tooltip text={showShinuiBadge ? s.hideShinuiBadgeTooltip : s.showShinuiBadgeTooltip}>
-              <button
-                onClick={() => setShowShinuiBadge(v => !v)}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium border transition-all ${
-                  showShinuiBadge ? 'bg-amber-50 border-amber-200 text-amber-700' : 'bg-gray-100 border-gray-200 text-gray-500'
-                }`}
-              >
-                <ToggleLeft size={14} />
-                {s.changes}
-              </button>
-            </Tooltip>
+            {/* The stages, folded into one small drop-down. */}
+            <StageFilterMenu
+              stages={sortedStages}
+              activeStageIds={bulkMode ? [] : activeStageIds}
+              onToggle={bulkMode ? () => {} : toggleStage}
+              onClear={() => setActiveStageIds([])}
+              anyLabel={s.stageFilterAny}
+              someLabel={s.stageFilterSome}
+              clearLabel={s.clearFilters}
+            />
 
             {/* Bulk update toggle */}
             <Tooltip text={bulkMode ? s.exitBulkModeTooltip : s.enterBulkModeTooltip}>
@@ -605,14 +607,6 @@ export function ProjectDiagramPage() {
             </div>
           </div>
 
-          {/* Stage legend */}
-          <div className="mt-3">
-            <StageLegend
-              stages={sortedStages}
-              activeStageIds={bulkMode ? [] : activeStageIds}
-              onToggle={bulkMode ? () => {} : toggleStage}
-            />
-          </div>
         </div>
 
         {/* Stage progress mini bar — wide screens only (below 900 the counts
@@ -871,11 +865,12 @@ export function ProjectDiagramPage() {
               </button>
             </div>
 
-            {/* Type */}
-            <div className="flex items-center gap-1 bg-gray-100 rounded-xl p-1">
-              {(['all', 'standard', 'shinui'] as const).map(c => (
+            {/* Sold · Not sold · Upgraded · Not upgraded */}
+            <div className="flex items-center gap-1 bg-gray-100 rounded-xl p-1 flex-wrap" data-sale-filter>
+              {(['all', 'sold', 'unsold', 'shinui', 'standard'] as const).map(c => (
                 <button
                   key={c}
+                  data-sale={c}
                   onClick={() => setClassFilter(c)}
                   className={`flex-1 py-2 rounded-lg text-sm font-medium transition-all ${
                     classFilter === c
@@ -883,7 +878,7 @@ export function ProjectDiagramPage() {
                       : 'text-gray-600'
                   }`}
                 >
-                  {c === 'all' ? s.all : c === 'standard' ? s.standard : s.changes}
+                  {c === 'all' ? s.all : c === 'sold' ? s.soldWord : c === 'unsold' ? s.notSoldWord : c === 'shinui' ? s.upgradedWord : s.notUpgradedWord}
                 </button>
               ))}
             </div>
@@ -908,15 +903,6 @@ export function ProjectDiagramPage() {
             />
 
             <div className="flex items-center gap-2 flex-wrap">
-              <button
-                onClick={() => setShowShinuiBadge(v => !v)}
-                className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium border transition-all ${
-                  showShinuiBadge ? 'bg-amber-50 border-amber-200 text-amber-700' : 'bg-gray-100 border-gray-200 text-gray-500'
-                }`}
-              >
-                <ToggleLeft size={14} />
-                {s.changes}
-              </button>
               <button
                 onClick={() => {
                   if (bulkMode) exitBulkMode(); else setBulkMode(true);

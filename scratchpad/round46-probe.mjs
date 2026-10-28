@@ -29,7 +29,7 @@ const NOTES = [
     createdAt: '2026-09-17T08:32:00.000Z' },
 ];
 
-const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome' });
+const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' });
 const seed = ctx => ctx.addInitScript(([user, stages, worker, apts, tasks, notes]) => {
   if (!localStorage.getItem('active_project')) localStorage.setItem('active_project', 'wolfson');
   localStorage.setItem('wolfson_app_version', '3');
@@ -114,9 +114,9 @@ async function openDrawer(page) {
   const page = await ctx.newPage();
   page.on('pageerror', e => { console.log('PAGE ERROR', e.message); fails++; });
   await openDrawer(page);
-  await page.locator('[data-stage-picker]').first().click();
+  /* always open (28 Oct) */ await page.locator('[data-stage-section]').first().scrollIntoViewIfNeeded();
   await page.waitForTimeout(600);
-  check(await page.locator('[data-stage-panel]').count() === 1, 'the stage list opens');
+  check(await page.locator('[data-stage-section]').count() === 1, 'the stage list opens');
   // The set model (2026-09-22): a tap walks the stage on — to do → happening
   // now → done — so two taps cross the current stage off.
   await page.locator('[data-stage-bubble="S2"]').first().click();

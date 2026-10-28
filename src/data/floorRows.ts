@@ -203,7 +203,10 @@ export type RowMode = 'desktop' | 'phone' | 'compact';
 /** Every row is a normal row's height — a named lobby or basement unit never has its text cut off. */
 export function rowBaseHeightPx(buildingId: string, mode: RowMode): number {
   if (mode === 'compact') return 36;
-  if (isWolfsonBuilding(buildingId)) return mode === 'phone' ? 78 : 68;
+  // Wolfson's desktop floors are much taller (owner, recording 2026-10-28:
+  // "make the floors significantly fatter") so a tile holds its number and
+  // name on one line, the tipus, the stage and the task under it.
+  if (isWolfsonBuilding(buildingId)) return mode === 'phone' ? 78 : 104;
   return mode === 'phone' ? 74 : 64;
 }
 

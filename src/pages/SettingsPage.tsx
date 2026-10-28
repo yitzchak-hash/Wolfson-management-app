@@ -14,7 +14,7 @@ import { TV_ALLOWED } from '../data/tvWidgets';
 import { TimeClockTab } from '../components/settings/TimeClockTab';
 import { TV_DASH_BOARD } from '../types';
 import { portalLink, bareDomain, looksLikePreviewHost } from '../data/portalLink';
-import type { BoardAccess, PortalLang } from '../types';
+import type { BoardAccess, PortalLang, CustomButton } from '../types';
 import { personColor, projectColor, BoardView, Stage, User, Contractor, ContractorCategory, ContractorUiStrings, DEFAULT_CONTRACTOR_UI_STRINGS, HEBREW_CONTRACTOR_UI_STRINGS, MainUiStrings, DEFAULT_MAIN_UI_STRINGS, HEBREW_MAIN_UI_STRINGS, BackupFrequency, DriveExportFrequency, getStageName, Apartment, isCountableApartment, BoardSetting, CanvasElement } from '../types';
 import { loadTvScreens, forgetTvScreen, screenIsLive, shapeNameOf, TvScreenPresence } from '../data/tvScreens';
 import { Tooltip } from '../components/ui/Tooltip';
@@ -396,6 +396,10 @@ export function SettingsPage({ scope = 'project' }: { scope?: SettingsScope }) {
       {activeTab === 'stages' && scope === 'project' && currentProjectId !== 'general' && (
         <TipusSettings onToast={showToast} />
       )}
+      {/* The project's own yes / no / don't-know buttons, shown on every apartment. */}
+      {activeTab === 'stages' && scope === 'project' && (
+        <CustomButtonSettings />
+      )}
       {/* The CRM import belongs to the Job Board alone — a deals export maps
           to board tiles and groups, not to apartments in a tower. */}
       {activeTab === 'stages' && scope === 'project' && currentProjectId === 'general' && (
@@ -483,6 +487,56 @@ function ColorPickerWithPresets({ value, onChange }: ColorPickerProps) {
  * list are different lists. It rides `boardSettings`, which is already
  * persisted, exported, imported and synced — no new state key.
  */
+const EMPTY_CUSTOM_BUTTONS: CustomButton[] = [];
+
+/**
+ * Custom project buttons (owner, recording 2026-10-28): "Wall — yes, no or I
+ * don't know", typed here once and answered at the bottom of every
+ * apartment's Details. Information only. A name is edited where it stands;
+ * removing a button leaves the answers already given on the apartments,
+ * where nothing reads them.
+ */
+function CustomButtonSettings() {
+  const s = useStore(state => state.mainUiStrings);
+  const buttons = useStore(st => st.boardSettings[st.currentProjectId]?.customButtons ?? EMPTY_CUSTOM_BUTTONS);
+  const setBoardSetting = useStore(st => st.setBoardSetting);
+  const [draft, setDraft] = useState('');
+  const write = (next: CustomButton[]) => setBoardSetting('customButtons', next.length ? next : undefined);
+  const add = () => {
+    const v = draft.trim();
+    if (!v) return;
+    write([...buttons, { id: 'CB-' + Date.now().toString(36), name: v }]);
+    setDraft('');
+  };
+  return (
+    <div className="bg-white border border-gray-200 rounded-xl p-3 md:p-5 mb-4 md:mb-5" data-custom-buttons-card>
+      <h2 className="font-semibold text-gray-800 mb-3">{s.customButtonsTitle}</h2>
+      <div className="space-y-2">
+        {buttons.map(b => (
+          <div key={b.id} data-custom-button-row={b.id} className="flex items-center gap-2">
+            <input defaultValue={b.name} data-enter-own
+              onBlur={e => { const v = e.target.value.trim(); if (v && v !== b.name) write(buttons.map(x => x.id === b.id ? { ...x, name: v } : x)); else e.target.value = b.name; }}
+              onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
+              className="flex-1 min-w-0 border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30" />
+            <span className="text-xs text-gray-400 whitespace-nowrap">{s.customYes} · {s.customNo} · {s.customUnknown}</span>
+            <button data-custom-button-remove onClick={() => write(buttons.filter(x => x.id !== b.id))} title={s.delete} aria-label={s.delete}
+              className="w-8 h-8 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 flex items-center justify-center">×</button>
+          </div>
+        ))}
+        <div className="flex items-center gap-2">
+          <input data-custom-button-new data-enter-own value={draft}
+            onChange={e => setDraft(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter') add(); }}
+            placeholder={s.customButtonNew}
+            className="flex-1 min-w-0 border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30" />
+          <button data-custom-button-add onClick={add} disabled={!draft.trim()}
+            className="px-3 py-1.5 rounded-lg text-sm font-medium bg-[#1e3a5f] text-white disabled:opacity-40">+ {s.add}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function TipusSettings({ onToast }: { onToast: (msg: string) => void }) {
   const s = useStore(state => state.mainUiStrings);
   const tipusim = useStore(st => st.boardSettings[st.currentProjectId]?.tipusim ?? EMPTY_TIPUSIM);

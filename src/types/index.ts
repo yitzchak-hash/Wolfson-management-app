@@ -87,6 +87,13 @@ export interface AutoJobsSetting {
   lastNote?: string;
 }
 
+export interface CustomButton {
+  id: string;
+  name: string;
+}
+
+export type CustomAnswer = 'yes' | 'no' | 'unknown';
+
 export interface BoardSetting {
   /** What is on the toolbar and in what order. */
   toolbar?: ToolbarSetup;
@@ -101,6 +108,14 @@ export interface BoardSetting {
    * list. Rides `boardSettings`, so persist / sync / export need no new key.
    */
   tipusStages?: Record<string, string[]>;
+  /**
+   * The project's own information buttons (owner, recording 2026-10-28):
+   * "Wall — yes, no or I don't know", added in Project settings and answered
+   * on every apartment at the bottom of its Details. Information only — a
+   * button never moves a stage, opens a task or feeds a report. The answers
+   * ride on the apartment (`Apartment.customAnswers`, keyed by the id here).
+   */
+  customButtons?: CustomButton[];
   themeId?: string;
   snapToGrid?: boolean;
   /**
@@ -777,6 +792,8 @@ export interface Apartment {
   noteEntries?: StageNoteEntry[];
   isUnnamed: boolean;
   mergedWith?: string; // id of partner apartment when buyer physically connected two units
+  /** The answers to the project's custom buttons, by `CustomButton.id`; absent = not answered (empty). */
+  customAnswers?: Record<string, CustomAnswer>;
 
   /**
    * Which board bin this job sits in, if any. Absent = on the main board.
@@ -3368,6 +3385,34 @@ export interface MainUiStrings {
   columnsBtn: string;
   // BuildingDiagram / ProjectDiagram tooltips
   shinuiTooltip: string;
+  soldWord: string;
+  notSoldWord: string;
+  upgradedWord: string;
+  notUpgradedWord: string;
+  upgradedBadge: string;
+  upgradedTooltip: string;
+  stageFilterAny: string;
+  stageFilterSome: string;
+  buildingWord: string;
+  addNotesTitle: string;
+  stagesTitle: string;
+  stageNextLine: string;
+  stageAllDone: string;
+  stageFinishedBy: string;
+  stageWorkingBy: string;
+  stagePartLabel: string;
+  stageStateDone: string;
+  stageStateDoing: string;
+  stageStatePart: string;
+  stageStateBooked: string;
+  stageStateOff: string;
+  stageStateTodo: string;
+  customButtonsTitle: string;
+  customYes: string;
+  customNo: string;
+  customUnknown: string;
+  customButtonNew: string;
+  deleteAptShort: string;
   addTaskTooltip: string;
   hideShinuiBadgeTooltip: string;
   showShinuiBadgeTooltip: string;
@@ -4337,6 +4382,34 @@ export const DEFAULT_MAIN_UI_STRINGS: MainUiStrings = {
   columnsBtn: 'Columns',
   // BuildingDiagram / ProjectDiagram tooltips
   shinuiTooltip: 'Apartment has modifications (Shinui)',
+  soldWord: 'Sold',
+  notSoldWord: 'Not sold',
+  upgradedWord: 'Upgraded',
+  notUpgradedWord: 'Not upgraded',
+  upgradedBadge: 'U',
+  upgradedTooltip: 'Upgraded apartment',
+  stageFilterAny: 'Stage: any',
+  stageFilterSome: 'Stages: {n}',
+  buildingWord: 'Building',
+  addNotesTitle: 'Add notes',
+  stagesTitle: 'Stages',
+  stageNextLine: 'Next: {stage} · {done} of {total} done',
+  stageAllDone: 'All {total} done',
+  stageFinishedBy: '{who} finished it on {day}',
+  stageWorkingBy: '{who} working on it',
+  stagePartLabel: 'Done in part',
+  stageStateDone: 'Done',
+  stageStateDoing: 'Working',
+  stageStatePart: 'Part of it',
+  stageStateBooked: 'Booked',
+  stageStateOff: 'Not in this flat',
+  stageStateTodo: 'To do',
+  customButtonsTitle: 'Custom project buttons',
+  customYes: 'Yes',
+  customNo: 'No',
+  customUnknown: "Don't know",
+  customButtonNew: 'New button name…',
+  deleteAptShort: 'Delete apartment',
   addTaskTooltip: 'Add task',
   hideShinuiBadgeTooltip: 'Hide the "C" badge on apartments with modifications',
   showShinuiBadgeTooltip: 'Show badge on apartments with modifications (Shinui)',
@@ -5296,6 +5369,34 @@ export const HEBREW_MAIN_UI_STRINGS: MainUiStrings = {
   columnsBtn: 'עמודות',
   // BuildingDiagram / ProjectDiagram tooltips
   shinuiTooltip: 'דירת שינוי',
+  soldWord: 'נמכר',
+  notSoldWord: 'לא נמכר',
+  upgradedWord: 'משודרג',
+  notUpgradedWord: 'לא משודרג',
+  upgradedBadge: 'ש',
+  upgradedTooltip: 'דירה משודרגת',
+  stageFilterAny: 'שלב: הכל',
+  stageFilterSome: 'שלבים: {n}',
+  buildingWord: 'בניין',
+  addNotesTitle: 'הוספת הערות',
+  stagesTitle: 'שלבים',
+  stageNextLine: 'הבא: {stage} · {done} מתוך {total} הושלמו',
+  stageAllDone: 'כל {total} הושלמו',
+  stageFinishedBy: '{who} סיים ב-{day}',
+  stageWorkingBy: '{who} עובד על זה',
+  stagePartLabel: 'בוצע חלקית',
+  stageStateDone: 'בוצע',
+  stageStateDoing: 'בעבודה',
+  stageStatePart: 'חלקית',
+  stageStateBooked: 'מתוכנן',
+  stageStateOff: 'לא בדירה',
+  stageStateTodo: 'לביצוע',
+  customButtonsTitle: 'כפתורי פרויקט',
+  customYes: 'כן',
+  customNo: 'לא',
+  customUnknown: 'לא יודע',
+  customButtonNew: 'שם כפתור חדש…',
+  deleteAptShort: 'מחיקת דירה',
   addTaskTooltip: 'הוסף משימה',
   hideShinuiBadgeTooltip: 'הסתר תג שינוי בדירות',
   showShinuiBadgeTooltip: 'הצג תג שינוי בדירות',

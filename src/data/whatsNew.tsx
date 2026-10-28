@@ -30,6 +30,38 @@ export interface WhatsNewEntry {
 
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    date: '2027-02-19',
+    title: 'Bigger Wolfson tiles, sold and upgraded filters, and the stages laid out in the apartment',
+    items: [
+      {
+        title: 'Taller tiles with the tipus',
+        body: 'Each Wolfson floor is taller: the number and the name sit on one line, the tipus (A, B, C1, C2) under it, '
+          + 'and an upgraded flat wears a bigger "U". "0/12" is gone; a flat with no name says "Not sold", and Sold/Start is '
+          + 'now simply "Sold".',
+        demo: 'tap',
+      },
+      {
+        title: 'Sold · Not sold · Upgraded · Not upgraded',
+        body: 'Four buttons at the top pick which flats stay lit. The stages fold into one small "Stage" drop-down, and the '
+          + 'buildings are 1 · 2 · 3.',
+        demo: 'tap',
+      },
+      {
+        title: 'The apartment window, re-ordered',
+        body: 'Building, floor, tipus, apartment number and name come first, then Standard or Upgraded, then the address and '
+          + 'phone. Add notes folds away. Every stage is listed with its parts, who finished it and when, and its pictures; '
+          + 'tap a stage to move it on. Your own yes/no buttons sit at the bottom, and the Drive folder, the Zoho link and '
+          + 'delete live in Settings.',
+        demo: 'list',
+      },
+      {
+        title: 'Your own buttons for each project',
+        body: 'In Project settings, add a button like "Wall". Every apartment then answers it: Yes, No or Don\'t know.',
+        demo: 'tap',
+      },
+    ],
+  },
+  {
     date: '2027-02-18',
     title: 'A plan prints clean',
     items: [

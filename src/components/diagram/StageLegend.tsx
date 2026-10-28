@@ -50,3 +50,48 @@ export function StageLegend({ stages, activeStageIds, onToggle }: StageLegendPro
     </div>
   );
 }
+
+/**
+ * The stage filter folded into ONE small drop-down (owner, recording
+ * 2026-10-28: "this whole thing … can become a drop-down, a little tiny
+ * drop-down"). The chips inside are the legend above, unchanged — the same
+ * press narrows the board to those stages.
+ */
+export function StageFilterMenu({ stages, activeStageIds, onToggle, onClear, anyLabel, someLabel, clearLabel }: StageLegendProps & {
+  onClear: () => void;
+  anyLabel: string;
+  someLabel: string;
+  clearLabel: string;
+}) {
+  const [open, setOpen] = React.useState(false);
+  const ref = React.useRef<HTMLDivElement>(null);
+  React.useEffect(() => {
+    if (!open) return;
+    const down = (e: PointerEvent) => { if (!ref.current?.contains(e.target as Node)) setOpen(false); };
+    const key = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false); };
+    window.addEventListener('pointerdown', down);
+    window.addEventListener('keydown', key);
+    return () => { window.removeEventListener('pointerdown', down); window.removeEventListener('keydown', key); };
+  }, [open]);
+  const n = activeStageIds.length;
+  const picked = stages.filter(s => activeStageIds.includes(s.id));
+  return (
+    <div ref={ref} className="relative" data-stage-filter>
+      <button type="button" data-stage-filter-btn aria-expanded={open} onClick={() => setOpen(v => !v)}
+        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium border transition-all ${
+          n ? 'bg-[#1e3a5f]/5 border-[#1e3a5f]/30 text-[#1e3a5f]' : 'bg-gray-100 border-gray-200 text-gray-600 hover:border-gray-300'}`}>
+        {picked.slice(0, 3).map(s => <span key={s.id} className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: s.color }} />)}
+        {n ? someLabel.replace('{n}', String(n)) : anyLabel}
+        <span className="text-[10px] text-gray-400">▾</span>
+      </button>
+      {open && (
+        <div data-stage-filter-panel className="absolute z-40 mt-1.5 left-0 rtl:left-auto rtl:right-0 w-[420px] max-w-[80vw] bg-white border border-gray-200 rounded-xl shadow-xl p-3">
+          <StageLegend stages={stages} activeStageIds={activeStageIds} onToggle={onToggle} />
+          {n > 0 && (
+            <button type="button" onClick={onClear} className="mt-2 text-xs text-red-500 hover:text-red-700">{clearLabel}</button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}

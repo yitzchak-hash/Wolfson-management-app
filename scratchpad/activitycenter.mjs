@@ -93,7 +93,7 @@ function seed([now, hebrew]) {
   }));
 }
 
-const b = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome' });
+const b = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' });
 const stub = async page => { await page.route(/fonts\.g|open-meteo|tiktok|vercel\.app|tzviair-goals/, r => r.abort()); };
 const bodyText = page => page.evaluate(() => document.body.innerText);
 const rowText = (page, sel) => page.$eval(sel, e => e.textContent.replace(/\s+/g, ' ').trim()).catch(() => '');
@@ -193,7 +193,7 @@ const rowText = (page, sel) => page.$eval(sel, e => e.textContent.replace(/\s+/g
   console.log('— ticking a stage logs the stage, never the headline —');
   await page.click('.drawer-panel button:has-text("Details")');
   await page.waitForTimeout(300);
-  await page.click('[data-stage-picker]');
+  /* the stages are an always-open section now (28 Oct) */ await page.locator('[data-stage-section]').first().scrollIntoViewIfNeeded();
   await page.waitForSelector('[data-stage-bubble="st-reg"]', { timeout: 4000 }).catch(() => null);
   await page.click('[data-stage-bubble="st-reg"]');           // to do → happening now
   await page.waitForTimeout(250);
@@ -204,7 +204,7 @@ const rowText = (page, sel) => page.$eval(sel, e => e.textContent.replace(/\s+/g
   ok(logs[1].a === 'stage_marks' && logs[1].m?.[0]?.to === 'doing', 'the first tap recorded Registers → happening now');
   ok(!logs.some(l => l.f === 'currentStageId'), 'and nothing logged the headline moving');
   ok(logs[0].n === 'marked Registers done', `the record carries its English words (${logs[0].n})`);
-  await page.keyboard.press('Escape'); await page.waitForTimeout(200);
+  // No panel to close any more (28 Oct) — Escape would close the window itself.
   await page.click('.drawer-panel button:has-text("History")');
   await page.waitForTimeout(300);
   const top = await rowText(page, '[data-history-row] [data-activity-sentence]');

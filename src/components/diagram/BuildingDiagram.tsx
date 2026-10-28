@@ -3,7 +3,11 @@ import { Link2, Lock, LockOpen } from 'lucide-react';
 import { Apartment, BuildingId, Stage } from '../../types';
 import { useStore } from '../../data/store';
 import { PROBLEM_FILL } from '../../data/problems';
-import { progressOf, StageProgress } from '../../data/stageMarks';
+import { progressOf, StageProgress, isStartStage } from '../../data/stageMarks';
+import { realName, isSold } from '../../data/aptSale';
+
+/** The board's sale filter (owner, 2026-10-28): one at a time, plus All. */
+export type SaleFilter = 'all' | 'sold' | 'unsold' | 'shinui' | 'standard';
 import {
   FloorRow, RowMode, aptCol, aptSpan, buildFloorRows, colNameOf, positionMap, roofHeightPx, rowCells,
   rowHeightPx, rowLabelText, rowPillLabel,
@@ -13,7 +17,7 @@ interface BuildingDiagramProps {
   apartments: Apartment[];
   stages: Stage[];
   activeStageIds: string[];
-  classFilter: 'all' | 'standard' | 'shinui';
+  classFilter: SaleFilter;
   /** Only apartments of this tipus stay lit; '' = every tipus. */
   tipusFilter?: string;
   /** aptId → live problem state — red with a '!' while open, rose while waiting (problems.ts). */
@@ -235,17 +239,25 @@ function AptCell({
   // The apartment number is always the primary label — a family name never replaces
   // it, it renders on its own line underneath.
   const numberLabel = mergedLabel || (apt && !apt.isUnnamed ? apt.apartmentNumber : '');
-  const rawName = apt?.displayName?.trim() ?? '';
-  // Only a *real* name counts — displayName defaults to the apartment number.
-  const nameLabel = rawName && rawName !== apt?.apartmentNumber?.trim() ? rawName : '';
+  // Only a *real* name counts — displayName defaults to the apartment number,
+  // and the office's unsold flats carry a placeholder ("Building 3/43").
+  const nameLabel = realName(apt);
+  /**
+   * A numbered flat with no family name is NOT SOLD (owner, recording
+   * 2026-10-28) — said on the tile in place of the placeholder and "Not
+   * started". The start stage itself reads "Sold".
+   */
+  const unsold = !!apt && !apt.isUnnamed && !nameLabel && !rowFloorType && apt.buildingId !== 'G';
+  /** Desktop tiles carry the number and the name on ONE line, the tipus under it. */
+  const oneLine = !phone && !compact && !mergedLabel;
   /**
    * The TIPUS rides with the number (owner, 2026-09-06): "47 — A2" on the
    * desktop cell; the phone cell is 77px wide, so there it is a small line
    * under the number instead (the starred answer he let stand).
    */
   const tipus = apt?.tipus?.trim() ?? '';
-  const displayLabel = (numberLabel && tipus && !phone && !mergedLabel ? `${numberLabel} — ${tipus}` : numberLabel) || nameLabel;
-  const tipusLine = tipus && numberLabel && (phone || !!mergedLabel) ? tipus : '';
+  const displayLabel = numberLabel || nameLabel;
+  const tipusLine = tipus && numberLabel ? tipus : '';
 
   const scale = isHighlighted && !isDimmed ? 'scale-[1.04] z-10' : '';
 
@@ -304,15 +316,9 @@ function AptCell({
           is simply divided. */}
       {progress && progress.total > 0 && displayLabel && !isDimmed && (
         <>
-          {!compact && (
-            <span data-cell-fraction
-              className="absolute font-black tabular-nums leading-none rounded"
-              style={{ top: 1, left: 2, fontSize: phone ? 7 : 8, padding: '1px 3px',
-                backgroundColor: 'rgba(255,255,255,.82)', color: '#334155' }}>
-              {progress.done}/{progress.total}
-            </span>
-          )}
-          <span data-cell-strip className="absolute flex" style={{ left: 2, right: 2, bottom: 1, height: compact ? 2 : 3, gap: 1 }}>
+          {/* No "0/12" on the tile any more (owner, 2026-10-28) — the strip
+              along the bottom already says how far along it is. */}
+          <span data-cell-strip data-done={progress.done} data-total={progress.total} className="absolute flex" style={{ left: 2, right: 2, bottom: 1, height: compact ? 2 : 3, gap: 1 }}>
             {progress.rows.map(r => (
               <span key={r.stage.id} className="flex-1 rounded-sm" style={{
                 backgroundColor: r.state === 'done' ? r.stage.color
@@ -329,6 +335,18 @@ function AptCell({
       )}
       {displayLabel ? (
         <>
+          {oneLine && numberLabel ? (
+            <span data-cell-line1
+              className="font-bold leading-tight text-center w-full block truncate flex-shrink-0"
+              // The badges sit in the top corners, above this line, so the
+              // whole width is the name's.
+              style={{ fontSize: '12.5px', padding: '0 3px' }}>
+              {numberLabel}
+              <span className="ms-1.5" style={{ fontWeight: unsold ? 500 : 700, fontStyle: unsold ? 'italic' : undefined, opacity: unsold ? 0.7 : 1 }}>
+                {nameLabel || (unsold ? ui.notSoldWord : '')}
+              </span>
+            </span>
+          ) : (
           <span
             // flex-shrink-0 is the whole fix for "the name covers the number":
             // the cell is a fixed-height flex column, so once the family name
@@ -339,14 +357,16 @@ function AptCell({
           >
             {displayLabel}
           </span>
+          )}
           {tipusLine && (
-            <span data-tipus-line className="w-full text-center block leading-none flex-shrink-0 font-bold"
-              style={{ fontSize: compact ? '7.5px' : '8.5px', opacity: isDimmed ? 0.55 : 0.85 }}>
+            <span data-tipus-line className={`text-center leading-none flex-shrink-0 font-bold ${oneLine ? 'inline-block self-center rounded px-1.5 py-[3px]' : 'w-full block'}`}
+              style={{ fontSize: compact ? '7.5px' : oneLine ? '10px' : '8.5px', opacity: isDimmed ? 0.55 : 0.9,
+                backgroundColor: oneLine ? (hasStage && !isDimmed ? 'rgba(255,255,255,.22)' : '#eef1f4') : undefined }}>
               {tipusLine}
             </span>
           )}
           {/* Family name — always shown *in addition to* the apartment number */}
-          {nameLabel && numberLabel && (
+          {!oneLine && (nameLabel || unsold) && numberLabel && (
             <span
               // Same reason as the stage line: a family name is the thing the
               // office reads the grid for, so on a phone it wraps instead of
@@ -362,7 +382,7 @@ function AptCell({
                 ...(phone ? { overflowWrap: 'break-word' as const } : null),
               }}
             >
-              {nameLabel}
+              {nameLabel || ui.notSoldWord}
             </span>
           )}
         </>
@@ -393,7 +413,10 @@ function AptCell({
         const stageText = problem === 'open'
           ? `${ui.problemLabel.toUpperCase()}${hasStage ? ` · ${ui.problemWas} ${stage!.name}` : ''}`
           : problem === 'waiting' ? ui.problemWaiting
-          : hasStage ? stage!.name : ui.notStartedOption;
+          : unsold ? ''
+          : hasStage ? (isStartStage(stage!) ? ui.soldWord : stage!.name)
+          : nameLabel ? ui.soldWord : ui.notStartedOption;
+        if (!stageText) return null;
         // On a phone the stage name SHRINKS until it fits on one line rather
         // than wrapping to three. A four-across row is ~86px wide and
         // "Registers & Access Panels" needs 106px at 8.5px, so before this it
@@ -471,13 +494,16 @@ function AptCell({
       )}
 
       {/* Changes badge */}
+      {/* The upgrade badge — a "U", bigger now that the count beside it is
+          gone (owner, 2026-10-28). It owns the top-left corner. */}
       {showShinuiBadge && apt?.classification === 'shinui' && (
         <div
-          className="absolute top-0.5 left-0.5 w-3.5 h-3.5 rounded-full flex items-center justify-center"
-          title={ui.shinuiTooltip}
-          style={{ backgroundColor: '#f59e0b', border: '1px solid rgba(255,255,255,0.9)' }}
+          data-upgraded-badge
+          className={`absolute top-1 left-1 rounded-full flex items-center justify-center ${compact || phone ? 'w-3.5 h-3.5' : 'w-5 h-5'}`}
+          title={ui.upgradedTooltip}
+          style={{ backgroundColor: '#f59e0b', border: '1.5px solid rgba(255,255,255,0.9)' }}
         >
-          <span style={{ fontSize: '7.5px', color: 'white', fontWeight: 'bold', lineHeight: 1 }}>C</span>
+          <span style={{ fontSize: compact || phone ? '7.5px' : '11px', color: 'white', fontWeight: 800, lineHeight: 1 }}>{ui.upgradedBadge}</span>
         </div>
       )}
 
@@ -669,7 +695,7 @@ interface ColumnProps {
   mergedLabels: Map<string, string>;
   stages: Stage[];
   activeStageIds: string[];
-  classFilter: 'all' | 'standard' | 'shinui';
+  classFilter: SaleFilter;
   /** Only apartments of this tipus stay lit; '' = every tipus. */
   tipusFilter?: string;
   /** aptId → live problem state — red with a '!' while open, rose while waiting (problems.ts). */
@@ -737,7 +763,9 @@ function BuildingColumn({
   function isDimmed(apt: Apartment | undefined): boolean {
     if (!apt) return false;
     if (highlightedApartmentIds) return !highlightedApartmentIds.has(apt.id);
-    if (classFilter !== 'all' && apt.classification !== classFilter) return true;
+    if (classFilter === 'sold' && !isSold(apt)) return true;
+    if (classFilter === 'unsold' && isSold(apt)) return true;
+    if ((classFilter === 'shinui' || classFilter === 'standard') && apt.classification !== classFilter) return true;
     if (tipusFilter && (apt.tipus ?? '') !== tipusFilter) return true;
     if (searchQuery) return !(apt.displayName || apt.apartmentNumber).toLowerCase().includes(searchQuery.toLowerCase());
     if (activeStageIds.length === 0) return false;

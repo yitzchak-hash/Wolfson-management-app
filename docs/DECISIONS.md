@@ -397,9 +397,10 @@ Time off belongs to the person and lives in one shared list.
 
 ## 2026-10-28 (recording 28 Oct, his chat answers)
 - **Wolfson tipus**: floors 1–13 A · B · C1 · C2 by position (number order); 14 = 53 A · 54 B; duplexes 55 A · 56 B; a
-  joined flat carries both (38/39 = B + C1). Source: our quote "W Residence Mini Merkazi" + plans in Drive. Pending his yes.
+  joined unit carries the first and last flat it covers (21–24 = A+C2 — his words: "a mix… A plus C2"; 38/39 as two records = B, C1). Source: our quote "W Residence Mini Merkazi" + plans in Drive. **Approved and built 2026-10-28.** Filled into EMPTY tipus fields only, on open (`fillWolfsonTipus`).
 - **Sold** = the flat has a family name; none = "Not sold" (the Drive folders' own naming).
 - Four sale filters, one at a time + All; no Upgrades button (only Bulk Update, Print); buildings read 1 · 2 · 3, no "A".
 - The apartment window: Building · Floor (read only) · Tipus · Apt # · Name / Standard–Upgraded / address · phone / Add
   notes (folded) / every stage, always shown, with its `includes` parts / custom project buttons / Settings.
 - The tile keeps naming the stage being worked on, else "Sold".
+- The start stage "Sold/Start" is renamed "Sold" in the data (once, on open); `isStartStage` knows both names.
