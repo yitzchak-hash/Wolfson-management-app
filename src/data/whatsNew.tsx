@@ -30,6 +30,18 @@ export interface WhatsNewEntry {
 
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    date: '2027-02-18',
+    title: 'A plan prints clean',
+    items: [
+      {
+        title: 'Just the plan on the paper',
+        body: 'Printing a plan no longer puts a line of names, markings and dates over it. Each page fills one sheet, '
+          + 'turned the way the drawing is.',
+        demo: 'tap',
+      },
+    ],
+  },
+  {
     date: '2027-02-17',
     title: 'Full screen that keeps its menus, smoother heavy plans, and a clearer Save',
     items: [

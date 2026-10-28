@@ -1,0 +1,414 @@
+<title>Wolfson Tiles and Details</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;700;800&family=Inter:wght@400;500;600;700&family=Caveat:wght@600&display=swap">
+<style>
+/* Layout: a drafting-grey table; the app's screens sit on it as white sheets, my notes in china-marker red beside them. */
+:root {
+  --table: #e6e8eb; --sheet: #ffffff; --ink: #111827; --muted: #5b6472;
+  --navy: #1e3a5f; --tile: #5d6a80; --teal: #0d9fa6; --amber: #f2a900;
+  --marker: #c8312b; --line: #d3d7dd; --soft: #f3f4f6;
+  --display: 'Archivo', 'Segoe UI', sans-serif; --body: 'Inter', 'Segoe UI', Arial, sans-serif;
+  --hand: 'Caveat', 'Segoe Print', cursive;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --table: #1b1f25; --sheet: #ffffff; --ink: #111827; --muted: #5b6472; --marker: #ff6b5e; --line: #3a414b; color-scheme: dark } }
+:root[data-theme="dark"] { --table: #1b1f25; --sheet: #ffffff; --ink: #111827; --muted: #5b6472; --marker: #ff6b5e; --line: #3a414b; color-scheme: dark }
+body { background: var(--table); color: var(--ink); font-family: var(--body); }
+.wrap { max-width: 1180px; margin: 0 auto; padding-block: 28px 64px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+.page-head { color: var(--fg-on-table, inherit); }
+h1 { font-family: var(--display); font-weight: 800; font-size: clamp(28px, 4vw, 40px); margin: 0 0 6px; color: var(--navy); text-wrap: balance; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) h1, :root:not([data-theme="light"]) .eyebrow, :root:not([data-theme="light"]) .lede, :root:not([data-theme="light"]) h2 { color: #e9edf2; } }
+:root[data-theme="dark"] h1, :root[data-theme="dark"] .eyebrow, :root[data-theme="dark"] .lede, :root[data-theme="dark"] h2 { color: #e9edf2; }
+.lede { max-width: 66ch; color: var(--muted); font-size: 15px; line-height: 1.55; margin: 0; }
+section { margin-top: 44px; }
+.eyebrow { font: 700 11px/1 var(--body); letter-spacing: .12em; text-transform: uppercase; color: var(--muted); margin-bottom: 8px; }
+h2 { font-family: var(--display); font-weight: 700; font-size: 22px; margin: 0 0 14px; color: var(--navy); }
+.row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(220px, 300px); gap: 18px; align-items: start; }
+@media (max-width: 860px) { .row { grid-template-columns: 1fr; } }
+.sheet { background: var(--sheet); border: 1px solid #cfd4da; border-radius: 6px; padding: 16px; min-width: 0; overflow-x: auto; color: #111827; }
+.note { font-family: var(--hand); color: var(--marker); font-size: 21px; line-height: 1.15; padding-top: 4px; }
+.note ol { margin: 0; padding-left: 22px; }
+.note li { margin-bottom: 8px; }
+.note small { font-family: var(--body); font-size: 12px; display: block; color: var(--marker); opacity: .85; margin-top: 2px; }
+.tag { display: inline-block; font: 700 10px/1 var(--body); letter-spacing: .08em; text-transform: uppercase; padding: 4px 7px; border-radius: 4px; margin-bottom: 10px; }
+.tag.before { background: #eceff3; color: #5b6472; } .tag.after { background: #e2f1ea; color: #146c43; }
+.pair { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+@media (max-width: 640px) { .pair { grid-template-columns: 1fr; } }
+
+/* ---- the board ---- */
+.bld { border-radius: 6px; overflow: hidden; border: 1px solid #dfe3e8; }
+.bld-head { background: var(--navy); color: #fff; text-align: center; font: 700 14px var(--body); padding: 7px; }
+.floor { display: grid; grid-template-columns: 26px repeat(4, minmax(0, 1fr)); gap: 4px; padding: 3px 4px; align-items: stretch; }
+.floor .fl { font-size: 10px; color: #6b7280; display: flex; align-items: center; justify-content: center; }
+.t { position: relative; border-radius: 5px; background: var(--tile); color: #fff; text-align: center; padding: 6px 4px 7px; min-width: 0; font-size: 11px; line-height: 1.15; }
+.t.teal { background: var(--teal); } .t.empty { background: #fff; color: #374151; border: 1px solid #d1d5db; }
+.t .n { font-weight: 800; } .t .nm { font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; }
+.t .st { font-size: 9px; opacity: .8; display: block; }
+.t .plus { position: absolute; top: 3px; right: 3px; width: 13px; height: 13px; border-radius: 50%; background: rgba(255,255,255,.85); color: #475569; font-size: 11px; line-height: 13px; }
+.t.empty .plus { background: none; }
+.t .c { position: absolute; top: 3px; left: 3px; width: 13px; height: 13px; border-radius: 50%; background: var(--amber); color: #3b2a00; font: 800 9px/13px var(--body); }
+.t .cnt { position: absolute; top: 3px; left: 3px; font-size: 8px; opacity: .85; }
+.t .c + .cnt { left: 12px; }
+/* after */
+.floor.big { padding: 5px 6px; gap: 6px; }
+.t.big { padding: 12px 8px 12px; font-size: 13px; min-height: 64px; display: flex; flex-direction: column; justify-content: center; gap: 4px; }
+.t.big .line1 { display: flex; gap: 6px; justify-content: center; align-items: baseline; min-width: 0; }
+.t.big .line1 .n { flex-shrink: 0; } .t.big .line1 .nm { min-width: 0; }
+.t.big .tip { display: inline-block; align-self: center; font: 700 10px/1 var(--body); padding: 3px 6px; border-radius: 3px; background: rgba(255,255,255,.2); }
+.t.empty.big .tip { background: #eef1f4; color: #374151; }
+.t.big .st { font-size: 10px; }
+.t.big .u { position: absolute; top: 6px; left: 6px; width: 20px; height: 20px; border-radius: 50%; background: var(--amber); color: #3b2a00; font: 800 12px/20px var(--body); }
+.t.big .plus { top: 6px; right: 6px; width: 18px; height: 18px; line-height: 18px; font-size: 14px; }
+.t.big .bar { position: absolute; left: 4px; right: 4px; bottom: 3px; height: 3px; display: flex; gap: 1px; }
+.t.big .bar i { flex: 1; border-radius: 1px; background: rgba(255,255,255,.25); } .t.big .bar i.d { background: #8ef0c1; }
+
+/* ---- filters ---- */
+.fbar { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; font-size: 12px; }
+.seg { display: inline-flex; background: #eef1f5; border-radius: 8px; padding: 2px; }
+.seg b { padding: 5px 10px; border-radius: 6px; font-weight: 600; color: #374151; }
+.seg b.on { background: var(--navy); color: #fff; }
+.chip { border: 1px solid #d1d5db; border-radius: 999px; padding: 4px 9px; display: inline-flex; gap: 5px; align-items: center; color: #374151; background: #fff; }
+.chip i { width: 7px; height: 7px; border-radius: 50%; display: inline-block; }
+.btn { border: 1px solid #d1d5db; background: #fff; border-radius: 7px; padding: 5px 10px; font-weight: 600; color: #374151; display: inline-flex; gap: 6px; align-items: center; }
+.btn.drop::after { content: '▾'; font-size: 10px; color: #6b7280; }
+.search { border: 1px solid #d1d5db; border-radius: 7px; padding: 5px 10px; color: #9ca3af; min-width: 110px; }
+
+/* ---- the window ---- */
+.win { border-radius: 8px; overflow: hidden; border: 1px solid #cfd4da; max-width: 560px; }
+.win-head { background: var(--navy); color: #fff; padding: 10px 12px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; font-size: 13px; }
+.win-head .ttl { font-weight: 700; } .win-head .sub { color: #9fb6d1; font-weight: 600; }
+.hchip { display: inline-flex; align-items: center; gap: 5px; height: 24px; padding: 0 10px; border-radius: 6px; background: rgba(255,255,255,.12); color: #fff; font: 600 11.5px var(--body); }
+.hchip i { width: 7px; height: 7px; border-radius: 50%; background: #34d399; display: inline-block; }
+.tabs { display: flex; gap: 0; border-bottom: 1px solid #e5e7eb; font-size: 13px; color: #6b7280; }
+.tabs span { padding: 9px 14px; } .tabs span.on { color: var(--navy); font-weight: 700; border-bottom: 2px solid var(--navy); }
+.body { padding: 14px; display: flex; flex-direction: column; gap: 14px; }
+.fields { display: grid; gap: 8px; }
+.r1 { grid-template-columns: 64px 54px 76px 64px minmax(0, 1fr); }
+.r3 { grid-template-columns: 1fr 1fr; }
+@media (max-width: 520px) { .r1 { grid-template-columns: repeat(4, minmax(0, 1fr)); } .r1 .f:last-child { grid-column: 1 / -1; } }
+.f label { display: block; font-size: 10.5px; color: #6b7280; margin-bottom: 3px; }
+.f .box { border: 1px solid #d1d5db; border-radius: 6px; padding: 7px 8px; font-size: 13px; min-height: 18px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.f .box.ro { background: #f3f4f6; color: #374151; border-color: #e5e7eb; }
+.f .box.sel::after { content: ' ▾'; color: #9ca3af; font-size: 10px; }
+.f .box.ph { color: #9ca3af; }
+.typeseg { display: inline-flex; border: 1px solid #d1d5db; border-radius: 7px; overflow: hidden; font-size: 12.5px; font-weight: 600; }
+.typeseg span { padding: 6px 14px; color: #374151; } .typeseg span.on { background: var(--navy); color: #fff; }
+.sec-t { font: 700 12px var(--body); color: #374151; display: flex; align-items: center; gap: 6px; }
+.sec-t .arr { color: #6b7280; font-size: 10px; }
+.next { font-size: 12px; color: #374151; background: #eef6ff; border: 1px solid #cfe2f7; border-radius: 6px; padding: 6px 9px; }
+.stage { border: 1px solid #e5e7eb; border-radius: 8px; padding: 10px 12px; display: grid; grid-template-columns: 1fr auto; gap: 4px 10px; }
+.stage .sn { font: 700 16px var(--display); color: #111827; display: flex; gap: 8px; align-items: center; }
+.stage .state { font: 700 10.5px var(--body); padding: 3px 7px; border-radius: 999px; }
+.st-done { background: #dcfce7; color: #166534; } .st-half { background: #fef3c7; color: #92400e; } .st-doing { background: #e0f2fe; color: #075985; } .st-todo { background: #f3f4f6; color: #4b5563; }
+.stage .who { grid-column: 1 / -1; font-size: 12.5px; color: #374151; }
+.stage .left { grid-column: 1 / -1; font-size: 12.5px; color: #92400e; }
+.stage .subs { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 5px; }
+.stage .subs span { font-size: 11px; background: #f3f4f6; border-radius: 4px; padding: 2px 6px; color: #374151; }
+.thumbs { grid-column: 1 / -1; display: flex; gap: 6px; }
+.th { width: 46px; height: 34px; border-radius: 4px; background: linear-gradient(135deg, #cbd5e1, #94a3b8); position: relative; transition: transform .18s; transform-origin: left top; cursor: zoom-in; }
+.th::after { content: ''; position: absolute; inset: 30% 25%; border: 2px solid rgba(255,255,255,.7); border-radius: 2px; }
+.th:hover, .th:focus { transform: scale(3.2); z-index: 5; box-shadow: 0 8px 24px rgba(0,0,0,.3); outline: none; }
+@media (prefers-reduced-motion: reduce) { .th { transition: none; } }
+.notes-closed { border: 1px solid #e5e7eb; border-radius: 8px; padding: 9px 12px; }
+.cf { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: center; font-size: 13px; }
+.yn { display: inline-flex; border: 1px solid #d1d5db; border-radius: 7px; overflow: hidden; font-size: 12px; font-weight: 600; }
+.yn span { padding: 5px 10px; color: #374151; border-left: 1px solid #e5e7eb; } .yn span:first-child { border-left: 0; }
+.yn span.on { background: var(--navy); color: #fff; }
+.settings { border-top: 1px solid #e5e7eb; padding-top: 10px; display: grid; gap: 8px; font-size: 13px; }
+.srow { display: flex; align-items: center; gap: 8px; color: #374151; }
+.srow .lnk { color: #2563eb; } .srow .end { margin-left: auto; }
+.trash { width: 30px; height: 30px; border-radius: 7px; border: 1px solid #fecaca; color: #b91c1c; display: inline-flex; align-items: center; justify-content: center; }
+
+/* ---- questions ---- */
+.qs { display: grid; gap: 12px; }
+.q { background: var(--sheet); border: 1px solid #cfd4da; border-left: 4px solid var(--marker); border-radius: 6px; padding: 14px 16px; color: #111827; }
+.q h3 { margin: 0 0 6px; font: 700 15px var(--body); }
+.q p { margin: 0 0 8px; font-size: 14px; line-height: 1.5; color: #374151; max-width: 72ch; }
+.q ul { margin: 0; padding-left: 0; list-style: none; display: grid; gap: 5px; font-size: 14px; }
+.q li.star::before { content: '★ '; color: var(--marker); }
+.q li:not(.star)::before { content: '○ '; color: #9ca3af; }
+.count { background: var(--sheet); border: 1px solid #cfd4da; border-radius: 6px; padding: 14px 16px; color: #111827; overflow-x: auto; }
+.count table { border-collapse: collapse; width: 100%; font-size: 13px; min-width: 520px; }
+.count td, .count th { text-align: left; padding: 6px 8px; border-bottom: 1px solid #eef0f3; vertical-align: top; }
+.count th { font-size: 10.5px; letter-spacing: .06em; text-transform: uppercase; color: #6b7280; }
+.count td:first-child { font-variant-numeric: tabular-nums; color: #6b7280; width: 28px; }
+.ok { color: #146c43; font-weight: 700; } .wait { color: #92400e; font-weight: 600; }
+</style>
+
+<div class="wrap">
+  <header class="page-head">
+    <div class="eyebrow">Recording 28 Oct · 10:25 · for your OK</div>
+    <h1>Wolfson Tiles and Details</h1>
+    <p class="lede">Everything you asked for in the recording, drawn before it is built. The white sheets are the app;
+      the red handwriting is me. Names are made up. Look it over, answer the six questions at the bottom, and say
+      "build it".</p>
+  </header>
+
+  <section>
+    <div class="eyebrow">1 · The board</div>
+    <h2>Taller floors, one line for the number and name, the tipus on every tile</h2>
+    <div class="row">
+      <div class="pair">
+        <div class="sheet">
+          <span class="tag before">Today</span>
+          <div class="bld">
+            <div class="bld-head">A2</div>
+            <div class="floor"><div class="fl">13</div>
+              <div class="t empty"><span class="cnt">0/12</span><span class="plus">+</span><span class="n">49</span><span class="nm">Building 2/49</span><span class="st">— Not Started —</span></div>
+              <div class="t"><span class="c">C</span><span class="cnt">0/12</span><span class="plus">+</span><span class="n">50</span><span class="nm">Levi, Dana</span><span class="st">Sold/Start</span></div>
+              <div class="t teal"><span class="cnt">1/12</span><span class="plus">+</span><span class="n">51</span><span class="nm">Mizrahi, Avi</span><span class="st">Drilling</span></div>
+              <div class="t"><span class="cnt">0/12</span><span class="plus">+</span><span class="n">52</span><span class="nm">Katz, Noa</span><span class="st">Sold/Start</span></div>
+            </div>
+            <div class="floor"><div class="fl">12</div>
+              <div class="t"><span class="c">C</span><span class="cnt">0/12</span><span class="plus">+</span><span class="n">45</span><span class="nm">Peretz, Ron</span><span class="st">Sold/Start</span></div>
+              <div class="t empty"><span class="cnt">0/12</span><span class="plus">+</span><span class="n">46</span><span class="nm">Building 2/46</span><span class="st">— Not Started —</span></div>
+              <div class="t"><span class="cnt">0/12</span><span class="plus">+</span><span class="n">47</span><span class="nm">Shalom, Tali</span><span class="st">Sold/Start</span></div>
+              <div class="t teal"><span class="c">C</span><span class="cnt">2/12</span><span class="plus">+</span><span class="n">48</span><span class="nm">Biton, Eli</span><span class="st">Drilling</span></div>
+            </div>
+          </div>
+        </div>
+        <div class="sheet">
+          <span class="tag after">Proposed</span>
+          <div class="bld">
+            <div class="bld-head">A2</div>
+            <div class="floor big"><div class="fl">13</div>
+              <div class="t empty big"><span class="plus">+</span><span class="line1"><span class="n">49</span><span class="nm">Not sold</span></span><span class="tip">Tipus B</span></div>
+              <div class="t big"><span class="u">U</span><span class="plus">+</span><span class="line1"><span class="n">50</span><span class="nm">Levi, Dana</span></span><span class="tip">Tipus A</span><span class="st">Sold</span><span class="bar"><i></i><i></i><i></i><i></i><i></i><i></i></span></div>
+              <div class="t teal big"><span class="plus">+</span><span class="line1"><span class="n">51</span><span class="nm">Mizrahi, Avi</span></span><span class="tip">Tipus A</span><span class="st">Drilling</span><span class="bar"><i class="d"></i><i></i><i></i><i></i><i></i><i></i></span></div>
+              <div class="t big"><span class="plus">+</span><span class="line1"><span class="n">52</span><span class="nm">Katz, Noa</span></span><span class="tip">Tipus C</span><span class="st">Sold</span><span class="bar"><i></i><i></i><i></i><i></i><i></i><i></i></span></div>
+            </div>
+            <div class="floor big"><div class="fl">12</div>
+              <div class="t big"><span class="u">U</span><span class="plus">+</span><span class="line1"><span class="n">45</span><span class="nm">Peretz, Ron</span></span><span class="tip">Tipus B</span><span class="st">Sold</span><span class="bar"><i></i><i></i><i></i><i></i><i></i><i></i></span></div>
+              <div class="t empty big"><span class="plus">+</span><span class="line1"><span class="n">46</span><span class="nm">Not sold</span></span><span class="tip">Tipus A</span></div>
+              <div class="t big"><span class="plus">+</span><span class="line1"><span class="n">47</span><span class="nm">Shalom, Tali</span></span><span class="tip">Tipus A</span><span class="st">Sold</span><span class="bar"><i></i><i></i><i></i><i></i><i></i><i></i></span></div>
+              <div class="t teal big"><span class="u">U</span><span class="plus">+</span><span class="line1"><span class="n">48</span><span class="nm">Biton, Eli</span></span><span class="tip">Tipus C</span><span class="st">Drilling</span><span class="bar"><i class="d"></i><i class="d"></i><i></i><i></i><i></i><i></i></span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="note"><ol>
+        <li>Floors about twice as tall.<small>If that means one building fills the screen, that's fine (your words).</small></li>
+        <li>Number and name on one line.</li>
+        <li>"0/12" gone. The thin bar along the bottom still shows how far along it is.</li>
+        <li>The "C" is now a bigger "U" in the corner, with nothing under it.</li>
+        <li>Tipus on every tile.</li>
+        <li>No name yet = "Not sold", not "Building 2/49 · Not started".</li>
+      </ol></div>
+    </div>
+  </section>
+
+  <section>
+    <div class="eyebrow">2 · The filters</div>
+    <h2>Four sale buttons on top, the stages in one small drop-down</h2>
+    <div class="row">
+      <div style="display:grid;gap:12px;min-width:0">
+        <div class="sheet"><span class="tag before">Today</span>
+          <div class="fbar">
+            <span class="seg"><b class="on">All</b><b>A3</b><b>A2</b><b>A1</b></span>
+            <span class="seg"><b class="on">All</b><b>Standard</b><b>Changes</b></span>
+            <span class="search">Search apt…</span><span class="btn">Changes</span><span class="btn">Bulk Update</span><span class="btn">Print</span>
+          </div>
+          <div class="fbar" style="margin-top:8px">
+            <span class="chip"><i style="background:#6b7280"></i>Sold/Start</span><span class="chip"><i style="background:#0d9fa6"></i>Drilling</span><span class="chip"><i style="background:#9ca3af"></i>Piping</span><span class="chip"><i style="background:#38bdf8"></i>Drains</span><span class="chip"><i style="background:#eab308"></i>Concealed Units</span><span class="chip"><i style="background:#f59e0b"></i>Fans</span><span class="chip">… 7 more</span>
+          </div>
+        </div>
+        <div class="sheet"><span class="tag after">Proposed</span>
+          <div class="fbar">
+            <span class="seg"><b class="on">All</b><b>1</b><b>2</b><b>3</b></span>
+            <span class="seg"><b class="on">All</b><b>Sold</b><b>Not sold</b><b>Upgraded</b><b>Not upgraded</b></span>
+            <span class="btn drop">Stage: any</span>
+            <span class="search">Search apt…</span><span class="btn">Upgrades</span><span class="btn">Bulk Update</span><span class="btn">Print</span>
+          </div>
+        </div>
+      </div>
+      <div class="note"><ol>
+        <li>Sold · Not sold · Upgraded · Not upgraded.</li>
+        <li>"All · Standard · Changes" is gone — Upgraded / Not upgraded take its place.</li>
+        <li>The row of stage chips folds into "Stage: any ▾".</li>
+        <li>"Changes" is called "Upgrades" everywhere.<small>The building buttons say 1 · 2 · 3? That's question 4.</small></li>
+      </ol></div>
+    </div>
+  </section>
+
+  <section>
+    <div class="eyebrow">3 · The apartment window</div>
+    <h2>Details first, then the stages as their own section</h2>
+    <div class="row">
+      <div class="pair" style="grid-template-columns:minmax(0,1fr) minmax(0,1fr)">
+        <div class="sheet"><span class="tag before">Today</span>
+          <div class="win">
+            <div class="win-head"><span class="sub">A2 · Floor 15</span><span class="ttl">Levi, Dana</span><span class="hchip" style="background:#16a34a33"><i></i>Drive</span><span class="hchip" style="background:#ffffff22;border-radius:12px">Print</span><span class="hchip" style="background:#10b98133;border-radius:999px"><i></i>Worker status</span></div>
+            <div class="tabs"><span class="on">Details</span><span>Tasks</span><span>Notes</span><span>Photos</span><span>History</span></div>
+            <div class="body">
+              <div class="fields" style="grid-template-columns:44px minmax(0,1fr) 84px 100px">
+                <div class="f"><label>Apt #</label><div class="box">56</div></div>
+                <div class="f"><label>Family Name</label><div class="box">Levi, Dana</div></div>
+                <div class="f"><label>Type</label><div class="typeseg"><span class="on">Std</span><span>Chg</span></div></div>
+                <div class="f"><label>Current Stage</label><div class="box sel">Sold/Start</div></div>
+              </div>
+              <div class="fields r3"><div class="f"><label>Address</label><div class="box ph">Address</div></div><div class="f"><label>Phone</label><div class="box ph">Phone</div></div></div>
+              <div class="f"><label>General Notes</label><div class="box ph">General notes about this apartment…</div></div>
+              <div class="srow" style="font-size:12px">▸ Google Drive Folder · Levi… &nbsp; ▸ Zoho Link · not linked</div>
+              <div class="srow" style="font-size:12px">▸ Settings</div>
+              <div style="border:1px solid #fecaca;color:#b91c1c;border-radius:7px;text-align:center;padding:8px;font-size:13px;font-weight:600">Delete Apartment</div>
+            </div>
+          </div>
+        </div>
+        <div class="sheet"><span class="tag after">Proposed</span>
+          <div class="win">
+            <div class="win-head"><span class="sub">Building 2 · Floor 15 · Apt 56</span><span class="ttl">Levi, Dana</span>
+              <span class="hchip"><i></i>Drive</span><span class="hchip"><i></i>Zoho</span><span class="hchip">Print</span><span class="hchip"><i></i>Worker status</span></div>
+            <div class="tabs"><span class="on">Details</span><span>Tasks</span><span>Notes</span><span>Photos</span><span>History</span></div>
+            <div class="body">
+              <div class="fields r1">
+                <div class="f"><label>Building</label><div class="box ro">2</div></div>
+                <div class="f"><label>Floor</label><div class="box ro">15</div></div>
+                <div class="f"><label>Tipus</label><div class="box sel">A</div></div>
+                <div class="f"><label>Apt #</label><div class="box">56</div></div>
+                <div class="f"><label>Family name</label><div class="box">Levi, Dana</div></div>
+              </div>
+              <div><div class="typeseg"><span class="on">Standard</span><span>Upgraded</span></div></div>
+              <div class="fields r3"><div class="f"><label>Address</label><div class="box ph">Address</div></div><div class="f"><label>Phone</label><div class="box ph">Phone</div></div></div>
+
+              <div class="sec-t">Stages</div>
+              <div class="next">Next: <b>Piping</b> · 2 of 11 done</div>
+              <div class="stage">
+                <div class="sn">Drilling</div><span class="state st-done">Done</span>
+                <div class="who">Igor finished it on Mon 12 Oct</div>
+                <div class="subs"><span>Living room</span><span>Bedroom 1</span><span>Bedroom 2</span><span>Kitchen</span></div>
+                <div class="thumbs"><span class="th" tabindex="0"></span><span class="th" tabindex="0"></span><span class="th" tabindex="0"></span></div>
+              </div>
+              <div class="stage">
+                <div class="sn">Drains</div><span class="state st-half">Part of it</span>
+                <div class="who">Igor, Wed 14 Oct</div>
+                <div class="left">Left out: the master bathroom — tiles not in yet</div>
+                <div class="thumbs"><span class="th" tabindex="0"></span><span class="th" tabindex="0"></span></div>
+              </div>
+              <div class="stage">
+                <div class="sn">Piping</div><span class="state st-todo">To do</span>
+              </div>
+              <div class="srow" style="font-size:12px;color:#6b7280">+ 8 more stages</div>
+
+              <div class="notes-closed"><div class="sec-t"><span class="arr">▸</span>Add notes</div></div>
+
+              <div class="sec-t">Custom project buttons</div>
+              <div class="cf"><span>Wall</span><span class="yn"><span>Yes</span><span>No</span><span>Don't know</span></span></div>
+              <div class="cf"><span>Ceiling lowered</span><span class="yn"><span class="on">Yes</span><span>No</span><span>Don't know</span></span></div>
+
+              <div class="settings">
+                <div class="sec-t"><span class="arr">▾</span>Settings</div>
+                <div class="srow">Drive folder <span class="lnk">Levi, Dana</span></div>
+                <div class="srow">Zoho link <span class="lnk">linked</span></div>
+                <div class="srow"><span class="end trash" title="Delete apartment" aria-label="Delete apartment"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14H6L5 6"/></svg></span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="note"><ol>
+        <li>Title: building, floor AND apartment number.</li>
+        <li>Row 1: Building (1, 2, 3 — no "A", can't be changed) · Floor (can't be changed) · Tipus · Apt # · Name.</li>
+        <li>Row 2: Standard / Upgraded. Row 3: address and phone.</li>
+        <li>"Current stage" is gone. Sold is where everyone starts, not a stage.</li>
+        <li>Each stage a line: name big, its parts, who and when, what was left out, photos (hover one).</li>
+        <li>"Add notes", folded behind the arrow.</li>
+        <li>Your own yes/no fields, information only.</li>
+        <li>Drive, Zoho and a small trash can live in Settings. Drive and Zoho also show in the title when linked; all four title buttons look alike.</li>
+      </ol></div>
+    </div>
+  </section>
+
+  <section>
+    <div class="eyebrow">4 · Project settings</div>
+    <h2>Where the custom buttons are made</h2>
+    <div class="row">
+      <div class="sheet" style="max-width:560px">
+        <div class="sec-t" style="font-size:14px;margin-bottom:10px">Custom project buttons</div>
+        <div style="display:grid;gap:8px;font-size:13px">
+          <div class="cf"><span><b>Wall</b> · Yes / No / Don't know · starts empty</span><span class="btn">Remove</span></div>
+          <div class="cf"><span><b>Ceiling lowered</b> · Yes / No / Don't know · starts empty</span><span class="btn">Remove</span></div>
+          <div class="cf"><span class="box" style="border:1px solid #d1d5db;border-radius:6px;padding:7px 8px;color:#9ca3af">New button name…</span><span class="btn" style="background:#1e3a5f;color:#fff;border-color:#1e3a5f">Add</span></div>
+        </div>
+      </div>
+      <div class="note"><ol><li>Type a name, Add. It shows on every apartment in this project.</li><li>It does nothing else — no stage, no task, no report.</li></ol></div>
+    </div>
+  </section>
+
+  <section>
+    <div class="eyebrow">5 · Questions — the star is my pick</div>
+    <h2>Six things I need from you</h2>
+    <div class="qs">
+      <div class="q"><h3>1. Where does each apartment's tipus come from?</h3>
+        <p>Wolfson has no tipus list yet, so nothing shows today. Every Wolfson plan already says it in its title block ("טיפוס A").</p>
+        <ul><li class="star">The app reads it off each apartment's plan and fills it in; you fix any it got wrong</li>
+          <li>You type the list in Project settings and set each apartment by hand (or with Bulk Update)</li></ul></div>
+      <div class="q"><h3>2. What makes an apartment "sold"?</h3>
+        <ul><li class="star">It has a family name. No name = Not sold</li><li>A separate Sold / Not sold switch on each apartment</li></ul></div>
+      <div class="q"><h3>3. The four filter buttons — one at a time, or together?</h3>
+        <ul><li class="star">One at a time, plus All (as drawn). "Sold and upgraded" is not one press</li><li>Each a switch you can combine</li></ul></div>
+      <div class="q"><h3>4. The building buttons above the board</h3>
+        <ul><li class="star">Say 1 · 2 · 3 too, like the window</li><li>Keep A1 · A2 · A3 there; only the window says 1 · 2 · 3</li></ul></div>
+      <div class="q"><h3>5. "The tiny sub-details of each stage that we discussed"</h3>
+        <p>I could not find a list of parts per stage in the past notes. What I drew is the rooms the worker ticked.</p>
+        <ul><li class="star">Show what the worker reported on that stage: the parts he ticked, his note, what was left out</li>
+          <li>You send me the parts for each stage (Drilling: …, Drains: …) and every stage shows its own list</li></ul></div>
+      <div class="q"><h3>6. With "Current stage" gone, does the tile still name a stage?</h3>
+        <ul><li class="star">Yes — the tile keeps the stage being worked on (Drilling), or "Sold" before anything starts</li><li>The tile shows the next stage instead</li></ul></div>
+    </div>
+  </section>
+
+  <section>
+    <div class="eyebrow">6 · Everything I heard</div>
+    <h2>44 asks, one change each</h2>
+    <div class="count"><table>
+      <thead><tr><th>#</th><th>The change</th><th>Where it is</th></tr></thead>
+      <tbody>
+        <tr><td>1</td><td>Floor rows much taller</td><td class="wait">§1 · waiting</td></tr>
+        <tr><td>2</td><td>Number and name on one line</td><td class="wait">§1</td></tr>
+        <tr><td>3</td><td>The change badge bigger</td><td class="wait">§1</td></tr>
+        <tr><td>4</td><td>The badge covers nothing</td><td class="wait">§1</td></tr>
+        <tr><td>5</td><td>No "0/12"</td><td class="wait">§1</td></tr>
+        <tr><td>6</td><td>Tipus on every tile</td><td class="wait">§1 · Q1</td></tr>
+        <tr><td>7</td><td>Stage chips → one small drop-down</td><td class="wait">§2</td></tr>
+        <tr><td>8</td><td>Sold · Not sold · Upgraded · Not upgraded buttons</td><td class="wait">§2 · Q3</td></tr>
+        <tr><td>9</td><td>All · Standard · Changes goes</td><td class="wait">§2</td></tr>
+        <tr><td>10</td><td>"Changes" → "Upgraded" everywhere</td><td class="wait">§2</td></tr>
+        <tr><td>11</td><td>"C" → "U"</td><td class="wait">§1</td></tr>
+        <tr><td>12</td><td>Apartment number in the window title</td><td class="wait">§3</td></tr>
+        <tr><td>13</td><td>Building 1 · 2 · 3, read only</td><td class="wait">§3 · Q4</td></tr>
+        <tr><td>14</td><td>Floor, read only</td><td class="wait">§3</td></tr>
+        <tr><td>15</td><td>Tipus field</td><td class="wait">§3 · Q1</td></tr>
+        <tr><td>16</td><td>Apt # editable</td><td class="wait">§3</td></tr>
+        <tr><td>17</td><td>Name ends row one</td><td class="wait">§3</td></tr>
+        <tr><td>18</td><td>Standard / Upgraded on row two</td><td class="wait">§3</td></tr>
+        <tr><td>19</td><td>Address and phone after it</td><td class="wait">§3</td></tr>
+        <tr><td>20</td><td>No name = "Not sold"</td><td class="wait">§1 · Q2</td></tr>
+        <tr><td>21</td><td>"Sold/Start" → "Sold"</td><td class="wait">§1</td></tr>
+        <tr><td>22</td><td>"General notes" → "Add notes"</td><td class="wait">§3</td></tr>
+        <tr><td>23</td><td>Notes fold behind an arrow</td><td class="wait">§3</td></tr>
+        <tr><td>24</td><td>Drive folder into Settings</td><td class="wait">§3</td></tr>
+        <tr><td>25</td><td>Delete = small trash can in Settings</td><td class="wait">§3</td></tr>
+        <tr><td>26</td><td>Zoho link into Settings</td><td class="wait">§3</td></tr>
+        <tr><td>27</td><td>A Zoho chip beside Drive in the title</td><td class="wait">§3</td></tr>
+        <tr><td>28</td><td>A plan prints clean</td><td class="ok">Built</td></tr>
+        <tr><td>29</td><td>A plan prints turned its way, one page per sheet</td><td class="ok">Built</td></tr>
+        <tr><td>30</td><td>The print window always opens</td><td>See the chat — it's a setting on her Chrome</td></tr>
+        <tr><td>31</td><td>Drive · Print · Worker status look the same</td><td class="wait">§3</td></tr>
+        <tr><td>32</td><td>"Current stage" goes</td><td class="wait">§3 · Q6</td></tr>
+        <tr><td>33</td><td>Sold/Start is not a stage</td><td class="wait">§3</td></tr>
+        <tr><td>34</td><td>Stages: a whole section</td><td class="wait">§3</td></tr>
+        <tr><td>35</td><td>Stage name big</td><td class="wait">§3</td></tr>
+        <tr><td>36</td><td>Its sub-details under it</td><td class="wait">§3 · Q5</td></tr>
+        <tr><td>37</td><td>Who finished it, and when</td><td class="wait">§3</td></tr>
+        <tr><td>38</td><td>What was left out</td><td class="wait">§3</td></tr>
+        <tr><td>39</td><td>Photos that grow on hover</td><td class="wait">§3</td></tr>
+        <tr><td>40</td><td>Preview it on a page first</td><td class="ok">This page</td></tr>
+        <tr><td>41</td><td>"Custom project buttons" section</td><td class="wait">§3</td></tr>
+        <tr><td>42</td><td>Made in Project settings</td><td class="wait">§4</td></tr>
+        <tr><td>43</td><td>Yes · No · Don't know, empty to start</td><td class="wait">§3 · §4</td></tr>
+        <tr><td>44</td><td>Information only</td><td class="wait">§4</td></tr>
+      </tbody></table></div>
+  </section>
+</div>

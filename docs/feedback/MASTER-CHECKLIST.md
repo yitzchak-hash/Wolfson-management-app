@@ -224,6 +224,54 @@ the job's own name) · addedwork-probe §5.
 | V15-2 | 0:26 | Pressing Job Completed took both ticks off | Done | `marksForCurrent` closing → all done · markerrole-test |
 | V15-3 | 0:14 | "What does 'the whole flat is' mean?" | Done | "Mark the whole job / apartment as", hover hints, opening first |
 
+### Video 17 — Recording 2026-10-28 102505 ([feedback doc](2026-10-28-102505.md))
+| # | Time | Ask | Status | Proof |
+|---|------|-----|--------|-------|
+| V17-1 | S1 | Floor rows on the board are much taller | Waiting | preview page, awaiting "build it" |
+| V17-2 | S2 | Number and name on ONE line on a tile | Waiting | preview page, awaiting "build it" |
+| V17-3 | S3 | The change badge is bigger | Waiting | preview page, awaiting "build it" |
+| V17-4 | S4 | The badge never covers anything on the tile | Waiting | preview page, awaiting "build it" |
+| V17-5 | S5 | No "0/12" on the tiles | Waiting | preview page, awaiting "build it" |
+| V17-6 | S7 | The tipus shown on every tile | Waiting | preview page, awaiting "build it" |
+| V17-7 | S9 | The stage chips row becomes one small drop-down | Waiting | preview page, awaiting "build it" |
+| V17-8 | S10–S11 | Four filter buttons: Sold · Not sold · Upgraded · Not upgraded | Waiting | preview page, awaiting "build it" |
+| V17-9 | S13 | The All · Standard · Changes toggle goes | Waiting | preview page, awaiting "build it" |
+| V17-10 | S14 | "Changes / Changed / Chg" is called "Upgraded" everywhere | Waiting | preview page, awaiting "build it" |
+| V17-11 | S15 | The "C" badge becomes "U" | Waiting | preview page, awaiting "build it" |
+| V17-12 | S18 | The window title shows the apartment number | Waiting | preview page, awaiting "build it" |
+| V17-13 | S19–S20 | First field: Building 1 · 2 · 3 (no "A"), read only | Waiting | preview page, awaiting "build it" |
+| V17-14 | S21 | Then Floor, read only | Waiting | preview page, awaiting "build it" |
+| V17-15 | S22 | Then Tipus | Waiting | preview page, awaiting "build it" |
+| V17-16 | S23 | Then Apartment number, editable | Waiting | preview page, awaiting "build it" |
+| V17-17 | S24 | Then the name — end of the first row | Waiting | preview page, awaiting "build it" |
+| V17-18 | S25 | Standard / Upgraded on the second row | Waiting | preview page, awaiting "build it" |
+| V17-19 | S26 | Address and phone after it | Waiting | preview page, awaiting "build it" |
+| V17-20 | S27 | An apartment with no name reads "Not sold" (not "Building 3/43 · Not started") | Waiting | preview page, awaiting "build it" |
+| V17-21 | S28 | "Sold/Start" is called "Sold" | Waiting | preview page, awaiting "build it" |
+| V17-22 | S30 | "General notes" → "Add notes" | Waiting | preview page, awaiting "build it" |
+| V17-23 | S31 | The notes fold away behind a small arrow | Waiting | preview page, awaiting "build it" |
+| V17-24 | S32 | The Drive folder row moves into Settings | Waiting | preview page, awaiting "build it" |
+| V17-25 | S33 | Delete apartment is a small trash can inside Settings | Waiting | preview page, awaiting "build it" |
+| V17-26 | S34 | The Zoho link moves into Settings | Waiting | preview page, awaiting "build it" |
+| V17-27 | S35 | A "Zoho" chip beside the "Drive" chip in the title when it is linked | Waiting | preview page, awaiting "build it" |
+| V17-28 | S36 | A plan prints clean — no line of names, markings and dates, no Chrome title/date | Done | PlanAnnotator print: no header, @page margin 0 · printprobe (2 pages, landscape) |
+| V17-29 | shown | A plan prints turned its own way, one page per sheet | Done | same · printprobe |
+| V17-30 | S37 | The print window always opens | Partly | cannot be forced from a web page — a Chrome setting on her computer |
+| V17-31 | S38 | Drive · Print · Worker status in the title look the same | Waiting | preview page, awaiting "build it" |
+| V17-32 | S41 | The "Current stage" field goes | Waiting | preview page, awaiting "build it" |
+| V17-33 | S43 | Sold/Start is not a stage in the list — it is where every apartment starts | Waiting | preview page, awaiting "build it" |
+| V17-34 | S42 | The stages are a whole section of the Details tab | Waiting | preview page, awaiting "build it" |
+| V17-35 | S44 | Each stage is one line: its name big | Waiting | preview page, awaiting "build it" |
+| V17-36 | S44 | Under the name, its small sub-details | Waiting | preview page, awaiting "build it" |
+| V17-37 | S45 | Each stage says who finished it and on what day | Waiting | preview page, awaiting "build it" |
+| V17-38 | S46 | Each stage says what was left out | Waiting | preview page, awaiting "build it" |
+| V17-39 | S47 | Each stage shows its photos as thumbnails that grow on hover | Waiting | preview page, awaiting "build it" |
+| V17-40 | S48 | All of this previewed on an artifact page first | Done | artifact T1CSfpRoeyGQimdHtZ4YdR |
+| V17-41 | S49 | A "Custom project buttons" section at the bottom of Details | Waiting | preview page, awaiting "build it" |
+| V17-42 | S50 | The fields are added in Project settings | Waiting | preview page, awaiting "build it" |
+| V17-43 | S51 | A field like "Wall": Yes · No · Don't know, empty by default | Waiting | preview page, awaiting "build it" |
+| V17-44 | S52 | The field is information only — it changes nothing else | Waiting | preview page, awaiting "build it" |
+
 ## From chat
 
 | # | Date | Ask | Status | Proof |

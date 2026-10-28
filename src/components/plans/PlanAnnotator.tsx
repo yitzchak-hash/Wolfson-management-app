@@ -3663,11 +3663,13 @@ function PlanEditor({
     if (!doc) return;
     onToast?.(s.dlPrintBuilding);
     const imgs: string[] = [];
+    let wide = false;
     for (const i of wanted) {
       const p = await doc.getPage(i + 1);
       const vp = p.getViewport({ scale: 2 });
       const c = document.createElement('canvas');
       c.width = Math.round(vp.width); c.height = Math.round(vp.height);
+      if (i === wanted[0]) wide = c.width > c.height;
       const ctx = c.getContext('2d')!;
       ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, c.width, c.height);
       await p.render({ canvasContext: ctx, viewport: vp }).promise;
@@ -3679,20 +3681,27 @@ function PlanEditor({
     }
     const w = window.open('', '_blank');
     if (!w) { onToast?.(s.dlPrintBlocked, 'error'); return; }
-    const marks = withMarkup ? strokes.length + myPins.length : 0;
+    /**
+     * A clean plan and nothing else (owner, recording 2026-10-28, 5:20). The
+     * sheet used to open with a line of our own — the flat, the plan's name,
+     * the number of markings, the pages and the time — and Chrome then added
+     * its own title and date at the top and the address at the bottom. The
+     * page margin is now zero, which is what tells Chrome to leave its
+     * header and footer off, and the breathing room the printer needs moves
+     * onto each page instead. Each page is fitted whole onto one sheet of
+     * paper, turned the way the drawing is (a wide plan prints landscape).
+     */
     w.document.write(`<!doctype html><title>${printEsc(planName || s.engineeringPlans)} — ${printEsc(apartmentLabel)}</title>
       <style>
-        @page { margin: 8mm; }
-        body { margin:0; font:12px Segoe UI,Helvetica,Arial,sans-serif; }
-        .hd { padding:6px 2px 10px; color:#374151; display:flex; justify-content:space-between; }
-        img { width:100%; display:block; page-break-after:always; }
-        img:last-child { page-break-after:auto; }
+        @page { size: ${wide ? 'landscape' : 'portrait'}; margin: 0; }
+        html, body { margin:0; padding:0; background:#fff; }
+        .pg { box-sizing:border-box; width:100vw; height:100vh; padding:7mm;
+          display:flex; align-items:center; justify-content:center;
+          break-after:page; page-break-after:always; overflow:hidden; }
+        .pg:last-child { break-after:auto; page-break-after:auto; }
+        .pg img { display:block; max-width:100%; max-height:100%; object-fit:contain; }
       </style>
-      <div class="hd"><b>${printEsc(apartmentLabel)} — ${printEsc(planName || s.engineeringPlans)}</b>
-        <span>${s.dlMarksWord}: ${marks} · `
-      + `${s.dlPagesWord}: ${wanted.length}/${doc.numPages} · `
-      + `${new Date().toLocaleString()}</span></div>
-      ${imgs.map(src => `<img src="${src}">`).join('')}`);
+      ${imgs.map(src => `<div class="pg"><img src="${src}"></div>`).join('')}`);
     w.document.close();
     w.focus();
     /**
