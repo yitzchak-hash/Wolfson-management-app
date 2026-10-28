@@ -534,6 +534,12 @@ export interface Stage {
    * words (StageSuggestion). Shown translated into the reader's language.
    */
   includes?: string[];
+  /**
+   * The same words in the three languages, typed by the office (owner,
+   * 2026-10-28) — keyed by the word as it stands in `includes`. The worker's
+   * phone shows his own language; an empty one is translated automatically.
+   */
+  includesTr?: Record<string, Partial<Record<PortalLang, string>>>;
   projectId?: string;   // if set, stage only appears in this project (e.g. 'general')
   /**
    * THE SET MODEL (owner's "bubbles" plan, built 2026-09-22 — on screen the

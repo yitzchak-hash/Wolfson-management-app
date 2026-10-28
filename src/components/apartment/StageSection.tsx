@@ -8,6 +8,7 @@ import {
 } from '../../data/stageMarks';
 import { driveThumbUrl } from '../../data/driveApi';
 import type { CustomWhere } from './StagePicker';
+import { includeIn } from '../../data/stageIncludes';
 
 /**
  * THE STAGES, AS A SECTION OF THE WINDOW (owner, recording 2026-10-28).
@@ -190,7 +191,7 @@ export function StageSection({
             </div>
             {!isOff && (st.includes?.length ?? 0) > 0 && (
               <div data-stage-includes className="mt-1.5 flex flex-wrap gap-1">
-                {st.includes!.map(w => <span key={w} className="text-[11px] bg-gray-100 text-gray-700 rounded px-1.5 py-0.5">{w}</span>)}
+                {st.includes!.map(w => <span key={w} className="text-[11px] bg-gray-100 text-gray-700 rounded px-1.5 py-0.5" dir="auto">{includeIn(st, w, rtl ? 'he' : 'en') || w}</span>)}
               </div>
             )}
             {who && <div data-stage-who className="mt-1 text-[12.5px] text-gray-700">{who}</div>}

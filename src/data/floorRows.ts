@@ -206,7 +206,7 @@ export function rowBaseHeightPx(buildingId: string, mode: RowMode): number {
   // Wolfson's desktop floors are much taller (owner, recording 2026-10-28:
   // "make the floors significantly fatter") so a tile holds its number and
   // name on one line, the tipus, the stage and the task under it.
-  if (isWolfsonBuilding(buildingId)) return mode === 'phone' ? 78 : 104;
+  if (isWolfsonBuilding(buildingId)) return mode === 'phone' ? 78 : 112;
   return mode === 'phone' ? 74 : 64;
 }
 

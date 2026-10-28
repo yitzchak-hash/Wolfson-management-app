@@ -248,8 +248,18 @@ function AptCell({
    * started". The start stage itself reads "Sold".
    */
   const unsold = !!apt && !apt.isUnnamed && !nameLabel && !rowFloorType && apt.buildingId !== 'G';
-  /** Desktop tiles carry the number and the name on ONE line, the tipus under it. */
-  const oneLine = !phone && !compact && !mergedLabel;
+  /**
+   * A Wolfson tile on a desktop is laid out the way the owner arranged it on
+   * the "Wolfson Tile Layout" page (saved 2026-10-28): the number top-left,
+   * the tipus centred on top (it grows both ways, so "C2" or "A+C2" is never
+   * cut), the + top-right, the family name in the middle on up to two lines,
+   * the worker under it, then the stage, and the "U" at the bottom left.
+   * Every piece has its own place, so nothing shares a line and nothing is
+   * cut short. Other workspaces keep the one-line tile.
+   */
+  const placed = !phone && !compact && !!apt && /^A\d/.test(apt.buildingId) && !rowFloorType;
+  /** Desktop tiles elsewhere carry the number and the name on ONE line, the tipus under it. */
+  const oneLine = !phone && !compact && !mergedLabel && !placed;
   /**
    * The TIPUS rides with the number (owner, 2026-09-06): "47 — A2" on the
    * desktop cell; the phone cell is 77px wide, so there it is a small line
@@ -260,6 +270,12 @@ function AptCell({
   const tipusLine = tipus && numberLabel ? tipus : '';
 
   const scale = isHighlighted && !isDimmed ? 'scale-[1.04] z-10' : '';
+  const stageWords = problem === 'open'
+    ? `${ui.problemLabel.toUpperCase()}${hasStage ? ` · ${ui.problemWas} ${stage!.name}` : ''}`
+    : problem === 'waiting' ? ui.problemWaiting
+    : unsold ? ''
+    : hasStage ? (isStartStage(stage!) ? ui.soldWord : stage!.name)
+    : nameLabel ? ui.soldWord : ui.notStartedOption;
 
   const boxShadow = isDimmed ? 'none'
     : isHoverGroup ? `0 0 0 2px #2563eb, 0 3px 12px ${borderColor}99`
@@ -333,7 +349,46 @@ function AptCell({
           </span>
         </>
       )}
-      {displayLabel ? (
+      {placed && displayLabel && (
+        <>
+          <span data-cell-number className="absolute font-bold leading-none whitespace-nowrap"
+            style={{ left: 6, top: 6, fontSize: '13px' }}>
+            {numberLabel}
+          </span>
+          {tipusLine && (
+            <span data-tipus-line className="absolute font-bold leading-none whitespace-nowrap rounded"
+              style={{ left: '50%', top: 5, transform: 'translateX(-50%)', fontSize: '12px', padding: '2px 6px',
+                opacity: isDimmed ? 0.55 : 0.95,
+                backgroundColor: hasStage && !isDimmed ? 'rgba(255,255,255,.22)' : '#eef1f4' }}>
+              {tipusLine}
+            </span>
+          )}
+          <span data-cell-name className="absolute text-center font-bold"
+            style={{ left: 6, right: 6, top: 31, fontSize: '12.5px', lineHeight: 1.15,
+              display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', overflowWrap: 'break-word',
+              fontWeight: unsold ? 500 : 700, fontStyle: unsold ? 'italic' : undefined, opacity: isDimmed ? 0.55 : unsold ? 0.7 : 1 }}>
+            {nameLabel || (unsold ? ui.notSoldWord : '')}
+          </span>
+          {taskInfo && (
+            <span data-cell-task className="absolute text-center whitespace-nowrap overflow-hidden text-ellipsis"
+              style={{ left: 4, right: 4, top: 63, fontSize: '9.5px', fontWeight: 600, lineHeight: 1.1,
+                opacity: isDimmed ? 0.4 : 0.9, color: isDimmed ? undefined : (allTasksDone ? '#22c55e' : '#f97316') }}>
+              {allTasksDone ? ui.doneIndicator : `⏳ ${taskInfo}`}
+            </span>
+          )}
+          {stageWords && (
+            <span data-cell-stage className="absolute text-center whitespace-nowrap overflow-hidden text-ellipsis"
+              title={stageWords}
+              style={{ left: 26, right: 26, top: 78, fontSize: '9.5px', lineHeight: 1.1,
+                opacity: isDimmed ? 0.5 : (hasStage ? 0.9 : 0.6),
+                fontStyle: hasStage || problem ? 'normal' : 'italic', fontWeight: problem ? 800 : undefined }}>
+              {stageWords}
+              {allTasksDone && <span style={{ color: isDimmed ? '#9ca3af' : '#22c55e', marginLeft: '1px' }}>✓</span>}
+            </span>
+          )}
+        </>
+      )}
+      {placed ? null : displayLabel ? (
         <>
           {oneLine && numberLabel ? (
             <span data-cell-line1
@@ -409,13 +464,8 @@ function AptCell({
       )}
 
       {/* Stage name with inline completion indicator */}
-      {!compact && displayLabel && (() => {
-        const stageText = problem === 'open'
-          ? `${ui.problemLabel.toUpperCase()}${hasStage ? ` · ${ui.problemWas} ${stage!.name}` : ''}`
-          : problem === 'waiting' ? ui.problemWaiting
-          : unsold ? ''
-          : hasStage ? (isStartStage(stage!) ? ui.soldWord : stage!.name)
-          : nameLabel ? ui.soldWord : ui.notStartedOption;
+      {!compact && !placed && displayLabel && (() => {
+        const stageText = stageWords;
         if (!stageText) return null;
         // On a phone the stage name SHRINKS until it fits on one line rather
         // than wrapping to three. A four-across row is ~86px wide and
@@ -451,7 +501,7 @@ function AptCell({
           cell), so at a fixed 10.5px this was the ONE line still ellipsizing —
           and it only showed up once the harness seed grew real assignments,
           which is the whole argument for testing on realistic data. */}
-      {!compact && displayLabel && taskInfo && (() => {
+      {!compact && !placed && displayLabel && taskInfo && (() => {
         const taskText = allTasksDone ? ui.doneIndicator : `⏳ ${taskInfo}`;
         const fit = phone && cellTextW ? fitStageFont(taskText, cellTextW) : null;
         return (
@@ -471,7 +521,7 @@ function AptCell({
         );
       })()}
 
-      {isDuplex && displayLabel && !compact && (
+      {isDuplex && displayLabel && !compact && !placed && (
         <span style={{ fontSize: '6px', opacity: 0.4, lineHeight: 1 }}>↑</span>
       )}
 
@@ -499,9 +549,9 @@ function AptCell({
       {showShinuiBadge && apt?.classification === 'shinui' && (
         <div
           data-upgraded-badge
-          className={`absolute top-1 left-1 rounded-full flex items-center justify-center ${compact || phone ? 'w-3.5 h-3.5' : 'w-5 h-5'}`}
+          className={`absolute rounded-full flex items-center justify-center ${placed ? 'w-5 h-5' : compact || phone ? 'top-1 left-1 w-3.5 h-3.5' : 'top-1 left-1 w-5 h-5'}`}
           title={ui.upgradedTooltip}
-          style={{ backgroundColor: '#f59e0b', border: '1.5px solid rgba(255,255,255,0.9)' }}
+          style={{ backgroundColor: '#f59e0b', border: '1.5px solid rgba(255,255,255,0.9)', ...(placed ? { left: 4, top: 71 } : null) }}
         >
           <span style={{ fontSize: compact || phone ? '7.5px' : '11px', color: 'white', fontWeight: 800, lineHeight: 1 }}>{ui.upgradedBadge}</span>
         </div>

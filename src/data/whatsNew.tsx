@@ -30,6 +30,24 @@ export interface WhatsNewEntry {
 
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    date: '2027-02-20',
+    title: 'Tiles laid out your way, and stage words in three languages',
+    items: [
+      {
+        title: 'Nothing cut off on a Wolfson tile',
+        body: 'The number sits top-left, the tipus centred on top, the name in the middle on up to two lines, then the '
+          + 'worker and the stage, with the "U" at the bottom left.',
+        demo: 'tap',
+      },
+      {
+        title: 'What a stage includes, in English, Hebrew and Russian',
+        body: 'In Settings → Stages each word has a box per language. A worker sees the words in the language his phone is set '
+          + 'to; a box left empty is translated automatically.',
+        demo: 'list',
+      },
+    ],
+  },
+  {
     date: '2027-02-19',
     title: 'Bigger Wolfson tiles, sold and upgraded filters, and the stages laid out in the apartment',
     items: [

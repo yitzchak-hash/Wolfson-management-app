@@ -45,6 +45,7 @@ import {
 import { saveBytes, safeFileName } from '../data/planExport';
 import { TaskThread } from '../components/tasks/TaskThread';
 import { Translated, TrText } from '../components/ui/Translated';
+import { includeIn } from '../data/stageIncludes';
 import { installPortalManifest } from '../data/portalManifest';
 import { findPlanSetViaBackend, findAllPlansPdfsViaBackend } from '../data/driveApi';
 import { searchJobs } from '../data/searchIndex';
@@ -4890,7 +4891,7 @@ plansPdfFileId && (
                                   {st.includes.map(word => (
                                     <span key={word} className="px-1.5 py-[1px] rounded-full text-[11px] font-semibold"
                                       style={{ backgroundColor: `${st.color}22`, color: '#374151' }}>
-                                      <TrText text={word} to={readLang} />
+                                      {includeIn(st, word, readLang) || <TrText text={word} to={readLang} />}
                                     </span>
                                   ))}
                                 </span>

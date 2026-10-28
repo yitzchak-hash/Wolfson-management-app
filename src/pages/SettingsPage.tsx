@@ -15,6 +15,7 @@ import { TimeClockTab } from '../components/settings/TimeClockTab';
 import { TV_DASH_BOARD } from '../types';
 import { portalLink, bareDomain, looksLikePreviewHost } from '../data/portalLink';
 import type { BoardAccess, PortalLang, CustomButton } from '../types';
+import { INCLUDE_LANGS, includeRow, langOfWord } from '../data/stageIncludes';
 import { personColor, projectColor, BoardView, Stage, User, Contractor, ContractorCategory, ContractorUiStrings, DEFAULT_CONTRACTOR_UI_STRINGS, HEBREW_CONTRACTOR_UI_STRINGS, MainUiStrings, DEFAULT_MAIN_UI_STRINGS, HEBREW_MAIN_UI_STRINGS, BackupFrequency, DriveExportFrequency, getStageName, Apartment, isCountableApartment, BoardSetting, CanvasElement } from '../types';
 import { loadTvScreens, forgetTvScreen, screenIsLive, shapeNameOf, TvScreenPresence } from '../data/tvScreens';
 import { Tooltip } from '../components/ui/Tooltip';
@@ -636,40 +637,82 @@ const EMPTY_TIPUSIM: string[] = [];
 /**
  * What a stage INCLUDES (owner, 2026-10-21): small words under the stage on
  * the worker's pick list — "Piping includes soldering, connections, pipes" —
- * kept up by the office day by day. Each chip's × takes it off; Enter or
- * leaving the box adds what was typed.
+ * kept up by the office day by day. Since 2026-10-28 each word has a box per
+ * language — English · Hebrew · Russian — and the worker's phone shows his
+ * own; a box left empty is translated automatically, as before. A box saves
+ * when it is left; × takes the whole word off.
  */
-function StageIncludes({ stage, onChange }: { stage: Stage; onChange: (next: string[] | undefined) => void }) {
+const INCLUDE_LANG_NAMES: Record<PortalLang, string> = { en: 'English', he: 'עברית', ru: 'Русский' };
+function StageIncludes({ stage, onChange }: { stage: Stage; onChange: (patch: Partial<Stage>) => void }) {
   const s = useStore(state => state.mainUiStrings);
-  const [draft, setDraft] = useState('');
+  const blank = { en: '', he: '', ru: '' } as Record<PortalLang, string>;
+  const [draft, setDraft] = useState<Record<PortalLang, string>>(blank);
   const list = stage.includes ?? [];
-  const add = () => {
-    const v = draft.trim();
-    setDraft('');
-    if (!v || list.some(w => w.toLowerCase() === v.toLowerCase())) return;
-    onChange([...list, v]);
+  const rowOf = (w: string) => {
+    const r = includeRow(stage, w);
+    const own = langOfWord(w);
+    if (!r[own]) r[own] = w;
+    return r;
   };
+  const writeWord = (w: string, lang: PortalLang, v: string) => {
+    const cur = rowOf(w);
+    if (cur[lang] === v.trim()) return;
+    const tr = { ...(stage.includesTr ?? {}) };
+    tr[w] = { ...(tr[w] ?? {}), [lang]: v.trim() || undefined };
+    onChange({ includesTr: tr });
+  };
+  const add = () => {
+    const base = draft.en.trim() || draft.he.trim() || draft.ru.trim();
+    if (!base || list.some(w => w.toLowerCase() === base.toLowerCase())) { setDraft(blank); return; }
+    const words: Partial<Record<PortalLang, string>> = {};
+    for (const l of INCLUDE_LANGS) if (draft[l].trim()) words[l] = draft[l].trim();
+    onChange({ includes: [...list, base], includesTr: { ...(stage.includesTr ?? {}), [base]: words } });
+    setDraft(blank);
+  };
+  const box = 'min-w-0 w-full border border-gray-200 rounded-lg px-2 py-1 text-[12.5px] bg-white focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/20';
   return (
-    <div data-stage-includes={stage.id} className="flex flex-wrap items-center gap-1.5 px-4 pb-2.5 -mt-1">
+    <div data-stage-includes={stage.id} className="px-4 pb-3 -mt-1">
       <Tooltip text={s.stageIncludesHint}>
         <span className="text-[11px] font-bold uppercase tracking-wide text-gray-400">{s.stageIncludesLabel}</span>
       </Tooltip>
-      {list.map(w => (
-        <span key={w} data-stage-include-chip={w}
-          className="flex items-center gap-1 pl-2 pr-1 py-0.5 rounded-full text-[12px] font-semibold"
-          style={{ backgroundColor: `${stage.color}22`, color: '#374151' }}>
-          <span dir="auto">{w}</span>
-          <button type="button" data-stage-include-remove={w} aria-label={`Remove ${w}`}
-            onClick={() => { const next = list.filter(x => x !== w); onChange(next.length ? next : undefined); }}
-            className="w-4 h-4 rounded-full flex items-center justify-center text-gray-500 hover:bg-white/70"><X size={10} /></button>
-        </span>
-      ))}
-      <input data-stage-include-add value={draft} data-enter-own
-        onChange={e => setDraft(e.target.value)}
-        onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); add(); } }}
-        onBlur={add}
-        placeholder={s.stageIncludesAdd} dir="auto"
-        className="w-32 border border-dashed border-gray-300 rounded-full px-2.5 py-0.5 text-[12px] bg-white focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/20" />
+      <div className="mt-1.5 grid gap-1.5" style={{ gridTemplateColumns: 'repeat(3, minmax(0, 1fr)) 28px' }}>
+        {INCLUDE_LANGS.map(l => <span key={l} className="text-[10.5px] font-semibold text-gray-500">{INCLUDE_LANG_NAMES[l]}</span>)}
+        <span />
+        {list.map(w => {
+          const r = rowOf(w);
+          return (
+            <React.Fragment key={w}>
+              {INCLUDE_LANGS.map(l => (
+                <input key={l + '|' + r[l]} data-stage-include-word={w} data-lang={l} defaultValue={r[l]} data-enter-own
+                  dir={l === 'he' ? 'rtl' : 'ltr'}
+                  onBlur={e => writeWord(w, l, e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
+                  className={box} style={{ borderColor: r[l] ? undefined : '#fcd34d' }} />
+              ))}
+              <button type="button" data-stage-include-remove={w} aria-label={`Remove ${w}`}
+                onClick={() => {
+                  const next = list.filter(x => x !== w);
+                  const tr = { ...(stage.includesTr ?? {}) }; delete tr[w];
+                  onChange({ includes: next.length ? next : undefined, includesTr: Object.keys(tr).length ? tr : undefined });
+                }}
+                className="w-7 h-7 rounded-lg flex items-center justify-center text-gray-400 hover:text-red-500 hover:bg-red-50"><X size={12} /></button>
+            </React.Fragment>
+          );
+        })}
+        {INCLUDE_LANGS.map(l => (
+          <input key={'new-' + l} data-stage-include-add={l === 'en' ? '' : undefined} data-stage-include-new={l}
+            value={draft[l]} data-enter-own dir={l === 'he' ? 'rtl' : 'ltr'}
+            onChange={e => setDraft(d => ({ ...d, [l]: e.target.value }))}
+            onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); add(); } }}
+            placeholder={l === 'en' ? s.stageIncludesAdd : INCLUDE_LANG_NAMES[l]}
+            className={box + ' border-dashed border-gray-300'} />
+        ))}
+        <button type="button" data-stage-include-go onClick={add}
+          disabled={!draft.en.trim() && !draft.he.trim() && !draft.ru.trim()}
+          className="w-7 h-7 rounded-lg flex items-center justify-center text-white bg-[#1e3a5f] disabled:opacity-30" aria-label={s.add}>
+          <Plus size={13} />
+        </button>
+      </div>
     </div>
   );
 }
@@ -995,7 +1038,7 @@ function StageSettings({ stages, updateStage, addStage, deleteStage, onToast, cu
                 </Tooltip>
               </div>
               {(stage.kind ?? 'work') === 'work' && (
-                <StageIncludes stage={stage} onChange={next => commit(stage, { includes: next })} />
+                <StageIncludes stage={stage} onChange={patch => commit(stage, patch)} />
               )}
               {isExpanded && (
                 <div className="px-4 pb-4 border-t border-gray-100 pt-3 bg-gray-50">

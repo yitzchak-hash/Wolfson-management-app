@@ -87,9 +87,17 @@ const a2 = await page.evaluate(() => {
 });
 const box = async n => page.locator(`[data-apt-id="${a2[n]}"]`).boundingBox();
 const h = (await box('46'))?.height ?? 0;
-check(h >= 90, 'board: a Wolfson floor is much taller', `${Math.round(h)} px`);
-const line1 = (await page.locator(`[data-apt-id="${a2['46']}"] [data-cell-line1]`).textContent())?.replace(/\s+/g, ' ').trim();
-check(/^46\s*\S/.test(line1 ?? ''), 'board: number and name on ONE line', line1);
+check(h >= 100, 'board: a Wolfson floor is much taller', `${Math.round(h)} px`);
+// His saved layout (Wolfson Tile Layout page): number top-left, tipus centred on top, name in the middle.
+const geo = async (n, sel) => page.locator(`[data-apt-id="${a2[n]}"] ${sel}`).boundingBox();
+const cellB = await box('46'), numB = await geo('46', '[data-cell-number]'), tipB = await geo('46', '[data-tipus-line]'), nameB = await geo('46', '[data-cell-name]');
+check(numB && numB.x - cellB.x < 12 && numB.y - cellB.y < 12, 'board: the number sits top-left');
+check(tipB && Math.abs((tipB.x + tipB.width / 2) - (cellB.x + cellB.width / 2)) < 2 && tipB.y - cellB.y < 12, 'board: the tipus is centred on top');
+check(nameB && nameB.y > numB.y + 15, 'board: the name has its own place under them');
+// Nothing on a tile is cut: every text fits its own box.
+const cut = await page.evaluate(() => [...document.querySelectorAll('[data-cell-number],[data-tipus-line],[data-cell-name]')]
+  .filter(e => e.scrollWidth > e.clientWidth + 1 || e.scrollHeight > e.clientHeight + 1).map(e => e.textContent));
+check(cut.length === 0, 'board: no number, tipus or name is cut', cut.slice(0, 5).join(' | '));
 check(await page.locator('[data-cell-fraction]').count() === 0, 'board: no "0/12" anywhere');
 const unsold = (await page.locator(`[data-apt-id="${a2['49']}"]`).textContent()) ?? '';
 check(/Not sold/.test(unsold) && !/Building 2\/49/.test(unsold) && !/Not Started/i.test(unsold), 'board: a flat with no name reads "Not sold"', unsold);
