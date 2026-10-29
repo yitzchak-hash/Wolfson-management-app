@@ -198,6 +198,10 @@ export function AppLayout() {
    */
   useEffect(() => {
     const tick = () => {
+      // Same rule as the repairs above: nothing automatic writes until this
+      // workspace's records have arrived from the cloud.
+      const st = useStore.getState();
+      if (isFirebaseConfigured && st.cloudSyncedProject !== st.currentProjectId) return;
       if (sweepDue()) void sweepAutoJobs('timer');
       // And, hourly, what moved in Drive — for the Active-jobs widget.
       if (driveActivityDue()) void refreshDriveActivity();

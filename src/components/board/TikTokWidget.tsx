@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { cloudReady } from '../../data/store';
 import { createPortal } from 'react-dom';
 import {
   Music2, ChevronLeft, ChevronRight, Shuffle, Play, Pause, Repeat, ExternalLink,
@@ -598,7 +599,7 @@ export function TikTokWidget({ el, c }: { el: CanvasElement; c: WidgetCtx }) {
         const j = await r.json();
         setMeta(prev => {
           const next = { ...prev, [current]: j as Meta };
-          if (!c.readOnly) c.update({ data: { ...d(el), meta: next } });
+          if (!c.readOnly && cloudReady()) c.update({ data: { ...d(el), meta: next } });
           return next;
         });
       } catch {
@@ -853,7 +854,7 @@ export function TikTokWidget({ el, c }: { el: CanvasElement; c: WidgetCtx }) {
           meta={meta}
           onResolved={found => setMeta(prev => {
             const next = { ...prev, ...found };
-            if (!c.readOnly) c.update({ data: { ...d(el), meta: next } });
+            if (!c.readOnly && cloudReady()) c.update({ data: { ...d(el), meta: next } });
             return next;
           })}
           onSave={saveLists}

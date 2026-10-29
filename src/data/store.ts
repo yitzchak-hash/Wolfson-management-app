@@ -23,7 +23,7 @@ import {
   buildDefaultApartments, buildNetivApartments, buildGroundFirstFloorSlots, migrateNetivApartments, DATA_VERSION,
 } from './initialData';
 import {
-  fsSet, fsDelete, fsBatchSet, fsGetAll, fsListen, fsListenSince, fsAttach, isFirebaseConfigured, db, projectCollection,
+  fsSet, fsPatch, fsBatchPatch, fsBatchCreate, fsDelete, fsBatchSet, fsGetAll, fsListen, fsListenSince, fsAttach, isFirebaseConfigured, db, projectCollection,
   type Attached,
   fsTombstone,
   fsUntombstone, fsGetTombstones, fsListenTombstones,
@@ -403,6 +403,11 @@ type RawKind = 'contractorAssignments' | 'contractorNotes' | 'contractorPhotos' 
 const RAW_KINDS: RawKind[] = ['contractorAssignments', 'contractorNotes', 'contractorPhotos', 'stageNotes', 'officeNoteFiles'];
 type AnyRec = { id: string } & Record<string, unknown>;
 /** What each kind sends to Firestore — the binary stays on this machine, as on every normal write. */
+/** A stage note as the cloud keeps it: no file bytes. */
+function leanNote(n: StageNote | undefined): Record<string, unknown> | undefined {
+  return n ? RAW_LEAN.stageNotes(n as unknown as AnyRec) : undefined;
+}
+
 const RAW_LEAN: Record<RawKind, (r: AnyRec) => AnyRec> = {
   contractorAssignments: a => ({ ...a, attachments: (a as unknown as ContractorAssignment).attachments?.map(att => ({ ...att, dataUrl: '' })) }),
   contractorNotes: n => ({ ...n, attachmentDataUrl: undefined }),
@@ -618,7 +623,10 @@ function applyUndoSides(to: UndoSides, from: UndoSides) {
         ],
       } as Partial<AppState>;
     });
-    puts.forEach(r => fsSet(projectCollection(pid, kind), r.id, RAW_LEAN[kind](r)));
+    puts.forEach(r => {
+      const cur = live.get(r.id);
+      fsPatch(projectCollection(pid, kind), r.id, cur ? RAW_LEAN[kind](cur) : null, RAW_LEAN[kind](r));
+    });
     removes.forEach(id => fsDelete(projectCollection(pid, kind), id));
   }
   persist(useStore.getState);
@@ -638,7 +646,8 @@ function applyUndoSides(to: UndoSides, from: UndoSides) {
   // The settings bags (time off, tipus sets …): field by field, one key at a time.
   const keys = Object.keys(to.settings);
   if (keys.length) {
-    const next: Record<string, BoardSetting> = { ...useStore.getState().boardSettings };
+    const prevBs = useStore.getState().boardSettings;
+    const next: Record<string, BoardSetting> = { ...prevBs };
     for (const key of keys) {
       const w = to.settings[key]; const f = from.settings[key] ?? null; const cur = next[key] ?? null;
       if (w && !f) next[key] = { ...(cur ?? {}), ...w };
@@ -647,7 +656,7 @@ function applyUndoSides(to: UndoSides, from: UndoSides) {
     }
     useStore.setState({ boardSettings: next });
     persist(useStore.getState);
-    fsSet('settings', 'app', { boardSettings: next });
+    saveBoardSettings(prevBs, next);
   }
 
   // Tasks in other workspaces — back into that workspace's snapshot and collection.
@@ -666,7 +675,7 @@ function applyUndoSides(to: UndoSides, from: UndoSides) {
       } else if (w && f && cur) put = withPatch(cur, f, w);
       if (put) {
         list = list.some(a => a.id === id) ? list.map(a => (a.id === id ? put! : a)) : [...list, put];
-        fsSet(projectCollection(fpid, 'contractorAssignments'), id, put);
+        fsPatch(projectCollection(fpid, 'contractorAssignments'), id, cur, put);
       }
     }
     saveToStorage(key, { ...snap, contractorAssignments: list });
@@ -690,6 +699,8 @@ function applyUndoSides(to: UndoSides, from: UndoSides) {
 function plannerPurgePlan(state: AppState, ids: string[]): {
   elements: CanvasElement[];
   changed: CanvasElement[];
+  /** Each changed element as it was before the purge — so only the change is written. */
+  before: Map<string, CanvasElement>;
   archive: BoardSetting['plannerArchive'];
   archiveChanged: boolean;
   removed: number;
@@ -698,6 +709,7 @@ function plannerPurgePlan(state: AppState, ids: string[]): {
   if (!gone.size) return null;
   let removed = 0;
   const changed: CanvasElement[] = [];
+  const before = new Map<string, CanvasElement>();
   const elements = state.canvasElements.map(el => {
     if (!isPlannerElement(el)) return el;
     const r = purgeJobsFromPlanner(el.data as Record<string, unknown> | undefined, gone);
@@ -705,6 +717,7 @@ function plannerPurgePlan(state: AppState, ids: string[]): {
     removed += r.removed;
     const next = { ...el, data: r.data };
     changed.push(next);
+    before.set(el.id, el);
     return next;
   });
 
@@ -723,7 +736,7 @@ function plannerPurgePlan(state: AppState, ids: string[]): {
   });
 
   if (!changed.length && !archiveChanged) return null;
-  return { elements, changed, archive, archiveChanged, removed };
+  return { elements, changed, before, archive, archiveChanged, removed };
 }
 
 /**
@@ -755,6 +768,21 @@ function keepMarksRescue(pid: string, local: Apartment[], remote: Apartment[]) {
 }
 
 /**
+ * Board settings live in ONE shared document (settings/app → boardSettings),
+ * one entry per workspace. Writing the whole map from this computer's copy is
+ * what wiped every workspace's settings on 2026-10-29. Only the keys that
+ * changed go up now: boardSettings.<workspace>.<key>, down to the one value.
+ */
+function saveBoardSettings(prev: Record<string, BoardSetting>, next: Record<string, BoardSetting>) {
+  saveAppField('boardSettings', prev, next);
+}
+
+/** Any shared field of settings/app, the same way: only what changed in it goes up. */
+function saveAppField(field: string, prev: unknown, next: unknown) {
+  fsPatch('settings', 'app', { [field]: prev }, { [field]: next });
+}
+
+/**
  * Write a planner purge out.
  *
  * The elements themselves are set by the caller inside its own `set`, so the
@@ -767,14 +795,15 @@ function applyPlannerPurge(
   pid: string,
   purge: NonNullable<ReturnType<typeof plannerPurgePlan>>,
 ) {
-  purge.changed.forEach(el => fsSet(projectCollection(pid, 'canvasElements'), el.id, el));
+  purge.changed.forEach(el => fsPatch(projectCollection(pid, 'canvasElements'), el.id, purge.before.get(el.id), el));
   if (!purge.archiveChanged) return;
+  const prev = get().boardSettings;
   const next = {
-    ...get().boardSettings,
-    [pid]: { ...(get().boardSettings[pid] ?? {}), plannerArchive: purge.archive },
+    ...prev,
+    [pid]: { ...(prev[pid] ?? {}), plannerArchive: purge.archive },
   };
   useStore.setState({ boardSettings: next });
-  fsSet('settings', 'app', { boardSettings: next });
+  saveBoardSettings(prev, next);
 }
 
 function generateId(): string {
@@ -1223,7 +1252,6 @@ interface AppState {
 
   // Firebase sync
   startFirebaseSync: (opts?: { lean?: boolean }) => void;
-  forcePushToFirestore: () => Promise<void>;
   applyFirebaseData: (data: Partial<AppState>) => void;
 
   // Pending apartment open (used by DashboardPage → ProjectDiagramPage navigation)
@@ -1584,6 +1612,7 @@ export const useStore = create<AppState>((set, get) => ({
    * current workspace is left alone until someone switches to it.
    */
   addProject: (project, buildings, apartments, stages) => {
+    const prevCustom = get().customProjects;
     const nextCustom = [...get().customProjects, project];
     set({
       customProjects: nextCustom,
@@ -1602,7 +1631,7 @@ export const useStore = create<AppState>((set, get) => ({
     });
 
     persist(get);
-    fsSet('settings', 'app', { customProjects: nextCustom });
+    saveAppField('customProjects', prevCustom, nextCustom);
     if (isFirebaseConfigured) {
       stages.forEach(st => fsSet('stages', st.id, st));
       if (apartments.length) {
@@ -1618,32 +1647,35 @@ export const useStore = create<AppState>((set, get) => ({
    */
   deleteProject: (id) => {
     if (DEFAULT_PROJECTS.some(p => p.id === id)) return;  // the built-in three stay
-    const nextCustom = get().customProjects.filter(p => p.id !== id);
+    const prevCustom = get().customProjects;
+    const nextCustom = prevCustom.filter(p => p.id !== id);
     set({
       customProjects: nextCustom,
       projects: get().projects.filter(p => p.id !== id),
     });
     if (get().currentProjectId === id) get().setCurrentProject('general');
     persist(get);
-    fsSet('settings', 'app', { customProjects: nextCustom });
+    saveAppField('customProjects', prevCustom, nextCustom);
   },
 
   setProjectColor: (projectId, color) => {
-    const next = { ...get().projectColors, [projectId]: color };
+    const prevColors = get().projectColors;
+    const next = { ...prevColors, [projectId]: color };
     set({
       projectColors: next,
       projects: get().projects.map(p => (p.id === projectId ? { ...p, color } : p)),
     });
     persist(get);
-    fsSet('settings', 'app', { projectColors: next });
+    saveAppField('projectColors', prevColors, next);
   },
 
   setBoardSetting: (key, value) => {
     const pid = get().currentProjectId;
-    const next = { ...get().boardSettings, [pid]: { ...(get().boardSettings[pid] ?? {}), [key]: value } };
+    const prev = get().boardSettings;
+    const next = { ...prev, [pid]: { ...(prev[pid] ?? {}), [key]: value } };
     set({ boardSettings: next });
     persist(get);
-    fsSet('settings', 'app', { boardSettings: next });
+    saveBoardSettings(prev, next);
   },
 
   boardLayouts: (stored?.boardLayouts as Record<string, BoardLayout[]> | null) ?? {},
@@ -1693,10 +1725,13 @@ export const useStore = create<AppState>((set, get) => ({
       const p = elPos.get(e.id);
       return p ? { ...e, x: p.x, y: p.y, w: p.w, h: p.h } : e;
     });
+    const prevApts = new Map(st.apartments.map(a => [a.id, a]));
+    const prevEls = new Map(st.canvasElements.map(e => [e.id, e]));
     set({ apartments, canvasElements });
     persist(get);
-    apartments.forEach(a => { if (jobPos.has(a.id)) fsSet(projectCollection(pid, 'apartments'), a.id, a); });
-    canvasElements.forEach(e => { if (elPos.has(e.id)) fsSet(projectCollection(pid, 'canvasElements'), e.id, e); });
+    // Positions only — never the whole record from this computer's copy.
+    apartments.forEach(a => { if (jobPos.has(a.id)) fsPatch(projectCollection(pid, 'apartments'), a.id, prevApts.get(a.id), a); });
+    canvasElements.forEach(e => { if (elPos.has(e.id)) fsPatch(projectCollection(pid, 'canvasElements'), e.id, prevEls.get(e.id), e); });
   },
 
   deleteBoardLayout: (layoutId) => {
@@ -1707,19 +1742,21 @@ export const useStore = create<AppState>((set, get) => ({
   },
 
   setTvSetting: (key, value) => {
-    const next = { ...get().boardSettings, __tv: { ...(get().boardSettings.__tv ?? {}), [key]: value } };
+    const prev = get().boardSettings;
+    const next = { ...prev, __tv: { ...(prev.__tv ?? {}), [key]: value } };
     set({ boardSettings: next });
     persist(get);
-    fsSet('settings', 'app', { boardSettings: next });
+    saveBoardSettings(prev, next);
   },
 
   setContractorSheetLink: (url: string) => {
     const pid = get().currentProjectId;
-    const next = { ...get().contractorSheetLinks, [pid]: url };
+    const prevLinks = get().contractorSheetLinks;
+    const next = { ...prevLinks, [pid]: url };
     set({ contractorSheetLinks: next });
     persist(get);
     // settings/app is the shared global doc, so the link follows the user to any device
-    fsSet('settings', 'app', { contractorSheetLinks: next });
+    saveAppField('contractorSheetLinks', prevLinks, next);
   },
 
   setLightTheme: (v: boolean) => {
@@ -1804,6 +1841,7 @@ export const useStore = create<AppState>((set, get) => ({
 
     // Sync shared fields to merged partner when they change
     let extraUpdates: Apartment[] = [];
+    let partnerBefore: Apartment | undefined;
     // displayName is synced too: a linked pair is one physical home, so it carries
     // one family name. Each cell still shows its own apartment number.
     // stageMarks syncs like currentStageId — a merged pair is one home, and
@@ -1812,6 +1850,7 @@ export const useStore = create<AppState>((set, get) => ({
     const changesHaveSync = syncedFields.some(f => f in changes);
     if (changesHaveSync && updated.mergedWith) {
       const partner = get().apartments.find(a => a.id === updated.mergedWith);
+      partnerBefore = partner;
       if (partner) {
         const partnerPatch: Partial<Apartment> = {};
         if ('currentStageId' in changes) partnerPatch.currentStageId = updated.currentStageId;
@@ -1869,9 +1908,9 @@ export const useStore = create<AppState>((set, get) => ({
     const _pid = get().currentProjectId;
     if (newGeneralNoteVersion) fsSet(projectCollection(_pid, 'generalNoteVersions'), newGeneralNoteVersion.id, newGeneralNoteVersion);
 
-    // Firebase sync
-    fsSet(projectCollection(_pid, 'apartments'), id, updated);
-    extraUpdates.forEach(e => fsSet(projectCollection(_pid, 'apartments'), e.id, e));
+    // Firebase sync — only the fields this action changed (fsPatch).
+    fsPatch(projectCollection(_pid, 'apartments'), id, existing, updated);
+    extraUpdates.forEach(e => fsPatch(projectCollection(_pid, 'apartments'), e.id, partnerBefore, e));
 
     // Log changes
     if (opts?.quiet) return;
@@ -1973,9 +2012,10 @@ export const useStore = create<AppState>((set, get) => ({
       }
       return { ...a, ...own, stageDates, updatedAt: now, updatedBy: user.id, updatedByName: user.name };
     });
+    const before = new Map(get().apartments.map(a => [a.id, a]));
     set({ apartments: updated });
     persist(get);
-    updated.filter(a => ids.includes(a.id)).forEach(a => fsSet(projectCollection(get().currentProjectId, 'apartments'), a.id, a));
+    updated.filter(a => ids.includes(a.id)).forEach(a => fsPatch(projectCollection(get().currentProjectId, 'apartments'), a.id, before.get(a.id), a));
   },
 
   setApartmentMarks: (id, marks, user, opts) => {
@@ -1998,7 +2038,9 @@ export const useStore = create<AppState>((set, get) => ({
     const now = new Date().toISOString();
     const next = { ...existing, ...applyMarks(existing, marks, sorted, ctx), updatedAt: now } as Apartment;
     saveToStorage(key, { ...snap, apartments: list.map(a => (a.id === id ? next : a)) });
-    fsSet(projectCollection(projectId, 'apartments'), id, next);
+    // This copy comes from the other workspace's snapshot on THIS computer,
+    // which can be days old — only the ticks changed here go up.
+    fsPatch(projectCollection(projectId, 'apartments'), id, existing, next);
     const changed = stageChangesOf(existing, next, sorted, ctx);
     if (changed.length) {
       const log: ActivityLog = {
@@ -2059,6 +2101,7 @@ export const useStore = create<AppState>((set, get) => ({
     const now = new Date().toISOString();
     const changed: Apartment[] = [];
     const ctxNow = setContextOf(pid, get().boardSettings);
+    const beforeById = new Map(get().apartments.map(a => [a.id, a]));
     const apartments = get().apartments.map(a => {
       const patch = migrateToBubbles(a, sortedNow);
       let next: Apartment = patch ? { ...a, ...patch, updatedAt: now } : a;
@@ -2083,14 +2126,12 @@ export const useStore = create<AppState>((set, get) => ({
     if (!changed.length) return 0;
     set({ apartments });
     persist(get);
-    // Only what the repair actually has: an absent mark list or headline is
-    // never written as a deletion (that is how one browser's empty copy wiped
-    // the cloud's ticks, 2026-10-29).
-    fsBatchSet(projectCollection(pid, 'apartments'), changed.map(a => ({ id: a.id, data: {
-      ...(a.stageMarks && Object.keys(a.stageMarks).length ? { stageMarks: a.stageMarks } : {}),
-      ...(a.currentStageId ? { currentStageId: a.currentStageId } : {}),
-      bubbles: true, updatedAt: now,
-    } })));
+    // Only what the repair changed, tick by tick, and never a deletion: an
+    // absent mark or headline on this computer is not a decision (that is how
+    // one browser's empty copy wiped the cloud's ticks, 2026-10-29).
+    const was = new Map(get().apartments.map(a => [a.id, a]));
+    fsBatchPatch(projectCollection(pid, 'apartments'),
+      changed.map(a => ({ id: a.id, before: beforeById.get(a.id) ?? was.get(a.id), after: a })), { noDeletes: true, noCreate: true });
     return changed.length;
   },
 
@@ -2126,7 +2167,7 @@ export const useStore = create<AppState>((set, get) => ({
     if (!changed.length) return n;
     set({ apartments });
     persist(get);
-    fsBatchSet(projectCollection('wolfson', 'apartments'), changed.map(c => ({ id: c.id, data: { tipus: c.tipus, updatedAt: now } })));
+    fsBatchSet(projectCollection('wolfson', 'apartments'), changed.map(c => ({ id: c.id, data: { tipus: c.tipus, updatedAt: now } })));  // only the empty tipus field it fills
     return n + changed.length;
   },
 
@@ -2145,6 +2186,7 @@ export const useStore = create<AppState>((set, get) => ({
     // Apartments: each parent's mark copied onto its children, the headline re-derived
     // (a record that STOOD on a parent with nothing marked moves to the first child).
     const changedApts: Apartment[] = [];
+    const splitWas = new Map(get().apartments.map(a => [a.id, a]));
     const apartments = get().apartments.map(a => {
       const sm = splitApartment(a);
       if (!sm) return a;
@@ -2177,7 +2219,9 @@ export const useStore = create<AppState>((set, get) => ({
     n += changedApts.length + taskPatches.length + notePatches.length;
     set({ apartments, contractorAssignments, stageNotes });
     persist(get);
-    if (changedApts.length) fsBatchSet(projectCollection(pid, 'apartments'), changedApts.map(a => ({ id: a.id, data: { stageMarks: a.stageMarks, currentStageId: a.currentStageId, bubbles: true, updatedAt: now } })));
+    // Tick by tick, never a deletion, never a new record (as migrateStageSets).
+    if (changedApts.length) fsBatchPatch(projectCollection(pid, 'apartments'),
+      changedApts.map(a => ({ id: a.id, before: splitWas.get(a.id), after: a })), { noDeletes: true, noCreate: true });
     if (taskPatches.length) fsBatchSet(projectCollection(pid, 'contractorAssignments'), taskPatches);
     if (notePatches.length) fsBatchSet(projectCollection(pid, 'stageNotes'), notePatches);
     // A tipus set naming a parent names its children now.
@@ -2229,8 +2273,10 @@ export const useStore = create<AppState>((set, get) => ({
       apartments: [...apts, ...fresh],
       canvasElements: addGroup ? [...els, addGroup] : els,
     });
-    if (fresh.length) fsBatchSet(projectCollection(projectId, 'apartments'), fresh.map(j => ({ id: j.id, data: j })));
-    if (addGroup) fsSet(projectCollection(projectId, 'canvasElements'), addGroup.id, addGroup);
+    // "Fresh" is judged on this computer's copy of the other workspace, which
+    // can be old: create-only, so a job the cloud already has is never overwritten.
+    if (fresh.length) fsBatchCreate(projectCollection(projectId, 'apartments'), fresh.map(j => ({ id: j.id, data: j })));
+    if (addGroup) fsBatchCreate(projectCollection(projectId, 'canvasElements'), [{ id: addGroup.id, data: addGroup }]);
     set(st => ({ snapshotTick: st.snapshotTick + 1 }));
   },
 
@@ -2260,10 +2306,11 @@ export const useStore = create<AppState>((set, get) => ({
   },
 
   setBoardSettingFor: (projectId, key, value) => {
-    const next = { ...get().boardSettings, [projectId]: { ...(get().boardSettings[projectId] ?? {}), [key]: value } };
+    const prev = get().boardSettings;
+    const next = { ...prev, [projectId]: { ...(prev[projectId] ?? {}), [key]: value } };
     set({ boardSettings: next });
     persist(get);
-    fsSet('settings', 'app', { boardSettings: next });
+    saveBoardSettings(prev, next);
   },
 
   removeJobsByIdPrefix: (prefix) => {
@@ -2292,35 +2339,38 @@ export const useStore = create<AppState>((set, get) => ({
 
   addGhost: (id, x, y) => {
     const pid = get().currentProjectId;
+    const was = get().apartments.find(a => a.id === id);
     set(state => ({
       apartments: state.apartments.map(a => a.id === id
         ? { ...a, ghosts: [...(a.ghosts ?? []), { x, y }] } : a),
     }));
     persist(get);
     const u = get().apartments.find(a => a.id === id);
-    if (u) fsSet(projectCollection(pid, 'apartments'), id, u);
+    if (u) fsPatch(projectCollection(pid, 'apartments'), id, was, u);
   },
 
   moveGhost: (id, index, x, y) => {
     const pid = get().currentProjectId;
+    const was = get().apartments.find(a => a.id === id);
     set(state => ({
       apartments: state.apartments.map(a => a.id === id
         ? { ...a, ghosts: (a.ghosts ?? []).map((g, i) => (i === index ? { x, y } : g)) } : a),
     }));
     persist(get);
     const u = get().apartments.find(a => a.id === id);
-    if (u) fsSet(projectCollection(pid, 'apartments'), id, u);
+    if (u) fsPatch(projectCollection(pid, 'apartments'), id, was, u);
   },
 
   removeGhost: (id, index) => {
     const pid = get().currentProjectId;
+    const was = get().apartments.find(a => a.id === id);
     set(state => ({
       apartments: state.apartments.map(a => a.id === id
         ? { ...a, ghosts: (a.ghosts ?? []).filter((_, i) => i !== index) } : a),
     }));
     persist(get);
     const u = get().apartments.find(a => a.id === id);
-    if (u) fsSet(projectCollection(pid, 'apartments'), id, u);
+    if (u) fsPatch(projectCollection(pid, 'apartments'), id, was, u);
   },
 
   undoState: emptyUndo(),
@@ -2359,16 +2409,20 @@ export const useStore = create<AppState>((set, get) => ({
     if (els.length === 0) return;
     const pid = get().currentProjectId;
     untombstone(pid, els.map(e => e.id));
+    const had = new Map(get().canvasElements.map(e => [e.id, e]));
     set(state => {
       const have = new Set(state.canvasElements.map(e => e.id));
       return { canvasElements: [...state.canvasElements, ...els.filter(e => !have.has(e.id))] };
     });
-    els.forEach(e => fsSet(projectCollection(pid, 'canvasElements'), e.id, e));
+    // A returning element is written whole (it was deleted); one this computer
+    // still holds sends only what differs.
+    els.forEach(e => fsPatch(projectCollection(pid, 'canvasElements'), e.id, had.get(e.id), e));
     persist(get);
   },
 
   moveToBin: (id, bin) => {
     const pid = get().currentProjectId;
+    const was = get().apartments.find(a => a.id === id);
     set(state => ({
       apartments: state.apartments.map(a => a.id === id
         ? { ...a, boardBin: bin ?? undefined, binnedAt: bin ? new Date().toISOString() : undefined, updatedAt: new Date().toISOString() }
@@ -2376,7 +2430,7 @@ export const useStore = create<AppState>((set, get) => ({
     }));
     persist(get);
     const updated = get().apartments.find(a => a.id === id);
-    if (updated) fsSet(projectCollection(pid, 'apartments'), id, updated);
+    if (updated) fsPatch(projectCollection(pid, 'apartments'), id, was, updated);
   },
 
   /**
@@ -2446,7 +2500,8 @@ export const useStore = create<AppState>((set, get) => ({
     linkedMarkups.forEach(m => fsDelete(projectCollection(pid, 'planAnnotations'), m.id));
     if (partnerId) {
       const partner = get().apartments.find(a => a.id === partnerId);
-      if (partner) fsSet(projectCollection(pid, 'apartments'), partner.id, partner);
+      // Only its link goes (mergedWith → deleted), not its whole record.
+      if (partner) fsPatch(projectCollection(pid, 'apartments'), partner.id, state.apartments.find(a => a.id === partnerId), partner);
     }
   },
 
@@ -2462,7 +2517,7 @@ export const useStore = create<AppState>((set, get) => ({
       ? mine.map(r => (r.id === def.id ? def : r))
       : [...mine, def];
     set({ savedReports: { ...st.savedReports, [pid]: next } });
-    fsSet('settings', 'app', { savedReports: get().savedReports });
+    saveAppField('savedReports', st.savedReports, get().savedReports);
     persist(get);
   },
   deleteReport: (id) => {
@@ -2474,17 +2529,19 @@ export const useStore = create<AppState>((set, get) => ({
         [pid]: (st.savedReports[pid] ?? []).filter(r => r.id !== id),
       },
     });
-    fsSet('settings', 'app', { savedReports: get().savedReports });
+    saveAppField('savedReports', st.savedReports, get().savedReports);
     persist(get);
   },
   addBoardView: (v) => {
+    const prevViews = get().boardViews;
     set(state => ({ boardViews: [...state.boardViews, v] }));
-    fsSet('settings', 'app', { boardViews: get().boardViews });
+    saveAppField('boardViews', prevViews, get().boardViews);
     persist(get);
   },
   updateBoardView: (id, changes) => {
+    const prevViews = get().boardViews;
     set(state => ({ boardViews: state.boardViews.map(v => v.id === id ? { ...v, ...changes } : v) }));
-    fsSet('settings', 'app', { boardViews: get().boardViews });
+    saveAppField('boardViews', prevViews, get().boardViews);
     persist(get);
   },
   deleteBoardView: (id) => {
@@ -2496,6 +2553,8 @@ export const useStore = create<AppState>((set, get) => ({
      * follows when it is deleted. The jobs were never on it exclusively; only
      * their positions were, and those are simply forgotten.
      */
+    const prevViews = get().boardViews;
+    const prevEls = new Map(get().canvasElements.map(el => [el.id, el]));
     set(state => ({
       boardViews: state.boardViews.filter(v => v.id !== id),
       canvasElements: state.canvasElements.map(el =>
@@ -2503,10 +2562,12 @@ export const useStore = create<AppState>((set, get) => ({
       activeBoardView: state.activeBoardView === id ? '' : state.activeBoardView,
     }));
     const pid = get().currentProjectId;
+    // Only the elements that were ON the removed board change (their `board`
+    // goes); every other element is left alone in the cloud.
     get().canvasElements
-      .filter(el => el.board === undefined)
-      .forEach(el => fsSet(projectCollection(pid, 'canvasElements'), el.id, el));
-    fsSet('settings', 'app', { boardViews: get().boardViews });
+      .filter(el => prevEls.get(el.id)?.board === id)
+      .forEach(el => fsPatch(projectCollection(pid, 'canvasElements'), el.id, prevEls.get(el.id), el));
+    saveAppField('boardViews', prevViews, get().boardViews);
     persist(get);
   },
 
@@ -2518,8 +2579,9 @@ export const useStore = create<AppState>((set, get) => ({
    */
   projectOrder: (stored?.projectOrder as string[] | null) ?? [],
   setProjectOrder: (ids) => {
+    const prevOrder = get().projectOrder;
     set({ projectOrder: ids });
-    fsSet('settings', 'app', { projectOrder: ids });
+    saveAppField('projectOrder', prevOrder, ids);
     persist(get);
   },
 
@@ -2541,18 +2603,20 @@ export const useStore = create<AppState>((set, get) => ({
 
   planAnnotations: (stored?.planAnnotations as PlanAnnotation[] | null) ?? [],
   savePlanAnnotation: (ann) => {
+    const was = get().planAnnotations.find(a => a.id === ann.id);
     set(state => ({
       planAnnotations: [...state.planAnnotations.filter(a => a.id !== ann.id), ann],
     }));
-    fsSet(projectCollection(get().currentProjectId, 'planAnnotations'), ann.id, ann);
+    fsPatch(projectCollection(get().currentProjectId, 'planAnnotations'), ann.id, was, ann);
     persist(get);
   },
   updatePlanAnnotation: (id, changes) => {
+    const was = get().planAnnotations.find(a => a.id === id);
     set(state => ({
       planAnnotations: state.planAnnotations.map(a => a.id === id ? { ...a, ...changes } : a),
     }));
     const updated = get().planAnnotations.find(a => a.id === id);
-    if (updated) fsSet(projectCollection(get().currentProjectId, 'planAnnotations'), id, updated);
+    if (updated) fsPatch(projectCollection(get().currentProjectId, 'planAnnotations'), id, was, updated);
     persist(get);
   },
   deletePlanAnnotation: (id) => {
@@ -2568,9 +2632,10 @@ export const useStore = create<AppState>((set, get) => ({
     persist(get);
   },
   updatePlanPin: (id, changes) => {
+    const was = get().planPins.find(p => p.id === id);
     set(state => ({ planPins: state.planPins.map(p => p.id === id ? { ...p, ...changes } : p) }));
     const updated = get().planPins.find(p => p.id === id);
-    if (updated) fsSet(projectCollection(get().currentProjectId, 'planPins'), id, updated);
+    if (updated) fsPatch(projectCollection(get().currentProjectId, 'planPins'), id, was, updated);
     persist(get);
   },
   deletePlanPin: (id) => {
@@ -2585,10 +2650,15 @@ export const useStore = create<AppState>((set, get) => ({
     persist(get);
   },
   updateCanvasElement: (id, changes) => {
+    // Only the fields this change touched go up — inside `data` key by key, and
+    // a list of pins/cards as adds/removes/edits replayed on the cloud's list.
+    // A computer with an old copy of the widget can no longer empty it
+    // (2026-10-28: a stale computer wrote 7 widgets whole and emptied a pin board).
+    const was = get().canvasElements.find(el => el.id === id);
     set(state => ({ canvasElements: state.canvasElements.map(el => el.id === id ? { ...el, ...changes } : el) }));
     persist(get);
     const updatedEl = get().canvasElements.find(el => el.id === id);
-    if (updatedEl) fsSet(projectCollection(get().currentProjectId, 'canvasElements'), id, updatedEl);
+    if (updatedEl) fsPatch(projectCollection(get().currentProjectId, 'canvasElements'), id, was, updatedEl);
   },
   deleteCanvasElement: (id) => {
     const pid = get().currentProjectId;
@@ -2616,13 +2686,9 @@ export const useStore = create<AppState>((set, get) => ({
         : [...state.stageNotes, note],
     }));
     persist(get);
-    const noteForFs: StageNote = {
-      ...note,
-      attachmentDataUrl: undefined,
-      attachments: note.attachments?.map(a => ({ ...a, dataUrl: undefined })),
-      entries: note.entries?.map(e => ({ ...e, attachments: e.attachments?.map(a => ({ ...a, dataUrl: undefined })) })),
-    };
-    fsSet(projectCollection(get().currentProjectId, 'stageNotes'), note.id, noteForFs);
+    // Entries go up as additions to the cloud's list (fsPatch), so a note
+    // written on two computers keeps both entries.
+    fsPatch(projectCollection(get().currentProjectId, 'stageNotes'), note.id, leanNote(existing), leanNote(note)!);
     const apt = get().apartments.find(a => a.id === apartmentId);
     if (apt) {
       // A note that is only a memo or a picture records the FILE, and says
@@ -2686,13 +2752,8 @@ export const useStore = create<AppState>((set, get) => ({
       set(state => ({ stageNotes: [...state.stageNotes, note] }));
     }
     persist(get);
-    // Strip dataUrl from attachments before Firestore write
-    const noteForFs: StageNote = {
-      ...note,
-      attachmentDataUrl: undefined,
-      attachments: note.attachments?.map(a => ({ ...a, dataUrl: undefined })),
-    };
-    fsSet(projectCollection(get().currentProjectId, 'stageNotes'), note.id, noteForFs);
+    // Without file bytes (dataUrl), and only what changed.
+    fsPatch(projectCollection(get().currentProjectId, 'stageNotes'), note.id, leanNote(existing), leanNote(note)!);
 
     const apt = get().apartments.find(a => a.id === apartmentId);
     const stage = get().stages.find(s => s.id === stageId);
@@ -2723,12 +2784,7 @@ export const useStore = create<AppState>((set, get) => ({
     const updated: StageNote = { ...note, entries };
     set(state => ({ stageNotes: state.stageNotes.map(n => (n.id === noteId ? updated : n)) }));
     persist(get);
-    fsSet(projectCollection(get().currentProjectId, 'stageNotes'), note.id, {
-      ...updated,
-      attachmentDataUrl: undefined,
-      attachments: updated.attachments?.map(a => ({ ...a, dataUrl: undefined })),
-      entries: entries.map(e => ({ ...e, attachments: e.attachments?.map(a => ({ ...a, dataUrl: undefined })) })),
-    });
+    fsPatch(projectCollection(get().currentProjectId, 'stageNotes'), note.id, leanNote(note), leanNote(updated)!);
   },
 
   getStageNoteVersions: (noteId) => {
@@ -2740,12 +2796,13 @@ export const useStore = create<AppState>((set, get) => ({
   },
 
   updateStage: (id, changes) => {
+    const was = get().stages.find(s => s.id === id);
     set(state => ({
       stages: state.stages.map(s => s.id === id ? { ...s, ...changes, updatedAt: new Date().toISOString() } : s),
     }));
     persist(get);
     const updated = get().stages.find(s => s.id === id);
-    if (updated) fsSet('stages', id, updated);
+    if (updated) fsPatch('stages', id, was, updated);
   },
 
   addStage: (stage) => {
@@ -2759,6 +2816,7 @@ export const useStore = create<AppState>((set, get) => ({
     const affectedAptIds = new Set(
       get().apartments.filter(a => a.currentStageId === id).map(a => a.id)
     );
+    const was = new Map(get().apartments.map(a => [a.id, a]));
     set(state => ({
       stages: state.stages.filter(s => s.id !== id),
       apartments: state.apartments.map(a => a.currentStageId === id ? { ...a, currentStageId: null } : a),
@@ -2767,7 +2825,7 @@ export const useStore = create<AppState>((set, get) => ({
     fsDelete('stages', id);
     get().apartments
       .filter(a => affectedAptIds.has(a.id))
-      .forEach(a => fsSet(projectCollection(get().currentProjectId, 'apartments'), a.id, a));
+      .forEach(a => fsPatch(projectCollection(get().currentProjectId, 'apartments'), a.id, was.get(a.id), a));
   },
 
   mergeApartments: (aptId, partnerId, user) => {
@@ -2810,7 +2868,8 @@ export const useStore = create<AppState>((set, get) => ({
 
     set(state => ({ apartments: state.apartments.map(a => updates.has(a.id) ? updates.get(a.id)! : a) }));
     persist(get);
-    fsBatchSet(projectCollection(get().currentProjectId, 'apartments'), Array.from(updates.entries()).map(([id, data]) => ({ id, data })));
+    fsBatchPatch(projectCollection(get().currentProjectId, 'apartments'),
+      Array.from(updates.entries()).map(([id, after]) => ({ id, before: state.apartments.find(a => a.id === id), after })));
   },
 
   unmergeApartments: (aptId, keepDataAptId, user) => {
@@ -2846,7 +2905,8 @@ export const useStore = create<AppState>((set, get) => ({
 
     set(state => ({ apartments: state.apartments.map(a => updates.has(a.id) ? updates.get(a.id)! : a) }));
     persist(get);
-    fsBatchSet(projectCollection(get().currentProjectId, 'apartments'), Array.from(updates.entries()).map(([id, data]) => ({ id, data })));
+    fsBatchPatch(projectCollection(get().currentProjectId, 'apartments'),
+      Array.from(updates.entries()).map(([id, after]) => ({ id, before: state.apartments.find(a => a.id === id), after })));
   },
 
   setGoogleClientId: (id) => {
@@ -2886,7 +2946,7 @@ export const useStore = create<AppState>((set, get) => ({
       }
       set(state => ({ stageSuggestions: state.stageSuggestions.map(x => (x.id === id ? next : x)) }));
       persist(get);
-      fsSet('stageSuggestions', id, next);
+      fsPatch('stageSuggestions', id, sug, next);
     });
   },
 
@@ -2900,12 +2960,13 @@ export const useStore = create<AppState>((set, get) => ({
   },
 
   updateWorkerLevel: (id, changes) => {
+    const was = get().workerLevels.find(x => x.id === id);
     set(state => ({
       workerLevels: state.workerLevels.map(l => (l.id === id ? { ...l, ...changes } : l)),
     }));
     persist(get);
     const updated = get().workerLevels.find(l => l.id === id);
-    if (updated) fsSet('workerLevels', id, updated);
+    if (updated) fsPatch('workerLevels', id, was, updated);
   },
 
   /**
@@ -2926,7 +2987,7 @@ export const useStore = create<AppState>((set, get) => ({
     }));
     persist(get);
     fsDelete('workerLevels', id);
-    orphans.forEach(c => fsSet('contractors', c.id, { ...c, levelId: DEFAULT_WORKER_LEVELS[0].id }));
+    orphans.forEach(c => fsPatch('contractors', c.id, c, { ...c, levelId: DEFAULT_WORKER_LEVELS[0].id }));
   },
 
   addEmployee: (fields) => {
@@ -2942,10 +3003,11 @@ export const useStore = create<AppState>((set, get) => ({
   },
 
   updateEmployee: (id, changes) => {
+    const was = get().employees.find(x => x.id === id);
     set(state => ({ employees: state.employees.map(e => e.id === id ? { ...e, ...changes } : e) }));
     persist(get);
     const updated = get().employees.find(e => e.id === id);
-    if (updated) fsSet('employees', id, updated);
+    if (updated) fsPatch('employees', id, was, updated);
   },
 
   /**
@@ -2995,10 +3057,11 @@ export const useStore = create<AppState>((set, get) => ({
   },
 
   updatePunch: (id, changes) => {
+    const was = get().timePunches.find(x => x.id === id);
     set(state => ({ timePunches: state.timePunches.map(p => p.id === id ? { ...p, ...changes } : p) }));
     persist(get);
     const updated = get().timePunches.find(p => p.id === id);
-    if (updated) fsSet('timePunches', id, updated);
+    if (updated) fsPatch('timePunches', id, was, updated);
   },
 
   deletePunch: (id) => {
@@ -3008,10 +3071,11 @@ export const useStore = create<AppState>((set, get) => ({
   },
 
   setTimeClock: (changes) => {
-    const next = { ...get().timeClock, ...changes };
+    const prevClock = get().timeClock;
+    const next = { ...prevClock, ...changes };
     set({ timeClock: next });
     persist(get);
-    fsSet('settings', 'app', { timeClock: next });
+    saveAppField('timeClock', prevClock, next);
   },
 
   addContractor: (fields) => {
@@ -3028,10 +3092,11 @@ export const useStore = create<AppState>((set, get) => ({
   },
 
   updateContractor: (id, changes) => {
+    const was = get().contractors.find(x => x.id === id);
     set(state => ({ contractors: state.contractors.map(c => c.id === id ? { ...c, ...changes } : c) }));
     persist(get);
     const updated = get().contractors.find(c => c.id === id);
-    if (updated) fsSet('contractors', id, updated);
+    if (updated) fsPatch('contractors', id, was, updated);
   },
 
   deleteContractor: (id) => {
@@ -3156,8 +3221,8 @@ export const useStore = create<AppState>((set, get) => ({
     persist(get);
     const updated = get().contractorAssignments.find(a => a.id === id);
     if (updated) {
-      const updForFs = { ...updated, attachments: updated.attachments?.map(att => ({ ...att, dataUrl: '' })) };
-      fsSet(projectCollection(get().currentProjectId, 'contractorAssignments'), id, updForFs);
+      const lean = (a: ContractorAssignment) => ({ ...a, attachments: a.attachments?.map(att => ({ ...att, dataUrl: '' })) });
+      fsPatch(projectCollection(get().currentProjectId, 'contractorAssignments'), id, before && lean(before), lean(updated));
     }
     /**
      * Closing a task TICKS ITS STAGES OFF (the set model, locked answer 7):
@@ -3331,16 +3396,28 @@ export const useStore = create<AppState>((set, get) => ({
     const contractorNotes = st.contractorNotes.map(n => (n.assignmentId === taskId ? { ...n, apartmentId: to.id } : n));
     set({ contractorAssignments, contractorPhotos, contractorNotes });
     persist(get);
-    // Whole records, never a lone field: a partial write to a document that
-    // has not reached the cloud yet would CREATE a stub, and the listener
-    // would then hand every device back a photo with no task and no file.
+    // Only the fields that moved. fsPatch never leaves a stub: a record the
+    // cloud does not have yet is written whole instead (a lone field on a
+    // missing document would hand every device a photo with no task and no file).
     const col = (base: string) => projectCollection(pid, base);
     const lean = (a: ContractorAssignment) => ({ ...a, attachments: a.attachments?.map(att => ({ ...att, dataUrl: '' })) });
-    fsBatchSet(col('contractorAssignments'), [moved, ...visitHosts].map(a => ({ id: a.id, data: lean(a) })));
+    const taskWas = new Map(st.contractorAssignments.map(a => [a.id, a]));
+    fsBatchPatch(col('contractorAssignments'), [moved, ...visitHosts].map(a => {
+      const w = taskWas.get(a.id);
+      return { id: a.id, before: w && lean(w), after: lean(a) };
+    }));
+    const photoWas = new Map(st.contractorPhotos.map(p => [p.id, p]));
     const photos = contractorPhotos.filter(p => p.assignmentId === taskId);
-    if (photos.length) fsBatchSet(col('contractorPhotos'), photos.map(p => ({ id: p.id, data: { ...p, dataUrl: '' } })));
+    if (photos.length) fsBatchPatch(col('contractorPhotos'), photos.map(p => {
+      const w = photoWas.get(p.id);
+      return { id: p.id, before: w && { ...w, dataUrl: '' }, after: { ...p, dataUrl: '' } };
+    }));
+    const noteWas = new Map(st.contractorNotes.map(n => [n.id, n]));
     const notes = contractorNotes.filter(n => n.assignmentId === taskId);
-    if (notes.length) fsBatchSet(col('contractorNotes'), notes.map(n => ({ id: n.id, data: { ...n, attachmentDataUrl: undefined } })));
+    if (notes.length) fsBatchPatch(col('contractorNotes'), notes.map(n => {
+      const w = noteWas.get(n.id);
+      return { id: n.id, before: w && { ...w, attachmentDataUrl: undefined }, after: { ...n, attachmentDataUrl: undefined } };
+    }));
 
     // ── One history line on EACH apartment, in plain words.
     const fromPlace = placeLabel(from ?? { buildingId: task.buildingId, apartmentNumber: '', displayName: '' });
@@ -3438,12 +3515,13 @@ export const useStore = create<AppState>((set, get) => ({
   },
 
   updateContractorNote: (id, changes) => {
+    const was = get().contractorNotes.find(x => x.id === id);
     set(state => ({
       contractorNotes: state.contractorNotes.map(n => n.id === id ? { ...n, ...changes } : n),
     }));
     persist(get);
     const updated = get().contractorNotes.find(n => n.id === id);
-    if (updated) fsSet(projectCollection(get().currentProjectId, 'contractorNotes'), id, { ...updated, attachmentDataUrl: undefined });
+    if (updated) fsPatch(projectCollection(get().currentProjectId, 'contractorNotes'), id, was && { ...was, attachmentDataUrl: undefined }, { ...updated, attachmentDataUrl: undefined });
   },
 
   deleteContractorNote: (id) => {
@@ -3491,7 +3569,8 @@ export const useStore = create<AppState>((set, get) => ({
     }
     const next = { ...cur, ...patch, updatedAt: new Date().toISOString() } as ContractorAssignment;
     saveToStorage(key, { ...snap, contractorAssignments: list.map(a => (a.id === id ? next : a)) });
-    fsSet(projectCollection(projectId, 'contractorAssignments'), id, next);
+    // The other workspace's copy on this computer can be old: only the patch goes up.
+    fsPatch(projectCollection(projectId, 'contractorAssignments'), id, cur, next);
     set(st => ({ snapshotTick: st.snapshotTick + 1 }));
   },
   deleteAssignmentInProject: (projectId, id) => {
@@ -3517,12 +3596,13 @@ export const useStore = create<AppState>((set, get) => ({
   },
 
   updateContractorPhoto: (id, changes) => {
+    const was = get().contractorPhotos.find(x => x.id === id);
     set(state => ({
       contractorPhotos: state.contractorPhotos.map(p => p.id === id ? { ...p, ...changes } : p),
     }));
     persist(get);
     const updated = get().contractorPhotos.find(p => p.id === id);
-    if (updated) fsSet(projectCollection(get().currentProjectId, 'contractorPhotos'), id, { ...updated, dataUrl: '' });
+    if (updated) fsPatch(projectCollection(get().currentProjectId, 'contractorPhotos'), id, was && { ...was, dataUrl: '' }, { ...updated, dataUrl: '' });
   },
 
   deleteContractorPhoto: (id) => {
@@ -3668,13 +3748,14 @@ export const useStore = create<AppState>((set, get) => ({
   },
 
   updateUser: (id, changes) => {
+    const was = get().users.find(x => x.id === id);
     set(state => ({
       users: state.users.map(u => u.id === id ? { ...u, ...changes } : u),
       currentUser: state.currentUser?.id === id ? { ...state.currentUser, ...changes } : state.currentUser,
     }));
     persist(get);
     const updated = get().users.find(u => u.id === id);
-    if (updated) fsSet('users', id, updated);
+    if (updated) fsPatch('users', id, was, updated);
   },
 
   addUser: (user) => {
@@ -3807,15 +3888,17 @@ export const useStore = create<AppState>((set, get) => ({
   },
 
   updateContractorUiStrings: (partial) => {
+    const prevStrings = get().contractorUiStrings;
     set(state => ({ contractorUiStrings: { ...state.contractorUiStrings, ...partial } }));
     persist(get);
-    fsSet('settings', 'app', { contractorUiStrings: get().contractorUiStrings });
+    saveAppField('contractorUiStrings', prevStrings, get().contractorUiStrings);
   },
 
   updateMainUiStrings: (s) => {
+    const prevStrings = get().mainUiStrings;
     set({ mainUiStrings: s });
     persist(get);
-    fsSet('settings', 'app', { mainUiStrings: s });
+    saveAppField('mainUiStrings', prevStrings, s);
   },
 
   addOfficeNoteFile: (fields) => {
@@ -3833,7 +3916,7 @@ export const useStore = create<AppState>((set, get) => ({
     const next = { ...existing, ...changes };
     set(state => ({ officeNoteFiles: state.officeNoteFiles.map(f => (f.id === id ? next : f)) }));
     persist(get);
-    fsSet(projectCollection(get().currentProjectId, 'officeNoteFiles'), id, { ...next, dataUrl: '' });
+    fsPatch(projectCollection(get().currentProjectId, 'officeNoteFiles'), id, { ...existing, dataUrl: '' }, { ...next, dataUrl: '' });
   },
 
   appendApartmentNote: (apartmentId, text, user) => {
@@ -3892,55 +3975,6 @@ export const useStore = create<AppState>((set, get) => ({
       notes: s.contractorNotes.length,
       activityLogs: s.activityLogs.length,
     };
-  },
-
-  forcePushToFirestore: async () => {
-    if (!db) return;
-    const state = get();
-    const fpid = state.currentProjectId;
-    const pc = (base: string) => projectCollection(fpid, base);
-    await Promise.all([
-      fsBatchSet(pc('apartments'), state.apartments.filter(a => ownsRecord(state.currentProjectId, a, state.buildings)).map(a => ({ id: a.id, data: a }))),
-      fsBatchSet('stages',        state.stages.map(s => ({ id: s.id, data: s }))),
-      fsBatchSet('users',         state.users.map(u => ({ id: u.id, data: u }))),
-      state.stageNotes.length > 0
-        ? fsBatchSet(pc('stageNotes'), state.stageNotes.map(n => ({ id: n.id, data: n })))
-        : Promise.resolve(),
-      state.contractors.length > 0
-        ? fsBatchSet('contractors', state.contractors.map(c => ({ id: c.id, data: c })))
-        : Promise.resolve(),
-      state.contractorAssignments.length > 0
-        ? fsBatchSet(pc('contractorAssignments'), state.contractorAssignments.map(a => ({
-            id: a.id, data: { ...a, attachments: a.attachments?.map(att => ({ ...att, dataUrl: '' })) },
-          })))
-        : Promise.resolve(),
-      state.contractorNotes.length > 0
-        ? fsBatchSet(pc('contractorNotes'), state.contractorNotes.map(n => ({ id: n.id, data: n })))
-        : Promise.resolve(),
-      state.contractorPhotos.length > 0
-        ? fsBatchSet(pc('contractorPhotos'), state.contractorPhotos.map(p => ({ id: p.id, data: { ...p, dataUrl: '' } })))
-        : Promise.resolve(),
-      state.officeNoteFiles.length > 0
-        ? fsBatchSet(pc('officeNoteFiles'), state.officeNoteFiles.map(f => ({ id: f.id, data: { ...f, dataUrl: '' } })))
-        : Promise.resolve(),
-      state.canvasElements.length > 0
-        ? fsBatchSet(pc('canvasElements'), state.canvasElements.map(e => ({ id: e.id, data: e })))
-        : Promise.resolve(),
-      state.employees.length > 0
-        ? fsBatchSet('employees', state.employees.map(e => ({ id: e.id, data: e })))
-        : Promise.resolve(),
-      state.timePunches.length > 0
-        ? fsBatchSet('timePunches', state.timePunches.map(pch => ({ id: pch.id, data: pch })))
-        : Promise.resolve(),
-      fsBatchSet('workerLevels', state.workerLevels.map(l => ({ id: l.id, data: l }))),
-      fsSet('settings', 'app', {
-        autoBackup: state.autoBackup, backupFrequency: state.backupFrequency,
-        backupDriveFolderLink: state.backupDriveFolderLink,
-        contractorUiStrings: state.contractorUiStrings,
-        mainUiStrings: state.mainUiStrings,
-        timeClock: state.timeClock,
-      }),
-    ]);
   },
 
   startFirebaseSync: async (opts) => {
@@ -4234,11 +4268,13 @@ export const useStore = create<AppState>((set, get) => ({
       // Netiv duplex floor correction: recompute floors from apt number and push any
       // changed records to Firestore so the fix wins against the "Firebase wins" listener.
       if (pid === 'netiv') {
+        const preNetiv = new Map(get().apartments.map(a => [a.id, a]));
         const { apts: migratedNetiv, changed: netivChanged } = migrateNetivApartments(get().apartments);
         if (netivChanged.length > 0) {
           set({ apartments: migratedNetiv });
           persist(get);
-          fsBatchSet(col('apartments'), netivChanged.map(a => ({ id: a.id, data: a })));
+          // The corrected fields only; never a deletion, never a new record.
+          fsBatchPatch(col('apartments'), netivChanged.map(a => ({ id: a.id, before: preNetiv.get(a.id), after: a })), { noDeletes: true, noCreate: true });
         }
       }
 
@@ -4249,7 +4285,7 @@ export const useStore = create<AppState>((set, get) => ({
       const fbAptIds = new Set((fbApts as unknown as Apartment[]).map(a => a.id));
       const missingApts = get().apartments.filter(a => !fbAptIds.has(a.id) && !_tombstones.has(a.id) && ownsRecord(pid, a, get().buildings));
       if (missingApts.length > 0) {
-        fsBatchSet(col('apartments'), missingApts.map(a => ({ id: a.id, data: a })));
+        fsBatchCreate(col('apartments'), missingApts.map(a => ({ id: a.id, data: a })));
       }
 
       // Board notes and boxes were localStorage-only until now, so a device that
@@ -4257,10 +4293,12 @@ export const useStore = create<AppState>((set, get) => ({
       const fbElIds = new Set((fbCanvasElements as unknown as CanvasElement[]).map(e => e.id));
       const missingEls = get().canvasElements.filter(e => !fbElIds.has(e.id) && !_tombstones.has(e.id));
       if (missingEls.length > 0) {
-        fsBatchSet(col('canvasElements'), missingEls.map(e => ({ id: e.id, data: e })));
+        fsBatchCreate(col('canvasElements'), missingEls.map(e => ({ id: e.id, data: e })));
       }
     } else {
-      // First run of THIS WORKSPACE — push its records up. The GLOBAL
+      // First run of THIS WORKSPACE — push its records up, CREATE-ONLY: a
+      // record the cloud already has is never overwritten by this computer's
+      // copy (fsBatchCreate), even if this computer misjudged the cloud as empty. The GLOBAL
       // collections (stages, users, workers, levels, the time clock, the app
       // settings) are shared by every workspace and are pushed only when the
       // cloud holds none of them: an empty new workspace once pushed a device's
@@ -4269,54 +4307,54 @@ export const useStore = create<AppState>((set, get) => ({
       const state = get();
       const appDocThere = fbSettings.some(s => (s as Record<string, unknown>).id === 'app');
       await Promise.all([
-        fsBatchSet(col('apartments'),  state.apartments.filter(a => ownsRecord(pid, a, state.buildings)).map(a => ({ id: a.id, data: a }))),
-        fbStages.length === 0 ? fsBatchSet('stages', state.stages.map(s => ({ id: s.id, data: s }))) : Promise.resolve(),
-        fbUsers.length === 0 ? fsBatchSet('users', state.users.map(u => ({ id: u.id, data: u }))) : Promise.resolve(),
+        fsBatchCreate(col('apartments'),  state.apartments.filter(a => ownsRecord(pid, a, state.buildings)).map(a => ({ id: a.id, data: a }))),
+        fbStages.length === 0 ? fsBatchCreate('stages', state.stages.map(s => ({ id: s.id, data: s }))) : Promise.resolve(),
+        fbUsers.length === 0 ? fsBatchCreate('users', state.users.map(u => ({ id: u.id, data: u }))) : Promise.resolve(),
         state.stageNotes.length > 0
-          ? fsBatchSet(col('stageNotes'), state.stageNotes.map(n => ({ id: n.id, data: n })))
+          ? fsBatchCreate(col('stageNotes'), state.stageNotes.map(n => ({ id: n.id, data: n })))
           : Promise.resolve(),
         state.contractors.length > 0 && fbContractors.length === 0
-          ? fsBatchSet('contractors', state.contractors.map(c => ({ id: c.id, data: c })))
+          ? fsBatchCreate('contractors', state.contractors.map(c => ({ id: c.id, data: c })))
           : Promise.resolve(),
         state.contractorAssignments.length > 0
-          ? fsBatchSet(col('contractorAssignments'), state.contractorAssignments.map(a => ({
+          ? fsBatchCreate(col('contractorAssignments'), state.contractorAssignments.map(a => ({
               id: a.id,
               data: { ...a, attachments: a.attachments?.map(att => ({ ...att, dataUrl: '' })) },
             })))
           : Promise.resolve(),
         state.contractorNotes.length > 0
-          ? fsBatchSet(col('contractorNotes'), state.contractorNotes.map(n => ({ id: n.id, data: n })))
+          ? fsBatchCreate(col('contractorNotes'), state.contractorNotes.map(n => ({ id: n.id, data: n })))
           : Promise.resolve(),
         state.contractorPhotos.length > 0
-          ? fsBatchSet(col('contractorPhotos'), state.contractorPhotos.map(p => ({ id: p.id, data: { ...p, dataUrl: '' } })))
+          ? fsBatchCreate(col('contractorPhotos'), state.contractorPhotos.map(p => ({ id: p.id, data: { ...p, dataUrl: '' } })))
           : Promise.resolve(),
         state.officeNoteFiles.length > 0
-          ? fsBatchSet(col('officeNoteFiles'), state.officeNoteFiles.map(f => ({ id: f.id, data: { ...f, dataUrl: '' } })))
+          ? fsBatchCreate(col('officeNoteFiles'), state.officeNoteFiles.map(f => ({ id: f.id, data: { ...f, dataUrl: '' } })))
           : Promise.resolve(),
         state.canvasElements.length > 0
-          ? fsBatchSet(col('canvasElements'), state.canvasElements.map(e => ({ id: e.id, data: e })))
+          ? fsBatchCreate(col('canvasElements'), state.canvasElements.map(e => ({ id: e.id, data: e })))
           : Promise.resolve(),
         state.planPins.length > 0
-          ? fsBatchSet(col('planPins'), state.planPins.map(p => ({ id: p.id, data: p })))
+          ? fsBatchCreate(col('planPins'), state.planPins.map(p => ({ id: p.id, data: p })))
           : Promise.resolve(),
         state.planAnnotations.length > 0
-          ? fsBatchSet(col('planAnnotations'), state.planAnnotations.map(a => ({ id: a.id, data: a })))
+          ? fsBatchCreate(col('planAnnotations'), state.planAnnotations.map(a => ({ id: a.id, data: a })))
           : Promise.resolve(),
         state.employees.length > 0 && fbEmployees.length === 0
-          ? fsBatchSet('employees', state.employees.map(e => ({ id: e.id, data: e })))
+          ? fsBatchCreate('employees', state.employees.map(e => ({ id: e.id, data: e })))
           : Promise.resolve(),
         state.timePunches.length > 0 && fbPunches.length === 0
-          ? fsBatchSet('timePunches', state.timePunches.map(pch => ({ id: pch.id, data: pch })))
+          ? fsBatchCreate('timePunches', state.timePunches.map(pch => ({ id: pch.id, data: pch })))
           : Promise.resolve(),
-        fbLevels.length === 0 ? fsBatchSet('workerLevels', state.workerLevels.map(l => ({ id: l.id, data: l }))) : Promise.resolve(),
-        appDocThere ? Promise.resolve() : fsSet('settings', 'app', {
+        fbLevels.length === 0 ? fsBatchCreate('workerLevels', state.workerLevels.map(l => ({ id: l.id, data: l }))) : Promise.resolve(),
+        appDocThere ? Promise.resolve() : fsBatchCreate('settings', [{ id: 'app', data: {
           autoBackup:            state.autoBackup,
           backupFrequency:       state.backupFrequency,
           backupDriveFolderLink: state.backupDriveFolderLink,
           contractorUiStrings:   state.contractorUiStrings,
           mainUiStrings:         state.mainUiStrings,
           timeClock:             state.timeClock,
-        }),
+        } }]),
       ]);
     }
 
@@ -4521,4 +4559,19 @@ function persistNow(get: () => AppState) {
  */
 if (import.meta.env.DEV && typeof window !== 'undefined') {
   (window as unknown as { __store?: typeof useStore }).__store = useStore;
+}
+
+/**
+ * Has THIS workspace's data arrived from the cloud? Every automatic writer —
+ * an effect, a timer, a repair, nothing a person clicked — waits for this, so
+ * nothing is ever decided on the copy a tab starts with (2026-10-29: a new
+ * browser's starter copy wrote empty progress over every Wolfson flat).
+ */
+export function cloudReady(): boolean {
+  const st = useStore.getState();
+  return !isFirebaseConfigured || st.cloudSyncedProject === st.currentProjectId;
+}
+/** cloudReady as a hook, so an effect re-runs the moment the data lands. */
+export function useCloudReady(): boolean {
+  return useStore(st => !isFirebaseConfigured || st.cloudSyncedProject === st.currentProjectId);
 }

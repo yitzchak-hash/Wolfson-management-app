@@ -4,7 +4,7 @@ import { Apartment, User, getStageName, TaskAttachment, TaskPriority, aptLabel, 
 import { TaskThread } from '../tasks/TaskThread';
 import { Translated } from '../ui/Translated';
 import { Send } from 'lucide-react';
-import { useStore, trackUndo } from '../../data/store';
+import { useStore, trackUndo, cloudReady } from '../../data/store';
 import { peekTaskFocus, takeTaskFocus } from '../../data/taskFocus';
 import { TaskDaysPicker, daysFields } from '../tasks/TaskDaysPicker';
 import { StagePairPill, StagePairPicker, stagePairStrings } from '../tasks/StagePair';
@@ -634,6 +634,9 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
            */
           // The folder's own title is kept on the job, so the search can find
           // a word that lives only there (bookkeeping — never bumps "edited").
+          // Never on a copy still loading: a starter copy's blank name is not
+          // the cloud's (cloudReady).
+          if (!cloudReady()) return;
           if (currentUser && n && apartment.driveFolderName !== n) {
             updateApartment(apartment.id, { driveFolderName: n }, currentUser);
           }

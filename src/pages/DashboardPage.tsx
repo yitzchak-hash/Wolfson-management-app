@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { useStore, isTombstoned } from '../data/store';
+import { useStore, isTombstoned, useCloudReady } from '../data/store';
 import { WidgetListPopup } from '../components/board/WidgetListPopup';
 import { useNavigate } from 'react-router-dom';
 import { format } from 'date-fns';
@@ -111,9 +111,11 @@ export function DashboardPage() {
    * tombstone check so a deleted one stays deleted, and it waits for the
    * workspace to have landed rather than seeding into a still-loading store.
    */
+  // Seeds wait for this workspace's records to arrive from the cloud.
+  const cloudIn = useCloudReady();
   const goalsSeedTried = useRef(false);
   useEffect(() => {
-    if (!allApartments.length) return;
+    if (!cloudIn || !allApartments.length) return;
     if (dashWidgets.some(e => e.widget === 'goals')) return;
     if (isTombstoned('CE-goals-dash')) return;
     // StrictMode runs the effect twice in one commit on the same pre-add
@@ -127,7 +129,7 @@ export function DashboardPage() {
       text: '', color: '#ffffff', data: {},
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [allApartments.length, dashWidgets]);
+  }, [allApartments.length, dashWidgets, cloudIn]);
 
   /**
    * The "This week" notebook card, once, the same way (owner, 2026-10-18 —
@@ -136,7 +138,7 @@ export function DashboardPage() {
    */
   const weekSeedTried = useRef(false);
   useEffect(() => {
-    if (!allApartments.length) return;
+    if (!cloudIn || !allApartments.length) return;
     if (dashWidgets.some(e => e.widget === 'notebook-week')) return;
     if (isTombstoned('CE-week-dash')) return;
     if (weekSeedTried.current) return;
@@ -148,7 +150,7 @@ export function DashboardPage() {
       text: '', color: '#ffffff', data: {},
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [allApartments.length, dashWidgets]);
+  }, [allApartments.length, dashWidgets, cloudIn]);
 
   const dashCtx: WidgetCtx = useMemo(() => ({
     jobs: apartments.filter(a => isCountableApartment(a)),

@@ -10,6 +10,7 @@ import {
 import { placeJobsOnPlanner, showDragGhost, hideDragGhost } from '../../data/plannerDrop';
 import { useBoardTrack } from '../../data/useBoardUndo';
 import { keepPinVersion } from '../../data/pinBackup';
+import { isFirebaseConfigured } from '../../data/firebase';
 
 /**
  * THE PIN BOARD — the owner's "board where I can pin jobs on… like a
@@ -284,6 +285,8 @@ export function PinBoardWidget({ el, c }: { el: CanvasElement; c: WidgetCtx }) {
       const st = useStore.getState();
       const cur = st.canvasElements.find(x => x.id === el.id);
       if (!cur || !st.currentUser) return;
+      // Only on the cloud's picture, never on a copy still loading.
+      if (isFirebaseConfigured && st.cloudSyncedProject !== st.currentProjectId) return;
       const onIt = new Set(pinsOf(cur).filter(p => p.jobId && !p.projectId).map(p => p.jobId!));
       const lost = st.apartments.filter(a => a.inNotebook === el.id && !a.boardBin && !onIt.has(a.id)).map(a => a.id);
       if (!lost.length) return;

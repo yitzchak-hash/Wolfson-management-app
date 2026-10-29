@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { cloudReady } from '../../data/store';
 import { Map as MapIcon, Crosshair, Loader2 , LocateFixed } from 'lucide-react';
 import { CanvasElement, isCountableApartment, personColor } from '../../types';
 import { daysOf } from '../../data/taskDays';
@@ -142,7 +143,8 @@ export function MapWidget({ el, c }: { el: CanvasElement; c: WidgetCtx }) {
         const next = { ...prev, ...found };
         // The TV must not write. It renders the same map from the same cache
         // and simply looks anything missing up again for itself.
-        if (!c.readOnly) c.update({ data: { ...d(el), geo: next } });
+        // An automatic write-back: only once the workspace's records have arrived.
+        if (!c.readOnly && cloudReady()) c.update({ data: { ...d(el), geo: next } });
         return next;
       });
     })();

@@ -40,7 +40,7 @@ function towardDone(i: number, n: number): string {
 function floorWord(lang: string | undefined, n: string): string {
   return lang === 'he' ? `קומה ${n}` : lang === 'ru' ? `этаж ${n}` : `Floor ${n}`;
 }
-import { useStore, loadProjectSnapshot, withoutUndo } from '../../data/store';
+import { useStore, loadProjectSnapshot, withoutUndo, useCloudReady } from '../../data/store';
 import { useBoardTrack } from '../../data/useBoardUndo';
 import { holidaysOn, hebrewLabel, Holiday } from '../../data/hebrewDates';
 import { DriveIcon, ZohoIcon, PlanIcon } from '../ui/BrandIcons';
@@ -1242,9 +1242,11 @@ export function PlannerWidget({
    * parked on a day, a free-words note) are untouched. Waits for the tasks to
    * have arrived: "not in assignments" and "nothing loaded yet" look alike.
    */
+  // Automatic tidying waits for this workspace's records to arrive from the cloud.
+  const cloudIn = useCloudReady();
   const foldedFor = useRef<string | null>(null);
   useEffect(() => {
-    if (ro || projection || !assignments.length) return;
+    if (!cloudIn || ro || projection || !assignments.length) return;
     if (foldedFor.current === el.id) return;
     const hasTaskCards = Object.values(cells).some(list => (list ?? []).some(e => !!e?.taskId));
     foldedFor.current = el.id;
@@ -1277,7 +1279,7 @@ export function PlannerWidget({
       write({ cells: next });
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ro, projection, assignments.length > 0, el.id]);
+  }, [ro, projection, assignments.length > 0, el.id, cloudIn]);
 
   /** The hover plus, and the dialog it opens (scene 3). */
   const [plusCell, setPlusCell] = useState<string | null>(null);
@@ -1676,11 +1678,11 @@ export function PlannerWidget({
    * copy (the TV) never writes; it draws whatever week the ribbon is on.
    */
   useEffect(() => {
-    if (!ribbon || ro) return;
+    if (!cloudIn || !ribbon || ro) return;
     const need = Math.round((new Date(`${shiftWeek(thisWeek, 3)}T00:00:00`).getTime() - firstWeek.getTime()) / (7 * 86_400_000)) + 1;
     if (need > weekCount && need <= 520) write({ weekCount: need });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ribbon, ro, thisWeek, iso(firstWeek), weekCount]);
+  }, [ribbon, ro, thisWeek, iso(firstWeek), weekCount, cloudIn]);
 
   /** A new week on screen starts at its top — the ribbon's whole promise. */
   useEffect(() => {

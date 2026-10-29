@@ -10,7 +10,7 @@ import {
   Eraser, GripVertical, Lock, Unlock, Group, Ungroup, Info as InfoGlyph, CalendarDays, Crosshair, Maximize2,
 } from 'lucide-react';
 import { Navigate, useNavigate } from 'react-router-dom';
-import { useStore, isTombstoned, loadProjectSnapshot } from '../data/store';
+import { useStore, isTombstoned, loadProjectSnapshot, cloudReady, useCloudReady } from '../data/store';
 import { useBoardTrack } from '../data/useBoardUndo';
 import { UndoButtons } from '../components/board/UndoLayer';
 import { AddExistingJob } from '../components/board/AddExistingJob';
@@ -1968,9 +1968,12 @@ export function GeneralJobsPage() {
    * and sync like anything else — but they are never created by the user, so any
    * that are missing get seeded once, down the right-hand edge.
    */
+  // Nothing below runs on a copy still loading: the workspace's own records
+  // must have arrived from the cloud first (cloudReady).
+  const cloudIn = useCloudReady();
   const seededBins = useRef(false);
   useEffect(() => {
-    if (currentProjectId !== 'general' || seededBins.current) return;
+    if (!cloudIn || currentProjectId !== 'general' || seededBins.current) return;
     const have = new Set(canvasElements.filter(e => e.binKind).map(e => e.binKind));
     if (have.size === BIN_KINDS.length) { seededBins.current = true; return; }
     // Wait for the first load to settle before deciding something is missing.
@@ -1996,7 +1999,7 @@ export function GeneralJobsPage() {
       });
     }, 1200);
     return () => clearTimeout(t);
-  }, [canvasElements, currentProjectId, addCanvasElement]);
+  }, [canvasElements, currentProjectId, addCanvasElement, cloudIn]);
 
   /**
    * Promote every legacy flat-ink stroke to a node, once.
@@ -2012,6 +2015,7 @@ export function GeneralJobsPage() {
    * over. Converges: a later Firestore echo of an old copy just re-promotes.
    */
   useEffect(() => {
+    if (!cloudIn) return;
     const legacy = canvasElements.filter(el => el.type === 'stroke' && el.points && !el.data?.own);
     if (!legacy.length) return;
     legacy.forEach(el => {
@@ -2019,7 +2023,7 @@ export function GeneralJobsPage() {
       if (pts.length < 2) { deleteCanvasElement(el.id); return; }
       updateCanvasElement(el.id, { ...pointsBounds(pts), data: { ...(el.data ?? {}), own: true } });
     });
-  }, [canvasElements, deleteCanvasElement, updateCanvasElement]);
+  }, [canvasElements, deleteCanvasElement, updateCanvasElement, cloudIn]);
 
   /**
    * A sticky note is ONE sticky note.
@@ -2033,6 +2037,7 @@ export function GeneralJobsPage() {
    * left alone.
    */
   useEffect(() => {
+    if (!cloudIn) return;
     const pads = canvasElements.filter(el =>
       el.type === 'widget' && el.widget === 'sticky-pad'
       && ((el.data?.notes as StickyNoteRecord[] | undefined)?.length ?? 0) > 1);
@@ -2053,7 +2058,7 @@ export function GeneralJobsPage() {
         data: { notes: [n], openId: n.id },
       }));
     });
-  }, [canvasElements, updateCanvasElement, addCanvasElement]);
+  }, [canvasElements, updateCanvasElement, addCanvasElement, cloudIn]);
 
   /**
    * The Goals widget appears on the board once, by itself.
@@ -2068,7 +2073,7 @@ export function GeneralJobsPage() {
    */
   const goalsSeedTried = useRef(false);
   useEffect(() => {
-    if (activeBoardView) return;
+    if (!cloudIn || activeBoardView) return;
     if (!canvasElements.some(e => e.type === 'bin')) return;
     if (canvasElements.some(e => e.type === 'widget' && e.widget === 'goals')) return;
     if (isTombstoned('CE-goals-board')) return;
@@ -2085,7 +2090,7 @@ export function GeneralJobsPage() {
       text: '', color: '#ffffff', data: {},
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [canvasElements, activeBoardView]);
+  }, [canvasElements, activeBoardView, cloudIn]);
 
   /**
    * One notebook per kind. The rest are projections of it.
@@ -2106,7 +2111,9 @@ export function GeneralJobsPage() {
    * Converges: once there is one main, the filter finds nothing.
    */
   useEffect(() => {
-    if (!apartments.length) return;              // the workspace has not landed yet
+    // The workspace has not landed yet — a starter copy has jobs too, so
+    // `apartments.length` alone is not the signal; the cloud's word is.
+    if (!cloudIn || !apartments.length) return;
     const KINDS = ['rota', 'week-planner'];
     for (const kind of KINDS) {
       const mains = canvasElements.filter(el =>
@@ -2142,7 +2149,7 @@ export function GeneralJobsPage() {
           .forEach(a => updateApartment(a.id, { inNotebook: keep.id }, currentUser));
       }
     }
-  }, [canvasElements, apartments, currentUser, updateCanvasElement, updateApartment]);
+  }, [canvasElements, apartments, currentUser, updateCanvasElement, updateApartment, cloudIn]);
 
   /**
    * Clear notebook entries whose job no longer exists.
@@ -2160,11 +2167,11 @@ export function GeneralJobsPage() {
    */
   const purgedPlanners = useRef(false);
   useEffect(() => {
-    if (purgedPlanners.current || !apartments.length) return;
+    if (!cloudIn || purgedPlanners.current || !apartments.length) return;
     const planners = canvasElements.filter(isPlannerElement);
     if (!planners.length) { purgedPlanners.current = true; return; }
     const t = setTimeout(() => {
-      if (purgedPlanners.current) return;
+      if (purgedPlanners.current || !cloudReady()) return;
       const live = new Set(apartments.map(a => a.id));
       const dead = new Set<string>();
       for (const el of planners) {
@@ -2188,7 +2195,7 @@ export function GeneralJobsPage() {
       setToast(`Cleared ${dead.size} deleted job${dead.size === 1 ? '' : 's'} from the notebook`);
     }, 1500);
     return () => clearTimeout(t);
-  }, [canvasElements, apartments, updateCanvasElement]);
+  }, [canvasElements, apartments, updateCanvasElement, cloudIn]);
 
   const stages = allStages.filter(st => st.projectId === 'general');
   const stageMap = new Map(stages.map(st => [st.id, st]));

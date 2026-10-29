@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { cloudReady } from '../../data/store';
 import { ExternalLink, Pencil, RefreshCw } from 'lucide-react';
 import { CanvasElement } from '../../types';
 import { Frame, d, WidgetCtx } from '../../data/widgets';
@@ -53,6 +54,7 @@ export function PhotosAlbumWidget({ el, c }: { el: CanvasElement; c: WidgetCtx }
         });
         if (!r.ok) { setFailed(true); return; }
         const j = await r.json();
+        if (!cloudReady()) return;   // automatic: never on a copy still loading
         c.update({
           data: {
             ...d(el),

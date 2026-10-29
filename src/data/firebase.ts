@@ -12,6 +12,8 @@
 
 import { initializeApp, FirebaseApp } from 'firebase/app';
 import { stripUndefinedDeep } from './deepClean';
+import { diffRecord, mergeIdList, getAtPath } from './fieldDiff';
+import type { DiffOp } from './fieldDiff';
 import {
   initializeFirestore,
   Firestore,
@@ -32,6 +34,7 @@ import {
   deleteField,
   updateDoc,
   FieldPath,
+  runTransaction,
   Unsubscribe,
 } from 'firebase/firestore';
 
@@ -330,15 +333,58 @@ export function fsAttach(
     const q = recent
       ? query(collection(db, collectionName), orderBy(recent.field, 'desc'), limit(recent.n))
       : collection(db, collectionName);
-    unsub = onSnapshot(q, snap => {
-      _countReads(_billed(snap), collectionName);
+    /**
+     * The first answer must be the SERVER's. A tab that already holds these
+     * documents in memory (the Job Board, listened to from Wolfson for its
+     * snapshot) answers first from that memory — `fromCache` — and the server
+     * only confirms it a moment later, as a metadata change. Taking the memory
+     * answer as "no word from the server" left a switched-to workspace never
+     * marked as loaded (2026-10-29).
+     *
+     * So a short-lived WAITER (with metadata changes) only waits for the
+     * server's word — or 10 s, after which the memory answer is used, marked
+     * offline. Then the ordinary LIVE listener takes over, as it always was
+     * (metadata changes would re-deliver the whole list on every save). Both
+     * share one query in the client, so the hand-over reads nothing twice.
+     */
+    let waiter: Unsubscribe | null = null;
+    let liveUnsub: Unsubscribe | null = null;
+    let cacheTimer: ReturnType<typeof setTimeout> | null = null;
+    let firstLive = true;
+    const onError = (e: unknown) => { _notifyReadError(collectionName, e); settle([], true); };
+    const goLive = () => {
+      if (liveUnsub) return;
+      liveUnsub = onSnapshot(q, snap => {
+        // Its first answer is the waiter's documents again (already counted).
+        if (!firstLive) _countReads(_billed(snap), collectionName);
+        firstLive = false;
+        const docs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        if (released) callback(docs); else latest = docs;
+      }, onError);
+      if (waiter) { const w = waiter; waiter = null; w(); }
+    };
+    waiter = onSnapshot(q, { includeMetadataChanges: true }, snap => {
+      if (liveUnsub) return;
+      if (snap.docChanges().length) _countReads(_billed(snap), collectionName);
       const docs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-      settle(docs, snap.metadata.fromCache);
-      if (released) callback(docs); else latest = docs;
-    }, e => {
-      _notifyReadError(collectionName, e);
-      settle([], true);
-    });
+      latest = docs;
+      if (!snap.metadata.fromCache) {
+        if (cacheTimer) { clearTimeout(cacheTimer); cacheTimer = null; }
+        settle(docs, false);
+        goLive();
+      } else if (!resolved && !cacheTimer) {
+        cacheTimer = setTimeout(() => {
+          cacheTimer = null;
+          settle(latest ?? docs, true);
+          goLive();
+        }, 10_000);
+      }
+    }, onError);
+    unsub = () => {
+      if (cacheTimer) clearTimeout(cacheTimer);
+      waiter?.(); liveUnsub?.();
+      waiter = null; liveUnsub = null;
+    };
   } catch (e) {
     console.warn(`Firestore attach failed for ${collectionName}:`, e);
     settle([], true);
@@ -373,6 +419,216 @@ export function fsListenSince(
     console.warn(`Firestore delta listener failed for ${collectionName}:`, e);
     return () => {};
   }
+}
+
+/**
+ * SAVE ONLY WHAT CHANGED (2026-10-29) — the writer every edit goes through.
+ *
+ * `before` is this computer's copy of the record before the action, `after`
+ * its copy after it. Only the difference is written (see fieldDiff.ts): one
+ * tick, one setting of one workspace, one moved widget's x and y. A field the
+ * person did not touch is never sent, so an old or half-loaded copy on this
+ * computer can no longer overwrite newer work in the cloud.
+ *
+ * Nothing changed → nothing is written (no cost, no risk).
+ * No `before` (a brand-new record) → the whole record, as fsSet.
+ * A list of records changed (pins, cards) → read the cloud's list inside a
+ * transaction and apply only my adds/removes/edits to it. If the cloud cannot
+ * be reached, it waits and tries again — it never sends this computer's list.
+ * The cloud has no such record → the whole record (never a half-empty stub).
+ *
+ * Returns how many field writes were sent (0 = nothing changed), for tests.
+ */
+export async function fsPatch(
+  collectionName: string,
+  docId: string,
+  before: object | null | undefined,
+  after: object,
+  opts?: PatchOpts,
+): Promise<number> {
+  if (!db) return 0;
+  if (!before) {
+    if (opts?.noCreate) return 0;
+    await fsSet(collectionName, docId, after); return -1;
+  }
+  const ops = patchOps(before, after, opts);
+  if (!ops.length) return 0;
+  const ref = doc(db, collectionName, docId);
+  const build = (cloud: Record<string, unknown> | null) => patchPairs(ops, cloud);
+  /** The cloud has no such record (never uploaded, or removed): write it whole. */
+  const whole = async () => { if (!opts?.noCreate) await fsSet(collectionName, docId, after); };
+  const isNotFound = (e: unknown) => (e as { code?: string })?.code === 'not-found';
+  const send = (pairs: unknown[]) => updateDoc(ref, pairs[0] as FieldPath, pairs[1], ...pairs.slice(2));
+  try {
+    if (ops.some(o => o.kind === 'idList')) {
+      // A list of records (pins, cards) is merged onto the CLOUD's list, which
+      // needs the cloud. Unreachable (asleep, offline) → wait and try again;
+      // never fall back to sending this computer's list, which is exactly the
+      // old copy that emptied a pin board (2026-10-28).
+      const merge = async () => {
+        let missing = false;
+        await runTransaction(db!, async tx => {
+          missing = false;
+          const snap = await tx.get(ref);
+          if (!snap.exists()) { missing = true; return; }
+          const pairs = build(snap.data() as Record<string, unknown>);
+          tx.update(ref, pairs[0] as FieldPath, pairs[1], ...pairs.slice(2));
+        }, { maxAttempts: 5 });
+        if (missing) await whole();
+      };
+      await _trackWrite(retryUntilReachable(merge, `${collectionName}/${docId}`));
+      return ops.length;
+    }
+    // updateDoc, not setDoc: it refuses a record the cloud does not have, so
+    // a patch can never leave a half-empty stub behind (the listener would
+    // hand every device a record with only the patched fields).
+    try {
+      await _trackWrite(send(build(null)));
+    } catch (e) {
+      if (!isNotFound(e)) throw e;
+      await whole();
+    }
+    return ops.length;
+  } catch (e) {
+    console.warn(`Firestore write failed for ${collectionName}/${docId}:`, e);
+    _notifySyncError();
+    return 0;
+  }
+}
+
+/**
+ * Run a cloud step, and if the cloud cannot be reached, try again: when the
+ * browser says it is back online, and on a widening timer (5 s … 2 min) for
+ * up to a day. A refusal that is not about reachability (permissions, a bad
+ * value) is not retried — it is reported like any failed write.
+ */
+const RETRYABLE = new Set(['unavailable', 'deadline-exceeded', 'aborted', 'failed-precondition', 'resource-exhausted', 'internal', 'unknown']);
+async function retryUntilReachable(step: () => Promise<void>, what: string): Promise<void> {
+  let wait = 5_000;
+  const until = Date.now() + 24 * 3600_000;
+  for (;;) {
+    try { await step(); return; } catch (e) {
+      const code = (e as { code?: string })?.code ?? '';
+      const offlineMsg = /offline/i.test(String((e as Error)?.message ?? ''));
+      if (!(RETRYABLE.has(code) || offlineMsg) || Date.now() > until) throw e;
+      console.warn(`Firestore unreachable for ${what} — trying again in ${Math.round(wait / 1000)}s`, e);
+      await new Promise<void>(res => {
+        const t = setTimeout(done, wait);
+        function done() { clearTimeout(t); window.removeEventListener('online', done); res(); }
+        window.addEventListener('online', done);
+      });
+      wait = Math.min(wait * 2, 120_000);
+    }
+  }
+}
+
+function patchOps(before: object, after: object, opts?: PatchOpts): DiffOp[] {
+  const ops = diffRecord(before as Record<string, unknown>, after as Record<string, unknown>);
+  // An automatic repair never removes anything from the cloud.
+  return opts?.noDeletes ? ops.filter(o => o.kind !== 'delete') : ops;
+}
+
+/** The field paths and values to send, as updateDoc takes them. Lists of records merge onto `cloud`'s. */
+function patchPairs(ops: DiffOp[], cloud: Record<string, unknown> | null): unknown[] {
+  const pairs: unknown[] = [new FieldPath('_updatedAt'), serverTimestamp()];
+  for (const op of ops) {
+    if (!op.path.length) continue;
+    const value = op.kind === 'delete' ? deleteField()
+      : op.kind === 'idList' ? stripUndefinedDeep(cloud ? mergeIdList(op.before, op.after, getAtPath(cloud, op.path)) : op.after)
+      : stripUndefinedDeep(op.value);
+    pairs.push(new FieldPath(...op.path), value);
+  }
+  return pairs;
+}
+
+/**
+ * fsPatch for many records at once. Records with no change are skipped; the
+ * plain patches go up as ONE batch (one save, one echo on every screen — a
+ * save per record made every screen redraw dozens of times in a second). A
+ * batch is all-or-nothing, so if one record is missing from the cloud the
+ * batch is refused and those records go one by one (fsPatch writes a missing
+ * one whole). Lists of records (pins, cards) always go one by one: each needs
+ * the cloud's list.
+ */
+export async function fsBatchPatch(
+  collectionName: string,
+  items: Array<{ id: string; before: object | null | undefined; after: object }>,
+  opts?: PatchOpts,
+): Promise<void> {
+  if (!db) return;
+  const single: typeof items = [];
+  const plain: Array<{ id: string; ops: DiffOp[]; item: typeof items[number] }> = [];
+  for (const it of items) {
+    if (!it.before) { single.push(it); continue; }
+    const ops = patchOps(it.before, it.after, opts);
+    if (!ops.length) continue;
+    if (ops.some(o => o.kind === 'idList')) single.push(it); else plain.push({ id: it.id, ops, item: it });
+  }
+  const one = (it: typeof items[number]) => fsPatch(collectionName, it.id, it.before, it.after, opts);
+  await Promise.all(single.map(one));
+  for (let i = 0; i < plain.length; i += 450) {
+    const chunk = plain.slice(i, i + 450);
+    const batch = writeBatch(db);
+    for (const c of chunk) {
+      const pairs = patchPairs(c.ops, null);
+      batch.update(doc(db, collectionName, c.id), pairs[0] as FieldPath, pairs[1], ...pairs.slice(2));
+    }
+    try {
+      await _trackWrite(batch.commit());
+    } catch (e) {
+      if ((e as { code?: string })?.code !== 'not-found') {
+        console.warn(`Firestore batch patch failed for ${collectionName}:`, e);
+        _notifySyncError();
+        continue;
+      }
+      await Promise.all(chunk.map(c => one(c.item)));
+    }
+  }
+}
+
+/**
+ * CREATE-ONLY upload: each record is written only if the cloud does not have
+ * it. Every "push up what the cloud is missing" and every first-run seed goes
+ * through here, so a computer's local or built-in copy can add records but can
+ * never overwrite one that already exists — whatever this computer believes
+ * about the cloud. Checked inside a transaction per chunk; if the cloud cannot
+ * be reached the upload is skipped (nothing is lost: the records stay local
+ * and the next open tries again). Returns how many were created.
+ */
+export async function fsBatchCreate(collectionName: string, items: Array<{ id: string; data: object }>): Promise<number> {
+  if (!db || !items.length) return 0;
+  let created = 0;
+  try {
+    for (let i = 0; i < items.length; i += 200) {
+      const chunk = items.slice(i, i + 200);
+      created += await _trackWrite(runTransaction(db, async tx => {
+        const refs = chunk.map(it => doc(db!, collectionName, it.id));
+        const snaps = await Promise.all(refs.map(r => tx.get(r)));
+        let n = 0;
+        snaps.forEach((snap, k) => {
+          if (snap.exists()) return;
+          const sanitized = Object.fromEntries(
+            Object.entries({ ...chunk[k].data, _updatedAt: serverTimestamp() })
+              .filter(([, v]) => v !== undefined)
+              .map(([key, v]) => [key, stripUndefinedDeep(v)]),
+          );
+          tx.set(refs[k], sanitized);
+          n++;
+        });
+        return n;
+      }));
+    }
+  } catch (e) {
+    console.warn(`Firestore create-only upload skipped for ${collectionName}:`, e);
+  }
+  return created;
+}
+
+export interface PatchOpts {
+  /** Automatic repairs: never send a deletion (a missing value on this computer is not a decision). */
+  noDeletes?: boolean;
+  /** Without a `before`, write nothing rather than the whole record. */
+  noCreate?: boolean;
 }
 
 // Delete a single document
