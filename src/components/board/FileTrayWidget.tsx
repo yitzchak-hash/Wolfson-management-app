@@ -273,9 +273,9 @@ export function FileTrayWidget({ el, c }: { el: CanvasElement; c: WidgetCtx }) {
           elId={el.id}
           folderId={data.folderId}
           readOnly={!!c.readOnly}
-          // The markup studio is the Plan Sketcher's now (owner, 2026-10-28): a tray
-          // plan opens there, in a new tab, as a plan of its own.
-          onMarkup={() => { if (preview.fileId) openInSketcher({ fileId: preview.fileId, name: preview.name }); }}
+          // Mark up opens the built-in studio again (owner, 2026-10-29); the Plan
+          // Maker is a press inside it, on a computer only.
+          onMarkup={() => { setMarkup(preview); setPreview(null); }}
           onDownload={() => void download(preview)}
           onClose={() => setPreview(null)}
         />, document.body)}
@@ -301,6 +301,7 @@ export function FileTrayWidget({ el, c }: { el: CanvasElement; c: WidgetCtx }) {
                  asks WHERE the marked-up copy belongs (the tray's folder, or
                  a job's plans folder) and files there from then on. */
               chooseSaveFolder
+              onOpenInPlanMaker={() => { if (markup.fileId) openInSketcher({ fileId: markup.fileId, name: markup.name }); }}
               onClose={() => setMarkup(null)}
             />
           </div>
@@ -320,7 +321,6 @@ function TrayPreview({ f, me, elId, folderId, readOnly, onMarkup, onDownload, on
   onDownload: () => void;
   onClose: () => void;
 }) {
-  const ui = useStore(st => st.mainUiStrings);
   const [imgUrl, setImgUrl] = useState<string | null>(f.url.startsWith('data:') ? f.url : null);
   useEffect(() => {
     if (!isImage(f) || f.url.startsWith('data:') || !f.fileId) return;
@@ -359,7 +359,7 @@ function TrayPreview({ f, me, elId, folderId, readOnly, onMarkup, onDownload, on
         {isPdf(f) && f.fileId && !readOnly && (
           <button onClick={onMarkup} data-tray-markup
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#4aa8d8] text-white text-[12px] font-bold hover:bg-[#3d95c2]">
-            <PenLine size={13} /> {ui.openInSketcher}
+            <PenLine size={13} /> Mark up
           </button>
         )}
         <button onClick={onDownload} title="Download"

@@ -30,6 +30,23 @@ export interface WhatsNewEntry {
 
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    date: '2027-02-22',
+    title: 'Mark up is back — with a door to the Plan Maker',
+    items: [
+      {
+        title: 'Mark up opens the markup studio again',
+        body: 'The plan\'s Mark up button opens the built-in markup studio, exactly as before — in the job window and in the file tray.',
+        demo: 'tap',
+      },
+      {
+        title: 'Open in Plan Maker',
+        body: 'Inside the markup studio, beside Print, "Open in Plan Maker" opens the same plan in the Plan Maker in a new tab, inside '
+          + 'the same job. It shows on a computer only — a phone or a tablet keeps the plain markup studio.',
+        demo: 'tap',
+      },
+    ],
+  },
+  {
     date: '2027-02-21',
     title: 'Plans are marked up in the Plan Sketcher',
     items: [

@@ -802,7 +802,7 @@ function PlanEditor({
   barExtrasRef, barInto, barInto2,
   touchScale = 1, chooseSaveFolder = false, sheetOverlay,
   tabStrip, initialWork, workRef, onOpenPlanNewTab, onUnsavedChange,
-  onClose, onToast, onPickPlan, onStartMarkup, onSavedToDrive,
+  onClose, onToast, onPickPlan, onStartMarkup, onSavedToDrive, onOpenInPlanMaker,
   onPreviewPlan, onStarPlan, starredPlanId, starAuto, autoPlanNote, autoPlanYesLabel, autoPlanOtherLabel, onConfirmAutoPlan, approvedNote,
 }: {
   planFileId: string;
@@ -935,6 +935,12 @@ function PlanEditor({
   /** Turns a read-only viewing into an editing session, in place. */
   onStartMarkup?: () => void;
   /**
+   * The owner, 2026-10-29 (video 13, 6:42 — "in the markup studio we should have another button that says Open in Plan Maker"):
+   * opens this plan in the Plan Sketcher, in a new tab, inside the job. The studio shows it only on a COMPUTER (a fine pointer
+   * on a wide screen) — "on a phone or on a tablet, anything other than a computer, I do not want this to come up".
+   */
+  onOpenInPlanMaker?: () => void;
+  /**
    * A markup just landed in Drive's Annotated Plans. The wrapper folds it
    * into the plan list on the spot, so the picker shows the version that was
    * saved ten seconds ago without waiting for the drawer to reopen.
@@ -961,6 +967,8 @@ function PlanEditor({
    * layout arriving on a machine that never needed it.
    */
   const shortScreen = useMedia('(max-height: 540px) and (max-width: 1024px)');
+  /** a computer: a mouse that hovers, on a screen at least a laptop wide — the Plan Maker door is a PC's only */
+  const onPc = useMedia('(hover: hover) and (pointer: fine) and (min-width: 1024px)');
   const landscape = useMedia('(orientation: landscape)');
   const compact = phone || shortScreen;
   /** The rail runs across the bottom only when the screen is taller than it is wide. */
@@ -4262,6 +4270,13 @@ function PlanEditor({
             className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[12px] font-semibold text-white/90 hover:bg-white/10">
             <Printer size={14} /> {s.printPlanLabel}
           </button>
+          {onOpenInPlanMaker && onPc && (
+            <button data-open-plan-maker onClick={onOpenInPlanMaker} title={s.openInPlanMakerTip}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[12px] font-semibold text-white"
+              style={{ backgroundColor: '#4aa8d8' }}>
+              <ExternalLink size={13} /> {s.openInPlanMaker}
+            </button>
+          )}
         </>)}
 
         {/* Where the work has got to.

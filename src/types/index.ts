@@ -3245,6 +3245,8 @@ export interface MainUiStrings {
   dlMarksWord: string;
   dlPagesWord: string;
   printPlanLabel: string;
+  openInPlanMaker: string;
+  openInPlanMakerTip: string;
   unknownUser: string;
   openInWindow: string;
   /**
@@ -4257,6 +4259,8 @@ export const DEFAULT_MAIN_UI_STRINGS: MainUiStrings = {
   dlMarksWord: 'Markings',
   dlPagesWord: 'Pages',
   printPlanLabel: 'Print',
+  openInPlanMaker: 'Open in Plan Maker',
+  openInPlanMakerTip: 'Opens this plan in the Plan Maker (the Plan Sketcher), in a new tab, inside this job',
   unknownUser: 'Someone',
   openInWindow: 'Open in the apartment window',
   mvAction: 'Move to another apartment…',
@@ -5251,6 +5255,8 @@ export const HEBREW_MAIN_UI_STRINGS: MainUiStrings = {
   dlMarksWord: 'סימונים',
   dlPagesWord: 'עמודים',
   printPlanLabel: 'הדפסה',
+  openInPlanMaker: 'פתיחה ב-Plan Maker',
+  openInPlanMakerTip: 'פותח את התוכנית ב-Plan Maker (הסקצ׳ר), בלשונית חדשה, בתוך העבודה הזאת',
   unknownUser: 'מישהו',
   openInWindow: 'פתיחה בחלון הדירה',
   mvAction: 'העברה לדירה אחרת…',

@@ -712,8 +712,9 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
   const paneFileId = browsePreview?.file.id ?? (browsing ? null : (shownPlanId ?? detectedPdfId));
   const studioFileId = browsePreview?.file.id ?? shownPlanId ?? detectedPdfId;
   /**
-   * The markup studio lives in the PLAN SKETCHER now (owner, 2026-10-28):
-   * the button opens this plan there, in a new tab, inside this job.
+   * The Plan Maker (the Plan Sketcher) opens this plan in a new tab, inside
+   * this job — from the markup studio's own "Open in Plan Maker" press (owner,
+   * 2026-10-29), on a computer only.
    */
   function openPlanInSketcher() {
     if (!studioFileId || !apartment) return;
@@ -1335,11 +1336,14 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
           <DriveDesktopPath driveLink={planSet.plansFolderId} onToast={onToast} />
         )}
 
-        <Tooltip text={ui.openInSketcherTip}>
-          <button onClick={openPlanInSketcher} data-open-sketcher
+        {/* The owner, 2026-10-29 (video 13, 6:37 — "bring back the markup studio the way it was here … and in the markup studio
+            another button that says Open in Plan Maker"): Mark up opens the built-in studio again; the Plan Maker is a press
+            inside it, on a computer only. */}
+        <Tooltip text="Mark up this plan">
+          <button onClick={() => setAnnotating('draw')} data-markup
             className="flex items-center gap-1.5 px-2.5 py-1 min-h-[30px] rounded-lg text-[11px] font-bold text-white"
             style={{ backgroundColor: '#4aa8d8' }}>
-            <PenLine size={11} /> {ui.openInSketcher}
+            <PenLine size={11} /> Mark up
             {planVersionCount > 0 && (
               <span className="px-1 rounded-full text-[9px]" style={{ backgroundColor: 'rgba(255,255,255,.28)' }}>
                 v{planVersionCount}
@@ -3500,7 +3504,8 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
           onPickPlan={p => setShownPlanId(p.id)}
           authorName={currentUser.name}
           readOnly={annotating === 'view'}
-          onStartMarkup={() => { setAnnotating(null); openPlanInSketcher(); }}
+          onStartMarkup={() => setAnnotating('draw')}
+          onOpenInPlanMaker={openPlanInSketcher}
           onClose={() => setAnnotating(null)}
           onToast={onToast}
         />

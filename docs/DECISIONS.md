@@ -410,3 +410,14 @@ Time off belongs to the person and lives in one shared list.
   that job … open up the plan." The job window's Mark up (and full screen's) and the board file tray's open
   `tzvi-air-plan-sketcher.vercel.app/sketch/<file>?name&job&project&folder` (`src/data/sketcherLink.ts`, `VITE_SKETCHER_URL`
   overrides). The worker's phone keeps its own Mark up until he says otherwise.
+
+## 2026-10-29 (the Plan Sketcher's video 13, 6:15–7:05) — the markup studio comes BACK, with a door to the Plan Maker
+**Supersedes 2026-10-28's "the markup studio leaves the management app".** "Maybe we should bring back the markup studio the way
+it was here and leave it there, and in the markup studio we should have another button that says Open in Plan Maker … on a phone
+or on a tablet, anything other than a computer, I do not want this to come up."
+- The job window's Mark up, its full screen's Mark up and the board file tray's Mark up open the BUILT-IN markup studio again.
+- Inside the studio, beside Print, **Open in Plan Maker** (`[data-open-plan-maker]`, `PlanAnnotator.onOpenInPlanMaker`) opens the
+  same plan in the Plan Sketcher in a new tab, inside the job (`sketcherLink.ts`, unchanged). Shown only on a computer:
+  `(hover: hover) and (pointer: fine) and (min-width: 1024px)` — a phone or tablet keeps the plain studio.
+- Proven by `scratchpad/planmaker-door.mjs` (7 checks, dev server on 5173). Built on `claude/friendly-cori-vnytok`; production
+  takes it when the manager session merges it.
