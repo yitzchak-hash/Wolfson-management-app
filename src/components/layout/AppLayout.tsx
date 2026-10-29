@@ -178,11 +178,15 @@ export function AppLayout() {
    */
   const aptCount = useStore(s => s.apartments.length);
   const stageCount = useStore(s => s.stages.length);
+  // Only once THIS workspace's records have come from the cloud — never on the
+  // copy a tab starts with (owner, 2026-10-29: a new browser's starter copy
+  // wrote empty progress over every Wolfson flat).
+  const synced = useStore(s => !isFirebaseConfigured || s.cloudSyncedProject === s.currentProjectId);
   useEffect(() => {
-    if (!aptCount) return;
+    if (!aptCount || !synced) return;
     const t = setTimeout(() => { useStore.getState().migrateStageSets(); }, 1600);
     return () => clearTimeout(t);
-  }, [currentProjectId, aptCount, stageCount]);
+  }, [currentProjectId, aptCount, stageCount, synced]);
 
   /**
    * THE DRIVE SWEEP's clock (owner, 2026-09-07: "every two hours a little

@@ -727,6 +727,34 @@ function plannerPurgePlan(state: AppState, ids: string[]): {
 }
 
 /**
+ * THE RESCUE COPY (owner, 2026-10-29). Before the cloud's records replace
+ * this computer's own copy, every flat whose ticks this computer holds and
+ * the cloud does NOT is kept aside in `rescue_marks_<workspace>` — so a wipe
+ * in the cloud (one computer writing empty progress over everyone's) can be
+ * undone from any other computer that still had the real ticks. Settings →
+ * "Bring back stage ticks" reads it. An earlier, larger rescue is never
+ * replaced by a smaller one.
+ */
+export const RESCUE_PREFIX = 'rescue_marks_';
+export interface MarksRescue { at: string; apts: Array<Pick<Apartment, 'id' | 'stageMarks' | 'currentStageId'>> }
+function keepMarksRescue(pid: string, local: Apartment[], remote: Apartment[]) {
+  try {
+    const cloud = new Map(remote.map(a => [a.id, a]));
+    const apts = local.filter(a => {
+      const c = cloud.get(a.id);
+      const mine = a.stageMarks && Object.keys(a.stageMarks).length > 0;
+      const theirs = c?.stageMarks && Object.keys(c.stageMarks).length > 0;
+      return c && mine && !theirs;
+    }).map(a => ({ id: a.id, stageMarks: a.stageMarks, currentStageId: a.currentStageId }));
+    if (apts.length < 3) return;
+    const key = RESCUE_PREFIX + pid;
+    const old = JSON.parse(localStorage.getItem(key) || 'null') as MarksRescue | null;
+    if (old && old.apts.length >= apts.length) return;
+    localStorage.setItem(key, JSON.stringify({ at: new Date().toISOString(), apts }));
+  } catch { /* full or blocked storage — nothing to keep */ }
+}
+
+/**
  * Write a planner purge out.
  *
  * The elements themselves are set by the caller inside its own `set`, so the
@@ -1216,6 +1244,14 @@ interface AppState {
    * themselves live in localStorage, this is only the "look again" signal.
    */
   snapshotTick: number;
+  /**
+   * The workspace whose records have ARRIVED from the cloud in this tab (null
+   * until then). The on-open repairs wait for it (owner, 2026-10-29): they ran
+   * 1.6 s after opening on whatever the tab held, and on a brand-new browser
+   * that was the built-in starter copy — Hodaya's first login wrote the
+   * starter's empty progress over every Wolfson flat's real ticks.
+   */
+  cloudSyncedProject: string | null;
 
   /**
    * "This job is on the planner and just got a dated task" — the queued
@@ -1411,6 +1447,7 @@ export const useStore = create<AppState>((set, get) => ({
   pendingOpenAptId: null,
   pendingFocus: null,
   snapshotTick: 0,
+  cloudSyncedProject: null,
   plannerAsk: null,
   dashboardWidgetOrder: (stored?.dashboardWidgetOrder as string[] | null) ?? ['apt-stats', 'task-stats', 'stage-progress', 'building-progress', 'activity'],
   dashboardHiddenWidgets: (stored?.dashboardHiddenWidgets as string[] | null) ?? [],
@@ -2046,8 +2083,13 @@ export const useStore = create<AppState>((set, get) => ({
     if (!changed.length) return 0;
     set({ apartments });
     persist(get);
+    // Only what the repair actually has: an absent mark list or headline is
+    // never written as a deletion (that is how one browser's empty copy wiped
+    // the cloud's ticks, 2026-10-29).
     fsBatchSet(projectCollection(pid, 'apartments'), changed.map(a => ({ id: a.id, data: {
-      stageMarks: a.stageMarks, bubbles: true, currentStageId: a.currentStageId ?? null, updatedAt: now,
+      ...(a.stageMarks && Object.keys(a.stageMarks).length ? { stageMarks: a.stageMarks } : {}),
+      ...(a.currentStageId ? { currentStageId: a.currentStageId } : {}),
+      bubbles: true, updatedAt: now,
     } })));
     return changed.length;
   },
@@ -4143,6 +4185,7 @@ export const useStore = create<AppState>((set, get) => ({
         return merged;
       }
 
+      keepMarksRescue(pid, get().apartments, fbApts as unknown as Apartment[]);
       set(state => ({
         apartments:            scopeApartmentsToProject(pid, mergeById(state.apartments, fbApts as unknown as Apartment[]), state.buildings),
         stageNotes:            fbStageNotes.length > 0  ? (fbStageNotes as unknown as StageNote[]) : state.stageNotes,
@@ -4198,6 +4241,8 @@ export const useStore = create<AppState>((set, get) => ({
           fsBatchSet(col('apartments'), netivChanged.map(a => ({ id: a.id, data: a })));
         }
       }
+
+      set({ cloudSyncedProject: pid });
 
       // Seed any apartments that are missing from Firestore (in case the first-run seed was partial).
       // Anything tombstoned is missing BECAUSE it was deleted, and must stay gone.

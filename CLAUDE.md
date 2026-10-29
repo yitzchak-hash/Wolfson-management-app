@@ -12,6 +12,11 @@ Vercel serverless functions in `/api`.
 - `npx tsc --noEmit -p .` and `npx vite build` before pushing.
 
 ## Facts worth knowing
+- **Push ONLY to the production branch, and push rarely** (owner, 2026-10-29 — Vercel's build minutes):
+  one push when a round is finished, never a work branch beside it (every branch push is a Vercel build).
+- **Never let an on-open repair write before the workspace's records have arrived from the cloud**
+  (`cloudSyncedProject`, 2026-10-29): a new browser's starter copy once wrote empty progress over every
+  Wolfson flat. A write that would DELETE a field the cloud has (`undefined` → deleteField) needs a reason.
 - Production is the branch `claude/blissful-cray-spTFY`; pushing it deploys
   wolfson-management-app.vercel.app.
 - Vercel's plan allows at most 12 files in `/api`. A 13th breaks every deploy.

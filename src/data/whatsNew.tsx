@@ -34,6 +34,12 @@ export const WHATS_NEW: WhatsNewEntry[] = [
     title: 'A pin board never loses its jobs',
     items: [
       {
+        title: 'Stage progress protected, and a way to bring it back',
+        body: 'A new browser can no longer write over the office\'s stage ticks while it is still loading. If a computer holds '
+          + 'ticks the cloud has lost, Settings shows "Bring them back" at the top.',
+        demo: 'tap',
+      },
+      {
         title: 'Lost cards come back by themselves',
         body: 'If a pin board is holding a job but its card went missing, the card is put back on the board by itself — '
           + 'the job no longer vanishes from everywhere.',
