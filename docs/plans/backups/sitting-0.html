@@ -1,0 +1,266 @@
+<title>Backups Slow Plan</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700&family=Figtree:wght@400;500;600;700&display=swap">
+<style>
+/* Layout: one column that grows sitting by sitting — journey strip, the picture so far, today's topic, the question batch. TzviAir navy + sky (the app's own colours). */
+:root {
+  --bg: #f4f8fc;
+  --paper: #ffffff;
+  --ink: #142235;
+  --muted: #56677d;
+  --line: #d9e3ef;
+  --navy: #1e3a5f;
+  --sky: #4aa8d8;
+  --sky-soft: #e3f2fb;
+  --ok: #1f8a5b;
+  --ok-soft: #e2f5ec;
+  --warn: #b25d07;
+  --warn-soft: #fdf0dc;
+  --bad: #b3261e;
+  --bad-soft: #fbe5e3;
+  --star: #c98a00;
+  --display: 'Sora', 'Segoe UI', system-ui, sans-serif;
+  --body: 'Figtree', 'Segoe UI', system-ui, sans-serif;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #0d1724; --paper: #142235; --ink: #e8eff8; --muted: #9db0c7; --line: #26384f;
+  --navy: #8cc4ec; --sky: #5ab7e6; --sky-soft: #173450; --ok: #5fd39a; --ok-soft: #133528;
+  --warn: #f2b25f; --warn-soft: #3a2a12; --bad: #f08a82; --bad-soft: #3d1a18; --star: #f2c14e; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #0d1724; --paper: #142235; --ink: #e8eff8; --muted: #9db0c7; --line: #26384f;
+  --navy: #8cc4ec; --sky: #5ab7e6; --sky-soft: #173450; --ok: #5fd39a; --ok-soft: #133528;
+  --warn: #f2b25f; --warn-soft: #3a2a12; --bad: #f08a82; --bad-soft: #3d1a18; --star: #f2c14e; color-scheme: dark }
+body { background: var(--bg); color: var(--ink); font-family: var(--body); font-size: 16px; line-height: 1.55; }
+.wrap { max-width: 920px; margin: 0 auto; padding-block: 28px 64px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); display: grid; gap: 28px; }
+h1, h2, h3 { font-family: var(--display); text-wrap: balance; margin: 0; color: var(--ink); }
+h1 { font-size: clamp(1.7rem, 4vw, 2.3rem); letter-spacing: -0.01em; }
+h2 { font-size: 1.3rem; }
+h3 { font-size: 1.02rem; }
+p { margin: 0; max-width: 68ch; }
+.eyebrow { font-size: .74rem; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); font-weight: 700; }
+.lead { color: var(--muted); font-size: 1.05rem; }
+
+/* journey strip */
+.strip { display: flex; flex-wrap: wrap; gap: 8px; }
+.step { display: flex; align-items: center; gap: 8px; padding: 7px 12px; border-radius: 999px; border: 1px solid var(--line); background: var(--paper); font-size: .86rem; font-weight: 600; color: var(--muted); }
+.step b { font-family: var(--display); color: var(--ink); }
+.step.now { background: var(--navy); border-color: var(--navy); color: var(--paper); }
+.step.now b { color: var(--paper); }
+
+/* answers box */
+.answers { background: var(--paper); border: 1px solid var(--line); border-radius: 16px; padding: 20px; display: grid; gap: 14px; }
+.qa { display: grid; gap: 4px; }
+.qa .q { font-weight: 700; }
+.qa .a { color: var(--ink); }
+
+/* today's pieces */
+.pieces { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px; }
+.piece { background: var(--paper); border: 1px solid var(--line); border-radius: 14px; padding: 16px; display: grid; gap: 10px; align-content: start; }
+.piece .head { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
+.tag { font-size: .72rem; font-weight: 700; padding: 3px 9px; border-radius: 999px; white-space: nowrap; }
+.tag.old { background: var(--warn-soft); color: var(--warn); }
+.tag.new { background: var(--ok-soft); color: var(--ok); }
+.tag.google { background: var(--sky-soft); color: var(--navy); }
+.facts { display: grid; grid-template-columns: auto 1fr; gap: 4px 10px; font-size: .9rem; }
+.facts dt { color: var(--muted); font-weight: 600; }
+.facts dd { margin: 0; min-width: 0; }
+.no { color: var(--bad); font-weight: 600; }
+.yes { color: var(--ok); font-weight: 600; }
+
+/* locked picks */
+.locked { display: grid; gap: 8px; }
+.pick { display: flex; gap: 12px; align-items: baseline; background: var(--ok-soft); border-radius: 12px; padding: 10px 14px; }
+.pick .n { font-family: var(--display); font-weight: 700; color: var(--ok); min-width: 3.4em; font-variant-numeric: tabular-nums; }
+
+/* questions */
+.qs { display: grid; gap: 16px; }
+.qcard { background: var(--paper); border: 1px solid var(--line); border-radius: 16px; padding: 18px; display: grid; gap: 12px; }
+.qcard .top { display: flex; gap: 12px; align-items: baseline; }
+.qcard .num { font-family: var(--display); font-weight: 700; font-size: 1.1rem; color: var(--sky); font-variant-numeric: tabular-nums; min-width: 2.2em; }
+.opts { display: grid; gap: 8px; }
+.opt { display: flex; gap: 10px; padding: 9px 12px; border-radius: 10px; border: 1px solid var(--line); }
+.opt .l { font-family: var(--display); font-weight: 700; min-width: 1.2em; }
+.opt.star { border-color: var(--star); background: color-mix(in srgb, var(--star) 9%, var(--paper)); }
+.why { font-size: .9rem; color: var(--muted); }
+.why b { color: var(--star); }
+.how { background: var(--navy); color: var(--paper); border-radius: 16px; padding: 18px 20px; display: grid; gap: 6px; }
+.how h3, .how p { color: var(--paper); }
+.how code { font-family: ui-monospace, Menlo, monospace; background: color-mix(in srgb, var(--paper) 18%, transparent); padding: 1px 6px; border-radius: 6px; }
+.map { display: grid; gap: 8px; }
+.maprow { display: flex; gap: 12px; align-items: baseline; padding: 10px 14px; border-radius: 12px; background: var(--paper); border: 1px solid var(--line); }
+.maprow .n { font-family: var(--display); font-weight: 700; color: var(--navy); min-width: 5.5em; }
+.maprow.now { border-color: var(--navy); box-shadow: inset 4px 0 0 var(--navy); }
+@media (prefers-reduced-motion: no-preference) { .qcard { transition: border-color .2s; } .qcard:hover { border-color: var(--sky); } }
+</style>
+
+<div class="wrap">
+  <header style="display:grid;gap:10px">
+    <div class="eyebrow">TzviAir · Slow plan · Backups</div>
+    <h1>How backups should work</h1>
+    <p class="lead">Nothing in the app changes until this plan is sealed. Each sitting, this page shows the whole picture so far, plus a few questions.</p>
+  </header>
+
+  <nav class="strip" aria-label="Sittings">
+    <span class="step now"><b>0</b> The map</span>
+    <span class="step"><b>1</b> What, where, how often</span>
+    <span class="step"><b>2</b> Preview &amp; restore</span>
+    <span class="step"><b>3</b> The Backups tab</span>
+    <span class="step"><b>4</b> Settings redesign</span>
+    <span class="step"><b>✓</b> Seal</span>
+  </nav>
+
+  <section class="answers" aria-labelledby="ans">
+    <h2 id="ans">Your questions, answered</h2>
+    <div class="qa">
+      <div class="q">"Was the old JSON really just Wolfson?"</div>
+      <div class="a">Yes. Each old file holds <b>only the workspace that was open</b> on the computer that made it, plus the shared parts (stages, users, board settings). I opened all 580 files since 14 October: <b>every one was Wolfson</b>. The Job Board and Netiv were never in Drive.</div>
+    </div>
+    <div class="qa">
+      <div class="q">"Are Snapshot history, Google Drive auto export and Manual backup the same thing?"</div>
+      <div class="a">No. They are three older, partial tools, built at different times. See the cards below: each covers less than the new full backup.</div>
+    </div>
+    <div class="qa">
+      <div class="q">"I thought the preview would be for the JSON."</div>
+      <div class="a">It can be both. Today Preview opens the new full backups. Opening an imported file in the same preview is question 7 below.</div>
+    </div>
+  </section>
+
+  <section style="display:grid;gap:14px" aria-labelledby="pic">
+    <div class="eyebrow">The picture so far</div>
+    <h2 id="pic">What exists today, side by side</h2>
+    <div class="pieces">
+      <article class="piece">
+        <div class="head"><h3>Snapshot history</h3><span class="tag old">old</span></div>
+        <dl class="facts">
+          <dt>Holds</dt><dd>Flats' stage and notes, tasks, workers. <span class="no">Not</span> widgets, boards, settings.</dd>
+          <dt>Where</dt><dd><span class="no">Only on the computer</span> that made it (last 5).</dd>
+          <dt>Restore</dt><dd>That computer's screen only.</dd>
+        </dl>
+      </article>
+      <article class="piece">
+        <div class="head"><h3>Google Drive auto export</h3><span class="tag old">old</span></div>
+        <dl class="facts">
+          <dt>Holds</dt><dd><span class="no">One workspace</span> (the open one) + shared parts. In practice: Wolfson only.</dd>
+          <dt>Where</dt><dd>Drive → Backups, about hourly (~1,500 files).</dd>
+          <dt>Restore</dt><dd>By hand (how we fixed today's wipe).</dd>
+        </dl>
+      </article>
+      <article class="piece">
+        <div class="head"><h3>Manual backup</h3><span class="tag old">old</span></div>
+        <dl class="facts">
+          <dt>Download</dt><dd>The same one-workspace file, to your computer.</dd>
+          <dt>Import</dt><dd><span class="no">Changes only that browser</span>, never the cloud. No preview.</dd>
+        </dl>
+      </article>
+      <article class="piece">
+        <div class="head"><h3>Full backup</h3><span class="tag new">new · live</span></div>
+        <dl class="facts">
+          <dt>Holds</dt><dd><span class="yes">Everything</span>: all 3 workspaces, 6,464 records, every widget, board, tick, setting, personal choice, undo list.</dd>
+          <dt>Where</dt><dd>Drive → Backups. Every night + after activity during the day (0.8 MB each).</dd>
+          <dt>Preview</dt><dd><span class="yes">Live</span>: the whole app as it was, sealed off.</dd>
+          <dt>Restore</dt><dd>Not built yet (waiting on this plan).</dd>
+        </dl>
+      </article>
+      <article class="piece">
+        <div class="head"><h3>Google's database backup</h3><span class="tag google">on · today</span></div>
+        <dl class="facts">
+          <dt>Holds</dt><dd>The whole database, at Google.</dd>
+          <dt>Rewind</dt><dd>To any minute of the last 7 days, plus daily copies.</dd>
+          <dt>Note</dt><dd>Works even if the app or Drive fails. Needs the account upgraded before the free trial ends (~53 days).</dd>
+        </dl>
+      </article>
+    </div>
+  </section>
+
+  <section style="display:grid;gap:12px" aria-labelledby="locked">
+    <div class="eyebrow">Locked picks</div>
+    <h2 id="locked">Already decided</h2>
+    <div class="locked">
+      <div class="pick"><span class="n">Pick 1</span><span><b>Restore makes the app exactly like the backup</b>, including removing what was added after it. A fresh full backup is taken automatically just before, so a restore can always be taken back.</span></div>
+      <div class="pick"><span class="n">Pick 2</span><span><b>Nothing in the app changes</b> until this plan is sealed.</span></div>
+    </div>
+  </section>
+
+  <section style="display:grid;gap:12px" aria-labelledby="map">
+    <div class="eyebrow">The map</div>
+    <h2 id="map">The sittings ahead</h2>
+    <div class="map">
+      <div class="maprow now"><span class="n">Sitting 0</span><span>The map, and what happens to the three old tools (today).</span></div>
+      <div class="maprow"><span class="n">Sitting 1</span><span>What, where, how often: how many backups to keep, for how long, a second copy outside Drive?</span></div>
+      <div class="maprow"><span class="n">Sitting 2</span><span>Preview &amp; restore: the restore button, one workspace or all, who may restore, what it says first.</span></div>
+      <div class="maprow"><span class="n">Sitting 3</span><span>The Backups tab: exactly what's on it.</span></div>
+      <div class="maprow"><span class="n">Sitting 4</span><span>Settings redesign in your design language. I'll need the link to it.</span></div>
+      <div class="maprow"><span class="n">Seal</span><span>One master plan + the build order.</span></div>
+    </div>
+  </section>
+
+  <section style="display:grid;gap:14px" aria-labelledby="batch">
+    <div class="eyebrow">Sitting 0 · questions</div>
+    <h2 id="batch">The three old tools: keep, change or retire?</h2>
+    <p class="lead">The full backup and Google's backup already cover everything the old tools did, and more. The question is which old pieces still earn a place.</p>
+    <div class="qs">
+      <article class="qcard">
+        <div class="top"><span class="num">3</span><h3>The hourly one-workspace files to Drive (Google Drive auto export)</h3></div>
+        <div class="opts">
+          <div class="opt star"><span class="l">A</span><span>Stop making them. The full backup replaces them. Old files stay in Drive as history.</span></div>
+          <div class="opt"><span class="l">B</span><span>Keep making them alongside the full backup.</span></div>
+        </div>
+        <div class="why"><b>★ A</b>: they hold one workspace, so they can mislead (they looked complete and weren't), and they add ~24 files a day.</div>
+      </article>
+      <article class="qcard">
+        <div class="top"><span class="num">4</span><h3>Snapshot history (restore points on one computer)</h3></div>
+        <div class="opts">
+          <div class="opt star"><span class="l">A</span><span>Retire it. Its job moves to the full backups list.</span></div>
+          <div class="opt"><span class="l">B</span><span>Keep it as a quick extra.</span></div>
+        </div>
+        <div class="why"><b>★ A</b>: it lives on one computer and holds only part of the data. Two different restore lists would be confusing.</div>
+      </article>
+      <article class="qcard">
+        <div class="top"><span class="num">5</span><h3>"Download a backup to my computer" button</h3></div>
+        <div class="opts">
+          <div class="opt star"><span class="l">A</span><span>Keep it, but it downloads the <b>full</b> backup (every workspace).</span></div>
+          <div class="opt"><span class="l">B</span><span>Remove it. Drive holds them all.</span></div>
+        </div>
+        <div class="why"><b>★ A</b>: a copy you hold yourself, outside Google, is a classic safety rule ("one copy somewhere else").</div>
+      </article>
+      <article class="qcard">
+        <div class="top"><span class="num">6</span><h3>Restoring from a backup file (Import)</h3></div>
+        <div class="opts">
+          <div class="opt star"><span class="l">A</span><span>Any backup, from the list <b>or</b> a file you choose, opens in the Preview first. Restore is pressed there and writes to the cloud.</span></div>
+          <div class="opt"><span class="l">B</span><span>Only backups from the Drive list. No file import.</span></div>
+        </div>
+        <div class="why"><b>★ A</b>: one way to restore, always with a preview, whatever the backup's source.</div>
+      </article>
+      <article class="qcard">
+        <div class="top"><span class="num">7</span><h3>Old one-workspace files (like this morning's): can they be previewed and restored too?</h3></div>
+        <div class="opts">
+          <div class="opt star"><span class="l">A</span><span>Yes, previewed; restore puts back <b>only that workspace</b> (the file has nothing else).</span></div>
+          <div class="opt"><span class="l">B</span><span>No, full backups only.</span></div>
+        </div>
+        <div class="why"><b>★ A</b>: the old files are the only history before today; it would be a shame to lock them out.</div>
+      </article>
+      <article class="qcard">
+        <div class="top"><span class="num">8</span><h3>Where the Backups area lives</h3></div>
+        <div class="opts">
+          <div class="opt star"><span class="l">A</span><span>Its own <b>Backups</b> tab inside Settings.</span></div>
+          <div class="opt"><span class="l">B</span><span>A separate page in the main menu.</span></div>
+        </div>
+        <div class="why"><b>★ A</b>: what you asked for, and it keeps the main menu for daily work.</div>
+      </article>
+      <article class="qcard">
+        <div class="top"><span class="num">9</span><h3>The map above: right sittings, right order?</h3></div>
+        <div class="opts">
+          <div class="opt star"><span class="l">A</span><span>Yes, go in this order.</span></div>
+          <div class="opt"><span class="l">B</span><span>Change it (say how).</span></div>
+        </div>
+        <div class="why"><b>★ A</b>: decisions about <i>what</i> come before decisions about the screen.</div>
+      </article>
+    </div>
+  </section>
+
+  <section class="how">
+    <h3>How to answer</h3>
+    <p>Reply in the chat with the numbers and letters, e.g. <code>3A 4A 5A 6A 7A 8A 9A</code>, or say "discuss" next to any of them.</p>
+  </section>
+</div>
