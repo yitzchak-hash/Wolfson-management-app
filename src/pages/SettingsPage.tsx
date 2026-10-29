@@ -18,7 +18,6 @@ import { portalLink, bareDomain, looksLikePreviewHost } from '../data/portalLink
 import type { BoardAccess, PortalLang, CustomButton } from '../types';
 import { INCLUDE_LANGS, includeRow, langOfWord } from '../data/stageIncludes';
 import { requestTranslation, translationAvailable } from '../data/translate';
-import { MarksRescueCard } from '../components/settings/MarksRescue';
 import { personColor, projectColor, BoardView, Stage, User, Contractor, ContractorCategory, ContractorUiStrings, DEFAULT_CONTRACTOR_UI_STRINGS, HEBREW_CONTRACTOR_UI_STRINGS, MainUiStrings, DEFAULT_MAIN_UI_STRINGS, HEBREW_MAIN_UI_STRINGS, BackupFrequency, DriveExportFrequency, getStageName, Apartment, isCountableApartment, BoardSetting, CanvasElement } from '../types';
 import { loadTvScreens, forgetTvScreen, screenIsLive, shapeNameOf, TvScreenPresence } from '../data/tvScreens';
 import { Tooltip } from '../components/ui/Tooltip';
@@ -371,8 +370,6 @@ export function SettingsPage({ scope = 'project' }: { scope?: SettingsScope }) {
           ? s.appSettingsHint
           : `${projectName} — ${s.projectSettingsHint}`}
       </p>
-
-      <MarksRescueCard />
 
       <div className="flex gap-1 bg-gray-100 rounded-xl p-1 mb-4 md:mb-6 flex-wrap">
         {tabs.map(tab => (

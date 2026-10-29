@@ -64,35 +64,8 @@ const hist = (await page.locator('body').textContent()) ?? '';
 check(/Put 2 jobs back on the pin board/.test(hist), 'the undo list names the repair');
 await page.keyboard.press('Escape'); await page.mouse.click(5, 500); await page.waitForTimeout(200);
 
-// The history button: an earlier version kept on this computer brings back the rest.
-check(await page.locator('[data-pin-history]').count() === 1, 'the board shows its history button (an earlier version has more on it)');
-await page.locator('[data-pin-history]').click();
-await page.waitForTimeout(300);
-const ptxt = (await page.locator('[data-pin-history-panel]').textContent()) ?? '';
-check(/1 job/.test(ptxt) && /1 note/.test(ptxt), 'the version says what it would bring back', ptxt);
-await page.locator('[data-pin-version-restore]').first().click();
-await page.waitForTimeout(800);
-s = await stored();
-check(s.pins.some(p => p.jobId === 'G-p3' && Math.abs(p.x - 0.7) < 0.01), 'the missing job comes back where it was', JSON.stringify(s.pins.find(p => p.jobId === 'G-p3')));
-check(s.pins.some(p => p.text === 'Call the gypsum guy'), 'the lost note comes back');
-check(s.held['G-p3'] === 'CE-pins' && await page.locator('[data-node-id="G-p3"]').count() === 0, 'the restored job leaves the main board, as a pin does');
-check(s.pins.filter(p => p.jobId === 'G-p1').length === 1, 'nothing is doubled');
-check(await page.locator('[data-pin-history]').count() === 0, 'with nothing left to bring back, the history button goes');
-
-// Undo takes the bring-back off again.
-await page.keyboard.press('Control+z');
-await page.waitForTimeout(600);
-// A bring-back puts content back, so its undo asks first (the undo layer's rule).
-const askBox = page.locator('div.fixed.inset-0.z-\\[250\\]');
-check(await askBox.count() === 1, 'the undo asks first, naming what it does', ((await askBox.textContent().catch(() => '')) ?? '').slice(0, 90));
-await askBox.locator('button').last().click();
-await page.waitForTimeout(700);
-s = await stored();
-check(!s.pins.some(p => p.text === 'Call the gypsum guy'), 'Ctrl+Z takes the bring-back off again', JSON.stringify(s.pins.map(p => p.jobId || p.text)));
-
-// A reload keeps the version history on this computer.
-await page.reload(); await page.waitForTimeout(4500);
-check(await page.locator('[data-pin-history]').count() === 1, 'after a reload the earlier version is still offered');
+// The board's history button was taken out at the owner's word (2026-10-29: no buttons without asking);
+// the versions are still kept silently on each computer (pinBackup.ts).
 await b.close();
 console.log(fails ? `\n${fails} FAILED` : '\nALL PASS');
 process.exit(fails ? 1 : 0);
