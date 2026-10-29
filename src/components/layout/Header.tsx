@@ -179,7 +179,7 @@ function PendingStagesBell({ light }: { light: boolean }) {
         <div
           ref={menuRef}
           data-pending-menu
-          dir={ui.isRtl ? 'rtl' : 'ltr'}
+          dir="ltr"
           className="fixed z-[100] bg-white border border-gray-200 rounded-xl shadow-2xl overflow-hidden flex flex-col"
           style={{ left: pos.left, top: pos.top, width: MENU_W, maxHeight: 'min(380px, calc(100dvh - 80px))' }}
         >

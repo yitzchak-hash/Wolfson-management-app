@@ -237,7 +237,7 @@ function SearchWindow({ c, onClose }: { c: WidgetCtx; onClose: () => void }) {
   return createPortal(
     <div
       data-search-window
-      dir={isRtl ? 'rtl' : 'ltr'}
+      dir="ltr"
       className="fixed inset-0 z-[300] flex items-start justify-center pt-[9vh] px-4"
       onPointerDown={stop} onPointerUp={stop} onPointerMove={stop}
       onClick={stop} onDoubleClick={stop} onContextMenu={stop}

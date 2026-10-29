@@ -68,7 +68,7 @@ export function OffListQuestion({ projectId, task, item, onClose }: {
   const pronoun = rtl ? 'הוא כתב' : 'This is what he wrote:';
 
   return createPortal(
-    <div {...seal} dir={rtl ? 'rtl' : 'ltr'}>
+    <div {...seal} dir="ltr">
       <div className="fixed inset-0 z-[180]" style={{ backgroundColor: 'rgba(15,23,42,.45)' }} onClick={onClose} />
       <div data-offlist-question={item.id} className="fixed z-[181] rounded-2xl bg-white overflow-hidden flex flex-col"
         style={{ left: '50%', top: '50%', transform: 'translate(-50%,-50%)', width: 'min(460px, 94vw)', maxHeight: '88vh',

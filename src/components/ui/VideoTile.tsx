@@ -19,6 +19,20 @@ import { driveThumbUrl, fetchPlanBytes, driveStreamUrl, isDriveStreamUrl } from 
  * would start six downloads. A stream that is refused falls back to fetching
  * the whole file once.
  */
+/**
+ * THE SOUND (owner, 2026-10-29: "I can't hear the video, I have to download
+ * it"). The still before play is muted; React sets `muted` only when the
+ * element is first drawn and does not reliably take it back off, so a video
+ * pressed into play kept playing silently. The press — a real tap, which is
+ * what lets a browser play sound — now switches the sound on directly.
+ */
+function withSound(v: HTMLVideoElement) {
+  v.muted = false;
+  v.defaultMuted = false;
+  v.removeAttribute('muted');
+  if (v.volume === 0) v.volume = 1;
+}
+
 export function VideoTile({ src, driveFileId, filename, mimeType, className = '', maxWidth = 230, onError, onOpen }: {
   /** A playable address — storageUrl, a data URL, a blob URL. */
   src?: string | null;
@@ -76,7 +90,7 @@ export function VideoTile({ src, driveFileId, filename, mimeType, className = ''
     if (!url) return;
     setPlaying(true);
     // The element mounts with its source on the next paint.
-    requestAnimationFrame(() => { void videoRef.current?.play().catch(() => undefined); });
+    requestAnimationFrame(() => { const v = videoRef.current; if (v) { withSound(v); void v.play().catch(() => undefined); } });
   }
 
   async function fullScreen(e: React.MouseEvent) {
@@ -88,6 +102,7 @@ export function VideoTile({ src, driveFileId, filename, mimeType, className = ''
     requestAnimationFrame(() => {
       const v = videoRef.current as (HTMLVideoElement & { webkitEnterFullscreen?: () => void }) | null;
       if (!v) return;
+      withSound(v);
       void v.play().catch(() => undefined);
       if (v.requestFullscreen) void v.requestFullscreen().catch(() => v.webkitEnterFullscreen?.());
       else v.webkitEnterFullscreen?.();
@@ -116,7 +131,7 @@ export function VideoTile({ src, driveFileId, filename, mimeType, className = ''
           onError={() => {
             if (!isDriveStreamUrl(blobUrl) || src) return;
             void downloadBytes().then(url => {
-              if (url && playing) requestAnimationFrame(() => { void videoRef.current?.play().catch(() => undefined); });
+              if (url && playing) requestAnimationFrame(() => { const v = videoRef.current; if (v) { withSound(v); void v.play().catch(() => undefined); } });
             });
           }}
         />

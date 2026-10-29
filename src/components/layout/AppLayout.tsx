@@ -219,7 +219,7 @@ export function AppLayout() {
     <div
       className="flex flex-col bg-gray-100 overflow-x-hidden"
       style={{ height: '100vh', maxHeight: '100dvh', minHeight: '100dvh' }}
-      dir={mainUiStrings.isRtl ? 'rtl' : 'ltr'}
+      dir="ltr"
     >
       <Header />
       <div className="flex flex-1 min-h-0 overflow-hidden">

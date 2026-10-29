@@ -495,7 +495,7 @@ export function BundlePopup({ bundle, person, personColor, dayLabel, stages, wor
   };
 
   return createPortal(
-    <div {...seal} dir={isRtl ? 'rtl' : undefined}>
+    <div {...seal} dir="ltr">
       <div className="fixed inset-0 z-[170]" style={{ backgroundColor: 'rgba(15,23,42,.45)' }} onClick={onClose} />
       <div
         data-bundle-popup={bundle.items.length}

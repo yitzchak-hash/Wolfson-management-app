@@ -903,7 +903,7 @@ export function LayoutStudio({ onClose, onToast }: {
   })() : [];
 
   return createPortal(
-    <div data-layout-studio dir={s.isRtl ? 'rtl' : 'ltr'}
+    <div data-layout-studio dir="ltr"
       className="fixed inset-0 z-[120] flex flex-col bg-slate-100 text-gray-800"
       style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}>
       {/* Top bar in the workspace colour */}

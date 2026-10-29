@@ -14,11 +14,37 @@ export type FullBackupEvery = 'activity' | 'hourly' | 'every4h' | 'night';
 import { setPrefsPerson, prefGet, prefSet, onPrefsChange, prefsPerson } from './prefs';
 import { saveNewStep, moveStep, dropSteps, loadSteps } from './undoCloud';
 
-// Always merge stored mainUiStrings ON TOP of the fresh preset so code-added keys
-// are never missing even when localStorage has an older saved version.
-function mergeFreshMainUi(ms: Partial<MainUiStrings> | null | undefined): MainUiStrings {
-  const safe = ms ?? {};
-  return { ...(safe.isRtl ? HEBREW_MAIN_UI_STRINGS : DEFAULT_MAIN_UI_STRINGS), ...safe };
+/**
+ * THE WORDS, PER PERSON (owner, 2026-10-29: "every user should be able to
+ * choose his language … just the words in Hebrew, the layout stays the same").
+ *
+ * The office keeps its own wording per language in settings/app:
+ * `mainUiStrings` (the office set, English unless it says isRtl) and
+ * `mainUiStringsHe` (the office's Hebrew changes). Each person picks a
+ * language (prefs.ts `ui_lang`, so it follows them to any computer); the
+ * screen shows the preset of that language with the office's changes in it.
+ * The layout never flips: the office app is always left to right.
+ */
+let _officeUi: Partial<MainUiStrings> = {};
+let _officeUiHe: Partial<MainUiStrings> = {};
+export type UiLang = 'en' | 'he';
+export function uiLangNow(): UiLang {
+  const p = prefGet('ui_lang');
+  if (p === 'he' || p === 'en') return p;
+  return _officeUi.isRtl ? 'he' : 'en';
+}
+function effectiveUi(): MainUiStrings {
+  if (uiLangNow() === 'he') {
+    return { ...HEBREW_MAIN_UI_STRINGS, ...(_officeUi.isRtl ? _officeUi : {}), ..._officeUiHe, isRtl: true } as MainUiStrings;
+  }
+  return { ...DEFAULT_MAIN_UI_STRINGS, ...(!_officeUi.isRtl ? _officeUi : {}), isRtl: false } as MainUiStrings;
+}
+// Stored/cloud office words in; the words for THIS person out. Code-added
+// keys are never missing: the preset sits underneath.
+function mergeFreshMainUi(ms: Partial<MainUiStrings> | null | undefined, he?: Partial<MainUiStrings> | null): MainUiStrings {
+  if (ms) _officeUi = ms;
+  if (he) _officeUiHe = he;
+  return effectiveUi();
 }
 import { wolfsonTipus, WOLFSON_TIPUSIM } from './wolfsonTipus';
 import { isWolfsonBuilding } from './floorRows';
@@ -1245,6 +1271,9 @@ interface AppState {
   updateContractorUiStrings: (partial: Partial<ContractorUiStrings>) => void;
   mainUiStrings: MainUiStrings;
   updateMainUiStrings: (s: MainUiStrings) => void;
+  /** This person's language for the words (the layout never flips). */
+  uiLang: UiLang;
+  setUiLang: (lang: UiLang) => void;
 
   // Office note files
   /** Returns the new record's id, so a memo's transcript can be written onto it when it arrives. */
@@ -3907,10 +3936,31 @@ export const useStore = create<AppState>((set, get) => ({
   },
 
   updateMainUiStrings: (s) => {
-    const prevStrings = get().mainUiStrings;
-    set({ mainUiStrings: s });
+    // Words edited while reading Hebrew are the office's HEBREW wording; they
+    // never land in the English set (and the other way round).
+    if (s.isRtl && !_officeUi.isRtl) {
+      const prevHe = _officeUiHe;
+      const nextHe: Partial<MainUiStrings> = {};
+      for (const k of Object.keys(s) as (keyof MainUiStrings)[]) {
+        if (k !== 'isRtl' && s[k] !== HEBREW_MAIN_UI_STRINGS[k]) (nextHe as Record<string, unknown>)[k] = s[k];
+      }
+      _officeUiHe = nextHe;
+      set({ mainUiStrings: effectiveUi() });
+      persist(get);
+      saveAppField('mainUiStringsHe', prevHe, nextHe);
+      return;
+    }
+    const prevStrings = _officeUi;
+    _officeUi = s;
+    set({ mainUiStrings: effectiveUi() });
     persist(get);
     saveAppField('mainUiStrings', prevStrings, s);
+  },
+  uiLang: uiLangNow(),
+  setUiLang: (lang) => {
+    prefSet('ui_lang', lang);
+    set({ uiLang: lang, mainUiStrings: effectiveUi() });
+    try { document.documentElement.lang = lang; } catch { /* no document */ }
   },
 
   addOfficeNoteFile: (fields) => {
@@ -4138,7 +4188,7 @@ export const useStore = create<AppState>((set, get) => ({
           ...(appS.backupDriveFolderLink !== undefined ? { backupDriveFolderLink: appS.backupDriveFolderLink as string } : {}),
           ...(appS.contractorUiStrings  ? { contractorUiStrings:  appS.contractorUiStrings as ContractorUiStrings } : {}),
           ...(appS.autoBackup           !== undefined ? { autoBackup: appS.autoBackup as boolean } : {}),
-          ...(appS.mainUiStrings        ? { mainUiStrings: mergeFreshMainUi(appS.mainUiStrings as Partial<MainUiStrings>) } : {}),
+          ...(appS.mainUiStrings || appS.mainUiStringsHe ? { mainUiStrings: mergeFreshMainUi(appS.mainUiStrings as Partial<MainUiStrings> | undefined, appS.mainUiStringsHe as Partial<MainUiStrings> | undefined) } : {}),
           ...(appS.contractorSheetLinks ? { contractorSheetLinks: appS.contractorSheetLinks as Record<string, string> } : {}),
           ...(appS.boardSettings ? { boardSettings: appS.boardSettings as Record<string, BoardSetting> } : {}),
           // A workspace made in the app: its buildings come from the cloud on a new computer.
@@ -4276,7 +4326,7 @@ export const useStore = create<AppState>((set, get) => ({
         ...(appSettings.backupDriveFolderLink !== undefined ? { backupDriveFolderLink: appSettings.backupDriveFolderLink as string } : {}),
         ...(appSettings.contractorUiStrings  ? { contractorUiStrings:  appSettings.contractorUiStrings as ContractorUiStrings } : {}),
         ...(appSettings.autoBackup           !== undefined ? { autoBackup: appSettings.autoBackup as boolean } : {}),
-        ...(appSettings.mainUiStrings        ? { mainUiStrings: mergeFreshMainUi(appSettings.mainUiStrings as Partial<MainUiStrings>) } : {}),
+        ...(appSettings.mainUiStrings || appSettings.mainUiStringsHe ? { mainUiStrings: mergeFreshMainUi(appSettings.mainUiStrings as Partial<MainUiStrings> | undefined, appSettings.mainUiStringsHe as Partial<MainUiStrings> | undefined) } : {}),
         ...(appSettings.contractorSheetLinks ? { contractorSheetLinks: appSettings.contractorSheetLinks as Record<string, string> } : {}),
         ...(appSettings.boardViews ? { boardViews: appSettings.boardViews as BoardView[] } : {}),
         ...(appSettings.driveExportFrequency ? { driveExportFrequency: appSettings.driveExportFrequency as DriveExportFrequency } : {}),
@@ -4612,6 +4662,9 @@ if (typeof window !== 'undefined') {
   // moment after sign-in.
   onPrefsChange(() => {
     const st = useStore.getState();
+    // The person's language arrives from the cloud on a new computer.
+    const lang = uiLangNow();
+    if (lang !== st.uiLang) useStore.setState({ uiLang: lang, mainUiStrings: effectiveUi() });
     const light = prefGet(THEME_KEY) !== 'dark';
     const view = prefGet('active_board_view') ?? '';
     if (light !== st.lightTheme) useStore.setState({ lightTheme: light });

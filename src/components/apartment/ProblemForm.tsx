@@ -205,7 +205,7 @@ export function ProblemForm({ apartments, currentUser, onClose, onSaved }: {
       <div className="fixed inset-0 bg-black/50 z-[130]" onClick={onClose} />
       <div
         data-problem-form
-        dir={ui.isRtl ? 'rtl' : 'ltr'}
+        dir="ltr"
         className="fixed z-[140] bg-white rounded-2xl shadow-2xl flex flex-col overflow-hidden"
         style={{ left: '50%', top: '50%', transform: 'translate(-50%, -50%)', width: 'min(560px, 94vw)', maxHeight: 'min(760px, 92dvh)' }}
         onPointerDown={e => e.stopPropagation()}

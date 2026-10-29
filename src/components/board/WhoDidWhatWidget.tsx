@@ -181,7 +181,7 @@ export function WhoDidWhatWidget({ el, c }: { el: CanvasElement; c: WidgetCtx })
 
   return (
     <Frame title={title} icon={ListChecks} tone="#0f766e">
-      <div className="h-full flex flex-col min-h-0" dir={he ? 'rtl' : 'ltr'} data-who-did-what>
+      <div className="h-full flex flex-col min-h-0" dir="ltr" data-who-did-what>
         {lines.length > 0 && (
           <div className="flex items-baseline gap-1.5 flex-shrink-0 mb-0.5 text-[9.5px] text-slate-400" data-wdw-summary>
             {summary.ids && c.showList && !sample

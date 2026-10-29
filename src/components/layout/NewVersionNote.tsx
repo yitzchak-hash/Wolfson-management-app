@@ -43,7 +43,7 @@ export function NewVersionNote() {
   }, []);
   if (!ready || dismissed) return null;
   return (
-    <div data-new-version dir={isRtl ? 'rtl' : 'ltr'}
+    <div data-new-version dir="ltr"
       className="fixed bottom-4 start-4 z-[90] flex items-center gap-2 rounded-full bg-[#1e3a5f] text-white shadow-lg ps-3 pe-1.5 py-1.5 text-[12.5px] font-semibold">
       <span>{isRtl ? 'גרסה חדשה של האפליקציה מוכנה' : 'A newer version of the app is ready'}</span>
       <button data-new-version-reload onClick={() => window.location.reload()}

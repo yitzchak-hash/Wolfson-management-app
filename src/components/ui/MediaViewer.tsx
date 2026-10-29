@@ -210,6 +210,10 @@ export function MediaViewer({
         ) : kind === 'video' ? (
           (playable || bytesSrc) && !loadFailed
             ? <video data-viewer-video src={playable || bytesSrc!} controls autoPlay playsInline className="max-w-full max-h-full"
+                // With its sound (owner, 2026-10-29: "I can't hear the video"):
+                // some browsers start an autoplaying film muted; opening the
+                // viewer was the person's own tap, so the sound goes on.
+                onLoadedMetadata={e => { const v = e.currentTarget; v.muted = false; v.defaultMuted = false; if (v.volume === 0) v.volume = 1; }}
                 onError={() => { if (!playable && isDriveStreamUrl(bytesSrc)) setStreamFailed(true); }} />
             : loadFailed
               ? <div className="flex flex-col items-center gap-3">

@@ -232,7 +232,7 @@ export function StagePicker({
         <div
           ref={panelRef}
           data-stage-panel
-          dir={rtl ? 'rtl' : 'ltr'}
+          dir="ltr"
           className="fixed z-[140] bg-white border border-gray-200 rounded-xl shadow-2xl overflow-hidden flex flex-col"
           style={{ left: pos.left, top: pos.top, width: Math.max(pos.width, 340), maxHeight: 'min(520px, calc(100dvh - 24px))' }}
         >

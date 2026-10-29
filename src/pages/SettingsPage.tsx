@@ -25,7 +25,7 @@ import { Toast } from '../components/ui/Toast';
 import { BoardRegionPicker } from '../components/board/BoardRegionPicker';
 import { NewWorkspace } from '../components/settings/NewWorkspace';
 import { ToolbarEditor } from '../components/settings/ToolbarEditor';
-import { SettingsShell, type SettingsGroup } from '../components/settings/SettingsShell';
+import { SettingsShell, SettingBox, SettingRow, type SettingsGroup } from '../components/settings/SettingsShell';
 import { BackupsPage } from '../components/settings/BackupsPage';
 import { ShieldCheck, HardHat, FolderKanban, Monitor, Cloud, ListChecks, FileInput, FileSpreadsheet } from 'lucide-react';
 import { WorkerLevelsPanel, WorkerLevelPicker, WorkerPermissionOverrides } from '../components/settings/WorkerLevels';
@@ -2831,10 +2831,22 @@ function ThisComputerCard({ onToast }: { onToast: (msg: string, type?: 'success'
 function AppSettingsTab({ lightTheme, setLightTheme, onToast }: {
   lightTheme: boolean; setLightTheme: (v: boolean) => void; onToast: (msg: string, type?: 'success' | 'error') => void;
 }) {
-  const { users, mainUiStrings: s } = useStore();
+  const { mainUiStrings: s } = useStore();
+  const uiLang = useStore(st => st.uiLang);
+  const setUiLang = useStore(st => st.setUiLang);
 
   return (
     <div className="space-y-5">
+      {/* Each person's own language (owner, 2026-10-29): the words change,
+          the layout stays where it is. Follows the person to any computer. */}
+      <SettingBox>
+        <SettingRow label="Language" htmlFor="ui-lang">
+          <select id="ui-lang" className="tz-select" value={uiLang} onChange={e => setUiLang(e.target.value as 'en' | 'he')}>
+            <option value="en">English</option>
+            <option value="he">עברית</option>
+          </select>
+        </SettingRow>
+      </SettingBox>
       <div className="bg-white border border-gray-200 rounded-xl p-5">
         <h2 className="font-semibold text-gray-800 mb-4 flex items-center gap-2">
           {lightTheme ? <Sun size={18} className="text-amber-500" /> : <Moon size={18} className="text-blue-500" />}
