@@ -791,3 +791,12 @@ export async function fsBatchSet(collectionName: string, items: Array<{ id: stri
     _notifySyncError();
   }
 }
+
+/** Listen to ONE document (null when it does not exist). */
+export function fsListenDoc(collectionName: string, docId: string, callback: (data: Record<string, unknown> | null) => void): Unsubscribe {
+  if (!db) return () => {};
+  return onSnapshot(doc(db, collectionName, docId), snap => {
+    if (!snap.metadata.hasPendingWrites) _countReads(1, collectionName);
+    callback(snap.exists() ? snap.data() as Record<string, unknown> : null);
+  }, e => _notifyReadError(collectionName, e));
+}

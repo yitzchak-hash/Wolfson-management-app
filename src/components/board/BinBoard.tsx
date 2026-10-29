@@ -27,6 +27,7 @@ import { snapBox, snapResize, Box, Guide } from '../../data/snapping';
 import { SnapGuides } from './SnapGuides';
 import { isFingerTouch } from '../../hooks/useTouchGestures';
 
+import { prefGet, prefSet } from '../../data/prefs';
 // TILE_W / TILE_H / tileSize come from BoardItems — the group used to carry
 // its own 190x116 pair, which is exactly why a job looked like a different
 // kind of thing depending on which window you were looking at.
@@ -296,10 +297,10 @@ export function BinBoard({ bin, onClose, onOpenJob, highlightJobId, onRestored }
    * something the whole company should have to agree on.
    */
   const [sort, setSort] = useState<BinSort>(() => {
-    const v = localStorage.getItem('bin_sort');
+    const v = prefGet('bin_sort');
     return (SORTS.some(s2 => s2.id === v) ? v : 'filed-new') as BinSort;
   });
-  useEffect(() => { localStorage.setItem('bin_sort', sort); }, [sort]);
+  useEffect(() => { prefSet('bin_sort', sort); }, [sort]);
 
   /** The group's own jobs — one array per data change, so the index built on it is reused per keystroke. */
   const binJobs = useMemo(

@@ -1,5 +1,6 @@
 import { useCallback, useRef, useState } from 'react';
 
+import { prefGet, prefSet } from './prefs';
 /**
  * Whether a task's MESSAGES are showing — one rule for the office's drawer
  * and the worker's phone, so the two cannot drift.
@@ -14,7 +15,7 @@ import { useCallback, useRef, useState } from 'react';
 const KEY = 'thread_open_default';
 
 function storedDefault(): boolean {
-  try { return localStorage.getItem(KEY) !== '0'; } catch { return true; }
+  try { return prefGet(KEY) !== '0'; } catch { return true; }
 }
 
 export function useThreadFold() {
@@ -32,7 +33,7 @@ export function useThreadFold() {
 
   const toggle = useCallback((taskId: string) => {
     const next = !(ownRef.current[taskId] ?? fbRef.current);
-    try { localStorage.setItem(KEY, next ? '1' : '0'); } catch { /* private window */ }
+    try { prefSet(KEY, next ? '1' : '0'); } catch { /* private window */ }
     setFallback(next);
     setOwn(prev => ({ ...prev, [taskId]: next }));
   }, []);

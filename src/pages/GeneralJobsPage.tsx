@@ -230,6 +230,7 @@ function genId(prefix: string) {
 import { MovablePanel } from '../components/board/MovablePanel';
 import { usePhone } from '../data/usePhone';
 
+import { prefGet, prefSet, prefRemove } from '../data/prefs';
 // ─── Eraser geometry ──────────────────────────────────────────────────────────
 // The geometry itself lives in `src/data/boardInk.ts`, because a GROUP WINDOW
 // is a board too and drawing had to reach it. Three of the eraser's rules were
@@ -964,7 +965,7 @@ export function GeneralJobsPage() {
   const defaultZoomKey = `board_default_zoom_${currentProjectId}`;
   // The key holds a DISPLAYED fraction; the state is the REAL zoom. With
   // nothing stored the board opens at its own "100%" — the old 75%.
-  const [zoom, setZoom] = useState(() => defaultZoomFromStored(localStorage.getItem(defaultZoomKey)));
+  const [zoom, setZoom] = useState(() => defaultZoomFromStored(prefGet(defaultZoomKey)));
   const [pan, setPan] = useState({ x: 0, y: 0 });
   /**
    * The live zoom and pan, for handlers that must compute both together.
@@ -2266,7 +2267,7 @@ export function GeneralJobsPage() {
        * home framing: the settled top-left, margin in, below the chrome.
        */
       try {
-        const raw = localStorage.getItem(`board_view_${currentProjectId}_${activeBoardView ?? 'main'}`);
+        const raw = prefGet(`board_view_${currentProjectId}_${activeBoardView ?? 'main'}`);
         const saved = raw ? JSON.parse(raw) : null;
         if (saved && Number.isFinite(saved.x) && Number.isFinite(saved.y)
             && Number.isFinite(saved.z) && saved.z > 0) {
@@ -2294,7 +2295,7 @@ export function GeneralJobsPage() {
     if (isPhoneBoard || !panNormalised.current) return;
     const t = setTimeout(() => {
       try {
-        localStorage.setItem(
+        prefSet(
           `board_view_${currentProjectId}_${activeBoardView ?? 'main'}`,
           JSON.stringify({ x: Math.round(pan.x), y: Math.round(pan.y), z: zoom }));
       } catch { /* storage full — the memory is a convenience */ }
@@ -6726,8 +6727,8 @@ function isPointerNode(el: CanvasElement | undefined): boolean {
                 <div className="flex items-center gap-1 flex-1">
                   <input
                     type="number" min={25} max={300} step={5}
-                    key={String(Number(localStorage.getItem(defaultZoomKey)) || 1)}
-                    defaultValue={Math.round((Number(localStorage.getItem(defaultZoomKey)) || 1) * 100)}
+                    key={String(Number(prefGet(defaultZoomKey)) || 1)}
+                    defaultValue={Math.round((Number(prefGet(defaultZoomKey)) || 1) * 100)}
                     data-default-zoom
                     onBlur={e => {
                       // The key holds the DISPLAYED fraction (1.5 = 150%);
@@ -6736,12 +6737,12 @@ function isPointerNode(el: CanvasElement | undefined): boolean {
                       if (!Number.isFinite(pct)) return;
                       // Cleared, or 100: back to the board's own 100%.
                       if (pct === 100 || !e.target.value.trim()) {
-                        localStorage.removeItem(defaultZoomKey);
+                        prefRemove(defaultZoomKey);
                         setZoom(HOME_ZOOM); setPan(pp => clampPanRef.current(pp, HOME_ZOOM));
                         return;
                       }
                       const v = Math.min(3, Math.max(0.25, pct / 100));
-                      localStorage.setItem(defaultZoomKey, String(v));
+                      prefSet(defaultZoomKey, String(v));
                       const real = defaultZoomFromStored(String(v));
                       setZoom(real); setPan(pp => clampPanRef.current(pp, real));
                       setToast(`The board will open at ${Math.round(v * 100)}%`);
@@ -6751,7 +6752,7 @@ function isPointerNode(el: CanvasElement | undefined): boolean {
                 </div>
                 <button
                   onClick={() => {
-                    localStorage.setItem(defaultZoomKey, storedFromRealZoom(zoom));
+                    prefSet(defaultZoomKey, storedFromRealZoom(zoom));
                     setToast(`The board will open at ${shownZoomPct(zoom)}%`);
                   }}
                   title="Save the current zoom as this computer's starting zoom"

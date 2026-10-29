@@ -295,6 +295,68 @@ await setDoc(doc(db, 'general_canvasElements', 'CE-book'), { id: 'CE-book', type
   check(J(book['n:Moshe|2026-11-02']?.map(e => e.id)) === J(['e1']), 'a card taken off a day is gone, the other card stays', J(book['n:Moshe|2026-11-02']));
 }
 
+// ════ 5 · A NEW COMPUTER SEES EVERYTHING ══════════════════════════════════
+// Owner, 2026-10-29: "nothing lives on the computer … even if we open up new
+// computers". Computer A makes choices; a brand-new computer B, same person,
+// must show all of them.
+scene = 'new computer';
+await seed();
+{
+  const ctxA = await freshBrowser();
+  const a = await open(ctxA, '/general');
+  await a.evaluate(() => window.__store.getState().setCurrentProject('general'));
+  await synced(a, 'general');
+  await sleep(2500);
+  await a.evaluate(() => {
+    const st = window.__store.getState();
+    st.updateCanvasElement('CE-note', { x: 1234, y: 567 });               // a widget moved
+    st.updateApartment('G-3', { canvasX: 4321, canvasY: 765 }, st.currentUser);   // a job moved
+    st.saveBoardLayout('Before the move', false);                       // an arrangement saved
+    st.setDashboardLayout(['activity', 'apt-stats'], ['task-stats']);   // dashboard arranged
+    st.setLightTheme(false);                                            // dark theme
+    st.setActiveBoardView('');                                          // (main board)
+  });
+  // personal choices made through the screens' own storage calls
+  await a.evaluate(async () => {
+    const p = await import('/src/data/prefs.ts');
+    p.prefSet('calendar_scope', 'here');
+    p.prefSet('board_view_general_main', JSON.stringify({ x: 11, y: 22, z: 0.5 }));
+    p.prefSet('plan_ink_saved', JSON.stringify(['#ff0000']), 'office');
+  });
+  await sleep(4500);   // personal choices go up 1.5 s after they settle
+  await ctxA.close();
+
+  const ctxB = await freshBrowser();      // nothing on this computer but the sign-in
+  const b = await open(ctxB, '/general');
+  await b.evaluate(() => window.__store.getState().setCurrentProject('general'));
+  await synced(b, 'general');
+  await sleep(3500);
+  const seen = await b.evaluate(async () => {
+    const st = window.__store.getState();
+    const p = await import('/src/data/prefs.ts');
+    return {
+      note: st.canvasElements.find(e => e.id === 'CE-note'),
+      job: st.apartments.find(a => a.id === 'G-3'),
+      layouts: (st.boardLayouts.general ?? []).map(l => l.label),
+      dash: st.boardSettings.general?.dashboardWidgetOrder,
+      hidden: st.boardSettings.general?.dashboardHiddenWidgets,
+      light: st.lightTheme,
+      cal: p.prefGet('calendar_scope'),
+      view: p.prefGet('board_view_general_main'),
+      ink: p.prefGet('plan_ink_saved', 'office'),
+    };
+  });
+  await ctxB.close();
+  check(seen.note?.x === 1234 && seen.note?.y === 567, 'new computer: the moved widget is where it was put');
+  check(seen.job?.canvasX === 4321 && seen.job?.canvasY === 765, 'new computer: the moved job is where it was put');
+  check(J(seen.layouts) === J(['Before the move']), 'new computer: the saved board arrangement is there', J(seen.layouts));
+  check(J(seen.dash) === J(['activity', 'apt-stats']) && J(seen.hidden) === J(['task-stats']), 'new computer: the dashboard is arranged the same');
+  check(seen.light === false, 'new computer: the person\'s dark theme came with them');
+  check(seen.cal === 'here', 'new computer: a screen\'s choice (calendar scope) came with them');
+  check(seen.view === J({ x: 11, y: 22, z: 0.5 }), 'new computer: the board\'s zoom and place came with them');
+  check(seen.ink === J(['#ff0000']), 'new computer: the office\'s saved markup colours are there');
+}
+
 await browser.close();
 if (errs.length) console.log('page errors:', [...new Set(errs)].slice(0, 5));
 console.log(fails ? `\n${fails} FAILED` : '\nALL PASS');

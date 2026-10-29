@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { ChevronDown, ChevronRight, ExternalLink } from 'lucide-react';
 
+import { prefGet, prefSet } from '../../data/prefs';
 /**
  * A link row that folds away (owner, 2026-10-08: "the Zoho should be
  * collapsible, as well as the Drive folder").
@@ -21,7 +22,7 @@ import { ChevronDown, ChevronRight, ExternalLink } from 'lucide-react';
 const KEY = (id: string) => `drawer_fold_${id}`;
 
 function readOpen(id: string): boolean {
-  try { return localStorage.getItem(KEY(id)) === '1'; } catch { return false; }
+  try { return prefGet(KEY(id)) === '1'; } catch { return false; }
 }
 
 export function LinkSection({
@@ -45,7 +46,7 @@ export function LinkSection({
   const toggle = () => {
     const next = !open;
     setOpen(next);
-    try { localStorage.setItem(KEY(id), next ? '1' : '0'); } catch { /* private mode */ }
+    try { prefSet(KEY(id), next ? '1' : '0'); } catch { /* private mode */ }
   };
   const openHref = href?.trim()
     ? (href.trim().startsWith('http') ? href.trim() : `https://${href.trim()}`)

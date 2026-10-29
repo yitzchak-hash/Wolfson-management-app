@@ -25,6 +25,7 @@
 import { useSyncExternalStore } from 'react';
 import { detectLang, type Lang } from './translate';
 
+import { prefGet, prefSet } from './prefs';
 export type SpeakLang = Lang;
 
 const PREFIX = 'speak_lang_';
@@ -74,7 +75,7 @@ function read(key: string): SpeakLang | null {
   if (memo.has(key)) return memo.get(key)!;
   let v: SpeakLang | null = null;
   try {
-    const raw = localStorage.getItem(PREFIX + key);
+    const raw = prefGet(PREFIX + key);
     if (raw === 'en' || raw === 'he' || raw === 'ru') v = raw;
   } catch { /* private window — nothing remembered */ }
   memo.set(key, v);
@@ -96,7 +97,7 @@ export function activeSpeakLang(): SpeakLang | null { return read(active); }
 export function setSpeakLang(lang: SpeakLang) {
   if (read(active) === lang) return;
   memo.set(active, lang);
-  try { localStorage.setItem(PREFIX + active, lang); } catch { /* quota */ }
+  try { prefSet(PREFIX + active, lang); } catch { /* quota */ }
   emit();
 }
 

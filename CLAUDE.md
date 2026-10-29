@@ -21,6 +21,13 @@ Vercel serverless functions in `/api`.
   wolfson-management-app.vercel.app.
 - Vercel's plan allows at most 12 files in `/api`. A 13th breaks every deploy.
 - Never commit real client data or secrets.
+- **EVERYTHING lives in the cloud and is in the full backup** (owner, 2026-10-29: "any new features we add
+  should also be added to these backup systems. Everything."). A new feature that saves anything saves it
+  to Firestore, through `fsPatch` (only what changed, never a whole record from this computer's copy) or
+  `fsSet` for a brand-new record. A new collection goes into `lib/fullBackup.js` (WORKSPACE_COLLECTIONS or
+  GLOBAL_COLLECTIONS). Nothing a person would expect on a new computer is kept only in the browser; the only
+  browser keys allowed are in `src/data/deviceOnly.ts`, each with its reason. `npm run build` runs
+  `scripts/check-backup-coverage.mjs` first and FAILS if a collection or a browser key breaks this rule.
 - The history of every past round is in `docs/archive/` if you need it.
 
 ## How to reply to the owner

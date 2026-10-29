@@ -41,11 +41,16 @@ export function DashboardPage() {
   const {
     apartments: allApartments, stages: allStages, activityLogs, contractorAssignments,
     mainUiStrings: s, setPendingOpenAptId,
-    dashboardWidgetOrder, dashboardHiddenWidgets, setDashboardLayout,
+    dashboardWidgetOrder: localWidgetOrder, dashboardHiddenWidgets: localHiddenWidgets, setDashboardLayout,
     buildings, currentProjectId, projects, contractors, users,
     canvasElements, addCanvasElement, updateCanvasElement, deleteCanvasElement,
     contractorPhotos, setCurrentProject, setPendingFocus,
   } = useStore();
+  // The layout lives in the cloud (boardSettings); this computer's older
+  // local copy is only the fallback until it has been saved once.
+  const cloudLayout = useStore(st => st.boardSettings[st.currentProjectId]);
+  const dashboardWidgetOrder = cloudLayout?.dashboardWidgetOrder ?? localWidgetOrder;
+  const dashboardHiddenWidgets = cloudLayout?.dashboardHiddenWidgets ?? localHiddenWidgets;
   const stages = allStages.filter(st => currentProjectId === 'general' ? st.projectId === 'general' : !st.projectId);
   // Scope apartments to current project only (guard against stale localStorage)
   const apartments = currentProjectId === 'general'

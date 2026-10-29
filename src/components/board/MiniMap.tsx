@@ -3,6 +3,7 @@ import { Maximize2, Move } from 'lucide-react';
 import { Apartment, CanvasElement, Stage } from '../../types';
 import { usePanelDrag } from './MovablePanel';
 
+import { prefGet, prefSet } from '../../data/prefs';
 /**
  * Board overview, bottom-right.
  *
@@ -73,7 +74,7 @@ const clampW = (n: number) => Math.max(120, Math.min(640, Math.round(n)));
 const clampH = (n: number) => Math.max(84, Math.min(520, Math.round(n)));
 function readOverviewSize(): { w: number; h: number } {
   try {
-    const raw = JSON.parse(localStorage.getItem(OVERVIEW_KEY) || 'null');
+    const raw = JSON.parse(prefGet(OVERVIEW_KEY) || 'null');
     if (raw && typeof raw.w === 'number' && typeof raw.h === 'number') {
       return { w: clampW(raw.w), h: clampH(raw.h) };
     }
@@ -81,7 +82,7 @@ function readOverviewSize(): { w: number; h: number } {
   return OVERVIEW_DEFAULT;
 }
 function writeOverviewSize(s: { w: number; h: number }) {
-  try { localStorage.setItem(OVERVIEW_KEY, JSON.stringify(s)); } catch { /* private mode */ }
+  try { prefSet(OVERVIEW_KEY, JSON.stringify(s)); } catch { /* private mode */ }
 }
 
 export const MiniMap = React.memo(function MiniMap({

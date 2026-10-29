@@ -1,3 +1,4 @@
+import { prefGet, prefSet, prefRemove } from './prefs';
 /**
  * What this machine remembers about searching — recent queries and the
  * results people chose. Per machine, never synced: what you searched for is
@@ -16,13 +17,13 @@ export interface PickMemory { n: number; last: number; qs: string[] }
 
 export function readRecent(): string[] {
   try {
-    const raw = localStorage.getItem(RECENT_KEY);
+    const raw = prefGet(RECENT_KEY);
     const list = raw ? JSON.parse(raw) : [];
     return Array.isArray(list) ? list.filter(x => typeof x === 'string').slice(0, RECENT_MAX) : [];
   } catch { return []; }
 }
 export function writeRecent(list: string[]) {
-  try { localStorage.setItem(RECENT_KEY, JSON.stringify(list.slice(0, RECENT_MAX))); } catch { /* private window */ }
+  try { prefSet(RECENT_KEY, JSON.stringify(list.slice(0, RECENT_MAX))); } catch { /* private window */ }
 }
 /** Remember a query, newest first and never twice. Returns the new list. */
 export function rememberQuery(q: string): string[] {
@@ -40,7 +41,7 @@ export function pickKey(projectId: string, docId: string): string {
 
 export function readPicks(): Record<string, PickMemory> {
   try {
-    const raw = localStorage.getItem(PICKS_KEY);
+    const raw = prefGet(PICKS_KEY);
     const obj = raw ? JSON.parse(raw) : {};
     return obj && typeof obj === 'object' ? obj : {};
   } catch { return {}; }
@@ -61,12 +62,12 @@ export function notePick(key: string, query: string) {
         .slice(0, ids.length - PICKS_MAX)
         .forEach(k => delete picks[k]);
     }
-    localStorage.setItem(PICKS_KEY, JSON.stringify(picks));
+    prefSet(PICKS_KEY, JSON.stringify(picks));
   } catch { /* private window */ }
 }
 
 export function clearPicks() {
-  try { localStorage.removeItem(PICKS_KEY); } catch { /* private window */ }
+  try { prefRemove(PICKS_KEY); } catch { /* private window */ }
 }
 
 /** How much a pick still counts, 0..n — halved every 30 days. */

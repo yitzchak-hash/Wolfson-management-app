@@ -35,6 +35,7 @@ import {
   shareFileToDrive, driveThumbUrl,
 } from '../data/driveApi';
 
+import { prefGet, prefSet } from '../data/prefs';
 const CAT_COLORS: Record<ContractorCategory, string> = {
   drywall: '#f59e0b', ac: '#3b82f6', general: '#10b981',
 };
@@ -308,11 +309,11 @@ export function TasksPage() {
    * re-read whenever one lands. Remembered per machine.
    */
   const [scope, setScopeState] = useState<'here' | 'all'>(() => {
-    try { return localStorage.getItem(TASK_SCOPE_KEY) === 'all' ? 'all' : 'here'; } catch { return 'here'; }
+    try { return prefGet(TASK_SCOPE_KEY) === 'all' ? 'all' : 'here'; } catch { return 'here'; }
   });
   const setScope = (v: 'here' | 'all') => {
     setScopeState(v);
-    try { localStorage.setItem(TASK_SCOPE_KEY, v); } catch { /* private window — the choice lasts the visit */ }
+    try { prefSet(TASK_SCOPE_KEY, v); } catch { /* private window — the choice lasts the visit */ }
   };
   const snapTick = useStore(st => st.snapshotTick);
   /**

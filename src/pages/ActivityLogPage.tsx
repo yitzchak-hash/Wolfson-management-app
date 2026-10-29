@@ -20,6 +20,7 @@ import { QuickAddTaskPanel } from '../components/apartment/QuickAddTaskPanel';
 import { Toast } from '../components/ui/Toast';
 import { format } from 'date-fns';
 
+import { prefGet, prefSet } from '../data/prefs';
 /** How many rows draw before "Show more" — a busy month is thousands of records. */
 const PAGE = 120;
 /** How many day cards draw before "Show more days". */
@@ -29,10 +30,10 @@ const DAY_PAGE = 20;
 type LogView = 'day' | 'all';
 const VIEW_KEY = 'activity_view';
 function readView(): LogView {
-  try { return localStorage.getItem(VIEW_KEY) === 'all' ? 'all' : 'day'; } catch { return 'day'; }
+  try { return prefGet(VIEW_KEY) === 'all' ? 'all' : 'day'; } catch { return 'day'; }
 }
 function writeView(v: LogView) {
-  try { localStorage.setItem(VIEW_KEY, v); } catch { /* a private window — the choice lasts the visit */ }
+  try { prefSet(VIEW_KEY, v); } catch { /* a private window — the choice lasts the visit */ }
 }
 /** A visit's own pictures: uploaded on that apartment within the visit (ten minutes either side). */
 const THUMB_SLACK_MS = 10 * 60 * 1000;

@@ -22,6 +22,7 @@ import { Contractor, ContractorAssignment, ContractorNote, PortalLang, aptLabel,
 import { TrText } from '../ui/Translated';
 import { chime, enablePush, notifyHere, pushConfigured, pushPermission, pushRemembered, pushSupported } from '../../data/pushClient';
 
+import { prefGet, prefSet } from '../../data/prefs';
 const W = {
   en: { ask: 'Get a sound when the office sends you work', on: 'Turn on', later: 'Not now', newTask: 'New task for you', message: (who: string) => `Message from ${who || 'the office'}`, voice: 'Voice message', photo: 'Photo', file: 'File' },
   he: { ask: 'לקבל צליל כשהמשרד שולח לך עבודה', on: 'הפעלה', later: 'לא עכשיו', newTask: 'משימה חדשה בשבילך', message: (who: string) => `הודעה מ${who || 'המשרד'}`, voice: 'הודעה קולית', photo: 'תמונה', file: 'קובץ' },
@@ -142,7 +143,7 @@ export function ArrivalWatcher({ contractor, lang, onOpen }: {
   useEffect(() => {
     let seen: Set<string> | null = null;
     try {
-      const raw = localStorage.getItem(seenKey);
+      const raw = prefGet(seenKey);
       seen = raw ? new Set(JSON.parse(raw) as string[]) : null;
     } catch { seen = null; }
     const ids = [...current.keys()];
@@ -160,7 +161,7 @@ export function ArrivalWatcher({ contractor, lang, onOpen }: {
     // Remembered only once the arrival has settled — or the baseline written
     // during the first seconds would swallow what lands a moment later.
     if (!seen || settled.current) {
-      try { localStorage.setItem(seenKey, JSON.stringify(ids.slice(-400))); } catch { /* private mode */ }
+      try { prefSet(seenKey, JSON.stringify(ids.slice(-400))); } catch { /* private mode */ }
     }
   }, [current, seenKey]);
 

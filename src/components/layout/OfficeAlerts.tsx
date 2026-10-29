@@ -24,6 +24,7 @@ import { chime, notifyHere } from '../../data/pushClient';
 import { rememberTaskFocus } from '../../data/taskFocus';
 import { TrText } from '../ui/Translated';
 
+import { prefGet, prefSet } from '../../data/prefs';
 interface Arrival {
   key: string;
   kind: 'message' | 'closed';
@@ -120,7 +121,7 @@ export function OfficeAlerts() {
   useEffect(() => {
     let seen: Set<string> | null = null;
     try {
-      const raw = localStorage.getItem(seenKey);
+      const raw = prefGet(seenKey);
       seen = raw ? new Set(JSON.parse(raw) as string[]) : null;
     } catch { seen = null; }
     const ids = [...current.keys()];
@@ -137,7 +138,7 @@ export function OfficeAlerts() {
       timer.current = setTimeout(() => setToast(null), 12000);
     }
     if (!seen || settled.current) {
-      try { localStorage.setItem(seenKey, JSON.stringify(ids.slice(-600))); } catch { /* private mode */ }
+      try { prefSet(seenKey, JSON.stringify(ids.slice(-600))); } catch { /* private mode */ }
     }
   }, [current, seenKey, settledAt]);
 

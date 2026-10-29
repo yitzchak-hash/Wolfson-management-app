@@ -2,6 +2,7 @@ import React, { useEffect, useRef } from 'react';
 import { Plus } from 'lucide-react';
 import { usePlanDownload } from '../../data/planCache';
 
+import { prefGet, prefSet } from '../../data/prefs';
 /**
  * One tab of the plan viewer/studio — a browser-style tab over one Drive file.
  *
@@ -30,7 +31,7 @@ export function mintTab(fileId: string, name: string, kind: PlanTab['kind'] = 'o
 
 export function loadTabState(key: string): { tabs: PlanTab[]; activeId: string } {
   try {
-    const raw = localStorage.getItem(key);
+    const raw = prefGet(key);
     if (raw) {
       const d = JSON.parse(raw);
       if (Array.isArray(d.tabs) && d.tabs.length) {
@@ -42,7 +43,7 @@ export function loadTabState(key: string): { tabs: PlanTab[]; activeId: string }
 }
 
 export function saveTabState(key: string, tabs: PlanTab[], activeId: string): void {
-  try { localStorage.setItem(key, JSON.stringify({ tabs, activeId })); } catch { /* private mode */ }
+  try { prefSet(key, JSON.stringify({ tabs, activeId })); } catch { /* private mode */ }
 }
 
 /**

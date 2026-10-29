@@ -7,6 +7,7 @@ import {
 import { CanvasElement, MAIN_BOARD, Project } from '../../types';
 import { WIDGET_PREVIEW, WIDGET_PREVIEW_COLOR } from '../../data/widgetFields';
 
+import { prefGet, prefSet } from '../../data/prefs';
 /**
  * Big enough to read the widget, not the label.
  *
@@ -209,16 +210,16 @@ export function WidgetStore({ onPick, onClose, only, destLabel = 'the board', pl
    * one flat list of everything. Remembered per machine.
    */
   const [layout, setLayout] = useState<'cats' | 'flat'>(() =>
-    localStorage.getItem(LAYOUT_KEY) === 'flat' ? 'flat' : 'cats');
-  const pickLayout = (v: 'cats' | 'flat') => { setLayout(v); localStorage.setItem(LAYOUT_KEY, v); };
+    prefGet(LAYOUT_KEY) === 'flat' ? 'flat' : 'cats');
+  const pickLayout = (v: 'cats' | 'flat') => { setLayout(v); prefSet(LAYOUT_KEY, v); };
   /** '' = every shelf at once; otherwise the one shelf being browsed. */
-  const [shelf, setShelf] = useState<string>(() => localStorage.getItem(SHELF_KEY) ?? '');
-  const pickShelf = (v: string) => { setShelf(v); localStorage.setItem(SHELF_KEY, v); };
+  const [shelf, setShelf] = useState<string>(() => prefGet(SHELF_KEY) ?? '');
+  const pickShelf = (v: string) => { setShelf(v); prefSet(SHELF_KEY, v); };
   const [scale, setScale] = useState(() => {
-    const v = Number(localStorage.getItem(SIZE_KEY));
+    const v = Number(prefGet(SIZE_KEY));
     return v >= 0.7 && v <= 1.5 ? v : 1;
   });
-  const pickScale = (v: number) => { setScale(v); localStorage.setItem(SIZE_KEY, String(v)); };
+  const pickScale = (v: number) => { setScale(v); prefSet(SIZE_KEY, String(v)); };
   const [sort, setSort] = useState<'useful' | 'az' | 'new'>('useful');
   /** What you have taken this visit, so the shelf can say so. */
   const [taken, setTaken] = useState<Record<string, number>>({});

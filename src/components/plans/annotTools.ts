@@ -1,5 +1,6 @@
 import { AnnTool } from '../../types';
 
+import { prefGet, prefSet } from '../../data/prefs';
 /**
  * The markup kit.
  *
@@ -130,20 +131,20 @@ const SAVED_KEY = 'plan_ink_saved';
 
 export function savedColors(): string[] {
   try {
-    const raw = localStorage.getItem(SAVED_KEY);
+    const raw = prefGet(SAVED_KEY, 'office');
     return raw ? (JSON.parse(raw) as string[]).slice(0, 18) : [];
   } catch { return []; }
 }
 
 export function saveColor(hex: string): string[] {
   const next = [hex, ...savedColors().filter(c => c.toLowerCase() !== hex.toLowerCase())].slice(0, 18);
-  try { localStorage.setItem(SAVED_KEY, JSON.stringify(next)); } catch { /* private mode */ }
+  try { prefSet(SAVED_KEY, JSON.stringify(next), 'office'); } catch { /* private mode */ }
   return next;
 }
 
 export function forgetColor(hex: string): string[] {
   const next = savedColors().filter(c => c.toLowerCase() !== hex.toLowerCase());
-  try { localStorage.setItem(SAVED_KEY, JSON.stringify(next)); } catch { /* private mode */ }
+  try { prefSet(SAVED_KEY, JSON.stringify(next), 'office'); } catch { /* private mode */ }
   return next;
 }
 
@@ -152,7 +153,7 @@ const RECENT_KEY = 'plan_ink_recent';
 
 export function recentColors(): string[] {
   try {
-    const raw = localStorage.getItem(RECENT_KEY);
+    const raw = prefGet(RECENT_KEY);
     return raw ? (JSON.parse(raw) as string[]).slice(0, 8) : [];
   } catch { return []; }
 }
@@ -160,7 +161,7 @@ export function recentColors(): string[] {
 export function rememberColor(hex: string) {
   try {
     const next = [hex, ...recentColors().filter(c => c !== hex)].slice(0, 8);
-    localStorage.setItem(RECENT_KEY, JSON.stringify(next));
+    prefSet(RECENT_KEY, JSON.stringify(next));
   } catch { /* private mode — a lost colour history is not worth an error */ }
 }
 

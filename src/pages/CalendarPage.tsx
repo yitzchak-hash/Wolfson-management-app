@@ -21,6 +21,7 @@ import { TimeOffDialog } from '../components/board/TimeOffDialog';
 import { useMedia } from '../data/usePhone';
 import { printTable } from '../data/printing';
 
+import { prefGet, prefSet } from '../data/prefs';
 /**
  * THE calendar — one, for every workspace (owner, 2026-10-12, "Calendar and
  * Time Off", all stars). It replaces the header's all-workspace calendar and
@@ -98,9 +99,9 @@ export function CalendarPage() {
   const narrow = useMedia('(max-width: 767px)');
 
   const [scope, setScope] = useState<'here' | 'all'>(() => {
-    try { return localStorage.getItem('calendar_scope') === 'here' ? 'here' : 'all'; } catch { return 'all'; }
+    try { return prefGet('calendar_scope') === 'here' ? 'here' : 'all'; } catch { return 'all'; }
   });
-  const pickScope = (v: 'here' | 'all') => { setScope(v); try { localStorage.setItem('calendar_scope', v); } catch { /* private mode */ } };
+  const pickScope = (v: 'here' | 'all') => { setScope(v); try { prefSet('calendar_scope', v); } catch { /* private mode */ } };
   const [worker, setWorker] = useState('');
   const [showDone, setShowDone] = useState(true);
   const [month, setMonth] = useState(() => monthStart(new Date()));

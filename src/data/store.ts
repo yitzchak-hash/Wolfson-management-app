@@ -9,6 +9,7 @@ import type { UndoDiff, UndoWorld } from './undoWords';
 import { create } from 'zustand';
 import { Apartment, CanvasElement, ActivityLog, Project, Stage, StageNote, StageNoteEntry, StageNoteAttachment, StageNoteVersion, GeneralNoteVersion, User, Building, Contractor, ContractorAssignment, ContractorNote, ContractorPhoto, BackupSnapshot, DataSummary, OfficeNoteFile, BackupFrequency, DriveExportFrequency, BackupLogEntry, ContractorUiStrings, DEFAULT_CONTRACTOR_UI_STRINGS, MainUiStrings, DEFAULT_MAIN_UI_STRINGS, HEBREW_MAIN_UI_STRINGS, BoardSetting, BoardSettingKey, BoardLayout, PlanPin, PlanAnnotation, BoardView, Employee, TimePunch, TimeClockSettings, WorkerLevel, StageSuggestion, FocusIntent, StageMark } from '../types';
 import { ReportDef } from './reportModel';
+import { setPrefsPerson, prefGet, prefSet, onPrefsChange } from './prefs';
 
 // Always merge stored mainUiStrings ON TOP of the fresh preset so code-added keys
 // are never missing even when localStorage has an older saved version.
@@ -920,6 +921,12 @@ function getDefaultBuildings(projectId: string): Building[] {
   if (projectId === 'netiv') return NETIV_BUILDINGS;
   if (projectId === 'general') return [];
   if (projectId === 'wolfson') return DEFAULT_BUILDINGS;
+  // A workspace made in the app keeps its buildings in the cloud
+  // (boardSettings.<id>.buildings), so a new computer has them too.
+  try {
+    const fromCloud = useStore.getState().boardSettings[projectId]?.buildings;
+    if (fromCloud?.length) return fromCloud as Building[];
+  } catch { /* the store is still being created */ }
   return [];
 }
 
@@ -1491,7 +1498,7 @@ export const useStore = create<AppState>((set, get) => ({
     ...p,
     color: ((stored?.projectColors as Record<string, string> | null) ?? {})[p.id] ?? p.color,
   })),
-  lightTheme: localStorage.getItem(THEME_KEY) !== 'dark',
+  lightTheme: prefGet(THEME_KEY) !== 'dark',
   setPendingOpenAptId: (id: string | null) => {
     set({ pendingOpenAptId: id });
   },
@@ -1509,6 +1516,14 @@ export const useStore = create<AppState>((set, get) => ({
   },
   setDashboardLayout: (order: string[], hidden: string[]) => {
     set({ dashboardWidgetOrder: order, dashboardHiddenWidgets: hidden });
+    // In the cloud, per workspace, so every computer shows the same dashboard.
+    {
+      const pid = get().currentProjectId;
+      const prev = get().boardSettings;
+      const next = { ...prev, [pid]: { ...(prev[pid] ?? {}), dashboardWidgetOrder: order, dashboardHiddenWidgets: hidden } };
+      set({ boardSettings: next });
+      saveBoardSettings(prev, next);
+    }
     persist(get);
   },
 
@@ -1621,6 +1636,14 @@ export const useStore = create<AppState>((set, get) => ({
       stages: [...get().stages, ...stages],
     });
 
+    // Its buildings go to the cloud with it (boardSettings.<id>.buildings).
+    {
+      const prev = get().boardSettings;
+      const next = { ...prev, [project.id]: { ...(prev[project.id] ?? {}), buildings: buildings.map(b => ({ id: b.id, name: b.name, displayOrder: b.displayOrder })) } };
+      set({ boardSettings: next });
+      saveBoardSettings(prev, next);
+    }
+
     // Seed the new workspace's own storage, without disturbing the live one.
     saveToStorage(getProjectStorageKey(project.id), {
       buildings, apartments,
@@ -1706,6 +1729,11 @@ export const useStore = create<AppState>((set, get) => ({
     };
     set({ boardLayouts: next });
     persist(get);
+    // In the cloud (one record per arrangement, per workspace), so every
+    // computer has the same saved arrangements — and the backup holds them.
+    fsSet(projectCollection(pid, 'boardLayouts'), layout.id, layout);
+    merged.filter(l => !next[pid].some(k => k.id === l.id))
+      .forEach(l => fsDelete(projectCollection(pid, 'boardLayouts'), l.id));
   },
 
   restoreBoardLayout: (layoutId) => {
@@ -1739,6 +1767,7 @@ export const useStore = create<AppState>((set, get) => ({
     const pid = st.currentProjectId;
     set({ boardLayouts: { ...st.boardLayouts, [pid]: (st.boardLayouts[pid] ?? []).filter(l => l.id !== layoutId) } });
     persist(get);
+    fsDelete(projectCollection(pid, 'boardLayouts'), layoutId);
   },
 
   setTvSetting: (key, value) => {
@@ -1761,7 +1790,7 @@ export const useStore = create<AppState>((set, get) => ({
 
   setLightTheme: (v: boolean) => {
     set({ lightTheme: v });
-    localStorage.setItem(THEME_KEY, v ? 'light' : 'dark');
+    prefSet(THEME_KEY, v ? 'light' : 'dark');
   },
 
   // Fetches the authoritative user list before any code is accepted.
@@ -2594,10 +2623,10 @@ export const useStore = create<AppState>((set, get) => ({
    * board you were on.
    */
   activeBoardView: (() => {
-    try { return localStorage.getItem('active_board_view') ?? ''; } catch { return ''; }
+    try { return prefGet('active_board_view') ?? ''; } catch { return ''; }
   })(),
   setActiveBoardView: (id) => {
-    try { localStorage.setItem('active_board_view', id); } catch { /* private mode */ }
+    try { prefSet('active_board_view', id); } catch { /* private mode */ }
     set({ activeBoardView: id });
   },
 
@@ -3872,7 +3901,10 @@ export const useStore = create<AppState>((set, get) => ({
       });
       if (!uploadRes.ok) return { ok: false, error: 'Upload failed' };
       const now = new Date().toISOString();
+      const prevAt = get().lastDriveExportAt;
       set({ lastDriveExportAt: now });
+      // Shared, so the office's computers keep ONE backup schedule between them.
+      saveAppField('lastDriveExportAt', prevAt, now);
       persist(get);
       get().addBackupLog({ filename, sizeKB: Math.round(json.length / 1024), driveUploaded: true, triggeredBy: 'scheduled' });
       // And the FULL backup — every workspace, every record — made on the
@@ -3899,7 +3931,10 @@ export const useStore = create<AppState>((set, get) => ({
 
   addBackupLog: (fields) => {
     const entry: BackupLogEntry = { ...fields, id: generateId(), createdAt: new Date().toISOString() };
+    const prevLogs = get().backupLogs;
     set(state => ({ backupLogs: [entry, ...state.backupLogs].slice(0, 50) }));
+    // Shared: every computer sees the same backup history.
+    saveAppField('backupLogs', prevLogs, get().backupLogs);
     persist(get);
   },
 
@@ -4145,6 +4180,9 @@ export const useStore = create<AppState>((set, get) => ({
           ...(appS.mainUiStrings        ? { mainUiStrings: mergeFreshMainUi(appS.mainUiStrings as Partial<MainUiStrings>) } : {}),
           ...(appS.contractorSheetLinks ? { contractorSheetLinks: appS.contractorSheetLinks as Record<string, string> } : {}),
           ...(appS.boardSettings ? { boardSettings: appS.boardSettings as Record<string, BoardSetting> } : {}),
+          // A workspace made in the app: its buildings come from the cloud on a new computer.
+          ...(!state.buildings.length && (appS.boardSettings as Record<string, BoardSetting> | undefined)?.[pid]?.buildings?.length
+            ? { buildings: (appS.boardSettings as Record<string, BoardSetting>)[pid].buildings as Building[] } : {}),
           ...(appS.timeClock ? { timeClock: { ...DEFAULT_TIME_CLOCK, ...(appS.timeClock as Partial<TimeClockSettings>) } } : {}),
           ...(appS.boardViews ? { boardViews: appS.boardViews as BoardView[] } : {}),
           ...(appS.savedReports ? { savedReports: appS.savedReports as Record<string, ReportDef[]> } : {}),
@@ -4159,7 +4197,21 @@ export const useStore = create<AppState>((set, get) => ({
               ...p, color: (appS.projectColors as Record<string, string>)[p.id] ?? p.color })),
           } : {}),
           ...(appS.driveExportFrequency ? { driveExportFrequency: appS.driveExportFrequency as DriveExportFrequency } : {}),
+          ...(Array.isArray(appS.backupLogs) ? { backupLogs: appS.backupLogs as BackupLogEntry[] } : {}),
+          ...(typeof appS.lastDriveExportAt === 'string' && appS.lastDriveExportAt > (state.lastDriveExportAt ?? '') ? { lastDriveExportAt: appS.lastDriveExportAt } : {}),
         }));
+        persist(get);
+      }),
+      // Saved board arrangements — in the cloud since 2026-10-29. A computer
+      // that kept some before then hands them up once, while the cloud has none.
+      lean ? none() : G(col('boardLayouts'), (docs) => {
+        const cloud = (docs as unknown as BoardLayout[]).sort((a, b) => (b.at > a.at ? 1 : -1));
+        const local = get().boardLayouts[pid] ?? [];
+        if (!cloud.length && local.length) {
+          fsBatchCreate(col('boardLayouts'), local.map(l => ({ id: l.id, data: l })));
+          return;
+        }
+        set(st => ({ boardLayouts: { ...st.boardLayouts, [pid]: cloud } }));
         persist(get);
       }),
     ];
@@ -4265,9 +4317,14 @@ export const useStore = create<AppState>((set, get) => ({
         ...(appSettings.mainUiStrings        ? { mainUiStrings: mergeFreshMainUi(appSettings.mainUiStrings as Partial<MainUiStrings>) } : {}),
         ...(appSettings.contractorSheetLinks ? { contractorSheetLinks: appSettings.contractorSheetLinks as Record<string, string> } : {}),
         ...(appSettings.boardViews ? { boardViews: appSettings.boardViews as BoardView[] } : {}),
+        ...(appSettings.driveExportFrequency ? { driveExportFrequency: appSettings.driveExportFrequency as DriveExportFrequency } : {}),
+        ...(Array.isArray(appSettings.backupLogs) ? { backupLogs: appSettings.backupLogs as BackupLogEntry[] } : {}),
+        ...(typeof appSettings.lastDriveExportAt === 'string' && appSettings.lastDriveExportAt > (state.lastDriveExportAt ?? '') ? { lastDriveExportAt: appSettings.lastDriveExportAt } : {}),
         ...(appSettings.savedReports ? { savedReports: appSettings.savedReports as Record<string, ReportDef[]> } : {}),
         ...(appSettings.projectOrder ? { projectOrder: appSettings.projectOrder as string[] } : {}),
         ...(appSettings.boardSettings ? { boardSettings: appSettings.boardSettings as Record<string, BoardSetting> } : {}),
+        ...(!state.buildings.length && (appSettings.boardSettings as Record<string, BoardSetting> | undefined)?.[pid]?.buildings?.length
+          ? { buildings: (appSettings.boardSettings as Record<string, BoardSetting>)[pid].buildings as Building[] } : {}),
         ...(appSettings.timeClock ? { timeClock: { ...DEFAULT_TIME_CLOCK, ...(appSettings.timeClock as Partial<TimeClockSettings>) } } : {}),
         ...(appSettings.customProjects ? {
           customProjects: appSettings.customProjects as Project[],
@@ -4575,6 +4632,22 @@ function persistNow(get: () => AppState) {
  */
 if (import.meta.env.DEV && typeof window !== 'undefined') {
   (window as unknown as { __store?: typeof useStore }).__store = useStore;
+}
+
+// Personal choices follow whoever is signed in on this computer (prefs.ts).
+if (typeof window !== 'undefined') {
+  const who = (st: AppState) => (st.currentUser ? `u:${st.currentUser.id}` : null);
+  setPrefsPerson(who(useStore.getState()));
+  useStore.subscribe(st => setPrefsPerson(who(st)));
+  // A new computer: the person's theme and board arrive from the cloud a
+  // moment after sign-in.
+  onPrefsChange(() => {
+    const st = useStore.getState();
+    const light = prefGet(THEME_KEY) !== 'dark';
+    const view = prefGet('active_board_view') ?? '';
+    if (light !== st.lightTheme) useStore.setState({ lightTheme: light });
+    if (view !== st.activeBoardView) useStore.setState({ activeBoardView: view });
+  });
 }
 
 /**

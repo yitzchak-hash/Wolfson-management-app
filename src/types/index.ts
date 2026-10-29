@@ -308,6 +308,14 @@ export interface BoardSetting {
    * list. Whole days. See `src/data/timeOff.ts`.
    */
   timeOff?: import('../data/timeOff').TimeOff[];
+  /** The dashboard's card order and hidden cards (were on one computer only until 2026-10-29). */
+  dashboardWidgetOrder?: string[];
+  dashboardHiddenWidgets?: string[];
+  /**
+   * The building list of a workspace made in the app (the built-in three have
+   * theirs in code). Was kept on the creating computer only until 2026-10-29.
+   */
+  buildings?: { id: string; name: string; displayOrder: number }[];
 }
 
 export type BoardSettingKey = keyof BoardSetting;

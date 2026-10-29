@@ -1,5 +1,6 @@
 import React from 'react';
 
+import { prefGet, prefSet } from './prefs';
 /**
  * The app's own changelog, told as a walkthrough.
  *
@@ -4153,6 +4154,6 @@ export const WHATS_NEW_LATEST = WHATS_NEW[0]?.date ?? '';
 
 const SEEN_KEY = 'whats_new_seen';
 export const whatsNewSeen = (): boolean =>
-  localStorage.getItem(SEEN_KEY) === WHATS_NEW_LATEST;
+  prefGet(SEEN_KEY) === WHATS_NEW_LATEST;
 export const markWhatsNewSeen = (): void =>
-  localStorage.setItem(SEEN_KEY, WHATS_NEW_LATEST);
+  prefSet(SEEN_KEY, WHATS_NEW_LATEST);

@@ -35,6 +35,7 @@ import { PlanPicker } from './PlanPicker';
 import { usePhone } from '../../data/usePhone';
 import { DriveIcon } from '../ui/BrandIcons';
 
+import { prefGet, prefSet } from '../../data/prefs';
 pdfjs.GlobalWorkerOptions.workerSrc = workerUrl;
 
 /**
@@ -1435,11 +1436,11 @@ function PlanEditor({
    * Per machine, like every studio comfort setting.
    */
   const [shapeSnap, setShapeSnap] = useState<boolean>(() => {
-    try { return localStorage.getItem('plan_shape_snap') !== '0'; } catch { return true; }
+    try { return prefGet('plan_shape_snap') !== '0'; } catch { return true; }
   });
   const toggleShapeSnap = useCallback(() => {
     setShapeSnap(v => {
-      try { localStorage.setItem('plan_shape_snap', v ? '0' : '1'); } catch { /* private mode */ }
+      try { prefSet('plan_shape_snap', v ? '0' : '1'); } catch { /* private mode */ }
       return !v;
     });
   }, []);

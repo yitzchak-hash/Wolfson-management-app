@@ -5,8 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc && vite build",
-    "preview": "vite preview"
+    "build": "node scripts/check-backup-coverage.mjs && tsc && vite build",
+    "preview": "vite preview",
+    "check:backup": "node scripts/check-backup-coverage.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.123.0",

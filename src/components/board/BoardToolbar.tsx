@@ -8,6 +8,7 @@ import {
   Map as MapIcon, LayoutGrid, X,
 } from 'lucide-react';
 
+import { prefGet, prefSet, prefRemove } from '../../data/prefs';
 export type BoardTool =
   | 'select' | 'pan' | 'job' | 'note' | 'box' | 'title'
   | 'pen' | 'highlighter' | 'eraser' | 'clipart' | 'countdown' | 'stopwatch' | 'voice' | 'export';
@@ -103,7 +104,7 @@ const RAIL_SIZE_EVENT = 'board-rail-size';
 
 function readSize(): { w: number; h: number } {
   try {
-    const raw = JSON.parse(localStorage.getItem(SIZE_KEY) || 'null');
+    const raw = JSON.parse(prefGet(SIZE_KEY) || 'null');
     if (raw && typeof raw.w === 'number' && typeof raw.h === 'number') {
       // `h: 0` means "as tall as there is room for" and must survive the clamp.
       return { w: Math.max(MIN_W, raw.w), h: raw.h ? Math.max(MIN_H, raw.h) : 0 };
@@ -230,11 +231,11 @@ export function BoardToolbar({
   }
   function onSizeUp() {
     sizeRef.current = null;
-    try { localStorage.setItem(SIZE_KEY, JSON.stringify(size)); } catch { /* private mode */ }
+    try { prefSet(SIZE_KEY, JSON.stringify(size)); } catch { /* private mode */ }
   }
   function resetSize() {
     setSize({ w: DEFAULT_W, h: 0 });
-    try { localStorage.removeItem(SIZE_KEY); } catch { /* private mode */ }
+    try { prefRemove(SIZE_KEY); } catch { /* private mode */ }
   }
 
   /**

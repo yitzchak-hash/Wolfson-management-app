@@ -55,6 +55,7 @@ import { orderTaskRows, isoToday } from '../components/portal/portalOrder';
 import { cachedPlanAspect, measurePlanAspect } from '../data/planAspect';
 import { shrinkImageToDataUrl } from '../data/imageMeta';
 import { rowNumOf } from '../data/floorRows';
+import { prefGet, prefSet, setPrefsPerson } from '../data/prefs';
 // Lazy — the studio carries pdf.js, and a worker who never opens a plan should
 // not download it (the drawer's precedent).
 const PlanAnnotator = lazy(() =>
@@ -430,7 +431,7 @@ function PortalBell({ contractor, s, lang, currentProjectId, allAssignments, all
   const hash = items.map(i => i.id).join(',');
   const seenKey = `portal_bell_seen_${contractor.id}`;
   const [seen, setSeen] = useState(() => {
-    try { return localStorage.getItem(seenKey) ?? ''; } catch { return ''; }
+    try { return prefGet(seenKey) ?? ''; } catch { return ''; }
   });
   const unseen = items.length > 0 && seen !== hash;
 
@@ -449,7 +450,7 @@ function PortalBell({ contractor, s, lang, currentProjectId, allAssignments, all
       <button
         onClick={() => {
           setOpen(v => !v);
-          try { localStorage.setItem(seenKey, hash); } catch { /* private mode */ }
+          try { prefSet(seenKey, hash); } catch { /* private mode */ }
           setSeen(hash);
         }}
         title={s.notifTitle || 'Updates'}
@@ -706,7 +707,7 @@ export function ContractorPortal() {
    * worker on this phone; the name button on the map changes it.
    */
   const [mapChosen, setMapChosen] = useState<string | null>(() => {
-    try { return localStorage.getItem(`portal_map_${token ?? ''}`); } catch { return null; }
+    try { return prefGet(`portal_map_${token ?? ''}`); } catch { return null; }
   });
   const [mapPickerOpen, setMapPickerOpen] = useState(false);
   /**
@@ -895,7 +896,7 @@ export function ContractorPortal() {
     const pid = a.general.projectId;
     const blds = a.general.buildingIds?.length ? a.general.buildingIds : (a.general.buildingId ? [a.general.buildingId] : []);
     setMapChosen(pid);
-    try { localStorage.setItem(`portal_map_${token ?? ''}`, pid); } catch { /* private mode */ }
+    try { prefSet(`portal_map_${token ?? ''}`, pid); } catch { /* private mode */ }
     if (pid !== currentProjectId) setCurrentProject(pid);
     setMapBuilding(blds.length === 1 ? blds[0] : 'all');
     setGeneralHunt(a.id);
@@ -941,6 +942,8 @@ export function ContractorPortal() {
   const noteAttachRef = useRef<HTMLInputElement>(null);
 
   const contractor = contractors.find(c => c.token === token && c.active) ?? null;
+  // The worker's own choices (folded lists, his map) follow him to any phone.
+  useEffect(() => { if (contractor?.id) setPrefsPerson(`c:${contractor.id}`); }, [contractor?.id]);
   const perms = permsOf(contractor, workerLevels);
 
   /**
@@ -1372,7 +1375,7 @@ export function ContractorPortal() {
   const doneKey = `portal_done_${token ?? ''}`;
   const [doneView, setDoneView] = useState<{ open: boolean; sort: DoneSort }>(() => {
     try {
-      const v = JSON.parse(localStorage.getItem(`portal_done_${token ?? ''}`) || 'null');
+      const v = JSON.parse(prefGet(`portal_done_${token ?? ''}`) || 'null');
       if (v && typeof v === 'object') return { open: v.open !== false, sort: (v.sort as DoneSort) || 'latest' };
     } catch { /* private window */ }
     return { open: true, sort: 'latest' };
@@ -1380,7 +1383,7 @@ export function ContractorPortal() {
   const setDone = (patch: Partial<{ open: boolean; sort: DoneSort }>) => {
     const next = { ...doneView, ...patch };
     setDoneView(next);
-    try { localStorage.setItem(doneKey, JSON.stringify(next)); } catch { /* private window */ }
+    try { prefSet(doneKey, JSON.stringify(next)); } catch { /* private window */ }
   };
   const [doneMenu, setDoneMenu] = useState(false);
   const openRows = useMemo(() => listRows.filter(r => !r.a.completedAt), [listRows]);
@@ -3274,7 +3277,7 @@ plansPdfFileId && (
         const chooser = !choice;
         const pick = (pid: string) => {
           setMapChosen(pid);
-          try { localStorage.setItem(`portal_map_${token ?? ''}`, pid); } catch { /* private mode */ }
+          try { prefSet(`portal_map_${token ?? ''}`, pid); } catch { /* private mode */ }
           if (pid !== currentProjectId) { setCurrentProject(pid); setMapBuilding(''); }
           setMapPickerOpen(false);
         };

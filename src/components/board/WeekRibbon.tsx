@@ -18,6 +18,7 @@ import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { ChevronDown } from 'lucide-react';
 
+import { prefGet, prefSet, prefRemove } from '../../data/prefs';
 const isoOf = (d: Date) => {
   const t = new Date(d.getTime() - d.getTimezoneOffset() * 60_000);
   return t.toISOString().slice(0, 10);
@@ -53,7 +54,7 @@ export function useThisWeek(startDay: number): string {
  */
 export function readWeekPick(key: string, thisWeek: string): string | null {
   try {
-    const raw = localStorage.getItem(`nb_week_${key}`);
+    const raw = prefGet(`nb_week_${key}`);
     if (!raw) return null;
     const v = JSON.parse(raw) as { week?: string; at?: string };
     return v.at === thisWeek && typeof v.week === 'string' ? v.week : null;
@@ -61,8 +62,8 @@ export function readWeekPick(key: string, thisWeek: string): string | null {
 }
 export function saveWeekPick(key: string, thisWeek: string, week: string | null): void {
   try {
-    if (!week || week === thisWeek) localStorage.removeItem(`nb_week_${key}`);
-    else localStorage.setItem(`nb_week_${key}`, JSON.stringify({ week, at: thisWeek }));
+    if (!week || week === thisWeek) prefRemove(`nb_week_${key}`);
+    else prefSet(`nb_week_${key}`, JSON.stringify({ week, at: thisWeek }));
   } catch { /* private window — the pick lasts this visit only */ }
 }
 

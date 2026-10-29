@@ -3,6 +3,7 @@ import { ChevronDown, Plus, Check, Users, Lock, Eye, LayoutDashboard } from 'luc
 import { useStore } from '../../data/store';
 import { BoardView, boardsForUser, boardAccess } from '../../types';
 
+import { prefGet, prefSet } from '../../data/prefs';
 /**
  * Which board you are looking at.
  *
@@ -51,11 +52,11 @@ export function BoardViewPicker({ accent = '#1e3a5f' }: { accent?: string }) {
   useEffect(() => {
     if (!activeBoardView) return;
     if (mine.some(v => v.id === activeBoardView)) {
-      try { localStorage.setItem(`prev_board_${currentProjectId}`, activeBoardView); } catch { /* private mode */ }
+      try { prefSet(`prev_board_${currentProjectId}`, activeBoardView); } catch { /* private mode */ }
       return;
     }
     let back = '';
-    try { back = localStorage.getItem(`prev_board_${currentProjectId}`) ?? ''; } catch { /* ignore */ }
+    try { back = prefGet(`prev_board_${currentProjectId}`) ?? ''; } catch { /* ignore */ }
     setActiveBoardView(mine.some(v => v.id === back) ? back : '');
   }, [activeBoardView, mine, currentProjectId, setActiveBoardView]);
 
