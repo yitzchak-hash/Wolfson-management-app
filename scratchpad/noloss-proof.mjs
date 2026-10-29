@@ -357,6 +357,50 @@ await seed();
   check(seen.ink === J(['#ff0000']), 'new computer: the office\'s saved markup colours are there');
 }
 
+// ════ 6 · THE UNDO LIST SURVIVES A RELOAD AND A NEW COMPUTER ══════════════
+scene = 'undo';
+await seed();
+{
+  const ctx = await freshBrowser();
+  const a = await open(ctx, '/general');
+  await a.evaluate(() => window.__store.getState().setCurrentProject('general'));
+  await synced(a, 'general');
+  await sleep(2500);
+  await a.evaluate(async () => {
+    const { trackUndo } = await import('/src/data/store.ts');
+    const st = window.__store.getState();
+    trackUndo({ weight: 'arrange', label: 'Moved Job 5' }, () => st.updateApartment('G-5', { canvasX: 5555, canvasY: 55 }, st.currentUser));
+  });
+  await sleep(2500);
+  await a.reload();
+  await synced(a, 'general');
+  await sleep(2500);
+  const after = await a.evaluate(() => window.__store.getState().undoState.past.map(e => e.label));
+  check(after.includes('Moved Job 5'), 'after a reload the undo list still has the step', JSON.stringify(after));
+  await a.evaluate(() => window.__store.getState().stepUndo());
+  await sleep(2500);
+  const back = (await read('general_apartments', 'G-5'));
+  check(back.canvasX === job(5).canvasX && back.canvasY === job(5).canvasY, 'undo after the reload puts the job back (in the cloud)', `${back.canvasX},${back.canvasY}`);
+  await a.reload();
+  await synced(a, 'general');
+  await sleep(2500);
+  const fut = await a.evaluate(() => window.__store.getState().undoState.future.map(e => e.label));
+  check(fut.includes('Moved Job 5'), 'and the redo survives another reload', JSON.stringify(fut));
+  await a.evaluate(() => window.__store.getState().stepRedo());
+  await sleep(2500);
+  check((await read('general_apartments', 'G-5')).canvasX === 5555, 'redo moves it again');
+  await ctx.close();
+
+  const ctxB = await freshBrowser();
+  const b = await open(ctxB, '/general');
+  await b.evaluate(() => window.__store.getState().setCurrentProject('general'));
+  await synced(b, 'general');
+  await sleep(3000);
+  const onB = await b.evaluate(() => window.__store.getState().undoState.past.map(e => e.label));
+  check(onB.includes('Moved Job 5'), 'a new computer, same person, has the same undo list', JSON.stringify(onB));
+  await ctxB.close();
+}
+
 await browser.close();
 if (errs.length) console.log('page errors:', [...new Set(errs)].slice(0, 5));
 console.log(fails ? `\n${fails} FAILED` : '\nALL PASS');

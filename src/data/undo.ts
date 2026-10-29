@@ -18,10 +18,11 @@
  * all three are ways of being subtly wrong about what actually changed, and a
  * wrong undo is worse than none.
  *
- * It is per-SESSION and per-workspace, never persisted. An undo stack that
- * survived a reload would offer to undo something somebody else has since
- * changed on another device, which is exactly the kind of quiet damage this
- * feature must not do.
+ * It is per-PERSON and per-workspace, and kept in the cloud (undoCloud.ts,
+ * owner 2026-10-29): it survives a reload, a workspace switch and a change of
+ * computer. An old step cannot do quiet damage: undoing patches only the
+ * fields that step changed onto the records as they are now, and a content
+ * step asks first, in words.
  */
 
 export type UndoWeight = 'arrange' | 'content';
@@ -41,6 +42,12 @@ export interface UndoEntry {
   undo: () => void;
   redo: () => void;
   at: number;
+  /**
+   * The records before and after, as plain data — what `undo`/`redo` are
+   * built from. Kept so the step can be saved to the cloud and rebuilt after
+   * a reload or on another computer (undoCloud.ts).
+   */
+  sides?: { before: unknown; after: unknown };
 }
 
 /** How many steps back it is worth being able to go. */

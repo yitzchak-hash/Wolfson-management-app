@@ -800,3 +800,12 @@ export function fsListenDoc(collectionName: string, docId: string, callback: (da
     callback(snap.exists() ? snap.data() as Record<string, unknown> : null);
   }, e => _notifyReadError(collectionName, e));
 }
+
+/** The documents whose fields equal the given values (equality only — no index needed). */
+export async function fsGetWhere(collectionName: string, equals: Record<string, string>): Promise<Record<string, unknown>[]> {
+  if (!db) return [];
+  const q = query(collection(db, collectionName), ...Object.entries(equals).map(([f, v]) => where(f, '==', v)));
+  const snap = await getDocs(q);
+  _countReads(snap.size, collectionName);
+  return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+}

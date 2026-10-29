@@ -9,7 +9,8 @@ import type { UndoDiff, UndoWorld } from './undoWords';
 import { create } from 'zustand';
 import { Apartment, CanvasElement, ActivityLog, Project, Stage, StageNote, StageNoteEntry, StageNoteAttachment, StageNoteVersion, GeneralNoteVersion, User, Building, Contractor, ContractorAssignment, ContractorNote, ContractorPhoto, BackupSnapshot, DataSummary, OfficeNoteFile, BackupFrequency, DriveExportFrequency, BackupLogEntry, ContractorUiStrings, DEFAULT_CONTRACTOR_UI_STRINGS, MainUiStrings, DEFAULT_MAIN_UI_STRINGS, HEBREW_MAIN_UI_STRINGS, BoardSetting, BoardSettingKey, BoardLayout, PlanPin, PlanAnnotation, BoardView, Employee, TimePunch, TimeClockSettings, WorkerLevel, StageSuggestion, FocusIntent, StageMark } from '../types';
 import { ReportDef } from './reportModel';
-import { setPrefsPerson, prefGet, prefSet, onPrefsChange } from './prefs';
+import { setPrefsPerson, prefGet, prefSet, onPrefsChange, prefsPerson } from './prefs';
+import { saveNewStep, moveStep, dropSteps, loadSteps } from './undoCloud';
 
 // Always merge stored mainUiStrings ON TOP of the fresh preset so code-added keys
 // are never missing even when localStorage has an older saved version.
@@ -547,6 +548,7 @@ export function trackUndo<T>(opts: TrackOpts | null, body: () => T): T {
     explain: words.explain,
     undo: () => applyUndoSides(before, after),
     redo: () => applyUndoSides(after, before),
+    sides: { before, after },
   });
   return out;
 }
@@ -2413,7 +2415,14 @@ export const useStore = create<AppState>((set, get) => ({
    */
   rememberUndo: entry => {
     if (_undoWalking) return;
-    set(st => ({ undoState: remember(st.undoState, entry) }));
+    const was = get().undoState;
+    const next = remember(was, entry);
+    set({ undoState: next });
+    // In the cloud too: the new step, minus the redo list it cleared and any
+    // step that fell off the end.
+    const keep = new Set(next.past.map(e => e.id));
+    saveNewStep(prefsPerson(), next.past[next.past.length - 1], was.future);
+    dropSteps(prefsPerson(), was.past.filter(e => !keep.has(e.id)));
   },
   stepUndo: () => {
     const { entry, next } = popUndo(get().undoState);
@@ -2421,6 +2430,7 @@ export const useStore = create<AppState>((set, get) => ({
     // The stack moves FIRST: `entry.undo()` writes to the store, and anything
     // that re-entered here mid-write would find the entry still on the past.
     set({ undoState: next });
+    moveStep(prefsPerson(), entry, 'future');
     _undoWalking = true;
     try { entry.undo(); } finally { _undoWalking = false; }
     return entry;
@@ -2429,6 +2439,7 @@ export const useStore = create<AppState>((set, get) => ({
     const { entry, next } = popRedo(get().undoState);
     if (!entry) return null;
     set({ undoState: next });
+    moveStep(prefsPerson(), entry, 'past');
     _undoWalking = true;
     try { entry.redo(); } finally { _undoWalking = false; }
     return entry;
@@ -4352,6 +4363,7 @@ export const useStore = create<AppState>((set, get) => ({
       }
 
       set({ cloudSyncedProject: pid });
+      void loadUndoFromCloud(pid);
 
       // Seed any apartments that are missing from Firestore (in case the first-run seed was partial).
       // Anything tombstoned is missing BECAUSE it was deleted, and must stay gone.
@@ -4648,6 +4660,31 @@ if (typeof window !== 'undefined') {
     if (light !== st.lightTheme) useStore.setState({ lightTheme: light });
     if (view !== st.activeBoardView) useStore.setState({ activeBoardView: view });
   });
+}
+
+/**
+ * The person's undo list for this workspace, from the cloud (undoCloud.ts) —
+ * after a reload, a workspace switch or on another computer. Steps taken in
+ * the moment before it arrived stay, newest last.
+ */
+async function loadUndoFromCloud(pid: string) {
+  const owner = prefsPerson();
+  if (!owner) return;
+  try {
+    const cloud = await loadSteps(owner, pid, sides => ({
+      undo: () => applyUndoSides(sides.before as UndoSides, sides.after as UndoSides),
+      redo: () => applyUndoSides(sides.after as UndoSides, sides.before as UndoSides),
+    }));
+    const st = useStore.getState();
+    if (st.currentProjectId !== pid) return;
+    const have = new Set([...st.undoState.past, ...st.undoState.future].map(e => e.id));
+    useStore.setState({ undoState: {
+      past: [...cloud.past.filter(e => !have.has(e.id)), ...st.undoState.past],
+      future: [...cloud.future.filter(e => !have.has(e.id)), ...st.undoState.future],
+    } });
+  } catch (e) {
+    console.warn('undo list could not be read from the cloud:', e);
+  }
 }
 
 /**

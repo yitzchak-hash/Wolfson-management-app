@@ -57,6 +57,9 @@ function attach(id: string) {
   });
 }
 
+/** Who is signed in on this computer, as prefs/undo key them (`u:<id>`, `c:<id>`), or null. */
+export const prefsPerson = (): string | null => personId;
+
 /** Who this computer is now: an office user (`u:<id>`) or a worker (`c:<id>`). */
 export function setPrefsPerson(id: string | null) {
   if (id === personId) return;
