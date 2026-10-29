@@ -19,6 +19,15 @@
     },
     "api/geocode.js": {
       "maxDuration": 60
+    },
+    "api/drive-upload.js": {
+      "maxDuration": 60
     }
-  }
+  },
+  "crons": [
+    {
+      "path": "/api/drive-upload?fullBackup=1",
+      "schedule": "0 1 * * *"
+    }
+  ]
 }

@@ -3875,6 +3875,22 @@ export const useStore = create<AppState>((set, get) => ({
       set({ lastDriveExportAt: now });
       persist(get);
       get().addBackupLog({ filename, sizeKB: Math.round(json.length / 1024), driveUploaded: true, triggeredBy: 'scheduled' });
+      // And the FULL backup — every workspace, every record — made on the
+      // server from the cloud itself (lib/fullBackup.js). It reads only what
+      // changed since the last one, and skips itself within 20 minutes of it.
+      fetch('/api/drive-upload', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-api-key': key },
+        body: JSON.stringify({
+          mode: 'full-backup',
+          projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+          apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+        }),
+      }).then(r => r.json()).then(out => {
+        if (out?.ok && out.file && !out.skipped) {
+          get().addBackupLog({ filename: out.file, sizeKB: out.sizeKB ?? 0, driveUploaded: true, triggeredBy: 'scheduled' });
+        }
+      }).catch(e => console.warn('full backup request failed:', e));
       return { ok: true };
     } catch (e) {
       return { ok: false, error: String(e) };
