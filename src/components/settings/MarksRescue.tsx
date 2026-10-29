@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react';
-import { LifeBuoy, Loader2 } from 'lucide-react';
+import React, { useEffect, useRef, useState } from 'react';
+import { LifeBuoy, Loader2, FileUp } from 'lucide-react';
 import { useStore, RESCUE_PREFIX, type MarksRescue } from '../../data/store';
 import { fsGetAll, fsBatchSet, isFirebaseConfigured, projectCollection } from '../../data/firebase';
 import type { Apartment, StageMark } from '../../types';
@@ -79,7 +79,59 @@ export function MarksRescueCard() {
   }, []);
 
   const total = found.reduce((n, f) => n + f.patches.length, 0);
-  if (!total && done == null) return null;
+  const [fileNote, setFileNote] = useState<string | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  /**
+   * A backup file (Settings → Backup, the JSON in Drive's Backups folder): its
+   * apartments are matched to whichever workspace in the cloud shares their
+   * ids, and only the ticks the cloud is missing are offered — the same rule.
+   */
+  const fromFile = async (file: File) => {
+    setFileNote(null); setDone(null);
+    try {
+      const d = JSON.parse(await file.text()) as { apartments?: Apartment[]; exportedAt?: string };
+      const local = (d.apartments ?? []).filter(a => a.stageMarks && Object.keys(a.stageMarks).length)
+        .map(a => ({ id: a.id, stageMarks: a.stageMarks, currentStageId: a.currentStageId }));
+      const out: Array<{ pid: string; patches: ReturnType<typeof plan> }> = [];
+      for (const pid of PROJECTS) {
+        const cloud = await fsGetAll(projectCollection(pid, 'apartments')) as unknown as Apartment[];
+        if (!cloud.length) continue;
+        const patches = plan(local, cloud);
+        if (patches.length) out.push({ pid, patches });
+      }
+      setFound(out);
+      const n = out.reduce((k, f) => k + f.patches.length, 0);
+      const when = d.exportedAt ? new Date(d.exportedAt).toLocaleString(isRtl ? 'he-IL' : 'en-GB') : '';
+      setFileNote(n
+        ? (isRtl ? `בגיבוי מ-${when}: סימונים של ${n} דירות שחסרים בענן.` : `Backup from ${when}: ticks for ${n} apartments the cloud is missing.`)
+        : (isRtl ? `בגיבוי מ-${when} אין סימונים שחסרים בענן.` : `The backup from ${when} has no ticks the cloud is missing.`));
+    } catch {
+      setFileNote(isRtl ? 'הקובץ הזה אינו גיבוי שאפשר לקרוא.' : 'That file is not a backup this app can read.');
+    }
+  };
+  const pickFile = (
+    <>
+      <input ref={fileRef} type="file" accept="application/json,.json" className="hidden" data-marks-rescue-file
+        onChange={e => { const f = e.target.files?.[0]; e.target.value = ''; if (f) void fromFile(f); }} />
+      <button type="button" data-marks-rescue-pick onClick={() => fileRef.current?.click()}
+        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium border border-gray-300 bg-white text-gray-700 hover:bg-gray-50">
+        <FileUp size={14} />
+        {isRtl ? 'מקובץ גיבוי…' : 'From a backup file…'}
+      </button>
+    </>
+  );
+
+  if (!total && done == null) {
+    return (
+      <div data-marks-rescue="idle" className="bg-white border border-gray-200 rounded-xl p-3 mb-4 flex flex-wrap items-center gap-3">
+        <LifeBuoy size={18} className="text-gray-400 flex-shrink-0" />
+        <span className="text-sm text-gray-700 flex-1 min-w-0">{isRtl ? 'החזרת סימוני שלבים' : 'Bring back stage ticks'}</span>
+        {pickFile}
+        {fileNote && <div className="w-full text-[13px] text-gray-600" data-marks-rescue-note>{fileNote}</div>}
+      </div>
+    );
+  }
 
   const restore = async () => {
     setBusy(true);
@@ -108,10 +160,12 @@ export function MarksRescueCard() {
         ) : (
           <>
             <div className="text-sm font-semibold text-gray-900">
-              {isRtl ? 'המחשב הזה שמר התקדמות שאבדה בענן' : 'This computer kept progress the cloud lost'}
+              {fileNote
+                ? (isRtl ? 'קובץ הגיבוי מחזיק התקדמות שאבדה בענן' : 'The backup file holds progress the cloud lost')
+                : (isRtl ? 'המחשב הזה שמר התקדמות שאבדה בענן' : 'This computer kept progress the cloud lost')}
             </div>
             <div className="text-[13px] text-gray-700 mt-0.5" data-marks-rescue-count={total}>
-              {isRtl ? `סימוני שלבים של ${total} דירות.` : `Stage ticks for ${total} apartments.`}
+              {fileNote ?? (isRtl ? `סימוני שלבים של ${total} דירות.` : `Stage ticks for ${total} apartments.`)}
             </div>
             <button type="button" data-marks-rescue-go disabled={busy} onClick={restore}
               className="mt-2 inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium bg-[#1e3a5f] text-white hover:bg-[#162d4a] disabled:opacity-60">
