@@ -31,7 +31,13 @@ export const PREVIEW_ID: string | null = (() => {
   } catch { return null; }
 })();
 
-export interface PreviewInfo { fileId: string; exportedAt: string; totalDocuments: number; workspaces: string[] }
+export interface PreviewInfo {
+  fileId: string; exportedAt: string; totalDocuments: number; workspaces: string[];
+  /** 'full' = every workspace; 'old' = a one-workspace file from before 2026-10-29. */
+  kind: 'full' | 'old';
+  /** For the question before a restore: what the backup holds, per workspace. */
+  counts: Array<{ ws: string; jobs: number; widgets: number; tasks: number }>;
+}
 let info: PreviewInfo | null = null;
 export const previewInfo = () => info;
 
@@ -134,8 +140,10 @@ export async function bootPreview(driveKey: string): Promise<void> {
   } else {
     text = new TextDecoder().decode(bytes);
   }
-  const backup = JSON.parse(text) as FullBackup;
-  if (backup.kind !== 'tzviair-full-backup') throw new Error('That file is not a full backup.');
+  const parsed = JSON.parse(text) as FullBackup & Record<string, unknown>;
+  const isFull = parsed.kind === 'tzviair-full-backup';
+  const isOld = !isFull && Array.isArray(parsed.apartments);
+  if (!isFull && !isOld) throw new Error('That file is not a TzviAir backup.');
 
   // Who is looking, and which workspace this computer was on — taken from
   // the real storage BEFORE it is swapped out.
@@ -151,11 +159,36 @@ export async function bootPreview(driveKey: string): Promise<void> {
     }
   }
   const seed: Record<string, string> = {};
-  for (const [k, v] of Object.entries(snapshotsFromBackup(backup, currentUser))) seed[k] = JSON.stringify(v);
-  for (const ws of backup.workspaces) seed[`${ws}_app_version`] = real.getItem(`${ws}_app_version`) ?? '3';
+  let workspaces: string[]; let exportedAt: string; let total: number;
+  const counts: PreviewInfo['counts'] = [];
+  if (isFull) {
+    const backup = parsed;
+    for (const [k, v] of Object.entries(snapshotsFromBackup(backup, currentUser))) seed[k] = JSON.stringify(v);
+    workspaces = backup.workspaces; exportedAt = backup.exportedAt; total = backup.totalDocuments;
+    for (const ws of workspaces) {
+      const n = (base: string) => (backup.collections[ws === 'wolfson' ? base : `${ws}_${base}`] ?? []).length;
+      counts.push({ ws, jobs: n('apartments'), widgets: n('canvasElements'), tasks: n('contractorAssignments') });
+    }
+    seed.active_project = real.getItem('active_project') ?? 'general';
+  } else {
+    // An old one-workspace file IS that workspace's copy, in the app's own shape.
+    const apts = parsed.apartments as Array<{ buildingId?: string }>;
+    const b = new Set(apts.map(a => a.buildingId));
+    const ws = b.has('G') ? 'general' : (b.has('B1') || b.has('B2')) ? 'netiv' : 'wolfson';
+    seed[ws === 'wolfson' ? 'wolfson_app_data' : `${ws}_app_data`] = JSON.stringify({ ...parsed, currentUser, autoBackup: false, driveExportFrequency: 'off' });
+    workspaces = [ws]; exportedAt = String(parsed.exportedAt ?? ''); 
+    total = Object.values(parsed).reduce((t: number, v) => t + (Array.isArray(v) ? v.length : 0), 0);
+    counts.push({ ws, jobs: apts.length, widgets: (parsed.canvasElements as unknown[] | undefined)?.length ?? 0, tasks: (parsed.contractorAssignments as unknown[] | undefined)?.length ?? 0 });
+    seed.active_project = ws;
+    // The front page is always the Job Board; a Wolfson or Netiv file opens on its own buildings.
+    if (ws !== 'general' && (window.location.pathname === '/' || window.location.pathname === '/jobs')) {
+      window.history.replaceState(null, '', '/project');
+    }
+  }
+  for (const ws of workspaces) seed[`${ws}_app_version`] = real.getItem(`${ws}_app_version`) ?? '3';
   seed.wolfson_app_version = real.getItem('wolfson_app_version') ?? '3';
-  seed.active_project = real.getItem('active_project') ?? 'general';
   seed.whats_new_seen = '9999';
+  realSession = window.sessionStorage;
   const mem = memoryStorage(seed);
   Object.defineProperty(window, 'localStorage', { value: mem, configurable: true });
   Object.defineProperty(window, 'sessionStorage', { value: memoryStorage({}), configurable: true });
@@ -172,6 +205,42 @@ export async function bootPreview(driveKey: string): Promise<void> {
     return realFetch(input, init);
   };
 
-  info = { fileId: PREVIEW_ID, exportedAt: backup.exportedAt, totalDocuments: backup.totalDocuments, workspaces: backup.workspaces };
-  document.title = `PREVIEW ${backup.exportedAt.slice(0, 16).replace('T', ' ')} — TzviAir`;
+  restoreFetch = realFetch;
+  info = { fileId: PREVIEW_ID, exportedAt, totalDocuments: total, workspaces, kind: isFull ? 'full' : 'old', counts };
+  document.title = `Preview · ${israelTime(exportedAt)} · TzviAir`;
+}
+
+/** "29 Oct 2026, 14:28", in Israel time. */
+export function israelTime(iso: string): string {
+  try { return new Date(iso).toLocaleString('en-GB', { timeZone: 'Asia/Jerusalem', dateStyle: 'medium', timeStyle: 'short' }); } catch { return iso; }
+}
+
+let restoreFetch: typeof fetch | null = null;
+let realSession: Storage | null = null;
+
+/**
+ * RESTORE this backup into the cloud (lib/fullRestore.js) — the one request a
+ * preview tab is allowed to make that changes something, and only from the
+ * Restore press after its question. The server saves a backup of how things
+ * are right now first.
+ */
+export async function restoreThisBackup(): Promise<{ ok: boolean; put?: number; removed?: number; safetyBackup?: string | null; error?: string }> {
+  if (!info || !restoreFetch) return { ok: false, error: 'Not a preview.' };
+  const r = await restoreFetch('/api/drive-upload', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-api-key': (import.meta.env.VITE_DRIVE_API_KEY as string | undefined) ?? '' },
+    body: JSON.stringify({
+      mode: 'full-restore', fileId: info.fileId,
+      projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID, apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+    }),
+  });
+  const j = await r.json().catch(() => ({ ok: false, error: `The server answered ${r.status}.` }));
+  return r.ok ? j : { ok: false, error: j.error ?? `The server answered ${r.status}.` };
+}
+
+/** Leave the preview for the real app (this tab stops being a preview). */
+export function leavePreview() {
+  try { (realSession ?? window.sessionStorage).removeItem('preview_backup_id'); } catch { /* blocked */ }
+  // The tab's own storage is the preview's; the real one comes back on a fresh load.
+  window.location.replace('/jobs');
 }

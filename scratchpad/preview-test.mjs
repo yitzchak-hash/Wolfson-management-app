@@ -23,7 +23,7 @@ await p.goto('http://localhost:5176/?previewBackup=FILE123');
 await p.waitForFunction(() => window.__store?.getState().currentUser, null, { timeout: 30000 });
 await p.waitForTimeout(3000);
 const bar = await p.textContent('body');
-check(/PREVIEW of the backup from/.test(bar), 'the preview bar is showing');
+check(/Preview of the backup from/.test(bar), 'the preview bar is showing');
 const g = await p.evaluate(() => { const s = window.__store.getState(); return { pid: s.currentProjectId, apts: s.apartments.length, els: s.canvasElements.length, url: location.pathname }; });
 check(g.pid === 'general' && g.apts > 3000 && g.els > 50, 'the Job Board opened from the backup, whole', JSON.stringify(g));
 await p.evaluate(() => window.__store.getState().setCurrentProject('wolfson'));
@@ -31,7 +31,7 @@ await p.waitForTimeout(1500);
 const w = await p.evaluate(() => { const s = window.__store.getState(); return { pid: s.currentProjectId, apts: s.apartments.length, marks: s.apartments.filter(a => Object.keys(a.stageMarks ?? {}).length).length, staged: s.apartments.filter(a => a.currentStageId).length }; });
 check(w.pid === 'wolfson' && w.apts >= 258 && w.marks === WANT.marks && w.staged === WANT.staged, 'Wolfson opened from the backup with its ticks', JSON.stringify(w));
 await p.goto('http://localhost:5176/project'); await p.waitForTimeout(2500);
-check(/PREVIEW of the backup from/.test(await p.textContent('body')), 'after moving to another page and reloading, it is STILL a preview');
+check(/Preview of the backup from/.test(await p.textContent('body')), 'after moving to another page and reloading, it is STILL a preview');
 // try to change something: it must stay in the tab
 await p.evaluate(() => { const s = window.__store.getState(); s.updateApartment(s.apartments[0].id, { generalNotes: 'PREVIEW EDIT' }, s.currentUser); });
 await p.waitForTimeout(2000);

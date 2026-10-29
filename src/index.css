@@ -866,3 +866,87 @@ html.board-full [data-board-page-root] {
   inset: 0;
   z-index: 60;
 }
+
+/* ── TzviAir Design Language: settings, presses, fields ───────────────────────
+   From the design system (claude.ai/artifact/4LrJSmHvq5GK7YFbThTRJs):
+   tokens.json and components/bundle.css, the classes the SettingsList uses.
+   Every settings screen is grouped categories on coloured tiles with white
+   icons, like a phone's settings (owner, 2026-10-29). */
+:root {
+  --tz-navy: #1e3a5f; --tz-navy-deep: #162d4a; --tz-navy-words: #1e3a5f; --tz-navy-line: #1e3a5f;
+  --tz-sky: #4aa8d8; --tz-sky-soft: #e8f4fa;
+  --tz-ground: #f3f4f6; --tz-card: #ffffff; --tz-raise: #f9fafb; --tz-hover: #f3f4f6; --tz-field: #ffffff;
+  --tz-line: #e5e7eb; --tz-line-soft: #f3f4f6; --tz-line-strong: #d1d5db;
+  --tz-ink: #111827; --tz-ink-heading: #1f2937; --tz-ink-2: #4b5563; --tz-ink-soft: #6b7280; --tz-ink-faint: #9ca3af;
+  --tz-good: #16a34a; --tz-good-ground: #ecfdf5; --tz-good-ink: #15803d;
+  --tz-crit-ground: #fef2f2; --tz-crit-ink: #b91c1c; --tz-crit-line: #fecaca;
+  --tz-warn: #f59e0b; --tz-warn-ground: #fffbeb; --tz-warn-ink: #92400e;
+  --on-fill: #ffffff; --toast-crit: #b91c1c;
+  --tz-r-press: 8px; --tz-r-card: 12px; --tz-r-window: 16px;
+  --space-1: 4px; --space-1\.5: 6px; --space-2: 8px; --space-3: 12px; --space-4: 16px; --space-5: 20px; --space-6: 24px;
+  --shadow-hover: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  --target-min: 36px; --target-touch: 40px;
+  --settings-list: 300px; --settings-row: 48px; --settings-tile: 30px; --settings-row-on: rgba(30, 58, 95, 0.08);
+  --tz-t-press: 150ms;
+  --focus-ring: 0 0 0 1px var(--tz-card), 0 0 0 3px var(--tz-sky);
+  --focus-field: 0 0 0 3px rgba(74, 168, 216, 0.25);
+  --tile-indigo: #6366f1; --tile-sky: #0ea5e9; --tile-slate: #64748b; --tile-emerald: #10b981; --tile-orange: #f97316;
+  --tile-rose: #f43f5e; --tile-teal: #0d9488; --tile-blue: #3b82f6; --tile-pink: #ec4899; --tile-green: #16a34a;
+  --tile-amber: #f59e0b; --tile-blue-deep: #2563eb; --tile-violet: #8b5cf6; --tile-cyan: #0891b2;
+  --tile-green-deep: #15803d; --tile-gray: #4b5563; --tile-stone: #78716c;
+}
+.tz-btn { display: inline-flex; align-items: center; justify-content: center; gap: var(--space-1\.5); min-height: var(--target-min); padding: 8px 16px; border-radius: var(--tz-r-press); font-size: 14px; font-weight: 500; line-height: 1.25; border: 1px solid transparent; background: none; cursor: pointer; transition: background-color var(--tz-t-press) ease, color var(--tz-t-press) ease, border-color var(--tz-t-press) ease; white-space: nowrap; }
+.tz-btn svg { width: 16px; height: 16px; flex-shrink: 0; }
+.tz-btn:disabled, .tz-btn[aria-disabled="true"] { opacity: .4; pointer-events: none; }
+.tz-btn:focus-visible { outline: 2px solid transparent; box-shadow: var(--focus-ring); }
+.tz-btn-primary { background: var(--tz-navy); color: var(--on-fill); }
+.tz-btn-primary:hover { background: var(--tz-navy-deep); }
+.tz-btn-secondary { border-color: var(--tz-line); background: var(--tz-card); color: var(--tz-ink-2); }
+.tz-btn-secondary:hover { background: var(--tz-raise); }
+.tz-btn-danger { border-color: var(--tz-crit-line); background: var(--tz-card); color: var(--tz-crit-ink); }
+.tz-btn-danger:hover { background: var(--tz-crit-ground); }
+.tz-btn-quiet { color: var(--tz-ink-2); }
+.tz-btn-quiet:hover { background: var(--tz-hover); }
+@media (pointer: coarse) { .tz-btn { min-height: var(--target-touch); } }
+.tz-input, .tz-select { border: 1px solid var(--tz-line); border-radius: var(--tz-r-press); height: 36px; padding: 0 12px; font-size: 14px; color: var(--tz-ink); background: var(--tz-field); outline: none; transition: border-color var(--tz-t-press) ease, box-shadow var(--tz-t-press) ease; min-width: 0; }
+.tz-input::placeholder { color: var(--tz-ink-faint); }
+.tz-input:focus, .tz-select:focus { border-color: var(--tz-navy-line); box-shadow: var(--focus-field); }
+@media (pointer: coarse) { .tz-input { font-size: 16px; } }
+.tz-set { display: flex; flex-direction: column; gap: 20px; }
+.tz-set-group { display: flex; flex-direction: column; gap: var(--space-1\.5); }
+.tz-set-head { padding: 0 var(--space-4); margin: 0; font-size: 13px; font-weight: 500; color: var(--tz-ink-soft); }
+.tz-set-box { list-style: none; margin: 0; padding: 0; overflow: hidden; border-radius: var(--tz-r-card); border: 1px solid var(--tz-line); background: var(--tz-card); box-shadow: var(--shadow-hover); }
+.tz-set-row { display: flex; align-items: center; gap: var(--space-3); width: 100%; min-height: var(--settings-row); padding-inline-start: var(--space-3); font-size: 15px; color: var(--tz-ink); text-align: start; text-decoration: none; background: none; border: 0; cursor: pointer; transition: background-color var(--tz-t-press) ease; }
+.tz-set-row:hover, .tz-set-row:focus-visible { background: var(--tz-hover); outline: none; }
+.tz-set-row[aria-current="page"] { background: var(--settings-row-on); font-weight: 600; }
+.tz-set-tile { display: flex; align-items: center; justify-content: center; flex-shrink: 0; width: var(--settings-tile); height: var(--settings-tile); border-radius: var(--tz-r-press); color: var(--on-fill); }
+.tz-set-tile svg { width: 18px; height: 18px; }
+.tz-set-text { display: flex; align-items: center; gap: var(--space-2); flex: 1; min-width: 0; min-height: var(--settings-row); padding-inline-end: var(--space-3); border-bottom: 1px solid var(--tz-line-soft); }
+.tz-set-box > li:last-child .tz-set-text { border-bottom: 0; }
+.tz-set-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tz-set-chev { width: 16px; height: 16px; flex-shrink: 0; color: var(--tz-ink-soft); }
+[dir="rtl"] .tz-set-chev { transform: scaleX(-1); }
+.tz-set-back { display: inline-flex; align-items: center; gap: 2px; margin-inline-start: -4px; padding: 4px 0; font-size: 15px; font-weight: 500; color: var(--tz-navy-words); background: none; border: 0; cursor: pointer; }
+.tz-set-back svg { width: 20px; height: 20px; }
+[dir="rtl"] .tz-set-back svg { transform: scaleX(-1); }
+.tz-set-title { margin: 0; padding: 0 4px; font-size: 20px; font-weight: 700; color: var(--tz-ink-heading); }
+.tz-set-pane { background: var(--tz-card); border: 1px solid var(--tz-line); border-radius: var(--tz-r-card); box-shadow: var(--shadow-hover); padding: 0 var(--space-4); }
+.tz-set-item { display: grid; align-items: center; gap: var(--space-2); padding: var(--space-3) 0; border-bottom: 1px solid var(--tz-line-soft); }
+.tz-set-item:last-child { border-bottom: 0; }
+@media (min-width: 640px) { .tz-set-item { grid-template-columns: 1fr auto; gap: var(--space-4); } }
+.tz-set-item-label { display: block; font-size: 14px; font-weight: 500; color: var(--tz-ink); }
+.tz-set-item-hint { font-size: 12px; color: var(--tz-ink-soft); }
+.tz-set-foot { padding: 0 var(--space-4); margin: 0; font-size: 12px; color: var(--tz-ink-soft); }
+/* The shell: list and page side by side from 1024px, one at a time below. */
+.tz-settings { display: block; max-width: 1400px; margin: 0 auto; }
+.tz-settings .tz-set { max-width: 576px; margin: 0 auto; }
+.tz-settings[data-open] > .tz-set { display: none; }
+.tz-settings:not([data-open]) > .tz-set-page { display: none; }
+@media (min-width: 1024px) {
+  .tz-settings { display: grid; grid-template-columns: var(--settings-list) minmax(0, 1fr); gap: var(--space-6); align-items: start; }
+  .tz-settings > .tz-set { position: sticky; top: 0; max-width: none; margin: 0; display: flex !important; }
+  .tz-settings > .tz-set-page { display: block !important; }
+  .tz-settings .tz-set-back { display: none; }
+}
+.tz-set-page-head { display: flex; flex-direction: column; gap: 4px; margin-bottom: var(--space-4); }
+.tz-set-page-body { display: flex; flex-direction: column; gap: var(--space-6); max-width: 760px; }

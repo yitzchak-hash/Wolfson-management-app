@@ -104,7 +104,7 @@ function fileToDataUrl(file: File): Promise<string> {
 
 export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast, onRequestAddTask }: Props) {
   const { stages, activityLogs, apartments, updateApartment, mergeApartments, unmergeApartments,
-    autoBackup, backupSnapshots, restoreFromSnapshot, mainUiStrings: ui,
+    mainUiStrings: ui,
     officeNoteFiles, addOfficeNoteFile, updateOfficeNoteFile, deleteOfficeNoteFile, addActivityLog,
     appendApartmentNote, removeApartmentNote,
     contractorAssignments, contractors, updateContractorAssignment,
@@ -3438,19 +3438,10 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
             <div>
               <div className="flex items-center justify-between mb-3">
                 <h4 className="text-sm font-semibold text-gray-700">{ui.recentActivityLabel}</h4>
-                {autoBackup && (
-                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-green-100 text-green-700 font-medium">{ui.autoBackupOn}</span>
-                )}
               </div>
-              <ActivitySection
-                logs={aptLogs}
-                autoBackup={autoBackup}
-                backupSnapshots={backupSnapshots}
-                onRestore={(snapshotId) => {
-                  restoreFromSnapshot(snapshotId);
-                  onToast(ui.restoredToPoint);
-                }}
-              />
+              {/* Restore points on one computer are retired (2026-10-29): the
+                  full backups in Settings → Backups hold every workspace. */}
+              <ActivitySection logs={aptLogs} />
             </div>
           )}
         </div>

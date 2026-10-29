@@ -18,7 +18,8 @@ import GoalsPage from './pages/GoalsPage';
 import { CalendarPage } from './pages/CalendarPage';
 import { TvPresentationPage } from './pages/TvPresentationPage';
 import { armWorkspaceHistoryRestore } from './data/workspaceHistory';
-import { previewInfo } from './data/previewMode';
+import { previewInfo, israelTime, restoreThisBackup, leavePreview } from './data/previewMode';
+import { Loader2 } from 'lucide-react';
 
 // Before the router can subscribe to popstate — see workspaceHistory.ts.
 armWorkspaceHistoryRestore();
@@ -90,18 +91,86 @@ function useEnterCommits() {
 
 /**
  * The bar across a backup PREVIEW tab (previewMode.ts): which backup this is,
- * and that nothing done here is saved.
+ * that nothing done here is saved, and — for Tzvi and the developer — the
+ * Restore press, which asks first in plain words with the numbers.
  */
+const WS_NAME: Record<string, string> = { wolfson: 'Wolfson', general: 'Job Board', netiv: 'Netiv' };
 function PreviewBar() {
   const p = previewInfo();
+  const role = useStore(st => st.currentUser?.role ?? '');
+  const [ask, setAsk] = React.useState(false);
+  const [busy, setBusy] = React.useState(false);
+  const [done, setDone] = React.useState<null | { ok: boolean; put?: number; removed?: number; safetyBackup?: string | null; error?: string }>(null);
   if (!p) return null;
-  const when = new Date(p.exportedAt).toLocaleString('en-GB', { timeZone: 'Asia/Jerusalem', dateStyle: 'medium', timeStyle: 'short' });
+  const when = israelTime(p.exportedAt);
+  const mayRestore = role === 'Boss' || role === 'Dev';
+  const which = p.kind === 'old' ? `${WS_NAME[p.workspaces[0]] ?? p.workspaces[0]} only` : 'every workspace';
+  const go = async () => {
+    setBusy(true);
+    const r = await restoreThisBackup();
+    setBusy(false); setAsk(false); setDone(r);
+  };
   return (
-    <div style={{ position: 'fixed', top: 6, left: '50%', transform: 'translateX(-50%)', zIndex: 2147483000 }}
-      className="flex items-center gap-3 rounded-full bg-amber-400 text-amber-950 shadow-lg px-4 py-1.5 text-sm font-semibold">
-      <span>PREVIEW of the backup from {when} · {p.totalDocuments.toLocaleString()} records · nothing you do here is saved</span>
-      <button onClick={() => window.close()} className="rounded-full bg-amber-950 text-amber-50 px-3 py-0.5 text-xs">Close preview</button>
-    </div>
+    <>
+      <div role="status" className="fixed inset-x-0 bottom-0 flex flex-wrap items-center justify-center gap-3 px-4 py-2 text-sm"
+        style={{ zIndex: 2147483000, background: '#fffbeb', borderTop: '2px solid #f59e0b', color: '#92400e', paddingBottom: 'max(8px, env(safe-area-inset-bottom, 0px))' }}>
+        <span className="font-semibold">Preview of the backup from {when}</span>
+        <span>{which} · {p.totalDocuments.toLocaleString()} records · nothing you do here is saved</span>
+        {mayRestore && (
+          <button onClick={() => setAsk(true)} className="inline-flex items-center min-h-[32px] px-3 rounded-lg font-medium text-white" style={{ background: '#1e3a5f' }}>
+            Restore this backup
+          </button>
+        )}
+        <button onClick={() => window.close()} className="inline-flex items-center min-h-[32px] px-3 rounded-lg font-medium border bg-white" style={{ borderColor: '#e5e7eb', color: '#4b5563' }}>
+          Close preview
+        </button>
+      </div>
+      {(ask || done) && (
+        <div className="fixed inset-0 flex items-center justify-center p-4" style={{ zIndex: 2147483001, background: 'rgba(17,24,39,.45)' }}>
+          <div role="dialog" aria-modal="true" className="w-full max-w-md bg-white rounded-2xl p-5 grid gap-4" style={{ boxShadow: '0 20px 50px rgba(0,0,0,.25)', color: '#111827' }}>
+            {ask && !done && (
+              <>
+                <h2 className="text-base font-semibold" style={{ color: '#1f2937' }}>Restore the backup from {when}?</h2>
+                <p className="text-sm">
+                  {p.kind === 'old'
+                    ? <>The {WS_NAME[p.workspaces[0]] ?? p.workspaces[0]} workspace becomes exactly as it was then. The other workspaces are not touched.</>
+                    : <>The whole app becomes exactly as it was then, in every workspace.</>}
+                  {' '}Anything added after it is removed, and anything changed goes back.
+                </p>
+                <ul className="text-sm grid gap-1">
+                  {p.counts.map(c => (
+                    <li key={c.ws}><b>{WS_NAME[c.ws] ?? c.ws}:</b> {c.jobs.toLocaleString()} {c.ws === 'general' ? 'jobs' : 'flats'}, {c.widgets} board items, {c.tasks} tasks</li>
+                  ))}
+                </ul>
+                <p className="text-sm" style={{ color: '#4b5563' }}>Before anything changes, a backup of how things are right now is saved to Drive, so this can be undone.</p>
+                <div className="flex flex-wrap justify-end gap-2">
+                  <button onClick={() => setAsk(false)} disabled={busy} className="min-h-[36px] px-4 rounded-lg border text-sm font-medium" style={{ borderColor: '#e5e7eb', color: '#4b5563' }}>Keep things as they are</button>
+                  <button onClick={go} disabled={busy} className="inline-flex items-center gap-2 min-h-[36px] px-4 rounded-lg text-sm font-medium text-white" style={{ background: '#b91c1c' }}>
+                    {busy && <Loader2 size={16} className="animate-spin" />}
+                    {busy ? 'Restoring…' : `Restore ${which}`}
+                  </button>
+                </div>
+              </>
+            )}
+            {done && done.ok && (
+              <>
+                <h2 className="text-base font-semibold" style={{ color: '#15803d' }}>Restored</h2>
+                <p className="text-sm">The app is now as it was on {when}: {done.put?.toLocaleString()} records put back, {done.removed?.toLocaleString()} newer ones removed.</p>
+                {done.safetyBackup && <p className="text-sm" style={{ color: '#4b5563' }}>How things were just before is saved in Drive as <span className="font-mono text-xs">{done.safetyBackup}</span>.</p>}
+                <div className="flex justify-end"><button onClick={leavePreview} className="min-h-[36px] px-4 rounded-lg text-sm font-medium text-white" style={{ background: '#1e3a5f' }}>Open the app</button></div>
+              </>
+            )}
+            {done && !done.ok && (
+              <>
+                <h2 className="text-base font-semibold" style={{ color: '#b91c1c' }}>Nothing was restored</h2>
+                <p className="text-sm">{done.error}</p>
+                <div className="flex justify-end"><button onClick={() => setDone(null)} className="min-h-[36px] px-4 rounded-lg border text-sm font-medium" style={{ borderColor: '#e5e7eb', color: '#4b5563' }}>Back to the preview</button></div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+    </>
   );
 }
 

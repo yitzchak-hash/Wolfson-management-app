@@ -9,6 +9,8 @@ import type { UndoDiff, UndoWorld } from './undoWords';
 import { create } from 'zustand';
 import { Apartment, CanvasElement, ActivityLog, Project, Stage, StageNote, StageNoteEntry, StageNoteAttachment, StageNoteVersion, GeneralNoteVersion, User, Building, Contractor, ContractorAssignment, ContractorNote, ContractorPhoto, BackupSnapshot, DataSummary, OfficeNoteFile, BackupFrequency, DriveExportFrequency, BackupLogEntry, ContractorUiStrings, DEFAULT_CONTRACTOR_UI_STRINGS, MainUiStrings, DEFAULT_MAIN_UI_STRINGS, HEBREW_MAIN_UI_STRINGS, BoardSetting, BoardSettingKey, BoardLayout, PlanPin, PlanAnnotation, BoardView, Employee, TimePunch, TimeClockSettings, WorkerLevel, StageSuggestion, FocusIntent, StageMark } from '../types';
 import { ReportDef } from './reportModel';
+/** How often the full backup runs during the day (Settings → Backups). The night one always runs. */
+export type FullBackupEvery = 'activity' | 'hourly' | 'every4h' | 'night';
 import { setPrefsPerson, prefGet, prefSet, onPrefsChange, prefsPerson } from './prefs';
 import { saveNewStep, moveStep, dropSteps, loadSteps } from './undoCloud';
 
@@ -1232,7 +1234,10 @@ interface AppState {
   setDriveExportFrequency: (f: DriveExportFrequency) => void;
   addBackupLog: (entry: Omit<BackupLogEntry, 'id' | 'createdAt'>) => void;
   restoreFromSnapshot: (snapshotId: string) => void;
-  exportToDrive: () => Promise<{ ok: boolean; error?: string }>;
+  exportToDrive: (opts?: { now?: boolean }) => Promise<{ ok: boolean; error?: string; file?: string; skipped?: string }>;
+  /** How often the full backup runs during the day (the night one always runs). */
+  fullBackupEvery: FullBackupEvery;
+  setFullBackupEvery: (v: FullBackupEvery) => void;
   getDataSummary: () => DataSummary;
 
   // Contractor UI language strings
@@ -1479,6 +1484,13 @@ export const useStore = create<AppState>((set, get) => ({
   backupDriveFolderLink: (stored?.backupDriveFolderLink as string | null) ?? '',
   driveExportFrequency: (stored?.driveExportFrequency as DriveExportFrequency | null) ?? 'off',
   lastDriveExportAt: (stored?.lastDriveExportAt as string | null) ?? null,
+  fullBackupEvery: ((stored as Record<string, unknown> | null)?.fullBackupEvery as FullBackupEvery | undefined) ?? 'activity',
+  setFullBackupEvery: (v) => {
+    const prev = get().fullBackupEvery;
+    set({ fullBackupEvery: v });
+    persist(get);
+    saveAppField('fullBackupEvery', prev, v);
+  },
   contractorUiStrings: (stored?.contractorUiStrings as ContractorUiStrings | null) ?? DEFAULT_CONTRACTOR_UI_STRINGS,
   mainUiStrings: mergeFreshMainUi(stored?.mainUiStrings as Partial<MainUiStrings> | null),
   pendingOpenAptId: null,
@@ -3815,47 +3827,9 @@ export const useStore = create<AppState>((set, get) => ({
       const newLogs = [entry, ...state.activityLogs].slice(0, 500);
       // Somebody LOOKING at a job changes no data — a snapshot exists to
       // restore what a change overwrote, so an 'opened' entry never takes one.
-      if (entry.actionType === 'opened') return { activityLogs: newLogs };
-      if (!state.autoBackup) return { activityLogs: newLogs };
-
-      // Check frequency before snapshotting
-      const freq = state.backupFrequency ?? 'activity';
-      const now = Date.now();
-      const last = state.lastAutoBackupAt ? new Date(state.lastAutoBackupAt).getTime() : 0;
-      const DAY = 86_400_000;
-      let shouldSnapshot = false;
-      if (freq === 'activity') shouldSnapshot = true;
-      else if (freq === 'daily' && now - last > DAY) shouldSnapshot = true;
-      else if (freq === 'weekly' && now - last > 7 * DAY) shouldSnapshot = true;
-      else if (freq === 'monthly' && now - last > 30 * DAY) shouldSnapshot = true;
-
-      if (!shouldSnapshot) return { activityLogs: newLogs };
-
-      const snapshot: BackupSnapshot = {
-        id: generateId(),
-        activityLogId: entry.id,
-        createdAt: entry.createdAt,
-        label: `${entry.userName} · ${plainSummary(entry, state.stages)}${entry.apartmentNumber ? ` · ${entry.apartmentNumber}` : ''}`,
-        apartmentStates: state.apartments.map(a => ({
-          id: a.id,
-          currentStageId: a.currentStageId,
-          classification: a.classification,
-          generalNotes: a.generalNotes,
-          driveLink: a.driveLink,
-          plansPdfLink: a.plansPdfLink,
-          displayName: a.displayName,
-          mergedWith: a.mergedWith,
-        })),
-        stageNotes: state.stageNotes,
-        contractorAssignments: state.contractorAssignments,
-        contractors: state.contractors,
-        contractorNotes: state.contractorNotes,
-      };
-      return {
-        activityLogs: newLogs,
-        backupSnapshots: [snapshot, ...state.backupSnapshots],
-        lastAutoBackupAt: entry.createdAt,
-      };
+      // Snapshot history is retired (owner, 2026-10-29): the full backups in
+      // Drive hold every workspace, and they are what a restore uses.
+      return { activityLogs: newLogs };
     });
     persist(get);
     fsSet(projectCollection(get().currentProjectId, 'activityLogs'), entry.id, entry);
@@ -3885,56 +3859,32 @@ export const useStore = create<AppState>((set, get) => ({
     fsSet('settings', 'app', { driveExportFrequency: f });
   },
 
-  exportToDrive: async () => {
-    const state = get();
-    const { backupDriveFolderLink } = state;
+  exportToDrive: async (opts?: { now?: boolean }) => {
+    // The FULL backup — every workspace, every record — made on the server
+    // from the cloud itself (lib/fullBackup.js). The old one-workspace files
+    // are retired (owner, 2026-10-29). `now`: "Back up now" — read
+    // everything, ignore the 20-minute gap.
     const key = (import.meta.env as Record<string, string>)['VITE_DRIVE_API_KEY'] ?? '';
-    if (!backupDriveFolderLink || !key) return { ok: false, error: 'Drive folder not configured' };
+    if (!get().backupDriveFolderLink || !key) return { ok: false, error: 'No Drive folder is set for backups' };
+    const prevAt = get().lastDriveExportAt;
+    const at = new Date().toISOString();
+    // Claim the slot first, so the office's other computers do not all ask at once.
+    set({ lastDriveExportAt: at });
+    saveAppField('lastDriveExportAt', prevAt, at);
     try {
-      const json = get().exportData();
-      const filename = `wolfson-backup-${new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)}.json`;
-      // Find or create Backups subfolder
-      const { extractFolderId } = await import('./driveApi');
-      const parentId = extractFolderId(backupDriveFolderLink);
-      if (!parentId) return { ok: false, error: 'Invalid Drive folder URL' };
-      const folderRes = await fetch('/api/folder', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-api-key': key },
-        body: JSON.stringify({ parentId, name: 'Backups' }),
-      });
-      if (!folderRes.ok) return { ok: false, error: 'Failed to access Drive folder' };
-      const { folderId } = await folderRes.json();
-      const data = btoa(unescape(encodeURIComponent(json)));
-      const uploadRes = await fetch('/api/drive-upload', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-api-key': key },
-        body: JSON.stringify({ folderId, filename, mimeType: 'application/json', data }),
-      });
-      if (!uploadRes.ok) return { ok: false, error: 'Upload failed' };
-      const now = new Date().toISOString();
-      const prevAt = get().lastDriveExportAt;
-      set({ lastDriveExportAt: now });
-      // Shared, so the office's computers keep ONE backup schedule between them.
-      saveAppField('lastDriveExportAt', prevAt, now);
-      persist(get);
-      get().addBackupLog({ filename, sizeKB: Math.round(json.length / 1024), driveUploaded: true, triggeredBy: 'scheduled' });
-      // And the FULL backup — every workspace, every record — made on the
-      // server from the cloud itself (lib/fullBackup.js). It reads only what
-      // changed since the last one, and skips itself within 20 minutes of it.
-      fetch('/api/drive-upload', {
+      const r = await fetch('/api/drive-upload', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'x-api-key': key },
         body: JSON.stringify({
-          mode: 'full-backup',
+          mode: 'full-backup', now: !!opts?.now,
           projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
           apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
         }),
-      }).then(r => r.json()).then(out => {
-        if (out?.ok && out.file && !out.skipped) {
-          get().addBackupLog({ filename: out.file, sizeKB: out.sizeKB ?? 0, driveUploaded: true, triggeredBy: 'scheduled' });
-        }
-      }).catch(e => console.warn('full backup request failed:', e));
-      return { ok: true };
+      });
+      const out = await r.json().catch(() => ({}));
+      if (!r.ok || !out?.ok) return { ok: false, error: out?.error ?? `Drive answered ${r.status}` };
+      if (out.file && !out.skipped) get().addBackupLog({ filename: out.file, sizeKB: out.sizeKB ?? 0, driveUploaded: true, triggeredBy: opts?.now ? 'manual' : 'scheduled' });
+      return { ok: true, file: out.file as string | undefined, skipped: out.skipped as string | undefined };
     } catch (e) {
       return { ok: false, error: String(e) };
     }
@@ -4209,6 +4159,7 @@ export const useStore = create<AppState>((set, get) => ({
           } : {}),
           ...(appS.driveExportFrequency ? { driveExportFrequency: appS.driveExportFrequency as DriveExportFrequency } : {}),
           ...(Array.isArray(appS.backupLogs) ? { backupLogs: appS.backupLogs as BackupLogEntry[] } : {}),
+          ...(typeof appS.fullBackupEvery === 'string' ? { fullBackupEvery: appS.fullBackupEvery as FullBackupEvery } : {}),
           ...(typeof appS.lastDriveExportAt === 'string' && appS.lastDriveExportAt > (state.lastDriveExportAt ?? '') ? { lastDriveExportAt: appS.lastDriveExportAt } : {}),
         }));
         persist(get);
@@ -4330,6 +4281,7 @@ export const useStore = create<AppState>((set, get) => ({
         ...(appSettings.boardViews ? { boardViews: appSettings.boardViews as BoardView[] } : {}),
         ...(appSettings.driveExportFrequency ? { driveExportFrequency: appSettings.driveExportFrequency as DriveExportFrequency } : {}),
         ...(Array.isArray(appSettings.backupLogs) ? { backupLogs: appSettings.backupLogs as BackupLogEntry[] } : {}),
+        ...(typeof appSettings.fullBackupEvery === 'string' ? { fullBackupEvery: appSettings.fullBackupEvery as FullBackupEvery } : {}),
         ...(typeof appSettings.lastDriveExportAt === 'string' && appSettings.lastDriveExportAt > (state.lastDriveExportAt ?? '') ? { lastDriveExportAt: appSettings.lastDriveExportAt } : {}),
         ...(appSettings.savedReports ? { savedReports: appSettings.savedReports as Record<string, ReportDef[]> } : {}),
         ...(appSettings.projectOrder ? { projectOrder: appSettings.projectOrder as string[] } : {}),
@@ -4472,13 +4424,17 @@ export const useStore = create<AppState>((set, get) => ({
     const DRIVE_THRESHOLDS: Record<string, number> = {
       off: 0, hourly: 3_600_000, every5h: 18_000_000, every12h: 43_200_000, daily: 86_400_000, weekly: 604_800_000,
     };
+    // The FULL backup (lib/fullBackup.js) during the day, as often as
+    // Settings → Backups says; the night one runs on the server regardless.
+    // One shared clock (lastDriveExportAt in settings/app) for every computer.
+    void DRIVE_THRESHOLDS;
+    const FULL_EVERY: Record<FullBackupEvery, number> = { activity: 20 * 60_000, hourly: 3_600_000, every4h: 4 * 3_600_000, night: 0 };
     function checkDriveExport() {
-      const { driveExportFrequency, lastDriveExportAt, backupDriveFolderLink } = get();
-      if (driveExportFrequency === 'off' || !backupDriveFolderLink) return;
-      const threshold = DRIVE_THRESHOLDS[driveExportFrequency] ?? 0;
-      if (threshold === 0) return;
+      const { fullBackupEvery, lastDriveExportAt, backupDriveFolderLink } = get();
+      const threshold = FULL_EVERY[fullBackupEvery] ?? 0;
+      if (!threshold || !backupDriveFolderLink) return;
       const last = lastDriveExportAt ? new Date(lastDriveExportAt).getTime() : 0;
-      if (Date.now() - last >= threshold) get().exportToDrive();
+      if (Date.now() - last >= threshold) void get().exportToDrive();
     }
     checkDriveExport();
     const driveTimer = setInterval(checkDriveExport, 5 * 60 * 1000);
@@ -4606,6 +4562,7 @@ function persistNow(get: () => AppState) {
     backupDriveFolderLink: state.backupDriveFolderLink,
     driveExportFrequency: state.driveExportFrequency,
     lastDriveExportAt: state.lastDriveExportAt,
+    fullBackupEvery: state.fullBackupEvery,
     contractorUiStrings: state.contractorUiStrings,
     mainUiStrings: state.mainUiStrings,
     generalNoteVersions: state.generalNoteVersions.slice(0, 200),

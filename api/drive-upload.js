@@ -5,6 +5,7 @@
 import { google } from 'googleapis';
 import { Readable } from 'stream';
 import { runFullBackup, listFullBackups } from '../lib/fullBackup.js';
+import { runRestore } from '../lib/fullRestore.js';
 
 function getDrive() {
   const json = process.env.GOOGLE_SERVICE_ACCOUNT_JSON;
@@ -51,7 +52,7 @@ export default async function handler(req, res) {
         ...(!process.env.VITE_FIREBASE_PROJECT_ID && /^[a-z0-9-]{4,40}$/.test(String(req.query.projectId ?? '')) ? { VITE_FIREBASE_PROJECT_ID: String(req.query.projectId) } : {}),
         ...(!process.env.VITE_FIREBASE_API_KEY && /^[A-Za-z0-9_-]{20,60}$/.test(String(req.query.apiKey ?? '')) ? { VITE_FIREBASE_API_KEY: String(req.query.apiKey) } : {}),
       };
-      return res.json({ files: await listFullBackups({ drive: getDrive(), env }) });
+      return res.json(await listFullBackups({ drive: getDrive(), env, old: !!req.query.old, limit: req.query.old ? 200 : 60 }));
     } catch (err) {
       console.error('list full backups error:', err.message);
       return res.status(500).json({ error: err.message });
@@ -76,7 +77,8 @@ export default async function handler(req, res) {
         ...(!process.env.VITE_FIREBASE_PROJECT_ID && /^[a-z0-9-]{4,40}$/.test(b.projectId ?? '') ? { VITE_FIREBASE_PROJECT_ID: b.projectId } : {}),
         ...(!process.env.VITE_FIREBASE_API_KEY && /^[A-Za-z0-9_-]{20,60}$/.test(b.apiKey ?? '') ? { VITE_FIREBASE_API_KEY: b.apiKey } : {}),
       };
-      const out = await runFullBackup({ drive: getDrive(), env, forceFull: req.method === 'GET' });
+      // "Back up now" (b.now) and the nightly run read everything and ignore the 20-minute gap.
+      const out = await runFullBackup({ drive: getDrive(), env, forceFull: req.method === 'GET' || !!b.now });
       return res.json(out);
     } catch (err) {
       console.error('full backup error:', err.message);
@@ -87,6 +89,28 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
   if (!process.env.API_KEY || req.headers['x-api-key'] !== process.env.API_KEY) {
     return res.status(401).json({ error: 'Unauthorized' });
+  }
+
+  /**
+   * RESTORE (lib/fullRestore.js): from the backup preview's Restore press.
+   * A full backup of how things are now is saved first; then the cloud is
+   * made exactly like the chosen backup (an old one-workspace file: that
+   * workspace only).
+   */
+  if (req.body?.mode === 'full-restore') {
+    const b = req.body;
+    if (!/^[A-Za-z0-9_-]{10,100}$/.test(String(b.fileId ?? ''))) return res.status(400).json({ error: 'Which backup?' });
+    const env = {
+      ...process.env,
+      ...(!process.env.VITE_FIREBASE_PROJECT_ID && /^[a-z0-9-]{4,40}$/.test(b.projectId ?? '') ? { VITE_FIREBASE_PROJECT_ID: b.projectId } : {}),
+      ...(!process.env.VITE_FIREBASE_API_KEY && /^[A-Za-z0-9_-]{20,60}$/.test(b.apiKey ?? '') ? { VITE_FIREBASE_API_KEY: b.apiKey } : {}),
+    };
+    try {
+      return res.json(await runRestore({ drive: getDrive(), fileId: b.fileId, env }));
+    } catch (err) {
+      console.error('restore error:', err.message);
+      return res.status(500).json({ ok: false, error: err.message });
+    }
   }
 
   const { folderId, filename, mimeType, data } = req.body;

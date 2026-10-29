@@ -25,6 +25,9 @@ import { Toast } from '../components/ui/Toast';
 import { BoardRegionPicker } from '../components/board/BoardRegionPicker';
 import { NewWorkspace } from '../components/settings/NewWorkspace';
 import { ToolbarEditor } from '../components/settings/ToolbarEditor';
+import { SettingsShell, type SettingsGroup } from '../components/settings/SettingsShell';
+import { BackupsPage } from '../components/settings/BackupsPage';
+import { ShieldCheck, HardHat, FolderKanban, Monitor, Cloud, ListChecks, FileInput, FileSpreadsheet } from 'lucide-react';
 import { WorkerLevelsPanel, WorkerLevelPicker, WorkerPermissionOverrides } from '../components/settings/WorkerLevels';
 import { DEFAULT_NEW_WORKER_LEVEL, permsOf, overrideCount, WORKER_PERMISSIONS, levelAnswer } from '../data/workerLevels';
 import { getDriveRoot, setDriveRoot, guessRoot } from '../data/drivePath';
@@ -274,7 +277,6 @@ const TV_SHAPES: { id: string; label: string; note: string }[] = [
   { id: '9:16',  label: '9:16',  note: 'Turned upright' },
 ];
 
-type Tab = 'stages' | 'users' | 'contractors' | 'timeclock' | 'app' | 'language' | 'buildings' | 'sheet' | 'tv' | 'workspaces';
 
 /**
  * Settings are split in two, and the split is deliberate:
@@ -290,8 +292,6 @@ type Tab = 'stages' | 'users' | 'contractors' | 'timeclock' | 'app' | 'language'
  */
 export type SettingsScope = 'project' | 'app';
 
-const PROJECT_TABS: Tab[] = ['stages', 'buildings', 'sheet'];
-const APP_TABS: Tab[] = ['workspaces', 'users', 'contractors', 'timeclock', 'tv', 'app', 'language'];
 
 const PRESET_COLORS = [
   '#ef4444', '#f97316', '#f59e0b', '#eab308', '#84cc16',
@@ -312,138 +312,104 @@ const CAT_COLORS: Record<ContractorCategory, string> = { drywall: '#f59e0b', ac:
 
 export function SettingsPage({ scope = 'project' }: { scope?: SettingsScope }) {
   const { stages, users, updateStage, addStage, deleteStage, updateUser, addUser, lightTheme, setLightTheme, mainUiStrings: s, currentProjectId, projects } = useStore();
-  // The Job Board has no buildings and no contractor status sheet, so those
-  // tabs would open on an empty page that can never be filled.
-  const tabs = scope === 'app'
-    ? APP_TABS
-    : (currentProjectId === 'general' ? (['stages'] as Tab[]) : PROJECT_TABS);
-  const [activeTab, setActiveTab] = useState<Tab>(tabs[0]);
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
-
-  function showToast(msg: string, type: 'success' | 'error' = 'success') {
-    setToast({ msg, type });
-  }
-
+  function showToast(msg: string, type: 'success' | 'error' = 'success') { setToast({ msg, type }); }
   const sortedStages = [...stages].sort((a, b) => a.order - b.order);
-
-  const TAB_LABELS: Record<Tab, string> = {
-    stages: s.settingsStages,
-    users: s.settingsUsers,
-    contractors: s.settingsContractors,
-    timeclock: 'Time clock',
-    app: s.settingsApp,
-    language: s.settingsLanguage,
-    buildings: s.settingsBuildings,
-    sheet: s.contractorSheetLabel,
-    tv: 'TV',
-    workspaces: 'Projects',
-  };
-
   const projectName = projects.find(p => p.id === currentProjectId)?.name ?? currentProjectId;
-
   const accent = projectColor(projects, currentProjectId);
+  const isJobBoard = currentProjectId === 'general';
 
-  return (
-    <div className="p-3 md:p-6 w-full max-w-3xl mx-auto">
-      {/* The two settings pages looked identical, so moving between them read as
-          nothing happening. Project settings now wears the workspace's own
-          colour and says whose settings these are; app settings stays neutral
-          and says it belongs to everything. */}
-      <div className="flex items-center gap-2.5 mb-1">
-        <span
-          className="w-1.5 h-7 rounded-full flex-shrink-0"
-          style={{ backgroundColor: scope === 'app' ? '#94a3b8' : accent }}
-          aria-hidden="true"
-        />
-        <div className="min-w-0">
-          <div className="text-[10px] font-extrabold tracking-widest uppercase"
-            style={{ color: scope === 'app' ? '#94a3b8' : accent }}>
-            {scope === 'app' ? 'Everything' : projectName}
-          </div>
-          <h1 className="text-lg md:text-2xl font-bold text-gray-900 leading-tight">
-            {scope === 'app' ? s.appSettingsTitle : s.projectSettingsTitle}
-          </h1>
-        </div>
-      </div>
-      <p className="text-xs md:text-sm text-gray-500 mb-3 md:mb-6 ml-4">
-        {scope === 'app'
-          ? s.appSettingsHint
-          : `${projectName} — ${s.projectSettingsHint}`}
-      </p>
-
-      <div className="flex gap-1 bg-gray-100 rounded-xl p-1 mb-4 md:mb-6 flex-wrap">
-        {tabs.map(tab => (
-          <button key={tab} onClick={() => setActiveTab(tab)}
-            className={`pick px-2.5 py-1.5 md:px-4 md:py-2 rounded-lg text-[12px] md:text-sm font-medium ${
-              activeTab === tab ? 'pick-on' : 'text-gray-500 hover:text-gray-700'
-            }`}
-            style={{
-              ['--pick-fill' as string]: scope === 'app' ? '#1e3a5f' : accent,
-              color: activeTab === tab ? '#ffffff' : undefined,
-            }}>
-            {TAB_LABELS[tab]}
-          </button>
-        ))}
-      </div>
-
-      {scope === 'project' && (
-        <WorkspaceLook onToast={showToast} />
-      )}
-      {activeTab === 'stages' && scope === 'project' && (
-        <div className="mb-5"><ToolbarEditor onToast={showToast} /></div>
-      )}
-      {activeTab === 'stages' && (
-        <StageSettings stages={sortedStages} updateStage={updateStage} addStage={addStage} deleteStage={deleteStage} onToast={showToast} currentProjectId={currentProjectId} />
-      )}
-      {/* Apartment types — a building thing; the Job Board has no apartments. */}
-      {activeTab === 'stages' && scope === 'project' && currentProjectId !== 'general' && (
-        <TipusSettings onToast={showToast} />
-      )}
-      {/* The project's own yes / no / don't-know buttons, shown on every apartment. */}
-      {activeTab === 'stages' && scope === 'project' && (
-        <CustomButtonSettings />
-      )}
-      {/* The CRM import belongs to the Job Board alone — a deals export maps
-          to board tiles and groups, not to apartments in a tower. */}
-      {activeTab === 'stages' && scope === 'project' && currentProjectId === 'general' && (
-        <>
-          <AutoJobsCard onToast={showToast} />
-          <ImportJobsCard onToast={showToast} />
-        </>
-      )}
-      {activeTab === 'users' && (
+  /**
+   * THE SETTINGS LIST (TzviAir Design Language, SettingsList — owner,
+   * 2026-10-29): grouped categories on coloured tiles with white icons, like
+   * a phone's settings. Everything the old tab strips held is here, each in
+   * one category; nothing was removed except the retired backup tools
+   * (Settings → Backups replaces them).
+   */
+  const groups: SettingsGroup[] = scope === 'app' ? [
+    { name: 'You', categories: [
+      { id: 'appearance', label: 'Appearance', icon: Palette, tile: 'indigo',
+        render: () => <AppSettingsTab lightTheme={lightTheme} setLightTheme={setLightTheme} onToast={showToast} /> },
+      { id: 'words', label: s.settingsLanguage, icon: Languages, tile: 'sky', render: () => <LanguageTab onToast={showToast} /> },
+    ] },
+    { name: 'Team', categories: [
+      { id: 'users', label: s.settingsUsers, icon: ShieldCheck, tile: 'blue-deep', render: () => (
         <>
           <UserSettings users={users} updateUser={updateUser} addUser={addUser} onToast={showToast} />
           <BoardAccess onToast={showToast} />
+          <AccessCodesCard />
         </>
-      )}
-      {activeTab === 'contractors' && (
-        <ContractorsTab onToast={showToast} />
-      )}
-      {activeTab === 'timeclock' && (
-        <TimeClockTab onToast={showToast} />
-      )}
-      {activeTab === 'workspaces' && (
-        <NewWorkspace onToast={showToast} />
-      )}
-      {activeTab === 'tv' && (
-        <TvSettings onToast={showToast} />
-      )}
-      {activeTab === 'app' && (
-        <AppSettingsTab lightTheme={lightTheme} setLightTheme={setLightTheme} onToast={showToast} />
-      )}
-      {activeTab === 'sheet' && (
-        <ContractorSheetSettings onToast={showToast} />
-      )}
-      {activeTab === 'language' && (
-        <LanguageTab onToast={showToast} />
-      )}
-      {activeTab === 'buildings' && (
-        <BuildingsBuilderTab onToast={showToast} />
-      )}
+      ) },
+      { id: 'workers', label: s.settingsContractors, icon: HardHat, tile: 'orange', render: () => <ContractorsTab onToast={showToast} /> },
+      { id: 'timeclock', label: 'Time clock', icon: Clock, tile: 'teal', render: () => <TimeClockTab onToast={showToast} /> },
+    ] },
+    { name: 'Workspaces & screens', categories: [
+      { id: 'workspaces', label: 'Workspaces', icon: FolderKanban, tile: 'violet', render: () => <NewWorkspace onToast={showToast} /> },
+      { id: 'tv', label: 'TV', icon: Tv, tile: 'cyan', render: () => (
+        <>
+          <TvSettings onToast={showToast} />
+          <TvPresentationSettings onToast={showToast} />
+        </>
+      ) },
+    ] },
+    { name: 'Data', categories: [
+      { id: 'backups', label: 'Backups', icon: HardDriveDownload, tile: 'gray', render: () => <BackupsPage onToast={showToast} /> },
+      { id: 'computer', label: 'This computer', icon: Monitor, tile: 'stone', render: () => (
+        <>
+          <ThisComputerCard onToast={showToast} />
+          <DriveNameBackfill onToast={showToast} />
+        </>
+      ) },
+      { id: 'cloud', label: 'Cloud connection', icon: Cloud, tile: 'slate', render: () => <FirebaseStatusSection /> },
+    ] },
+  ] : [
+    { name: projectName, categories: [
+      { id: 'look', label: 'Look & toolbar', icon: Palette, tile: 'indigo', render: () => (
+        <>
+          <WorkspaceLook onToast={showToast} />
+          <ToolbarEditor onToast={showToast} />
+        </>
+      ) },
+      { id: 'stages', label: s.settingsStages, icon: ListChecks, tile: 'emerald', render: () => (
+        <>
+          <StageSettings stages={sortedStages} updateStage={updateStage} addStage={addStage} deleteStage={deleteStage} onToast={showToast} currentProjectId={currentProjectId} />
+          {!isJobBoard && <TipusSettings onToast={showToast} />}
+          <CustomButtonSettings />
+        </>
+      ) },
+      ...(isJobBoard ? [
+        { id: 'intake', label: 'New jobs coming in', icon: FileInput, tile: 'cyan', render: () => (
+          <>
+            <AutoJobsCard onToast={showToast} />
+            <ImportJobsCard onToast={showToast} />
+          </>
+        ) },
+      ] : [
+        { id: 'buildings', label: s.settingsBuildings, icon: Building2, tile: 'slate', render: () => <BuildingsBuilderTab onToast={showToast} /> },
+        { id: 'sheet', label: s.contractorSheetLabel, icon: FileSpreadsheet, tile: 'green-deep', render: () => <ContractorSheetSettings onToast={showToast} /> },
+      ]),
+    ] },
+  ];
 
-      {toast && <Toast message={toast.msg} type={toast.type} onClose={() => setToast(null)} />}
+  const header = (
+    <div className="flex items-center gap-2.5 mb-4 max-w-[1400px] mx-auto">
+      <span className="w-1.5 h-7 rounded-full flex-shrink-0" style={{ backgroundColor: scope === 'app' ? '#94a3b8' : accent }} aria-hidden="true" />
+      <div className="min-w-0">
+        <div className="text-[11px] font-bold tracking-wider uppercase" style={{ color: scope === 'app' ? '#64748b' : accent }}>
+          {scope === 'app' ? 'Everything' : projectName}
+        </div>
+        <h1 className="text-lg md:text-2xl font-bold leading-tight" style={{ color: 'var(--tz-ink-heading)' }}>
+          {scope === 'app' ? s.appSettingsTitle : s.projectSettingsTitle}
+        </h1>
+      </div>
     </div>
+  );
+
+  return (
+    <>
+      <SettingsShell scopeKey={scope === 'app' ? 'app' : `project_${currentProjectId}`} groups={groups} header={header} />
+      {toast && <Toast message={toast.msg} type={toast.type} onClose={() => setToast(null)} />}
+    </>
   );
 }
 
@@ -2896,12 +2862,15 @@ function AppSettingsTab({ lightTheme, setLightTheme, onToast }: {
         </div>
       </div>
 
-      <ThisComputerCard onToast={onToast} />
+    </div>
+  );
+}
 
-      <TvPresentationSettings onToast={onToast} />
-
-      <DriveNameBackfill onToast={onToast} />
-
+/** The office's sign-in codes (was on the old "App" tab; now under Users). */
+function AccessCodesCard() {
+  const { users, mainUiStrings: s } = useStore();
+  return (
+    <div className="space-y-5">
       <div className="bg-white border border-gray-200 rounded-xl p-5">
         <div className="flex items-center gap-2 mb-4">
           <Shield size={18} className="text-[#1e3a5f]" />
@@ -2924,425 +2893,6 @@ function AppSettingsTab({ lightTheme, setLightTheme, onToast }: {
         </div>
       </div>
 
-      <BackupRestoreSection onToast={onToast} />
-
-      <FirebaseStatusSection />
-    </div>
-  );
-}
-
-/**
- * THE FULL BACKUPS (lib/fullBackup.js): one file per moment holding every
- * workspace and every record. Each can be opened as a PREVIEW — the whole
- * app as it was then, in its own tab, sealed off so nothing is saved
- * (previewMode.ts). Owner, 2026-10-29.
- */
-function FullBackupsCard() {
-  type Row = { id: string; createdTime: string; sizeKB: number; records: number | null };
-  const [rows, setRows] = useState<Row[] | null>(null);
-  const [err, setErr] = useState('');
-  const [showAll, setShowAll] = useState(false);
-  useEffect(() => {
-    const key = (import.meta.env.VITE_DRIVE_API_KEY as string | undefined) ?? '';
-    const q = new URLSearchParams({
-      listFullBackups: '1',
-      projectId: (import.meta.env.VITE_FIREBASE_PROJECT_ID as string | undefined) ?? '',
-      apiKey: (import.meta.env.VITE_FIREBASE_API_KEY as string | undefined) ?? '',
-    });
-    fetch(`/api/drive-upload?${q}`, { headers: { 'x-api-key': key } })
-      .then(r => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
-      .then(j => setRows(j.files ?? []))
-      .catch(e => setErr(String(e?.message ?? e)));
-  }, []);
-  const when = (iso: string) => new Date(iso).toLocaleString('en-GB', { timeZone: 'Asia/Jerusalem', weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
-  const list = rows ? (showAll ? rows : rows.slice(0, 8)) : [];
-  return (
-    <div className="bg-white border border-gray-200 rounded-xl p-5">
-      <div className="flex items-center gap-2 mb-1">
-        <HardDrive size={17} className="text-[#1e3a5f]" />
-        <h2 className="font-semibold text-gray-800">Full backups — every workspace</h2>
-      </div>
-      <p className="text-xs text-gray-500 mb-3">
-        Each one holds the whole app at that moment: every workspace, job, tick, note, widget, board and setting.
-        Made every night and after work during the day. Preview opens it in a new tab, exactly as it was — nothing you do there is saved.
-      </p>
-      {err && <p className="text-xs text-red-600">The list could not be loaded ({err}).</p>}
-      {!rows && !err && <p className="text-xs text-gray-400">Loading…</p>}
-      {rows && rows.length === 0 && <p className="text-xs text-gray-400">No full backup yet — the first one is made tonight.</p>}
-      <div className="space-y-1">
-        {list.map(r => (
-          <div key={r.id} className="flex items-center justify-between text-xs px-3 py-2 bg-gray-50 rounded-lg border border-gray-100">
-            <span className="text-gray-700">{when(r.createdTime)}</span>
-            <span className="text-gray-400 ml-auto mr-3">{r.records ? `${r.records.toLocaleString()} records · ` : ''}{r.sizeKB} KB</span>
-            <button onClick={() => window.open(`/?previewBackup=${encodeURIComponent(r.id)}`, '_blank')}
-              className="px-3 py-1 rounded-lg bg-[#1e3a5f] text-white font-medium hover:bg-[#162d4a]">Preview</button>
-          </div>
-        ))}
-      </div>
-      {rows && rows.length > 8 && (
-        <button onClick={() => setShowAll(v => !v)} className="mt-2 text-xs text-[#1e3a5f] underline">
-          {showAll ? 'Show fewer' : `Show all ${rows.length}`}
-        </button>
-      )}
-    </div>
-  );
-}
-
-function BackupRestoreSection({ onToast }: { onToast: (msg: string, type?: 'success' | 'error') => void }) {
-  const {
-    exportData, importData, getDataSummary,
-    autoBackup, setAutoBackup, backupSnapshots, restoreFromSnapshot,
-    backupDriveFolderLink, setBackupDriveFolder,
-    backupFrequency, setBackupFrequency, backupLogs, addBackupLog,
-    driveExportFrequency, setDriveExportFrequency, lastDriveExportAt, exportToDrive,
-    mainUiStrings: s,
-  } = useStore();
-  const importRef = useRef<HTMLInputElement>(null);
-  const [exportModal, setExportModal] = useState<ReturnType<typeof getDataSummary> & { sizeKB: number; driveUploaded?: boolean } | null>(null);
-  const [importModal, setImportModal] = useState<ReturnType<typeof getDataSummary> | null>(null);
-  const [driveFolderDraft, setDriveFolderDraft] = useState(backupDriveFolderLink);
-  const [driveExporting, setDriveExporting] = useState(false);
-  const [restoreConfirmId, setRestoreConfirmId] = useState<string | null>(null);
-
-  const apiKey = (import.meta.env as Record<string, string>)['VITE_DRIVE_API_KEY'] ?? '';
-
-  async function handleExport() {
-    const json = exportData();
-    const sizeKB = Math.round(json.length / 1024);
-    const filename = `wolfson-backup-${format(new Date(), 'yyyy-MM-dd-HHmm')}.json`;
-    const blob = new Blob([json], { type: 'application/json' });
-    saveAs(blob, filename);
-
-    let driveUploaded = false;
-    if (backupDriveFolderLink && isUploadBackendConfigured()) {
-      try {
-        const parentId = extractFolderId(backupDriveFolderLink);
-        if (parentId) {
-          const folderRes = await fetch('/api/folder', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey },
-            body: JSON.stringify({ parentId, name: 'Backups' }),
-          });
-          if (folderRes.ok) {
-            const { folderId } = await folderRes.json();
-            const data = btoa(unescape(encodeURIComponent(json)));
-            const uploadRes = await fetch('/api/drive-upload', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey },
-              body: JSON.stringify({ folderId, filename, mimeType: 'application/json', data }),
-            });
-            if (uploadRes.ok) driveUploaded = true;
-          }
-        }
-      } catch {
-        // Drive upload failure is non-fatal
-      }
-    }
-
-    addBackupLog({ filename, sizeKB, driveUploaded, triggeredBy: 'manual' });
-    setExportModal({ ...getDataSummary(), sizeKB, driveUploaded });
-  }
-
-  async function handleExportToDriveNow() {
-    setDriveExporting(true);
-    const result = await exportToDrive();
-    setDriveExporting(false);
-    if (result.ok) onToast('Exported to Google Drive ✓');
-    else onToast(result.error ?? 'Drive export failed', 'error');
-  }
-
-  function handleImportFile(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = ev => {
-      const json = ev.target?.result as string;
-      const result = importData(json);
-      if (result.ok) {
-        setImportModal(result.summary ?? null);
-        onToast(s.backupRestored);
-      } else {
-        onToast(result.error ?? s.importFailed, 'error');
-      }
-    };
-    reader.readAsText(file);
-    if (importRef.current) importRef.current.value = '';
-  }
-
-  function handleRestoreSnapshot(id: string) {
-    restoreFromSnapshot(id);
-    setRestoreConfirmId(null);
-    onToast(s.snapshotRestored);
-  }
-
-  const SummaryRow = ({ label, value }: { label: string; value: number | string }) => (
-    <div className="flex items-center justify-between text-sm">
-      <span className="text-gray-600">{label}</span>
-      <span className="font-semibold text-gray-800">{value}</span>
-    </div>
-  );
-
-  const DRIVE_FREQ_LABELS: Record<DriveExportFrequency, string> = {
-    off: 'Off', hourly: 'Every Hour', every5h: 'Every 5h', every12h: 'Every 12h', daily: 'Daily', weekly: 'Weekly',
-  };
-
-  return (
-    <div className="space-y-4">
-      {/* ── Export summary modal ── */}
-      {exportModal && (
-        <div className="fixed inset-0 bg-black/30 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-sm">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="font-bold text-gray-900 flex items-center gap-2">
-                <Download size={16} className="text-[#1e3a5f]" /> {s.exportSummaryTitle}
-              </h3>
-              <button onClick={() => setExportModal(null)} className="text-gray-400 hover:text-gray-600"><X size={16} /></button>
-            </div>
-            <div className="space-y-2 mb-4">
-              <SummaryRow label={s.summaryApartments} value={exportModal.apartments} />
-              <SummaryRow label={s.summaryStages} value={exportModal.stages} />
-              <SummaryRow label={s.summaryContractors} value={exportModal.contractors} />
-              <SummaryRow label={s.summaryTasks} value={exportModal.tasks} />
-              <SummaryRow label={s.summaryCompletedTasks} value={exportModal.completedTasks} />
-              <SummaryRow label={s.summaryPhotos} value={exportModal.photos} />
-              <SummaryRow label={s.summaryNotes} value={exportModal.notes} />
-              <SummaryRow label={s.summaryActivity} value={exportModal.activityLogs} />
-              <div className="pt-2 border-t border-gray-100">
-                <SummaryRow label="File size" value={`${exportModal.sizeKB} ${s.fileSizeKb}`} />
-              </div>
-            </div>
-            {exportModal.driveUploaded && (
-              <div className="flex items-center gap-2 px-3 py-2 bg-blue-50 rounded-lg text-xs text-blue-700 mb-3">
-                <HardDriveDownload size={13} className="flex-shrink-0" />
-                {s.exportedToDriveNote}
-              </div>
-            )}
-            <p className="text-xs text-gray-400 text-center">Exported {format(new Date(), 'MMM d, yyyy · HH:mm')}</p>
-            <button onClick={() => setExportModal(null)}
-              className="mt-4 w-full py-2 bg-[#1e3a5f] text-white rounded-lg text-sm font-medium hover:bg-[#162d4a] transition-colors">
-              {s.doneBtn}
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* ── Import summary modal ── */}
-      {importModal && (
-        <div className="fixed inset-0 bg-black/30 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-sm">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="font-bold text-gray-900 flex items-center gap-2">
-                <Upload size={16} className="text-green-600" /> {s.importSuccessTitle}
-              </h3>
-              <button onClick={() => setImportModal(null)} className="text-gray-400 hover:text-gray-600"><X size={16} /></button>
-            </div>
-            <div className="space-y-2 mb-4">
-              <SummaryRow label={s.summaryApartmentsRestored} value={importModal.apartments} />
-              <SummaryRow label={s.summaryStages} value={importModal.stages} />
-              <SummaryRow label={s.summaryContractors} value={importModal.contractors} />
-              <SummaryRow label={s.summaryTasks} value={importModal.tasks} />
-              <SummaryRow label={s.summaryCompletedTasks} value={importModal.completedTasks} />
-              <SummaryRow label={s.summaryPhotos} value={importModal.photos} />
-              <SummaryRow label={s.summaryNotes} value={importModal.notes} />
-              <SummaryRow label={s.summaryActivity} value={importModal.activityLogs} />
-            </div>
-            <div className="flex items-center gap-2 px-3 py-2 bg-green-50 rounded-lg text-xs text-green-700 mb-4">
-              <Check size={13} className="flex-shrink-0" />
-              {s.importRestoredNote}
-            </div>
-            <button onClick={() => setImportModal(null)}
-              className="w-full py-2 bg-[#1e3a5f] text-white rounded-lg text-sm font-medium hover:bg-[#162d4a] transition-colors">
-              {s.doneBtn}
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* ══ Section 1: Auto Snapshots ══ */}
-      <div className="bg-white border border-gray-200 rounded-xl p-5">
-        <div className="flex items-center gap-2 mb-3">
-          <Clock size={17} className="text-[#1e3a5f]" />
-          <h2 className="font-semibold text-gray-800">{s.snapshotHistoryLabel}</h2>
-        </div>
-
-        <div className="flex items-center justify-between mb-3">
-          <div>
-            <p className="text-sm font-medium text-gray-700">{s.enableAutoSnapshots}</p>
-            <p className="text-xs text-gray-500 mt-0.5">{s.snapshotHint}</p>
-          </div>
-          <button onClick={() => setAutoBackup(!autoBackup)} className="flex-shrink-0 ml-3">
-            {autoBackup ? <ToggleRight size={28} className="text-[#1e3a5f]" /> : <ToggleLeft size={28} className="text-gray-400" />}
-          </button>
-        </div>
-
-        {autoBackup && (
-          <div className="flex gap-1 flex-wrap mb-4">
-            {(['activity', 'daily', 'weekly', 'monthly'] as BackupFrequency[]).map(f => (
-              <button key={f} onClick={() => setBackupFrequency(f)}
-                className={`px-3 py-1 rounded-lg text-xs font-medium transition-colors capitalize ${
-                  (backupFrequency ?? 'activity') === f
-                    ? 'bg-[#1e3a5f] text-white'
-                    : 'bg-gray-50 border border-gray-200 text-gray-600 hover:border-[#1e3a5f]/40'
-                }`}>
-                {f === 'activity' ? s.everyActivity : f.charAt(0).toUpperCase() + f.slice(1)}
-              </button>
-            ))}
-          </div>
-        )}
-
-        {/* Snapshot history */}
-        <div>
-          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
-            {s.snapshotHistoryLabel} {backupSnapshots.length > 0 && <span className="normal-case font-normal text-gray-400">({backupSnapshots.length} {s.snapshotsStored})</span>}
-          </p>
-          {backupSnapshots.length === 0 ? (
-            <p className="text-xs text-gray-400 italic py-2">{s.noSnapshotsYet}</p>
-          ) : (
-            <div className="space-y-1 max-h-56 overflow-y-auto">
-              {backupSnapshots.slice(0, 20).map(snap => (
-                <div key={snap.id} className="flex items-center justify-between px-3 py-2 bg-gray-50 rounded-lg border border-gray-100 gap-2">
-                  <div className="min-w-0 flex-1">
-                    <p className="text-xs font-medium text-gray-700 truncate">{snap.label}</p>
-                    <p className="text-[10px] text-gray-400 mt-0.5">
-                      {format(new Date(snap.createdAt), 'MMM d, yyyy · HH:mm')}
-                      {' · '}{snap.apartmentStates.length} {s.aptsCount} · {snap.contractorAssignments.length} {s.tasksCount}
-                    </p>
-                  </div>
-                  {restoreConfirmId === snap.id ? (
-                    <div className="flex items-center gap-1 flex-shrink-0">
-                      <button onClick={() => handleRestoreSnapshot(snap.id)}
-                        className="px-2 py-1 bg-red-500 text-white rounded text-[10px] font-medium hover:bg-red-600 transition-colors">
-                        {s.confirmButton}
-                      </button>
-                      <button onClick={() => setRestoreConfirmId(null)}
-                        className="px-2 py-1 bg-gray-200 text-gray-600 rounded text-[10px] font-medium hover:bg-gray-300 transition-colors">
-                        {s.cancel}
-                      </button>
-                    </div>
-                  ) : (
-                    <button onClick={() => setRestoreConfirmId(snap.id)}
-                      className="flex items-center gap-1 px-2 py-1 border border-gray-200 rounded text-[10px] font-medium text-gray-600 hover:border-[#1e3a5f]/50 hover:text-[#1e3a5f] transition-colors flex-shrink-0">
-                      <RotateCcw size={9} /> {s.restore}
-                    </button>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* ══ Section 2: Google Drive Auto-Export ══ */}
-      <div className="bg-white border border-gray-200 rounded-xl p-5">
-        <div className="flex items-center gap-2 mb-3">
-          <CloudUpload size={17} className="text-[#4aa8d8]" />
-          <h2 className="font-semibold text-gray-800">{s.driveAutoExportSection}</h2>
-        </div>
-
-        {/* Drive folder URL */}
-        <div className="mb-3">
-          <p className="text-xs font-medium text-gray-600 mb-1">{s.driveFolderUrl}</p>
-          <div className="flex gap-2">
-            <input
-              value={driveFolderDraft}
-              onChange={e => setDriveFolderDraft(e.target.value)}
-              placeholder="https://drive.google.com/drive/folders/…"
-              className="flex-1 border border-gray-200 rounded-lg px-3 py-1.5 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30"
-            />
-            <button
-              onClick={() => { setBackupDriveFolder(driveFolderDraft.trim()); onToast('Drive folder saved'); }}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-[#1e3a5f] text-white rounded-lg text-xs font-medium hover:bg-[#162d4a] transition-colors whitespace-nowrap">
-              <Save size={12} /> {s.driveFolderSave}
-            </button>
-          </div>
-          {backupDriveFolderLink && (
-            <p className="mt-1 text-xs text-green-600 flex items-center gap-1"><Check size={11} /> {s.folderConfigured}</p>
-          )}
-        </div>
-
-        {/* Auto-export frequency */}
-        <div className="mb-3">
-          <p className="text-xs font-medium text-gray-600 mb-1.5">{s.autoExportFreq}</p>
-          <div className="flex gap-1 flex-wrap">
-            {(['off', 'hourly', 'every5h', 'every12h', 'daily', 'weekly'] as DriveExportFrequency[]).map(f => (
-              <button key={f} onClick={() => setDriveExportFrequency(f)}
-                className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-colors ${
-                  (driveExportFrequency ?? 'off') === f
-                    ? 'bg-[#4aa8d8] text-white'
-                    : 'bg-gray-50 border border-gray-200 text-gray-600 hover:border-[#4aa8d8]/50'
-                }`}>
-                {DRIVE_FREQ_LABELS[f]}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Last export + Export Now */}
-        <div className="flex items-center justify-between gap-3 pt-3 border-t border-gray-100">
-          <p className="text-xs text-gray-500">
-            {s.lastExport}:{' '}
-            {lastDriveExportAt
-              ? <span className="font-medium text-gray-700">{format(new Date(lastDriveExportAt), 'MMM d, yyyy · HH:mm')}</span>
-              : <span className="text-gray-400">{s.never}</span>
-            }
-          </p>
-          <button
-            onClick={handleExportToDriveNow}
-            disabled={!backupDriveFolderLink || driveExporting}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-[#4aa8d8] text-white rounded-lg text-xs font-medium hover:bg-[#3a98c8] transition-colors disabled:opacity-40 disabled:cursor-not-allowed whitespace-nowrap flex-shrink-0">
-            {driveExporting ? <RefreshCw size={12} className="animate-spin" /> : <CloudUpload size={12} />}
-            {driveExporting ? s.exportingLabel : s.exportNow}
-          </button>
-        </div>
-      </div>
-
-      {/* ══ Full backups: every workspace, each one can be previewed whole ══ */}
-      <FullBackupsCard />
-
-      {/* ══ Section 3: Manual Backup ══ */}
-      <div className="bg-white border border-gray-200 rounded-xl p-5">
-        <div className="flex items-center gap-2 mb-3">
-          <HardDrive size={17} className="text-[#1e3a5f]" />
-          <h2 className="font-semibold text-gray-800">{s.manualBackup}</h2>
-        </div>
-
-        <p className="text-xs text-gray-500 mb-4">{s.manualBackupDesc}</p>
-        <div className="flex gap-3 flex-wrap mb-4">
-          <button onClick={handleExport}
-            className="flex items-center gap-2 px-4 py-2 bg-[#1e3a5f] text-white rounded-lg text-sm font-medium hover:bg-[#162d4a] transition-colors">
-            <Download size={15} /> {s.exportJson}
-          </button>
-          <button onClick={() => importRef.current?.click()}
-            className="flex items-center gap-2 px-4 py-2 border border-gray-200 text-gray-600 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors">
-            <Upload size={15} /> {s.importJson}
-          </button>
-          <input ref={importRef} type="file" accept=".json" className="hidden" onChange={handleImportFile} />
-        </div>
-
-        {/* Backup log */}
-        {backupLogs.length > 0 && (
-          <div>
-            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">{s.exportLogLabel}</p>
-            <div className="space-y-1 max-h-44 overflow-y-auto">
-              {backupLogs.slice(0, 10).map(entry => (
-                <div key={entry.id} className="flex items-center justify-between text-xs px-3 py-2 bg-gray-50 rounded-lg border border-gray-100">
-                  <div className="flex items-center gap-2 min-w-0">
-                    <HardDrive size={12} className={entry.driveUploaded ? 'text-[#4aa8d8]' : 'text-gray-400'} />
-                    <span className="text-gray-700 truncate font-mono">{entry.filename}</span>
-                  </div>
-                  <div className="flex items-center gap-2 flex-shrink-0 ml-2">
-                    <span className="text-gray-400">{entry.sizeKB} KB</span>
-                    <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
-                      entry.triggeredBy === 'manual' ? 'bg-blue-50 text-blue-600' : 'bg-gray-100 text-gray-500'
-                    }`}>{entry.triggeredBy}</span>
-                    <span className="text-gray-400">{format(new Date(entry.createdAt), 'MMM d, HH:mm')}</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-      </div>
     </div>
   );
 }
