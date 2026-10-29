@@ -30,6 +30,24 @@ export interface WhatsNewEntry {
 
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    date: '2027-02-22',
+    title: 'A pin board never loses its jobs',
+    items: [
+      {
+        title: 'Lost cards come back by themselves',
+        body: 'If a pin board is holding a job but its card went missing, the card is put back on the board by itself — '
+          + 'the job no longer vanishes from everywhere.',
+        demo: 'tap',
+      },
+      {
+        title: 'Earlier versions of a pin board',
+        body: 'Every computer now keeps the last versions of each pin board. When an earlier version had jobs or notes the board '
+          + 'no longer has, a small clock button appears in its corner — press it and Bring back. Undo takes it off again.',
+        demo: 'tap',
+      },
+    ],
+  },
+  {
     date: '2027-02-21',
     title: 'Plans are marked up in the Plan Sketcher',
     items: [

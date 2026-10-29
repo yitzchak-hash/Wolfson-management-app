@@ -12,7 +12,7 @@
  * down through `WidgetCtx` is what left `update` stubbed to a no-op for a year.
  */
 import React, { useRef, useState } from 'react';
-import { useStore } from './store';
+import { useStore, trackUndo } from './store';
 import {
   RotaHit, setRotaHover, rotaCellAt, anyRota, anyBoardDrop, boardDropAt, askRotaDrop,
   anyPinBoard, pinBoardAt, setPinHover,
@@ -230,7 +230,8 @@ export function usePlannerDrag(jobId: string, opts?: {
       // asked before the board's empty surface (which would refuse a widget).
       const pin = pinBoardAt(e.clientX, e.clientY);
       if (pin) {
-        const pinMsg = pin.place([jobId], opts?.projectId);
+        // Recorded for undo like every other pin (it was the one road that was not).
+        const pinMsg = trackUndo({ weight: 'arrange', label: 'Pinned a job' }, () => pin.place([jobId], opts?.projectId));
         if (pinMsg) opts?.onToast?.(pinMsg);
         return;
       }

@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Plus, X } from 'lucide-react';
+import { Plus, X, History } from 'lucide-react';
 import { CanvasElement, Apartment, Stage, aptLabel, projectColor, projectShortName } from '../../types';
 import { useStore, loadProjectSnapshot } from '../../data/store';
 import type { WidgetCtx } from '../../data/widgets';
@@ -9,6 +9,7 @@ import {
 } from '../../data/rotaDrop';
 import { placeJobsOnPlanner, showDragGhost, hideDragGhost } from '../../data/plannerDrop';
 import { useBoardTrack } from '../../data/useBoardUndo';
+import { keepPinVersion, pinVersions, missingFrom, type PinVersion } from '../../data/pinBackup';
 
 /**
  * THE PIN BOARD — the owner's "board where I can pin jobs on… like a
@@ -158,6 +159,47 @@ function unpin(elId: string, pinId: string, release = true) {
   }
 }
 
+/**
+ * Put jobs on the board in tidy rows along its lower half — where they land
+ * when the board itself has no memory of where they were.
+ */
+function placeInRows(elId: string, ids: string[]) {
+  const st = useStore.getState();
+  const el = st.canvasElements.find(e => e.id === elId);
+  if (!el) return;
+  const pins = [...pinsOf(el)];
+  const have = new Set(pins.filter(p => p.jobId && !p.projectId).map(p => p.jobId));
+  const per = 5;
+  ids.filter(id => !have.has(id)).forEach((jobId, i) => {
+    pins.push({
+      id: newId(), jobId,
+      x: clamp01(0.12 + (i % per) * 0.19), y: clamp01(0.3 + Math.floor(i / per) * 0.2, 0.1),
+      rot: Math.round(rnd(-4, 4) * 10) / 10, at: new Date().toISOString(),
+    });
+  });
+  st.updateCanvasElement(el.id, { data: { ...(el.data ?? {}), pins } });
+}
+
+/** Bring kept pins back exactly where they were; a job comes off the main board as a pin does. */
+function restorePins(elId: string, add: PinItem[]) {
+  const st = useStore.getState();
+  const el = st.canvasElements.find(e => e.id === elId);
+  if (!el) return;
+  const pins = [...pinsOf(el), ...missingFrom(add, pinsOf(el))];
+  st.updateCanvasElement(el.id, { data: { ...(el.data ?? {}), pins } });
+  const user = st.currentUser;
+  if (!user) return;
+  for (const p of add) {
+    if (!p.jobId || p.projectId) continue;
+    const j = st.apartments.find(a => a.id === p.jobId);
+    if (!j) continue;
+    const holder = j.inNotebook ? st.canvasElements.find(e => e.id === j.inNotebook) : undefined;
+    if (holder && holder.widget !== 'pin-board') continue;
+    if (j.inNotebook === el.id && !j.boardBin) continue;
+    st.updateApartment(j.id, { inNotebook: el.id, boardBin: undefined, binnedAt: undefined }, user);
+  }
+}
+
 interface Resolved {
   pin: PinItem;
   job?: Apartment;
@@ -237,6 +279,60 @@ export function PinBoardWidget({ el, c }: { el: CanvasElement; c: WidgetCtx }) {
   }, [editable, el.id]);
 
   useEffect(() => onPinHover(k => setLit(k === keyRef.current)), []);
+
+  // Every version of this board this computer sees is kept (pinBackup.ts) —
+  // the first one of a session is this computer's own saved copy, drawn
+  // before the cloud's answer, so an older, fuller board is never lost here.
+  const pinsSig = JSON.stringify(sample ? [] : pins);
+  useEffect(() => {
+    if (sample) return;
+    keepPinVersion(el.id, pinsOf(useStore.getState().canvasElements.find(x => x.id === el.id) ?? el));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [el.id, pinsSig, sample]);
+
+  /**
+   * A job this board is HOLDING with no card on it is shown nowhere: it left
+   * the main board for the pin board, and the pin board lost its card (owner,
+   * 2026-10-29 — the secretary's board "just disappeared"). Its card is put
+   * back. Asked a moment after the board settles, and again on the fresh
+   * state, so a board still loading is never "repaired" from a half picture.
+   */
+  const heldIds = useMemo(() => live.filter(a => a.inNotebook === el.id && !a.boardBin).map(a => a.id).sort().join(','), [live, el.id]);
+  useEffect(() => {
+    if (!editable || !heldIds) return;
+    const t = setTimeout(() => {
+      const st = useStore.getState();
+      const cur = st.canvasElements.find(x => x.id === el.id);
+      if (!cur || !st.currentUser) return;
+      const onIt = new Set(pinsOf(cur).filter(p => p.jobId && !p.projectId).map(p => p.jobId!));
+      const lost = st.apartments.filter(a => a.inNotebook === el.id && !a.boardBin && !onIt.has(a.id)).map(a => a.id);
+      if (!lost.length) return;
+      track({ weight: 'arrange', label: lost.length === 1 ? 'Put a job back on the pin board' : `Put ${lost.length} jobs back on the pin board` },
+        () => placeInRows(el.id, lost));
+    }, 2500);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editable, heldIds, el.id]);
+
+  // The board's history: versions kept on this computer that hold pins the
+  // board no longer has.
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const versions = useMemo((): { v: PinVersion; add: PinItem[] }[] => {
+    if (sample) return [];
+    return pinVersions(el.id)
+      .map(v => ({ v, add: missingFrom(v.pins, pins).filter(p => !p.jobId || p.projectId || live.some(a => a.id === p.jobId)) }))
+      .filter(x => x.add.length > 0);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [el.id, pinsSig, live, historyOpen, sample]);
+  const bringBack = (add: PinItem[]) => {
+    const n = add.length;
+    track({
+      weight: 'content',
+      label: c.isRtl ? `החזרת ${n} לוח הנעיצות` : `Brought back ${n} to the pin board`,
+      explain: c.isRtl ? `${n} הכרטיסים שהוחזרו יורדו שוב מלוח הנעיצות.` : `The ${n} cards brought back come off the pin board again.`,
+    }, () => restorePins(el.id, add));
+    setHistoryOpen(false);
+  };
 
   // ── Moving a pin, and carrying it off the cork ──────────────────────────
   const scaleOf = () => {
@@ -337,7 +433,10 @@ export function PinBoardWidget({ el, c }: { el: CanvasElement; c: WidgetCtx }) {
 
   const addNote = () => {
     const pin: PinItem = { id: newId(), text: '', x: rnd(0.35, 0.65), y: rnd(0.4, 0.6), rot: Math.round(rnd(-4, 4) * 10) / 10, at: new Date().toISOString() };
-    c.update({ data: { ...(el.data ?? {}), pins: [...pinsOf(el), pin] } });
+    // Read the board fresh: a write built from an older copy would put back
+    // the pins that copy had and drop every one added since.
+    const cur = useStore.getState().canvasElements.find(x => x.id === el.id) ?? el;
+    c.update({ data: { ...(cur.data ?? {}), pins: [...pinsOf(cur), pin] } });
     setEditNote({ id: pin.id, text: '' });
   };
   const saveNote = () => {
@@ -353,7 +452,8 @@ export function PinBoardWidget({ el, c }: { el: CanvasElement; c: WidgetCtx }) {
   };
   const saveTitle = () => {
     if (editTitle == null) return;
-    c.update({ data: { ...(el.data ?? {}), title: editTitle.trim() } });
+    const cur = useStore.getState().canvasElements.find(x => x.id === el.id) ?? el;
+    c.update({ data: { ...(cur.data ?? {}), title: editTitle.trim() } });
     setEditTitle(null);
   };
 
@@ -488,6 +588,43 @@ export function PinBoardWidget({ el, c }: { el: CanvasElement; c: WidgetCtx }) {
           );
         })}
 
+        {editable && versions.length > 0 && (
+          <button type="button" {...noDrag} data-pin-history aria-expanded={historyOpen}
+            onPointerDown={e => e.stopPropagation()}
+            onClick={e => { e.stopPropagation(); setHistoryOpen(o => !o); }}
+            title={c.isRtl ? 'גרסאות קודמות של הלוח' : 'Earlier versions of this board'}
+            className="absolute bottom-2 left-2 z-[4] w-8 h-8 rounded-full bg-white/90 text-gray-700 shadow-md flex items-center justify-center hover:bg-white">
+            <History size={15} />
+          </button>
+        )}
+        {editable && historyOpen && versions.length > 0 && (
+          <div {...noDrag} data-pin-history-panel dir={c.isRtl ? 'rtl' : 'ltr'}
+            onPointerDown={e => e.stopPropagation()}
+            onWheel={e => e.stopPropagation()}
+            className="absolute bottom-12 left-2 z-[40] w-64 max-h-[70%] overflow-y-auto bg-white rounded-xl shadow-xl border border-gray-200 py-1">
+            <div className="px-3 pt-1.5 pb-1 text-[11px] font-semibold text-gray-500">{c.isRtl ? 'גרסאות קודמות' : 'Earlier versions'}</div>
+            {versions.map(({ v, add }) => {
+              const jobs = add.filter(p => p.jobId).length, notes = add.length - jobs;
+              const when = new Date(v.at).toLocaleString(c.isRtl ? 'he-IL' : 'en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+              const what = [
+                jobs ? (c.isRtl ? `${jobs} עבודות` : `${jobs} job${jobs === 1 ? '' : 's'}`) : '',
+                notes ? (c.isRtl ? `${notes} פתקים` : `${notes} note${notes === 1 ? '' : 's'}`) : '',
+              ].filter(Boolean).join(' · ');
+              return (
+                <div key={v.at} data-pin-version={v.at} className="flex items-center gap-2 px-3 py-1.5 hover:bg-gray-50">
+                  <div className="min-w-0 flex-1">
+                    <div className="text-[12.5px] font-medium text-gray-800">{when}</div>
+                    <div className="text-[11.5px] text-gray-500 truncate">{what}</div>
+                  </div>
+                  <button type="button" data-pin-version-restore onClick={e => { e.stopPropagation(); bringBack(add); }}
+                    className="flex-shrink-0 px-2.5 py-1 rounded-lg text-[12px] font-medium bg-[#1e3a5f] text-white hover:bg-[#162d4a]">
+                    {c.isRtl ? 'החזר' : 'Bring back'}
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        )}
         {editable && (
           <button type="button" {...noDrag} data-pin-add-note
             onPointerDown={e => e.stopPropagation()}
