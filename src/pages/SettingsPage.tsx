@@ -2931,6 +2931,63 @@ function AppSettingsTab({ lightTheme, setLightTheme, onToast }: {
   );
 }
 
+/**
+ * THE FULL BACKUPS (lib/fullBackup.js): one file per moment holding every
+ * workspace and every record. Each can be opened as a PREVIEW — the whole
+ * app as it was then, in its own tab, sealed off so nothing is saved
+ * (previewMode.ts). Owner, 2026-10-29.
+ */
+function FullBackupsCard() {
+  type Row = { id: string; createdTime: string; sizeKB: number; records: number | null };
+  const [rows, setRows] = useState<Row[] | null>(null);
+  const [err, setErr] = useState('');
+  const [showAll, setShowAll] = useState(false);
+  useEffect(() => {
+    const key = (import.meta.env.VITE_DRIVE_API_KEY as string | undefined) ?? '';
+    const q = new URLSearchParams({
+      listFullBackups: '1',
+      projectId: (import.meta.env.VITE_FIREBASE_PROJECT_ID as string | undefined) ?? '',
+      apiKey: (import.meta.env.VITE_FIREBASE_API_KEY as string | undefined) ?? '',
+    });
+    fetch(`/api/drive-upload?${q}`, { headers: { 'x-api-key': key } })
+      .then(r => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
+      .then(j => setRows(j.files ?? []))
+      .catch(e => setErr(String(e?.message ?? e)));
+  }, []);
+  const when = (iso: string) => new Date(iso).toLocaleString('en-GB', { timeZone: 'Asia/Jerusalem', weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+  const list = rows ? (showAll ? rows : rows.slice(0, 8)) : [];
+  return (
+    <div className="bg-white border border-gray-200 rounded-xl p-5">
+      <div className="flex items-center gap-2 mb-1">
+        <HardDrive size={17} className="text-[#1e3a5f]" />
+        <h2 className="font-semibold text-gray-800">Full backups — every workspace</h2>
+      </div>
+      <p className="text-xs text-gray-500 mb-3">
+        Each one holds the whole app at that moment: every workspace, job, tick, note, widget, board and setting.
+        Made every night and after work during the day. Preview opens it in a new tab, exactly as it was — nothing you do there is saved.
+      </p>
+      {err && <p className="text-xs text-red-600">The list could not be loaded ({err}).</p>}
+      {!rows && !err && <p className="text-xs text-gray-400">Loading…</p>}
+      {rows && rows.length === 0 && <p className="text-xs text-gray-400">No full backup yet — the first one is made tonight.</p>}
+      <div className="space-y-1">
+        {list.map(r => (
+          <div key={r.id} className="flex items-center justify-between text-xs px-3 py-2 bg-gray-50 rounded-lg border border-gray-100">
+            <span className="text-gray-700">{when(r.createdTime)}</span>
+            <span className="text-gray-400 ml-auto mr-3">{r.records ? `${r.records.toLocaleString()} records · ` : ''}{r.sizeKB} KB</span>
+            <button onClick={() => window.open(`/?previewBackup=${encodeURIComponent(r.id)}`, '_blank')}
+              className="px-3 py-1 rounded-lg bg-[#1e3a5f] text-white font-medium hover:bg-[#162d4a]">Preview</button>
+          </div>
+        ))}
+      </div>
+      {rows && rows.length > 8 && (
+        <button onClick={() => setShowAll(v => !v)} className="mt-2 text-xs text-[#1e3a5f] underline">
+          {showAll ? 'Show fewer' : `Show all ${rows.length}`}
+        </button>
+      )}
+    </div>
+  );
+}
+
 function BackupRestoreSection({ onToast }: { onToast: (msg: string, type?: 'success' | 'error') => void }) {
   const {
     exportData, importData, getDataSummary,
@@ -3238,6 +3295,9 @@ function BackupRestoreSection({ onToast }: { onToast: (msg: string, type?: 'succ
           </button>
         </div>
       </div>
+
+      {/* ══ Full backups: every workspace, each one can be previewed whole ══ */}
+      <FullBackupsCard />
 
       {/* ══ Section 3: Manual Backup ══ */}
       <div className="bg-white border border-gray-200 rounded-xl p-5">

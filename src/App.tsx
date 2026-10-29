@@ -18,6 +18,7 @@ import GoalsPage from './pages/GoalsPage';
 import { CalendarPage } from './pages/CalendarPage';
 import { TvPresentationPage } from './pages/TvPresentationPage';
 import { armWorkspaceHistoryRestore } from './data/workspaceHistory';
+import { previewInfo } from './data/previewMode';
 
 // Before the router can subscribe to popstate — see workspaceHistory.ts.
 armWorkspaceHistoryRestore();
@@ -87,10 +88,28 @@ function useEnterCommits() {
   }, []);
 }
 
+/**
+ * The bar across a backup PREVIEW tab (previewMode.ts): which backup this is,
+ * and that nothing done here is saved.
+ */
+function PreviewBar() {
+  const p = previewInfo();
+  if (!p) return null;
+  const when = new Date(p.exportedAt).toLocaleString('en-GB', { timeZone: 'Asia/Jerusalem', dateStyle: 'medium', timeStyle: 'short' });
+  return (
+    <div style={{ position: 'fixed', top: 6, left: '50%', transform: 'translateX(-50%)', zIndex: 2147483000 }}
+      className="flex items-center gap-3 rounded-full bg-amber-400 text-amber-950 shadow-lg px-4 py-1.5 text-sm font-semibold">
+      <span>PREVIEW of the backup from {when} · {p.totalDocuments.toLocaleString()} records · nothing you do here is saved</span>
+      <button onClick={() => window.close()} className="rounded-full bg-amber-950 text-amber-50 px-3 py-0.5 text-xs">Close preview</button>
+    </div>
+  );
+}
+
 export default function App() {
   useEnterCommits();
   return (
     <CrashScreen>
+    <PreviewBar />
     <BrowserRouter>
       <Routes>
         <Route path="/login" element={<LoginPage />} />

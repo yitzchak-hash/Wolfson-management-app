@@ -12,6 +12,7 @@
 
 import { initializeApp, FirebaseApp } from 'firebase/app';
 import { stripUndefinedDeep } from './deepClean';
+import { PREVIEW_ID } from './previewMode';
 import { diffRecord, mergeIdList, getAtPath } from './fieldDiff';
 import type { DiffOp } from './fieldDiff';
 import {
@@ -47,7 +48,9 @@ const firebaseConfig = {
   appId: import.meta.env.VITE_FIREBASE_APP_ID,
 };
 
-export const isFirebaseConfigured = Boolean(
+// A backup PREVIEW tab never connects to the cloud (previewMode.ts): every
+// read and write below is off, exactly as on a machine without Firebase.
+export const isFirebaseConfigured = !PREVIEW_ID && Boolean(
   firebaseConfig.apiKey &&
   firebaseConfig.authDomain &&
   firebaseConfig.projectId &&

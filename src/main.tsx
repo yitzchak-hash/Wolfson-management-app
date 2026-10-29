@@ -1,6 +1,6 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
-import App from './App.tsx'
+import { bootPreview } from './data/previewMode'
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore
 import './index.css'
@@ -25,8 +25,25 @@ window.addEventListener('vite:preloadError', event => {
   window.location.reload();
 });
 
-ReactDOM.createRoot(document.getElementById('root')!).render(
-  <React.StrictMode>
-    <App />
-  </React.StrictMode>,
-)
+/**
+ * A backup PREVIEW tab (previewMode.ts) loads the backup and seals itself off
+ * BEFORE the app — and with it the store and the cloud connection — starts.
+ */
+const root = ReactDOM.createRoot(document.getElementById('root')!);
+bootPreview((import.meta.env.VITE_DRIVE_API_KEY as string | undefined) ?? '')
+  .then(() => import('./App.tsx'))
+  .then(({ default: App }) => {
+    root.render(
+      <React.StrictMode>
+        <App />
+      </React.StrictMode>,
+    );
+  })
+  .catch(e => {
+    root.render(
+      <div style={{ padding: 32, fontFamily: 'system-ui', color: '#7f1d1d' }}>
+        <h2>The backup preview could not open</h2>
+        <p>{String((e as Error)?.message ?? e)}</p>
+      </div>,
+    );
+  });

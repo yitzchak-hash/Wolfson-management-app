@@ -4,7 +4,7 @@
 
 import { google } from 'googleapis';
 import { Readable } from 'stream';
-import { runFullBackup } from '../lib/fullBackup.js';
+import { runFullBackup, listFullBackups } from '../lib/fullBackup.js';
 
 function getDrive() {
   const json = process.env.GOOGLE_SERVICE_ACCOUNT_JSON;
@@ -40,6 +40,24 @@ export default async function handler(req, res) {
    *  - POST { mode: 'full-backup' } with the app's key — the open app, after
    *    activity, like the per-workspace backups.
    */
+  // The Settings list of full backups (newest first) — the app's key required.
+  if (req.method === 'GET' && req.query?.listFullBackups) {
+    if (!process.env.API_KEY || req.headers['x-api-key'] !== process.env.API_KEY) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+    try {
+      const env = {
+        ...process.env,
+        ...(!process.env.VITE_FIREBASE_PROJECT_ID && /^[a-z0-9-]{4,40}$/.test(String(req.query.projectId ?? '')) ? { VITE_FIREBASE_PROJECT_ID: String(req.query.projectId) } : {}),
+        ...(!process.env.VITE_FIREBASE_API_KEY && /^[A-Za-z0-9_-]{20,60}$/.test(String(req.query.apiKey ?? '')) ? { VITE_FIREBASE_API_KEY: String(req.query.apiKey) } : {}),
+      };
+      return res.json({ files: await listFullBackups({ drive: getDrive(), env }) });
+    } catch (err) {
+      console.error('list full backups error:', err.message);
+      return res.status(500).json({ error: err.message });
+    }
+  }
+
   const wantsFull = (req.method === 'GET' && req.query?.fullBackup) || (req.method === 'POST' && req.body?.mode === 'full-backup');
   if (wantsFull) {
     if (req.method === 'GET') {

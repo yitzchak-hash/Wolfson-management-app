@@ -45,6 +45,7 @@ export const DEVICE_ONLY: Record<string, string> = {
   'push_dismissed_<x>': 'The worker said "not now" to push alerts on THIS phone.',
   'office_notif_asked': 'This browser was already asked for notification permission.',
   'pin_push_idle_ms': 'A testing override, never set in normal use.',
+  'preview_backup_id': 'This tab is a backup PREVIEW (sealed off from the cloud) — kept so a reload stays a preview.',
 
   // ── emergency copies (their point is to survive the cloud losing data) ─────
   'pin_board_versions': 'Earlier versions of each pin board seen on this computer — a second safety net beside the cloud backups.',

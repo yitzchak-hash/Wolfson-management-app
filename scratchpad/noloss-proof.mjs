@@ -138,6 +138,7 @@ const open = async (ctx, path) => {
   const page = await ctx.newPage();
   page.on('pageerror', e => errs.push(`[${scene}] ${e.message.slice(0, 100)}${process.env.DEBUG ? ' ' + (e.stack || '').split('\n').slice(9, 40).join(' / ') : ''}`));
   await page.goto(`http://localhost:5176${path}`);
+  await page.waitForFunction(() => !!window.__store, null, { timeout: 30000 });   // the app starts after the preview check
   return page;
 };
 const synced = (page, pid) => page.waitForFunction(p => window.__store?.getState().cloudSyncedProject === p, pid, { timeout: 30000 });
@@ -318,7 +319,7 @@ await seed();
   });
   // personal choices made through the screens' own storage calls
   await a.evaluate(async () => {
-    const p = await import('/src/data/prefs.ts');
+    const p = window.__prefs;
     p.prefSet('calendar_scope', 'here');
     p.prefSet('board_view_general_main', JSON.stringify({ x: 11, y: 22, z: 0.5 }));
     p.prefSet('plan_ink_saved', JSON.stringify(['#ff0000']), 'office');
@@ -333,7 +334,7 @@ await seed();
   await sleep(3500);
   const seen = await b.evaluate(async () => {
     const st = window.__store.getState();
-    const p = await import('/src/data/prefs.ts');
+    const p = window.__prefs;
     return {
       note: st.canvasElements.find(e => e.id === 'CE-note'),
       job: st.apartments.find(a => a.id === 'G-3'),
@@ -373,6 +374,7 @@ await seed();
   });
   await sleep(2500);
   await a.reload();
+  await a.waitForFunction(() => !!window.__store, null, { timeout: 30000 });
   await synced(a, 'general');
   await sleep(2500);
   const after = await a.evaluate(() => window.__store.getState().undoState.past.map(e => e.label));
@@ -382,6 +384,7 @@ await seed();
   const back = (await read('general_apartments', 'G-5'));
   check(back.canvasX === job(5).canvasX && back.canvasY === job(5).canvasY, 'undo after the reload puts the job back (in the cloud)', `${back.canvasX},${back.canvasY}`);
   await a.reload();
+  await a.waitForFunction(() => !!window.__store, null, { timeout: 30000 });
   await synced(a, 'general');
   await sleep(2500);
   const fut = await a.evaluate(() => window.__store.getState().undoState.future.map(e => e.label));

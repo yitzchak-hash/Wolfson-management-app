@@ -121,3 +121,8 @@ export function onPrefsChange(fn: () => void): () => void {
   listeners.add(fn);
   return () => { listeners.delete(fn); };
 }
+
+// Test harnesses reach the app's own instance (DEV builds only), as with window.__store.
+if (import.meta.env.DEV && typeof window !== 'undefined') {
+  (window as unknown as { __prefs?: unknown }).__prefs = { prefGet, prefSet, prefRemove, prefsPerson };
+}
