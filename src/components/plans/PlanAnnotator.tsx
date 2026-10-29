@@ -2473,8 +2473,11 @@ function PlanEditor({
     const baseX = Math.max(0.5, s.width) / REF;
     const baseY = baseX * aspect;
     const tail = Math.min(baseY * 8, (y1 - y0) * 0.32);
-    const box = bubbleTextBox(x0, y0, x1 - x0, y1 - tail - y0, baseX);
-    // bubbleTextBox pads both axes with the x-based figure; correct the y one.
+    // bubbleTextBox's floor (4) is in PIXELS — here the box is in page FRACTIONS, where 4 is four page widths: the editing box
+    // ran 400 % wide and the balloon's microphone, hung on its right edge, stood off the screen (the owner, 2026-10-29: "we
+    // discussed having a microphone in these bubbles"). The same padding, floored at a fraction instead.
+    const box = (() => { const pad = baseX * 4; return { x: x0 + pad, y: y0 + pad, w: Math.max(0.01, x1 - x0 - pad * 2) }; })();
+    // the box pads both axes with the x-based figure; correct the y one.
     const padY = baseY * 4, padX = baseX * 4;
     return {
       left: box.x * 100,
