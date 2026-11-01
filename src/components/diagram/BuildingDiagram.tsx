@@ -5,6 +5,7 @@ import { useStore } from '../../data/store';
 import { PROBLEM_FILL } from '../../data/problems';
 import { progressOf, StageProgress, isStartStage } from '../../data/stageMarks';
 import { realName, isSold } from '../../data/aptSale';
+import { driveThumbUrl } from '../../data/driveApi';
 
 /** The board's sale filter (owner, 2026-10-28): one at a time, plus All. */
 export type SaleFilter = 'all' | 'sold' | 'unsold' | 'shinui' | 'standard';
@@ -203,21 +204,36 @@ interface AptCellProps {
   problem?: 'open' | 'waiting';
   /** The set model: the apartment's stages with their states, and the fraction — drawn as a strip. */
   progress?: StageProgress | null;
+  /** A piece of the strip hovered or tapped: show that stage's photos (null hides them). */
+  onStripPiece?: (p: StripPiece | null) => void;
 }
+
+/** One piece of a tile's stage strip, for the photos it opens. */
+export interface StripPiece { aptId: string; stageId: string; state: string; rect: DOMRect; pinned?: boolean }
 
 function AptCell({
   apt, stage, isHighlighted, isDimmed, showShinuiBadge, onClick,
   isDuplex, rowFloorType, isMerged, mergedLabel, isBulkSelected, isContractorHighlighted,
   aptSubLabel, taskInfo, nextStageName, onAddTask, allTasksDone, compact, phone, cellTextW, onNameUnnamed,
-  mergeLink, extraStyle, isHoverGroup, onHover, problem, progress,
+  mergeLink, extraStyle, isHoverGroup, onHover, problem, progress, onStripPiece,
 }: AptCellProps) {
   const ui = useStore(state => state.mainUiStrings);
   const hasStage = !!stage;
+  /**
+   * PROJECT TILES (owner, 2026-11-01 — "Wolfson Diagram Preview", option A):
+   * no stage colour any more. White = not sold; grey = sold (it has its
+   * family name); the colours live only in the strip along the bottom. A
+   * problem still paints the tile. The Job Board ('G') keeps its colours.
+   */
+  const plain = !!apt && apt.buildingId !== 'G';
+  const soldTile = plain && isSold(apt);
+  const paint = plain ? null : stage;
   const floorBg =
     rowFloorType === 'basement' ? '#eef3f9' :
     rowFloorType === 'ground'   ? '#fefce8' :
     rowFloorType === 'lobby'    ? '#f0fdf4' :
     '#ffffff';
+  const tileBg = soldTile ? '#E3E7EC' : floorBg;
   const floorBorder =
     rowFloorType === 'basement' ? '#c8d8ec' :
     rowFloorType === 'ground'   ? '#fde68a' :
@@ -229,12 +245,12 @@ function AptCell({
    * untouched and comes straight back when the office approves. Red with a
    * white "!" while open, rose while waiting for approval.
    */
-  const bgColor = isDimmed ? '#e5e7eb' : problem ? PROBLEM_FILL[problem] : (hasStage ? stage!.color : floorBg);
+  const bgColor = isDimmed ? '#e5e7eb' : problem ? PROBLEM_FILL[problem] : (paint ? paint.color : tileBg);
   // Stage-coloured cells get a darker outline of their own colour so adjacent
   // apartments at the same stage don't blur into one block.
-  const borderColor = isDimmed ? '#d1d5db' : problem ? (problem === 'open' ? '#991b1b' : '#be123c') : (isMerged ? '#3b82f6' : hasStage ? darken(stage!.color) : floorBorder);
+  const borderColor = isDimmed ? '#d1d5db' : problem ? (problem === 'open' ? '#991b1b' : '#be123c') : (isMerged ? '#3b82f6' : paint ? darken(paint.color) : soldTile ? '#C9D0D9' : floorBorder);
   const borderWidth = isMerged && !isDimmed ? '2px' : '1.5px';
-  const textColor = isDimmed ? '#9ca3af' : problem ? '#ffffff' : (hasStage ? getTextColor(stage!.color) : '#374151');
+  const textColor = isDimmed ? '#9ca3af' : problem ? '#ffffff' : (paint ? getTextColor(paint.color) : '#374151');
 
   // The apartment number is always the primary label — a family name never replaces
   // it, it renders on its own line underneath.
@@ -273,14 +289,14 @@ function AptCell({
   const stageWords = problem === 'open'
     ? `${ui.problemLabel.toUpperCase()}${hasStage ? ` · ${ui.problemWas} ${stage!.name}` : ''}`
     : problem === 'waiting' ? ui.problemWaiting
-    : unsold ? ''
+    : unsold || plain ? ''
     : hasStage ? (isStartStage(stage!) ? ui.soldWord : stage!.name)
     : nameLabel ? ui.soldWord : ui.notStartedOption;
 
   const boxShadow = isDimmed ? 'none'
     : isHoverGroup ? `0 0 0 2px #2563eb, 0 3px 12px ${borderColor}99`
     : isContractorHighlighted ? `0 0 0 2px #f59e0b, 0 2px 10px ${borderColor}88`
-    : hasStage ? `0 1px 3px ${borderColor}55`
+    : paint ? `0 1px 3px ${borderColor}55`
     : '0 1px 2px rgba(0,0,0,0.06)';
 
   const numFontSize = compact ? '9px' : phone ? (mergedLabel ? '10.5px' : '11.5px') : mergedLabel ? '10px' : '11px';
@@ -330,7 +346,42 @@ function AptCell({
           order, coloured by state — and the fraction in the corner. The cell
           keeps exactly the size it has today; the colour bar already there
           is simply divided. */}
-      {progress && progress.total > 0 && displayLabel && !isDimmed && (
+      {progress && progress.total > 0 && displayLabel && !isDimmed && (plain ? (() => {
+        /**
+         * The project tile's STRIP (owner, 2026-11-01): a solid bar along the
+         * bottom, one piece per stage of this flat (never the start stage —
+         * the grey tile already says sold), coloured by its stage when done,
+         * paler when happening now, hatched when half done, pale grey to do.
+         * Hovering a piece (a tap on a phone) shows that stage's photos.
+         */
+        const rows = progress.rows.filter(r => !isStartStage(r.stage));
+        if (!rows.length) return null;
+        const hgt = compact ? 4 : phone ? 6 : 11;
+        const piece = (e: React.SyntheticEvent<HTMLElement>, r: typeof rows[number], pinned?: boolean) =>
+          apt && onStripPiece?.({ aptId: apt.id, stageId: r.stage.id, state: r.state, rect: e.currentTarget.getBoundingClientRect(), pinned });
+        return (
+          <span data-cell-strip data-done={rows.filter(r => r.state === 'done').length} data-total={rows.length}
+            className="absolute flex overflow-hidden"
+            style={{ left: 3, right: 3, bottom: 3, height: hgt, gap: 1, borderRadius: compact ? 2 : 4, background: 'rgba(255,255,255,.9)', zIndex: 4 }}>
+            {rows.map(r => {
+              const lit = r.state === 'done' || r.state === 'doing' || r.state === 'pending';
+              return (
+                <span key={r.stage.id} data-strip-piece={r.stage.id} data-state={r.state}
+                  role="button" tabIndex={-1} aria-label={r.stage.name}
+                  className="flex-1 min-w-0 cursor-pointer"
+                  onMouseEnter={e => piece(e, r)}
+                  onMouseLeave={() => onStripPiece?.(null)}
+                  onClick={e => { e.stopPropagation(); piece(e, r, true); }}
+                  style={{
+                    backgroundColor: r.state === 'problem' ? '#dc2626' : lit ? r.stage.color : soldTile ? '#D5DAE1' : '#E6E9EE',
+                    opacity: r.state === 'doing' ? 0.55 : 1,
+                    backgroundImage: r.state === 'pending' ? 'repeating-linear-gradient(135deg, rgba(255,255,255,.75) 0 3px, transparent 3px 6px)' : undefined,
+                  }} />
+              );
+            })}
+          </span>
+        );
+      })() : (
         <>
           {/* No "0/12" on the tile any more (owner, 2026-10-28) — the strip
               along the bottom already says how far along it is. */}
@@ -348,7 +399,7 @@ function AptCell({
             ))}
           </span>
         </>
-      )}
+      ))}
       {placed && displayLabel && (
         <>
           <span data-cell-number className="absolute font-bold leading-none whitespace-nowrap"
@@ -359,7 +410,7 @@ function AptCell({
             <span data-tipus-line className="absolute font-bold leading-none whitespace-nowrap rounded"
               style={{ left: '50%', top: 5, transform: 'translateX(-50%)', fontSize: '12px', padding: '2px 6px',
                 opacity: isDimmed ? 0.55 : 0.95,
-                backgroundColor: hasStage && !isDimmed ? 'rgba(255,255,255,.22)' : '#eef1f4' }}>
+                backgroundColor: paint && !isDimmed ? 'rgba(255,255,255,.22)' : soldTile && !isDimmed ? 'rgba(255,255,255,.75)' : '#eef1f4' }}>
               {tipusLine}
             </span>
           )}
@@ -416,7 +467,7 @@ function AptCell({
           {tipusLine && (
             <span data-tipus-line className={`text-center leading-none flex-shrink-0 font-bold ${oneLine ? 'inline-block self-center rounded px-1.5 py-[3px]' : 'w-full block'}`}
               style={{ fontSize: compact ? '7.5px' : oneLine ? '10px' : '8.5px', opacity: isDimmed ? 0.55 : 0.9,
-                backgroundColor: oneLine ? (hasStage && !isDimmed ? 'rgba(255,255,255,.22)' : '#eef1f4') : undefined }}>
+                backgroundColor: oneLine ? (paint && !isDimmed ? 'rgba(255,255,255,.22)' : soldTile && !isDimmed ? 'rgba(255,255,255,.75)' : '#eef1f4') : undefined }}>
               {tipusLine}
             </span>
           )}
@@ -766,15 +817,19 @@ interface ColumnProps {
   hoverGroup?: Set<string> | null;
   onHoverApt?: (id: string | null) => void;
   fixedColW?: number;
+  /** The last building on screen also carries the floor numbers on its right (option A). */
+  isLast?: boolean;
+  onStripPiece?: (p: StripPiece | null) => void;
 }
 
 function BuildingColumn({
   buildingId, apartments, mergedLabels, stages, activeStageIds, classFilter, tipusFilter, problemStates, searchQuery,
   onApartmentClick, showShinuiBadge, bulkSelected, highlightedApartmentIds, aptSubLabels,
   aptTaskData, nextStageLabels, onAddTask, aptCompletedData, compact, phone, onNameUnnamed,
-  hoverGroup, onHoverApt, fixedColW,
+  hoverGroup, onHoverApt, fixedColW, isLast, onStripPiece,
 }: ColumnProps) {
   const ui = useStore(state => state.mainUiStrings);
+  const uiLang = useStore(state => state.uiLang);
   const heights = useStore(state => state.boardSettings[state.currentProjectId]?.floorHeights?.[buildingId]);
   const layout = useStore(state => state.boardSettings[state.currentProjectId]?.buildingLayout?.[buildingId]);
   const stageMap = useMemo(() => new Map(stages.map(s => [s.id, s])), [stages]);
@@ -933,6 +988,7 @@ function BuildingColumn({
               <AptCell key={cell.col}
                 problem={apt ? problemStates?.get(apt.id) : undefined}
                 progress={apt ? progressMap.get(apt.id) : undefined}
+                onStripPiece={onStripPiece}
                 mergeLink={getMergeLink(apt)}
                 isHoverGroup={!!apt && !!hoverGroup?.has(apt.id)}
                 onHover={onHoverApt}
@@ -965,27 +1021,35 @@ function BuildingColumn({
           const left = cells.filter(c => c.col <= leftN);
           const right = cells.filter(c => c.col > leftN);
 
+          /**
+           * FLOOR BANDS (owner, 2026-11-01 — option A): every other floor is a
+           * pale band, the same on every building (the rows line up), so one
+           * floor reads straight across A1, A2 and A3.
+           */
+          const band = row.kind === 'normal' || row.kind === 'wide' ? (ri % 2 ? '#EEF2F7' : '#FFFFFF') : undefined;
+          const floorLabelBox = (side: 'left' | 'right') => (
+            <div className="flex flex-col items-center justify-center flex-shrink-0 text-gray-500"
+              data-floor-label={side === 'left' ? label : undefined} data-floor-label-right={side === 'right' ? label : undefined}
+              style={{ width: `${LABEL_W}px`, [side === 'left' ? 'borderRight' : 'borderLeft']: '1px solid #e2e8f0', backgroundColor: band ?? rowBgOf(row), fontWeight: 700 }}>
+              {/* The owner asked for bigger floor numbers (2026-10-28) — at 9px
+                  they were hard to find down the side of a tall building. */}
+              <span className="text-gray-700" style={{
+                fontSize: row.kind === 'lobby' || row.kind === 'ground' ? (compact ? '8px' : '10px')
+                  : row.num.startsWith('-') ? (compact ? '11px' : '13px') : (compact ? '12px' : '16px'),
+                textAlign: 'center', lineHeight: 1.1, fontWeight: 800,
+              }}>
+                {label}
+              </span>
+              {!compact && band && <span style={{ fontSize: '8px', letterSpacing: '.08em', textTransform: 'uppercase', color: '#8a94a6', fontWeight: 700 }}>{uiLang === 'he' ? 'קומה' : 'floor'}</span>}
+            </div>
+          );
           return (
             <div key={row.key} className="flex items-stretch relative"
-              data-floor-row={row.key} data-floor-kind={row.kind}
-              style={{ height: `${h}px`, minHeight: `${h}px`, borderBottom: ri < rows.length - 1 ? '1px solid #e9edf2' : 'none' }}>
+              data-floor-row={row.key} data-floor-kind={row.kind} data-floor-band={band === '#EEF2F7' ? '1' : undefined}
+              style={{ height: `${h}px`, minHeight: `${h}px`, borderBottom: ri < rows.length - 1 ? '1px solid #dfe4eb' : 'none', backgroundColor: band }}>
               {/* No left gutter on a phone — the floor number rides the middle
                   divider instead, giving all 34px back to the apartments. */}
-              {!phone && (
-                <div className="flex items-center justify-center flex-shrink-0 text-gray-500"
-                  data-floor-label={label}
-                  style={{ width: `${LABEL_W}px`, borderRight: '1px solid #e2e8f0', backgroundColor: rowBgOf(row), fontWeight: 700 }}>
-                  {/* The owner asked for bigger floor numbers (2026-10-28) — at 9px
-                      they were hard to find down the side of a tall building. */}
-                  <span className="text-gray-700" style={{
-                    fontSize: row.kind === 'lobby' || row.kind === 'ground' ? (compact ? '8px' : '10px')
-                      : row.num.startsWith('-') ? (compact ? '11px' : '13px') : (compact ? '12px' : '15px'),
-                    textAlign: 'center', lineHeight: 1.1,
-                  }}>
-                    {label}
-                  </span>
-                </div>
-              )}
+              {!phone && floorLabelBox('left')}
               <div className={`flex flex-1 items-stretch ${padClass} min-w-0`}>
                 {crossesMiddle ? (
                   <div className={`flex flex-1 ${gapCls} min-w-0`}>
@@ -1002,6 +1066,7 @@ function BuildingColumn({
                   </>
                 )}
               </div>
+              {!phone && isLast && floorLabelBox('right')}
               {/* The phone's floor number when a wide unit took the divider's place. */}
               {phone && crossesMiddle && pill && (
                 <span className="absolute pointer-events-none flex items-center justify-center"
@@ -1067,6 +1132,15 @@ export function BuildingDiagram({
 
   // Hovering either half of a linked pair highlights both.
   const [hoverAptId, setHoverAptId] = useState<string | null>(null);
+  /** The strip piece whose photos are showing (hovered, or tapped = pinned). */
+  const [piece, setPiece] = useState<StripPiece | null>(null);
+  const hideTimer = React.useRef<number | null>(null);
+  const onStripPiece = React.useCallback((p: StripPiece | null) => {
+    if (hideTimer.current) { window.clearTimeout(hideTimer.current); hideTimer.current = null; }
+    if (p) { setPiece(p); return; }
+    // Leaving the piece: a moment to move onto the photos before they go.
+    hideTimer.current = window.setTimeout(() => setPiece(cur => (cur?.pinned ? cur : null)), 260);
+  }, []);
   const hoverGroup = useMemo(() => {
     if (!hoverAptId) return null;
     const group = new Set<string>([hoverAptId]);
@@ -1115,11 +1189,84 @@ export function BuildingDiagram({
           hoverGroup,
           onHoverApt: setHoverAptId,
           fixedColW,
+          isLast: bId === visibleBuildings[visibleBuildings.length - 1],
+          onStripPiece,
         };
         return isWolfsonBuilding
           ? <BuildingColumn key={bId} {...colProps} />
           : <NetivBuildingColumn key={bId} {...colProps} />;
       })}
+      {piece && <StripPhotos piece={piece} stages={stages} apartments={apartments}
+        onKeep={() => { if (hideTimer.current) { window.clearTimeout(hideTimer.current); hideTimer.current = null; } }}
+        onClose={() => setPiece(null)} />}
+    </div>
+  );
+}
+
+/**
+ * The photos of one stage of one flat — opened by hovering a piece of the
+ * tile's strip (owner, 2026-11-01), or tapping it on a phone. The pictures
+ * are the job's own uploads filed under that stage; tap one to open it.
+ */
+function StripPhotos({ piece, stages, apartments, onKeep, onClose }: {
+  piece: StripPiece; stages: Stage[]; apartments: Apartment[]; onKeep: () => void; onClose: () => void;
+}) {
+  const photos = useStore(st => st.contractorPhotos);
+  const uiLang = useStore(st => st.uiLang);
+  const he = uiLang === 'he';
+  const stage = stages.find(x => x.id === piece.stageId);
+  const apt = apartments.find(a => a.id === piece.aptId);
+  const list = useMemo(() => photos.filter(p => p.apartmentId === piece.aptId && p.stageId === piece.stageId && (p.driveFileId || p.storageUrl)),
+    [photos, piece.aptId, piece.stageId]);
+  const boxRef = React.useRef<HTMLDivElement>(null);
+  const [at, setAt] = useState<{ left: number; top: number } | null>(null);
+  React.useLayoutEffect(() => {
+    const el = boxRef.current; if (!el) return;
+    const w = el.offsetWidth, h = el.offsetHeight, r = piece.rect;
+    const left = Math.min(Math.max(8, r.left + r.width / 2 - w / 2), window.innerWidth - w - 8);
+    const top = r.top - h - 8 >= 8 ? r.top - h - 8 : Math.min(r.bottom + 8, window.innerHeight - h - 8);
+    setAt({ left, top });
+  }, [piece, list.length]);
+  React.useEffect(() => {
+    if (!piece.pinned) return;
+    const off = (e: MouseEvent) => { if (!boxRef.current?.contains(e.target as Node) && !(e.target as HTMLElement).closest?.('[data-strip-piece]')) onClose(); };
+    const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    document.addEventListener('mousedown', off); document.addEventListener('keydown', esc);
+    return () => { document.removeEventListener('mousedown', off); document.removeEventListener('keydown', esc); };
+  }, [piece.pinned, onClose]);
+  if (!stage) return null;
+  const word: Record<string, [string, string]> = {
+    done: ['Done', 'גמור'], doing: ['Happening now', 'בעבודה'], pending: ['Half done', 'חצי גמור'],
+    todo: ['To do', 'לביצוע'], off: ['Not needed', 'לא נדרש'], problem: ['Problem', 'בעיה'],
+  };
+  const stateWord = (word[piece.state] ?? [piece.state, piece.state])[he ? 1 : 0];
+  return (
+    <div ref={boxRef} data-strip-photos={piece.stageId} role="dialog" aria-label={stage.name}
+      onMouseEnter={onKeep} onMouseLeave={() => { if (!piece.pinned) onClose(); }}
+      className="fixed z-[200] bg-white rounded-xl border border-gray-200 p-3"
+      style={{ width: 'min(330px, calc(100vw - 16px))', left: at?.left ?? -9999, top: at?.top ?? -9999, boxShadow: '0 12px 32px rgba(15,23,42,.22)' }}>
+      <p className="m-0 flex items-center gap-2 font-bold text-gray-900" style={{ fontSize: 14 }}>
+        <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: stage.color }} />
+        <span className="truncate">{stage.name}{apt ? ` · ${apt.apartmentNumber}` : ''}</span>
+      </p>
+      <p className="m-0 mt-0.5 mb-2 text-gray-500" style={{ fontSize: 12 }}>
+        {stateWord}{list.length ? ` · ${list.length} ${he ? 'תמונות' : list.length === 1 ? 'photo' : 'photos'}` : ''}
+      </p>
+      {list.length ? (
+        <div className="grid grid-cols-3 gap-1.5">
+          {list.slice(0, 9).map(p => {
+            const src = p.driveFileId ? driveThumbUrl(p.driveFileId, 400) : p.storageUrl!;
+            const href = p.driveUrl || (p.driveFileId ? `https://drive.google.com/file/d/${p.driveFileId}/view` : p.storageUrl);
+            return (
+              <a key={p.id} href={href} target="_blank" rel="noreferrer" className="block rounded-md overflow-hidden bg-gray-100">
+                <img src={src} alt="" loading="lazy" className="w-full aspect-[3/4] object-cover" />
+              </a>
+            );
+          })}
+        </div>
+      ) : (
+        <p className="m-0 text-gray-500" style={{ fontSize: 12.5 }}>{he ? 'אין עדיין תמונות של השלב הזה.' : 'No photos of this stage yet.'}</p>
+      )}
     </div>
   );
 }

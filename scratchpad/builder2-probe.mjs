@@ -56,15 +56,15 @@ const store = p => p.evaluate(() => JSON.parse(localStorage.getItem('wolfson_app
 const attrs = (p, sel, name) => p.locator(sel).evaluateAll((els, n) => els.map(e => e.getAttribute(n)), name);
 const box = async (p, sel) => p.locator(sel).first().boundingBox();
 
-const b = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome' });
+const b = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1243/chrome-linux64/chrome' });
 const ctx = await b.newContext({ viewport: { width: 1280, height: 900 } });
 await seed(ctx);
 const page = await ctx.newPage();
 page.on('pageerror', e => console.log('PAGEERROR', e.message));
 
 // ── 1. The card opens the builder full screen ──
-await page.goto(`${APP}/settings`);
-await page.getByRole('button', { name: /^Buildings$/ }).first().click();
+// Settings is a list of categories since 2026-10-29: Buildings opens by its address.
+await page.goto(`${APP}/settings?cat=buildings`);
 const studio = page.locator('[data-layout-studio]');
 await studio.waitFor({ state: 'visible', timeout: 15000 });
 const sb = await studio.boundingBox();
@@ -212,16 +212,17 @@ check(d45 > d48 * 2.8, '11d the merged unit is ONE wide cell on the project page
 check(await page.locator('[data-apt-id="A1-46"]').count() === 0, '11e the covered position is not drawn');
 const dh13 = await page.locator('[data-floor-row="13"]').first().evaluate(el => el.getBoundingClientRect().height);
 const dh14 = await page.locator('[data-floor-row="14"]').first().evaluate(el => el.getBoundingClientRect().height);
-check(Math.round(dh13) === 102 && Math.round(dh14) === 68, '11f the tall row height reaches the diagram (102 vs 68)', `${dh13} vs ${dh14}`);
+// Wolfson floors are 112px since the owner's recording of 2026-10-28 ("significantly fatter"); tall = 1.5×.
+check(Math.round(dh13) === 168 && Math.round(dh14) === 112, '11f the tall row height reaches the diagram (168 vs 112)', `${dh13} vs ${dh14}`);
 const dLobby = await page.locator('[data-floor-row="1"]').first().evaluate(el => el.getBoundingClientRect().height);
-check(Math.round(dLobby) === 68, '11g the lobby row is a normal row\'s height', String(dLobby));
+check(Math.round(dLobby) === 112, '11g the lobby row is a normal row\'s height', String(dLobby));
 check((await page.locator('[data-apt-id="A1-1"]').innerText()).includes('Rottenstreich'), '11h the nameless-number unit shows its name on the diagram');
 const c51d = await page.locator('[data-apt-id="A1-51"]').evaluate(el => el.closest('[data-floor-row]').getAttribute('data-floor-row'));
 check(c51d === '13', '11i 51 sits on its new floor on the diagram');
 
 // ── 12. Escape asks before discarding ──
-await page.goto(`${APP}/settings`);
-await page.getByRole('button', { name: /^Buildings$/ }).first().click();
+// Settings is a list of categories since 2026-10-29: Buildings opens by its address.
+await page.goto(`${APP}/settings?cat=buildings`);
 await studio.waitFor({ state: 'visible' });
 
 // ── 13. All buildings at once; empty squares select and merge (owner, 2026-09-15) ──

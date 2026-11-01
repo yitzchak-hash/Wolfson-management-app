@@ -76,7 +76,7 @@ function seed(ctx) {
 const store = p => p.evaluate(() => JSON.parse(localStorage.getItem('wolfson_app_data')));
 const attrs = (p, sel, name) => p.locator(sel).evaluateAll((els, n) => els.map(e => e.getAttribute(n)), name);
 
-const b = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome' });
+const b = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1243/chrome-linux64/chrome' });
 
 // ═══ A. The studio ═══════════════════════════════════════════════════════════
 {
@@ -84,8 +84,8 @@ const ctx = await b.newContext({ viewport: { width: 1400, height: 950 } });
 await seed(ctx);
 const page = await ctx.newPage();
 page.on('pageerror', e => console.log('PAGEERROR', e.message));
-await page.goto(`${APP}/settings`);
-await page.getByRole('button', { name: /^Buildings$/ }).first().click();
+// Settings is a list of categories since 2026-10-29: Buildings opens by its address.
+await page.goto(`${APP}/settings?cat=buildings`);
 const studio = page.locator('[data-layout-studio]');
 await studio.waitFor({ state: 'visible', timeout: 20000 });
 
