@@ -602,7 +602,7 @@ function AptCell({
           data-upgraded-badge
           className={`absolute rounded-full flex items-center justify-center ${placed ? 'w-5 h-5' : compact || phone ? 'top-1 left-1 w-3.5 h-3.5' : 'top-1 left-1 w-5 h-5'}`}
           title={ui.upgradedTooltip}
-          style={{ backgroundColor: '#f59e0b', border: '1.5px solid rgba(255,255,255,0.9)', ...(placed ? { left: 4, top: 71 } : null) }}
+          style={{ backgroundColor: '#f59e0b', border: '1.5px solid rgba(255,255,255,0.9)', ...(placed ? { left: 4, bottom: plain ? 18 : 6, zIndex: 5 } : null) }}
         >
           <span style={{ fontSize: compact || phone ? '7.5px' : '11px', color: 'white', fontWeight: 800, lineHeight: 1 }}>{ui.upgradedBadge}</span>
         </div>
@@ -1135,9 +1135,14 @@ export function BuildingDiagram({
   /** The strip piece whose photos are showing (hovered, or tapped = pinned). */
   const [piece, setPiece] = useState<StripPiece | null>(null);
   const hideTimer = React.useRef<number | null>(null);
+  const showTimer = React.useRef<number | null>(null);
   const onStripPiece = React.useCallback((p: StripPiece | null) => {
     if (hideTimer.current) { window.clearTimeout(hideTimer.current); hideTimer.current = null; }
-    if (p) { setPiece(p); return; }
+    if (showTimer.current) { window.clearTimeout(showTimer.current); showTimer.current = null; }
+    // A tap/click opens it at once; a passing mouse must REST on the piece
+    // for 1.5 s first (owner, 2026-11-01: it popped up while moving around).
+    if (p?.pinned) { setPiece(p); return; }
+    if (p) { showTimer.current = window.setTimeout(() => { showTimer.current = null; setPiece(p); }, 1500); return; }
     // Leaving the piece: a moment to move onto the photos before they go.
     hideTimer.current = window.setTimeout(() => setPiece(cur => (cur?.pinned ? cur : null)), 260);
   }, []);
