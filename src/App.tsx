@@ -18,7 +18,7 @@ import GoalsPage from './pages/GoalsPage';
 import { CalendarPage } from './pages/CalendarPage';
 import { TvPresentationPage } from './pages/TvPresentationPage';
 import { armWorkspaceHistoryRestore } from './data/workspaceHistory';
-import { previewInfo, israelTime, restoreThisBackup, leavePreview } from './data/previewMode';
+import { previewInfo, israelTime, restoreThisBackup, leavePreview, TEST_MODE, leaveTest } from './data/previewMode';
 import { Loader2 } from 'lucide-react';
 
 // Before the router can subscribe to popstate — see workspaceHistory.ts.
@@ -95,6 +95,17 @@ function useEnterCommits() {
  * Restore press, which asks first in plain words with the numbers.
  */
 const WS_NAME: Record<string, string> = { wolfson: 'Wolfson', general: 'Job Board', netiv: 'Netiv' };
+/** "Test as him" (Settings → Workers): his real portal, today's real data, nothing saved. */
+function TestBar() {
+  if (!TEST_MODE) return null;
+  return (
+    <div role="status" data-test-bar className="fixed inset-x-0 top-0 flex flex-wrap items-center justify-center gap-3 px-4 py-1.5 text-sm"
+      style={{ zIndex: 2147483000, background: '#ecfdf5', borderBottom: '2px solid #10b981', color: '#065f46', paddingTop: 'max(6px, env(safe-area-inset-top, 0px))' }}>
+      <span className="font-semibold">Test — what he sees today. Nothing you do here is saved.</span>
+      <button className="px-3 py-1 rounded-lg border bg-white font-semibold" style={{ borderColor: '#a7f3d0' }} onClick={() => leaveTest()}>Start over</button>
+    </div>
+  );
+}
 function PreviewBar() {
   const p = previewInfo();
   const role = useStore(st => st.currentUser?.role ?? '');
@@ -182,6 +193,7 @@ export default function App() {
   return (
     <CrashScreen>
     <PreviewBar />
+    <TestBar />
     <BrowserRouter>
       <Routes>
         <Route path="/login" element={<LoginPage />} />

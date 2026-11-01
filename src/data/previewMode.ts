@@ -32,6 +32,47 @@ export const PREVIEW_ID: string | null = (() => {
   } catch { return null; }
 })();
 
+/**
+ * TEST AS A WORKER (owner, 2026-11-01): `/c/<token>?test=1`, opened from his
+ * row in Settings → Workers. The worker's real portal with TODAY's real data —
+ * read live from the cloud — but nothing is saved: the cloud's writes are
+ * switched off (firebase.ts), changing requests are refused, this tab keeps
+ * its own memory-only storage, and pictures stay in the tab.
+ */
+export const TEST_MODE: boolean = (() => {
+  try {
+    if (new URLSearchParams(window.location.search).get('test') === '1') window.sessionStorage.setItem('test_mode', '1');
+    return window.sessionStorage.getItem('test_mode') === '1';
+  } catch { return false; }
+})();
+
+function bootTest(): void {
+  const real = window.localStorage;
+  const seed: Record<string, string> = { whats_new_seen: '9999' };
+  for (let i = 0; i < real.length; i++) { const k = real.key(i) ?? ''; if (/_app_version$/.test(k)) seed[k] = real.getItem(k) ?? '3'; }
+  seed.wolfson_app_version = seed.wolfson_app_version ?? '3';
+  realSession = window.sessionStorage;
+  Object.defineProperty(window, 'localStorage', { value: memoryStorage(seed), configurable: true });
+  Object.defineProperty(window, 'sessionStorage', { value: memoryStorage({ test_mode: '1' }), configurable: true });
+  const realFetch = window.fetch.bind(window);
+  const READ_ONLY_API = ['/api/drive-fetch', '/api/drive-files', '/api/drive-path', '/api/photos-cover', '/api/geocode'];
+  window.fetch = (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+    const path = url.startsWith('/') ? url : (() => { try { return new URL(url).pathname; } catch { return url; } })();
+    if (path.startsWith('/api/') && !READ_ONLY_API.some(x => path.startsWith(x))) {
+      return Promise.resolve(new Response(JSON.stringify({ error: 'Test: nothing is saved' }), { status: 403 }));
+    }
+    return realFetch(input, init);
+  };
+  document.title = 'Test · TzviAir';
+}
+
+/** Leave the test (this tab only). */
+export function leaveTest() {
+  try { (realSession ?? window.sessionStorage).removeItem('test_mode'); } catch { /* blocked */ }
+  window.location.replace(window.location.pathname);
+}
+
 export interface PreviewInfo {
   fileId: string; exportedAt: string; totalDocuments: number; workspaces: string[];
   /** 'full' = every workspace; 'old' = a one-workspace file from before 2026-10-29. */
@@ -130,6 +171,7 @@ function memoryStorage(seed: Record<string, string>): Storage {
  * the app may start. Throws with a plain message if the backup can't be read.
  */
 export async function bootPreview(driveKey: string): Promise<void> {
+  if (!PREVIEW_ID && TEST_MODE) { bootTest(); return; }
   if (!PREVIEW_ID) return;
   let text: string;
   if (PREVIEW_ID === LOCAL_PREVIEW_ID) {

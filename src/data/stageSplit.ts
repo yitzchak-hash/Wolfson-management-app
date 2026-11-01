@@ -26,7 +26,8 @@ export interface StageSplit { parent: string; children: SplitChild[] }
 
 export const STAGE_SPLITS: StageSplit[] = [
   { parent: 's1', children: [
-    { id: 's1-piping',    name: 'Piping',          nameHe: 'צנרת',           color: '#9ca3af', order: 2 },
+    // Piping was merged into Drilling ("Drilling & Piping", owner 2026-11-01): an old record still naming the combined stage lands there.
+    { id: 's-drilling',   name: 'Drilling & Piping', nameHe: 'קידוחים וצנרת', color: '#0891b2', order: 2 },
     { id: 's1-concealed', name: 'Concealed Units', nameHe: 'יחידות נסתרות',  color: '#c9b95c', order: 3 },
     { id: 's1-fans',      name: 'Fans',            nameHe: 'מפוחים',         color: '#eab308', order: 4 },
   ] },

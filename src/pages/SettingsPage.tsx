@@ -6,6 +6,7 @@ import {
   Copy, Check, Download, Upload, HardDrive, X, HardDriveDownload, ToggleLeft, ToggleRight,
   Languages, Clock, RotateCcw, Wifi, WifiOff, Loader, Database, RefreshCw, CloudUpload, Search, BookOpen, ExternalLink, AlertTriangle, Tv, Building2,
   Loader2, Sparkles,
+  Eye as EyeIcon,
 } from 'lucide-react';
 import { isFirebaseConfigured, db, fsSet, fsGetAll } from '../data/firebase';
 import { TvDashboard } from '../components/board/TvDashboard';
@@ -1472,6 +1473,11 @@ function ContractorsTab({ onToast }: { onToast: (msg: string, type?: 'success' |
                   <div className="flex items-center gap-2 mt-1">
                     <span className="text-xs text-gray-400 font-mono truncate max-w-[160px]">/c/{c.token}</span>
                     <CopyButton text={portalBase + c.token} />
+                    {/* His portal as he sees it TODAY, with nothing saved (owner, 2026-11-01). */}
+                    <a data-worker-test href={`${portalBase}${c.token}?test=1`} target="_blank" rel="noreferrer"
+                      className="flex items-center gap-1 text-xs px-2 py-1 rounded border border-emerald-200 text-emerald-700 hover:bg-emerald-50 transition-all">
+                      <EyeIcon size={12} /> Test as {c.name.split(' ')[0]}
+                    </a>
                   </div>
                 </div>
                 <Tooltip text={c.active ? s.hideStage : s.activateStage}>
@@ -1593,12 +1599,12 @@ function ContractorsTab({ onToast }: { onToast: (msg: string, type?: 'success' |
                   };
                   return (
                     <span className="relative inline-flex gap-1">
-                      <Tooltip text="Which building maps this worker may open in his portal">
+                      <Tooltip text="Which workspaces' diagrams this worker can see in his portal">
                         <button data-worker-maps
                           onClick={() => setReachOpen(open === 'maps' ? null : { id: c.id, what: 'maps' })}
                           className={`text-[11px] font-semibold px-2 py-1 rounded-lg border ${
                             c.mapProjects ? 'border-sky-200 bg-sky-50 text-sky-700' : 'border-gray-200 text-gray-500'}`}>
-                          maps: {c.mapProjects ? mapsOn.map(id => projects.find(p => p.id === id)?.name ?? id).join(', ') || 'none' : 'all'}
+                          diagrams: {c.mapProjects ? mapsOn.map(id => projects.find(p => p.id === id)?.name ?? id).join(', ') || 'none' : 'all'}
                         </button>
                       </Tooltip>
                       {canSelf && (
@@ -1622,7 +1628,7 @@ function ContractorsTab({ onToast }: { onToast: (msg: string, type?: 'success' |
                       {open && (
                         <div data-worker-reach className="absolute top-full mt-1 start-0 z-30 bg-white rounded-xl shadow-xl border border-gray-200 p-2 w-64">
                           <div className="text-[10px] font-bold text-gray-400 px-1.5 pb-1">
-                            {open === 'maps' ? 'Building maps he may open'
+                            {open === 'maps' ? 'Workspace diagrams he can see'
                               : open === 'self' ? 'Workspaces he may give himself a task in'
                               : `Stages he can report · ${wsName}`}
                           </div>

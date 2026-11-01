@@ -12,7 +12,7 @@
 
 import { initializeApp, FirebaseApp } from 'firebase/app';
 import { stripUndefinedDeep } from './deepClean';
-import { PREVIEW_ID } from './previewMode';
+import { PREVIEW_ID, TEST_MODE } from './previewMode';
 import { diffRecord, mergeIdList, getAtPath } from './fieldDiff';
 import type { DiffOp } from './fieldDiff';
 import {
@@ -20,24 +20,41 @@ import {
   Firestore,
   collection,
   doc,
-  setDoc,
+  setDoc as sdkSetDoc,
   getDocs,
   getDoc,
-  deleteDoc,
+  deleteDoc as sdkDeleteDoc,
   onSnapshot,
   query,
   orderBy,
   limit,
   where,
   connectFirestoreEmulator,
-  writeBatch,
+  writeBatch as sdkWriteBatch,
   serverTimestamp,
   deleteField,
-  updateDoc,
+  updateDoc as sdkUpdateDoc,
   FieldPath,
-  runTransaction,
+  runTransaction as sdkRunTransaction,
   Unsubscribe,
 } from 'firebase/firestore';
+
+/**
+ * TEST MODE (owner, 2026-11-01: "see everything he would see in a real day,
+ * but everything in there doesn't save"): the cloud is READ live, and every
+ * write below quietly does nothing. All of this app's writes come through
+ * these four doors.
+ */
+const READ_ONLY = TEST_MODE;
+const setDoc = ((...a: Parameters<typeof sdkSetDoc>) => (READ_ONLY ? Promise.resolve() : sdkSetDoc(...a))) as typeof sdkSetDoc;
+const updateDoc = ((...a: Parameters<typeof sdkUpdateDoc>) => (READ_ONLY ? Promise.resolve() : (sdkUpdateDoc as (...x: unknown[]) => Promise<void>)(...a))) as typeof sdkUpdateDoc;
+const deleteDoc = ((...a: Parameters<typeof sdkDeleteDoc>) => (READ_ONLY ? Promise.resolve() : sdkDeleteDoc(...a))) as typeof sdkDeleteDoc;
+const writeBatch = ((...a: Parameters<typeof sdkWriteBatch>) => {
+  if (!READ_ONLY) return sdkWriteBatch(...a);
+  const fake = { set: () => fake, update: () => fake, delete: () => fake, commit: () => Promise.resolve() };
+  return fake as unknown as ReturnType<typeof sdkWriteBatch>;
+}) as typeof sdkWriteBatch;
+const runTransaction = ((...a: Parameters<typeof sdkRunTransaction>) => (READ_ONLY ? Promise.resolve(undefined) : sdkRunTransaction(...a))) as typeof sdkRunTransaction;
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,

@@ -1,4 +1,4 @@
-import { PREVIEW_ID } from './previewMode';
+import { PREVIEW_ID, TEST_MODE } from './previewMode';
 // Google Drive API helpers — client-side only, no backend required
 
 declare global {
@@ -265,7 +265,7 @@ export function isUploadBackendConfigured(): boolean {
   // A PREVIEW (a backup, or the worker test link) keeps its pictures in the
   // tab: nothing goes up to Drive (owner, 2026-11-01: "test everything
   // without it actually changing in the field").
-  return !!DRIVE_API_KEY && !PREVIEW_ID;
+  return !!DRIVE_API_KEY && !PREVIEW_ID && !TEST_MODE;
 }
 
 /**
