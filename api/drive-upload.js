@@ -6,6 +6,8 @@ import { google } from 'googleapis';
 import { Readable } from 'stream';
 import { runFullBackup, listFullBackups } from '../lib/fullBackup.js';
 import { runRestore } from '../lib/fullRestore.js';
+import { sortPhotos as sortPhotosLib, claudeAsker } from '../lib/sortPhotos.js';
+import Anthropic from '@anthropic-ai/sdk';
 
 function getDrive() {
   const json = process.env.GOOGLE_SERVICE_ACCOUNT_JSON;
@@ -141,6 +143,32 @@ export default async function handler(req, res) {
       }
     }
     return res.json({ ok: results.every(r => r.ok), results });
+  }
+
+  /**
+   * SORT A CLOSE'S PHOTOS (owner, 2026-11-01): the worker took the day's
+   * pictures in one step; now each is filed under the stage it shows. The AI
+   * looks at the pictures; a video goes with the furthest stage of the close
+   * (a video shows the work up to that stage); one stage needs no AI. Each
+   * photo is tagged in the cloud and its file moved to Photos/<stage name>.
+   * The worker's phone does not wait for this.
+   */
+  if (req.body?.mode === 'sort-photos') {
+    try {
+      const b = req.body;
+      const env = {
+        ...process.env,
+        ...(!process.env.VITE_FIREBASE_PROJECT_ID && /^[a-z0-9-]{4,40}$/.test(b.projectId ?? '') ? { VITE_FIREBASE_PROJECT_ID: b.projectId } : {}),
+        ...(!process.env.VITE_FIREBASE_API_KEY && /^[A-Za-z0-9_-]{20,60}$/.test(b.apiKey ?? '') ? { VITE_FIREBASE_API_KEY: b.apiKey } : {}),
+      };
+      const askAi = process.env.ANTHROPIC_API_KEY
+        ? claudeAsker(new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY }), process.env.SORT_PHOTOS_MODEL || 'claude-opus-5-5')
+        : undefined;
+      return res.json(await sortPhotosLib(b, { drive: getDrive(), env, askAi }));
+    } catch (err) {
+      console.error('sort photos error:', err.message);
+      return res.status(500).json({ ok: false, error: err.message });
+    }
   }
 
   const { folderId, filename, mimeType, data } = req.body;

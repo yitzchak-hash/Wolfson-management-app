@@ -1342,6 +1342,7 @@ function ContractorsTab({ onToast }: { onToast: (msg: string, type?: 'success' |
   const currentProjectId = useStore(st => st.currentProjectId);
   const partNeedsPicture = useStore(st => st.boardSettings.__tv?.partNeedsPicture !== false);
   const closeMinFiles = useStore(st => closeMinFilesOf(st.boardSettings.__tv?.closeMinFiles));
+  const closePhotosPerStage = useStore(st => st.boardSettings.__tv?.closePhotosPerStage === true);
   /** Which worker's "maps" / "stages" panel is open — one at a time. */
   const [reachOpen, setReachOpen] = useState<{ id: string; what: 'maps' | 'stages' | 'self' } | null>(null);
   const [openPerms, setOpenPerms] = useState<string | null>(null);
@@ -1388,6 +1389,14 @@ function ContractorsTab({ onToast }: { onToast: (msg: string, type?: 'success' |
         <input type="checkbox" checked={partNeedsPicture} onChange={e => setTvSetting('partNeedsPicture', e.target.checked ? undefined : false)} />
         <span><b>{s.isRtl ? 'עבודה חלקית צריכה תמונה אחת' : 'A stage done in part needs one picture'}</b>
           <span className="text-gray-500"> — {s.isRtl ? 'כשהעובד סוגר עבודה ואומר שעשה רק חלק משלב' : 'when a worker closes a job and says he did only part of a stage'}</span></span>
+      </label>
+      {/* One picture step for the whole close, sorted by AI afterwards — the default (owner, 2026-11-01). */}
+      <label data-close-photos-per-stage={closePhotosPerStage ? '1' : '0'} className="flex items-start gap-2 bg-white border border-gray-200 rounded-xl px-4 py-3 text-sm text-gray-700 cursor-pointer">
+        <input type="checkbox" checked={closePhotosPerStage} onChange={e => setTvSetting('closePhotosPerStage', e.target.checked ? true : undefined)} />
+        <span><b>{s.isRtl ? 'לבקש תמונות לכל שלב בנפרד' : 'Ask for pictures of each stage separately'}</b>
+          <span className="text-gray-500"> — {s.isRtl
+            ? 'כבוי: העובד מצלם פעם אחת את כל עבודת היום, וה-AI ממיין כל תמונה לתיקיית השלב שלה'
+            : 'off: the worker takes the day\'s pictures once, and the AI files each one in its stage\'s folder'}</span></span>
       </label>
       {/* How many pictures or videos close a job (owner, 2026-10-18: one by default). */}
       <div data-close-min-files={closeMinFiles} className="flex flex-wrap items-center gap-x-3 gap-y-2 bg-white border border-gray-200 rounded-xl px-4 py-3 text-sm text-gray-700">

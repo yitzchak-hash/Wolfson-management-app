@@ -267,6 +267,14 @@ export interface BoardSetting {
    */
   closeMinFiles?: number;
   /**
+   * The close's pictures (owner, 2026-11-01): by default ONE step at the end —
+   * "pictures of today's work" for everything he picked — and the app's AI
+   * files each picture under its stage afterwards (api/drive-upload.js,
+   * mode 'sort-photos'), without making him wait. `true` brings back one
+   * picture step per stage. In the app-wide `__tv` bag.
+   */
+  closePhotosPerStage?: boolean;
+  /**
    * Which board the wallboard shows. Empty is the workspace's main board.
    * Set by the top-level admin in app settings — never on the TV, which has no
    * keyboard and is read-only by design.

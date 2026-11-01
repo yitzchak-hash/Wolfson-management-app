@@ -1,3 +1,5 @@
+// These checks cover the OLD per-stage picture steps — kept as a Settings switch since
+// 2026-11-01 (closePhotosPerStage); the new one-step default is closestep-probe.mjs.
 // "More Than the Task Said", built (owner, 2026-10-18: "all starred, build it"):
 //   1 · the worker's close: "Did you finish doing Fans and Concealed units?"
 //       → "Did you do anything else here today?" → "Is it one of these?"
@@ -24,7 +26,7 @@ const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR
 const pic = n => ({ name: `site-${n}.png`, mimeType: 'image/png', buffer: PNG });
 const film = { name: 'site-film.mp4', mimeType: 'video/mp4', buffer: Buffer.alloc(2048, 1) };
 
-const b = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome' });
+const b = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1243/chrome-linux64/chrome' });
 const ctx = await b.newContext({ viewport: { width: 420, height: 900 } });
 await ctx.addInitScript(([T, S]) => {
   localStorage.setItem('wolfson_app_version', '3');
@@ -67,6 +69,7 @@ const wolf = p => p.evaluate(() => JSON.parse(localStorage.getItem('wolfson_app_
 let page = await ctx.newPage();
 page.on('pageerror', e => { if (!/localStorage/.test(e.message)) { console.log('PAGE ERROR', e.message); fails++; } });
 await page.goto(`${APP}/c/tok-jo`);
+await page.waitForFunction(() => !!window.__store); await page.evaluate(() => window.__store.getState().setTvSetting('closePhotosPerStage', true));
 await page.waitForTimeout(3000);
 const openTask = async (id) => {
   if (await page.locator('button:has-text("All")').count()) await page.locator('button:has-text("All")').first().click().catch(() => {});
@@ -136,6 +139,7 @@ await page.waitForTimeout(300);
 await page.locator('[data-closing-panel] button[title]').first().click().catch(() => {});
 await page.keyboard.press('Escape');
 await page.goto(`${APP}/c/tok-jo`);
+await page.waitForFunction(() => !!window.__store); await page.evaluate(() => window.__store.getState().setTvSetting('closePhotosPerStage', true));
 await page.waitForTimeout(2500);
 await openTask('T-2');
 await page.locator('[data-close-finished-pick="yes"]').click();
@@ -160,10 +164,12 @@ await page.close();
 page = await ctx.newPage();
 page.on('pageerror', e => { if (!/localStorage/.test(e.message)) { console.log('PAGE ERROR', e.message); fails++; } });
 await page.goto(`${APP}/project`);
+await page.waitForFunction(() => !!window.__store); await page.evaluate(() => window.__store.getState().setTvSetting('closePhotosPerStage', true));
 await page.waitForTimeout(2500);
 await page.evaluate(() => { localStorage.setItem('active_project', 'general'); });
 await page.evaluate(() => window.__store.getState().setCurrentProject('general'));
 await page.goto(`${APP}/jobs`);
+await page.waitForFunction(() => !!window.__store); await page.evaluate(() => window.__store.getState().setTvSetting('closePhotosPerStage', true));
 await page.waitForTimeout(3500);
 await page.locator('button:has-text("100%")').first().click().catch(() => {});
 await page.waitForTimeout(800);
@@ -203,8 +209,10 @@ check(await glow() === 0, '3 · nothing glows any more');
 
 // ── 4 · the two settings, on their own pages ─────────────────────────────────
 await page.goto(`${APP}/app-settings`);
+await page.waitForFunction(() => !!window.__store); await page.evaluate(() => window.__store.getState().setTvSetting('closePhotosPerStage', true));
 await page.waitForTimeout(2000);
-await page.locator('button:has-text("Users")').first().click();
+// Settings is a list of categories since 2026-10-29: each opens by its address.
+await page.goto(`${APP}/app-settings?cat=users`); await page.waitForTimeout(1500);
 await page.waitForTimeout(500);
 const chip = page.locator('[data-user-answers="U-t"] [data-user-answers-kind="offList"]');
 check(await chip.count() === 1, '4 · Settings → Users: each person says which questions they answer');
@@ -213,7 +221,7 @@ await chip.click();
 await page.waitForTimeout(500);
 const users = await page.evaluate(() => window.__store.getState().users);
 check(before === '1' && JSON.stringify(users.find(u => u.id === 'U-t')?.answers) === '[]', '4 · pressing it takes the kind away from them', JSON.stringify(users.find(u => u.id === 'U-t')?.answers));
-await page.locator('button:has-text("Workers")').first().click();
+await page.goto(`${APP}/app-settings?cat=workers`); await page.waitForTimeout(1500);
 await page.waitForTimeout(500);
 const box = page.locator('[data-part-needs-picture] input');
 check(await box.count() === 1 && !(await box.isChecked()), '4 · Settings → Workers: "A stage done in part needs one picture" (off from section 2)');

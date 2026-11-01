@@ -1,3 +1,5 @@
+// These checks cover the OLD per-stage picture steps — kept as a Settings switch since
+// 2026-11-01 (closePhotosPerStage); the new one-step default is closestep-probe.mjs.
 // THE SET MODEL ("Bubbles, Not Stages", built 2026-09-22), end to end:
 //   1 · the migration writes the old line out as marks (Ready to start is a
 //       MARKER, the stage it stood on is TO DO, bubbles: true);
@@ -63,6 +65,7 @@ const aptOf = async (p, id) => (await store(p)).apartments.find(a => a.id === id
 let page = await ctx.newPage();
 page.on('pageerror', e => { console.log('PAGE ERROR', e.message); fails++; });
 await page.goto(`${APP}/project`);
+await page.waitForFunction(() => !!window.__store); await page.evaluate(() => window.__store.getState().setTvSetting('closePhotosPerStage', true));
 await page.waitForTimeout(3600);
 let d = await store(page);
 let a7 = d.apartments.find(a => a.id === 'A1-7');
@@ -100,7 +103,9 @@ await page.waitForTimeout(600);
 a7 = await aptOf(page, 'A1-7');
 // Owner, 2026-10-08: a building unit shows the LAST stage done.
 check(a7.stageMarks?.S4 === 'done' && a7.currentStageId === 'S4', 'a second tap finishes it and the headline is the last stage done', `${a7.currentStageId} ${JSON.stringify(a7.stageMarks)}`);
-check((await page.locator('[data-stage-next]').getAttribute('data-fraction')) === '2/3', 'fraction 2/3');
+// Owner, 2026-11-01: a stage done means every earlier stage of its trade is done — so Concealed units too.
+check(a7.stageMarks?.S3 === 'done', 'finishing Wall units finishes Concealed units before it', JSON.stringify(a7.stageMarks));
+check((await page.locator('[data-stage-next]').getAttribute('data-fraction')) === '3/3', 'fraction 3/3');
 // right-click: half done
 await page.locator('[data-stage-bubble="S3"]').click({ button: 'right' });
 await page.waitForTimeout(600);
@@ -152,6 +157,7 @@ await page.close();
 page = await ctx.newPage();
 page.on('pageerror', e => { console.log('PAGE ERROR', e.message); fails++; });
 await page.goto(`${APP}/c/tok-jo`);
+await page.waitForFunction(() => !!window.__store); await page.evaluate(() => window.__store.getState().setTvSetting('closePhotosPerStage', true));
 await page.waitForTimeout(2500);
 await page.locator('button:has-text("Building Map")').first().click();
 await page.waitForTimeout(900);
@@ -232,6 +238,7 @@ await page.close();
 page = await ctx.newPage();
 page.on('pageerror', e => { console.log('PAGE ERROR', e.message); fails++; });
 await page.goto(`${APP}/project`);
+await page.waitForFunction(() => !!window.__store); await page.evaluate(() => window.__store.getState().setTvSetting('closePhotosPerStage', true));
 await page.waitForTimeout(2800);
 check((await page.locator('[data-apt-id="A1-7"] [data-cell-strip]').first().evaluate(e => `${e.dataset.done}/${e.dataset.total}`)) === '3/4', 'the cell reads 3/4');
 await page.locator('[data-apt-id="A1-7"]').first().click();

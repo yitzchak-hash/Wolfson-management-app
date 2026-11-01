@@ -1,3 +1,5 @@
+// These checks cover the OLD per-stage picture steps — kept as a Settings switch since
+// 2026-11-01 (closePhotosPerStage); the new one-step default is closestep-probe.mjs.
 // Adding work to a stage already finished (owner, 2026-10-18): "if he already
 // finished the stage and he clicks it, it should be grayed out, but still
 // allow him to click it and add work to it. And the pictures that he adds to
@@ -22,7 +24,7 @@ const TODAY = iso(new Date());
 const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64');
 const pic = n => ({ name: `site-${n}.png`, mimeType: 'image/png', buffer: PNG });
 
-const b = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome' });
+const b = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1243/chrome-linux64/chrome' });
 const ctx = await b.newContext({ viewport: { width: 420, height: 900 } });
 await ctx.addInitScript(([T]) => {
   localStorage.setItem('wolfson_app_version', '3');
@@ -85,6 +87,8 @@ const wolf = () => page.evaluate(() => JSON.parse(localStorage.getItem('wolfson_
 const media = 'input[type="file"][accept*="video"][accept*=".zip"]';
 
 await page.goto(`${APP}/c/tok-jo`);
+
+await page.waitForFunction(() => !!window.__store); await page.evaluate(() => window.__store.getState().setTvSetting('closePhotosPerStage', true));
 await page.waitForTimeout(3500);
 if (await page.locator('button:has-text("All")').count()) await page.locator('button:has-text("All")').first().click().catch(() => {});
 await page.waitForTimeout(500);
@@ -154,6 +158,7 @@ page.on('pageerror', e => { if (!/localStorage/.test(e.message)) { console.log('
 await page.route('**/api/**', r => r.fulfill({ json: { files: [] } }));
 await page.route('**/drive.google.com/**', r => r.abort());
 await page.goto(`${APP}/project`);
+await page.waitForFunction(() => !!window.__store); await page.evaluate(() => window.__store.getState().setTvSetting('closePhotosPerStage', true));
 await page.waitForTimeout(3000);
 await page.locator('[data-apt-id="A1-16"]').first().click();
 await page.waitForTimeout(1200);

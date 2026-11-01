@@ -47,6 +47,7 @@ import { TaskThread } from '../components/tasks/TaskThread';
 import { Translated, TrText } from '../components/ui/Translated';
 import { includeIn } from '../data/stageIncludes';
 import { StageInfoButton } from '../components/portal/StageInfo';
+import { sortClosePhotos } from '../data/closeSort';
 import { installPortalManifest } from '../data/portalManifest';
 import { findPlanSetViaBackend, findAllPlansPdfsViaBackend } from '../data/driveApi';
 import { searchJobs } from '../data/searchIndex';
@@ -877,6 +878,8 @@ export function ContractorPortal() {
    * raise it in Settings → Workers. photosOptional workers skip it.
    */
   const MIN_CLOSE_MEDIA = useStore(st => closeMinFilesOf(st.boardSettings.__tv?.closeMinFiles));
+  /** One picture step per stage (the old way) — off by default since 2026-11-01. */
+  const perStagePhotos = useStore(st => st.boardSettings.__tv?.closePhotosPerStage === true);
   /** Weekly is what a worker plans his van by; the month grid is one press away. */
   const [calMode, setCalMode] = useState<'week' | 'month'>('month');
   const [calWeekOff, setCalWeekOff] = useState(0);
@@ -1804,6 +1807,12 @@ export function ContractorPortal() {
       newValue: (liveA.taskDescription ?? '').slice(0, 120),
       stageId: selectedAssignment.stageId ?? '',
     });
+    // ONE picture step (the default): the AI files each picture under its
+    // stage now, on the server — he does not wait for it.
+    if (photoSteps[0]?.all) {
+      sortClosePhotos(currentProjectId, getMedia(selectedAssignment.id),
+        photoSteps[0].ids.map(id => wsStageList.find(x => x.id === id)).filter((x): x is Stage => !!x));
+    }
     setShowCompleteConfirm(false);
     setClosing(false);
     setCompleting(true);
@@ -2107,8 +2116,8 @@ export function ContractorPortal() {
     && extraIds.every(id => extraPick[id] === 'all' || !!(partWords[id] ?? '').trim())
     && (!offOn || !!offText.trim());
   const moreOk = moreAsk === 'no' || (moreAsk === 'yes' && moreDone);
-  type PhotoStep = { id: string; ids: string[]; need: number; part?: boolean; loose?: boolean; sofar?: boolean; added?: boolean };
-  const photoSteps: PhotoStep[] = !stageClose ? [] : [
+  type PhotoStep = { id: string; ids: string[]; need: number; part?: boolean; loose?: boolean; sofar?: boolean; added?: boolean; all?: boolean };
+  const photoStepsEach: PhotoStep[] = !stageClose ? [] : [
     // A stage REPORT: the close minimum for each stage he finished.
     ...(isReportClose ? closeFinishedIds.map(id => ({ id, ids: [id], need: MIN_CLOSE_MEDIA })) : []),
     // An ordinary task: the close minimum for the job — tagged to its first stage.
@@ -2124,6 +2133,15 @@ export function ContractorPortal() {
     // stage's folder — the reason to pick it at all.
     ...(moreAsk === 'yes' ? addedIds.map(id => ({ id, ids: [id], need: 1, added: true })) : []),
   ];
+  /**
+   * THE DEFAULT (owner, 2026-11-01): when the close needs pictures of more
+   * than one thing, ONE step asks for the pictures of today's work, after he
+   * has picked everything he did. The pictures go up untagged at once; when
+   * he closes, the AI files each under its stage (sortClosePhotos), so he
+   * never waits for it. The minimum is the biggest any single step needed.
+   */
+  const photoSteps: PhotoStep[] = perStagePhotos || photoStepsEach.length <= 1 ? photoStepsEach
+    : [{ id: '', ids: [...new Set(photoStepsEach.flatMap(st => st.ids))], need: Math.max(...photoStepsEach.map(st => st.need)), loose: true, all: true }];
   const stepMedia = (st: PhotoStep) => selMedia.filter(m => (m.stageId ? st.ids.includes(m.stageId) : !!st.loose));
   const stepOk = (st: PhotoStep) => enoughMedia(stepMedia(st), st.need);
   const closeCountFor = (sid: string) => selMedia.filter(m => m.stageId === sid).length;
@@ -4399,9 +4417,12 @@ plansPdfFileId && (
                             {step && (
                               <div data-close-photo-step={step.id || 'job'} data-step-need={step.need} className="rounded-2xl border-2 p-3" style={{ borderColor: stepColor(step) }}>
                                 <p className="text-center font-extrabold text-gray-800" style={{ fontSize: 17, lineHeight: 1.3 }}>
-                                  {w('Pictures of', 'תמונות של', 'Фотографии')} <span style={{ color: stepColor(step) }}>{stepName(step)}</span>
+                                  {step.all
+                                    ? w("Pictures of today's work", 'תמונות של העבודה של היום', 'Фото сегодняшней работы')
+                                    : <>{w('Pictures of', 'תמונות של', 'Фотографии')} <span style={{ color: stepColor(step) }}>{stepName(step)}</span></>}
                                 </p>
                                 <p className="text-center text-gray-500 mb-2" style={{ fontSize: 12.5 }}>
+                                  {step.all && <span data-close-photo-all className="block font-semibold text-gray-600">{stepName(step)}</span>}
                                   {step.added
                                     ? w('work added to a finished stage · one picture or video', 'עבודה שנוספה לשלב שהסתיים · תמונה או סרטון', 'добавлено к завершённому этапу · одно фото или видео')
                                     : step.sofar

@@ -50,7 +50,7 @@ function seed([T, YD, perms]) {
   }));
 }
 
-const b = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome' });
+const b = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1243/chrome-linux64/chrome' });
 async function phone(perms) {
   const ctx = await b.newContext({ viewport: { width: 400, height: 860 } });
   await ctx.addInitScript(seed, [TODAY, Y, perms]);
