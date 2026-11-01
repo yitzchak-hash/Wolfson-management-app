@@ -46,6 +46,7 @@ export const DEVICE_ONLY: Record<string, string> = {
   'office_notif_asked': 'This browser was already asked for notification permission.',
   'pin_push_idle_ms': 'A testing override, never set in normal use.',
   'preview_backup_id': 'This tab is a backup PREVIEW (sealed off from the cloud) — kept so a reload stays a preview.',
+  'test_mode': 'This tab is "Test as a worker" (nothing it does is saved) — kept so a reload stays a test.',
 
   // ── emergency copies (their point is to survive the cloud losing data) ─────
   'pin_board_versions': 'Earlier versions of each pin board seen on this computer — a second safety net beside the cloud backups.',
