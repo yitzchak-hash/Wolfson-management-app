@@ -554,6 +554,12 @@ export interface Stage {
    * phone shows his own language; an empty one is translated automatically.
    */
   includesTr?: Record<string, Partial<Record<PortalLang, string>>>;
+  /**
+   * Example photos of this stage's work (Drive file ids), shown in a grid
+   * when a worker taps the (i) at the end of the stage's line (owner,
+   * 2026-11-01).
+   */
+  examples?: string[];
   projectId?: string;   // if set, stage only appears in this project (e.g. 'general')
   /**
    * THE SET MODEL (owner's "bubbles" plan, built 2026-09-22 — on screen the

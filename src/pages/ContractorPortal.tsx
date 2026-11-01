@@ -46,6 +46,7 @@ import { saveBytes, safeFileName } from '../data/planExport';
 import { TaskThread } from '../components/tasks/TaskThread';
 import { Translated, TrText } from '../components/ui/Translated';
 import { includeIn } from '../data/stageIncludes';
+import { StageInfoButton } from '../components/portal/StageInfo';
 import { installPortalManifest } from '../data/portalManifest';
 import { findPlanSetViaBackend, findAllPlansPdfsViaBackend } from '../data/driveApi';
 import { searchJobs } from '../data/searchIndex';
@@ -4877,9 +4878,10 @@ plansPdfFileId && (
                         const on = picks.includes(st.id);
                         const state = liveStateOf(apt, st.id, wsSortedAll, assignments);
                         return (
-                          <button key={st.id} data-work-stage={st.id} data-on={on ? '1' : undefined}
+                          <div key={st.id} className="flex items-center gap-2">
+                          <button data-work-stage={st.id} data-on={on ? '1' : undefined}
                             onClick={() => toggle(st.id)}
-                            className="w-full flex items-center gap-3 rounded-xl px-3.5 py-3 border-2 text-left rtl:text-right active:scale-[0.99]"
+                            className="flex-1 min-w-0 flex items-center gap-3 rounded-xl px-3.5 py-3 border-2 text-left rtl:text-right active:scale-[0.99]"
                             style={on
                               ? { borderColor: st.color, backgroundColor: `${st.color}1a` }
                               : { borderColor: '#e5e7eb', backgroundColor: '#fff' }}>
@@ -4903,6 +4905,8 @@ plansPdfFileId && (
                             {state === 'pending' && <span className="text-[10px] font-bold uppercase" style={{ color: '#f97316' }}>{w('half done', 'חצי גמור', 'наполовину')}</span>}
                             {state === 'doing' && <span className="text-[10px] font-bold uppercase" style={{ color: st.color }}>{w('started', 'התחיל', 'начато')}</span>}
                           </button>
+                          <StageInfoButton stage={st} lang={readLang} />
+                          </div>
                         );
                       })}
                       {!list.length && (

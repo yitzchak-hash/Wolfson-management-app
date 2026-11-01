@@ -113,6 +113,36 @@ export default async function handler(req, res) {
     }
   }
 
+  /**
+   * MOVE FILES (owner, 2026-11-01: photos re-sorted into their real stage) —
+   * { mode: 'move-files', moves: [{ fileId, toFolderId }] }, at most 300.
+   * Each file leaves every folder it was in and lands in `toFolderId`.
+   */
+  if (req.body?.mode === 'move-files') {
+    const ID = /^[A-Za-z0-9_-]{10,100}$/;
+    const moves = Array.isArray(req.body.moves) ? req.body.moves.slice(0, 300) : [];
+    if (!moves.length || moves.some(m => !ID.test(String(m?.fileId ?? '')) || !ID.test(String(m?.toFolderId ?? '')))) {
+      return res.status(400).json({ error: 'moves: [{ fileId, toFolderId }]' });
+    }
+    const drive = getDrive();
+    const results = [];
+    for (const m of moves) {
+      try {
+        const cur = await drive.files.get({ fileId: m.fileId, fields: 'parents', supportsAllDrives: true });
+        const from = (cur.data.parents ?? []).filter(p => p !== m.toFolderId);
+        if (!from.length && (cur.data.parents ?? []).includes(m.toFolderId)) { results.push({ fileId: m.fileId, ok: true, already: true }); continue; }
+        await drive.files.update({
+          fileId: m.fileId, addParents: m.toFolderId, removeParents: from.join(','),
+          fields: 'id,parents', supportsAllDrives: true,
+        });
+        results.push({ fileId: m.fileId, ok: true });
+      } catch (err) {
+        results.push({ fileId: m.fileId, ok: false, error: err.message });
+      }
+    }
+    return res.json({ ok: results.every(r => r.ok), results });
+  }
+
   const { folderId, filename, mimeType, data } = req.body;
   if (!folderId || !filename || !mimeType || !data) {
     return res.status(400).json({ error: 'Missing folderId, filename, mimeType, or data' });
