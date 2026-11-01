@@ -37,6 +37,28 @@ check(!r.stageMarks['s-drilling'], 'a Job Board job (its own list) never meets t
 r = applyMarks(apt({}), { 's1-piping': 'done' }, ST.filter(s => s.id !== 's-drilling'));
 check(!r.stageMarks?.['s-drilling'], 'a list without Drilling never meets the rule');
 
+// Owner, 2026-11-01: a later stage done means every earlier stage of the same trade is done.
+{
+  const T = [
+    { id: 'skhtatb', name: 'Sold', order: 1, active: true, kind: 'work' },
+    { id: 's-drilling', name: 'Drilling', order: 2, active: true, kind: 'work', trade: 'ac' },
+    { id: 's1-piping', name: 'Piping', order: 3, active: true, kind: 'work', trade: 'ac' },
+    { id: 's-drains', name: 'Drains', order: 4, active: true, kind: 'work', trade: 'ac' },
+    { id: 's1-concealed', name: 'Concealed Units', order: 5, active: true, kind: 'work', trade: 'ac' },
+    { id: 's1-fans', name: 'Fans', order: 6, active: true, kind: 'work', trade: 'ac' },
+    { id: 's4-wall', name: 'Wall Units', order: 7, active: true, kind: 'work', trade: 'ac' },
+    { id: 's7-registers', name: 'Registers', order: 9, active: true, kind: 'work', trade: 'drywall' },
+  ];
+  let q = applyMarks(apt(undefined), { 's1-fans': 'done' }, T);
+  check(['s-drilling', 's1-piping', 's-drains', 's1-concealed', 'skhtatb'].every(id => q.stageMarks[id] === 'done') && !q.stageMarks['s4-wall'],
+    'Fans done ticks Drilling, Piping, Drains, Concealed Units (and Sold); nothing after it', JSON.stringify(q.stageMarks));
+  q = applyMarks(apt(undefined), { 's7-registers': 'done' }, T);
+  check(!q.stageMarks['s4-wall'] && !q.stageMarks['s1-fans'], 'a drywall stage done never ticks the AC work before it', JSON.stringify(q.stageMarks));
+  q = applyMarks(apt({ 's-drains': 'off' }), { 's-drains': 'off', 's1-concealed': 'done' }, T);
+  check(q.stageMarks['s-drains'] === 'off' && q.stageMarks['s1-piping'] === 'done', '"not needed" stays not needed; the rest is ticked');
+  q = applyMarks(apt({ 's1-fans': 'done', 's-drilling': 'done', 's1-piping': 'done', 's-drains': 'done', 's1-concealed': 'done' }), { 's1-fans': 'done', 's1-piping': 'done', 's-drains': 'done', 's1-concealed': 'done' }, T);
+  check(!q.stageMarks['s-drilling'], 'unticking an earlier stage by hand afterwards stands');
+}
 await server.close();
 
 // Owner, 2026-10-08: anything done (or started) after Sold/Start ticks Sold/Start.

@@ -272,6 +272,23 @@ export function withImpliedDone(
       && before?.[st.id] !== out?.[st.id]);
     if (later) out = { ...(out ?? {}), [start.id]: 'done' };
   }
+  // A stage finished means every EARLIER work stage of the same trade is
+  // finished too (owner, 2026-11-01: "yes" — Fans done means Drilling,
+  // Piping, Drains and Concealed Units are done). Same trade only, so a
+  // drywall stage never ticks the AC work before it. "Not needed" stays,
+  // and only a stage that has just become done does this — unticking an
+  // earlier one by hand afterwards stands.
+  for (const when of sortedStages) {
+    if (out?.[when.id] !== 'done' || before?.[when.id] === 'done') continue;
+    if (!isWorkStage(when) || isStartStage(when) || !ownStage(apt, when)) continue;
+    for (const st of sortedStages) {
+      if (st.order >= when.order || !st.active || !isWorkStage(st) || isStartStage(st) || !ownStage(apt, st)) continue;
+      if ((st.trade ?? null) !== (when.trade ?? null)) continue;
+      const cur = out?.[st.id];
+      if (cur === 'done' || cur === 'off') continue;
+      out = { ...(out ?? {}), [st.id]: 'done' };
+    }
+  }
   for (const [when, also] of IMPLIED_DONE) {
     if (out?.[when] !== 'done' || before?.[when] === 'done') continue;
     const st = sortedStages.find(s => s.id === also);
