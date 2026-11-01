@@ -44,7 +44,7 @@ function seed(d) {
 }
 const wolf = page => page.evaluate(() => new Promise(r => setTimeout(() => r(JSON.parse(localStorage.getItem('wolfson_app_data'))), 500)));
 
-const b = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome',
+const b = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1243/chrome-linux64/chrome',
   args: ['--use-fake-device-for-media-stream', '--use-fake-ui-for-media-stream'] });
 
 // ══ A + B · the worker ══
@@ -64,29 +64,24 @@ const b = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-119
   await page.locator('[data-work-here]').click();
   await page.waitForTimeout(400);
   if (await page.locator('[data-work-part-no]').count()) { await page.locator('[data-work-part-no]').click(); await page.waitForTimeout(300); }
-  check(await page.locator('[data-work-pick]').count() === 1, 'A · the "what are you doing today" list is open');
-  const names = await page.locator('[data-work-stage]').allInnerTexts();
+  // Since 2026-11-01 the stages are asked at the close: "What did you do here today?"
+  for (let i = 0; i < 30 && !(await page.locator('[data-close-job]').count()); i++) await page.waitForTimeout(150);
+  await page.locator('[data-close-job]').first().click(); await page.waitForTimeout(600);
+  check(await page.locator('[data-close-pick]').count() === 1, 'A · the "what did you do here today" list is open');
+  const names = await page.locator('[data-close-pick-stage]').allInnerTexts();
   check(names.some(t => t.includes('Трубы')) && names.some(t => t.includes('Дренаж')) && names.some(t => t.includes('Канальные блоки')),
     'A · every stage reads in Russian', JSON.stringify(names));
   check(!names.some(t => /Piping|Drains|Concealed/.test(t)), 'A · no English stage name is left');
-  const inc = await page.locator('[data-work-stage="s1-piping"] [data-work-stage-includes]').innerText().catch(() => '');
-  check(/Soldering/.test(inc) && /Connections/.test(inc), 'A · Piping shows what it includes', inc);
-  check(await page.locator('[data-work-stage="s-drains"] [data-work-stage-includes]').count() === 0, 'A · a stage with no words shows no chips');
-  // B
-  await page.locator('[data-not-listed]').click();
+  const inc = await page.locator('[data-close-pick-stage="s1-piping"] [data-work-stage-includes]').innerText().catch(() => '');
+  check(/Soldering|Пайка/.test(inc) && /Connections|Соединения/.test(inc), 'A · Piping shows what it includes', inc);
+  check(await page.locator('[data-close-pick-stage="s-drains"] [data-work-stage-includes]').count() === 0, 'A · a stage with no words shows no chips');
+  // B · "I don't see what I did here" (2026-11-01): he explains it, by voice or typing; it reaches the office with the close
+  await page.locator('[data-close-pick-explain]').click();
   await page.waitForTimeout(200);
-  check(await page.locator('[data-not-listed-box]').count() === 1, 'B · "I don\'t see what I did here" opens a small box');
-  check(await page.locator('[data-not-listed-send]').isDisabled(), 'B · Send waits for words');
-  await page.locator('[data-not-listed-input]').fill('сварка труб на крыше и ещё много слов');
-  check((await page.locator('[data-not-listed-input]').inputValue()).split(/\s+/).length <= 4, 'B · the box keeps it to a few words');
-  await page.locator('[data-not-listed-send]').click();
-  await page.waitForTimeout(300);
-  check(await page.locator('[data-not-listed-sent]').count() === 1, 'B · it says it was sent to the office');
-  const d = await wolf(page);
-  const sg = (d.stageSuggestions ?? [])[0];
-  check(sg && sg.status === 'open' && /сварка/.test(sg.text) && sg.apartmentId === 'A1-12' && sg.contractorId === 'C-w',
-    'B · the words are kept for the office, with the worker and the apartment', JSON.stringify(sg));
-  check(await page.locator('[data-work-start]').count() === 1, 'B · he can still pick a stage and start');
+  check(await page.locator('[data-close-explain]').count() === 1, 'B · "I don\'t see what I did here" asks him to explain');
+  check(await page.locator('[data-close-pick-next]').isDisabled(), 'B · Next waits for words');
+  await page.locator('[data-close-explain] textarea').fill('сварка труб на крыше');
+  check(!(await page.locator('[data-close-pick-next]').isDisabled()), 'B · with his words, he can go on');
   await ctx.close();
 }
 
@@ -102,7 +97,8 @@ const b = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-119
   ] }));
   const page = await ctx.newPage();
   page.on('pageerror', e => { if (!/localStorage/.test(e.message)) { console.log('PAGE ERROR', e.message.slice(0, 200)); fails++; } });
-  await page.goto(`${APP}/settings`);
+  // Settings is a list of categories since 2026-10-29: Stages opens by its address.
+  await page.goto(`${APP}/settings?cat=stages`);
   await page.waitForTimeout(2500);
   const rows = await page.locator('[data-worker-word]').count();
   check(rows === 2, 'C · the open words from this workspace\'s workers wait in Stages settings', `${rows}`);

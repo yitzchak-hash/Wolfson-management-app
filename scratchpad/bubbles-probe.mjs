@@ -165,45 +165,31 @@ if (await page.locator('[data-map-square="wolfson"]').count()) { await page.loca
 await page.locator('[data-apt-id="A1-7"]').first().click();
 await page.waitForTimeout(800);
 await page.locator('[data-work-here]').click();
-await page.waitForTimeout(600);
-check(await page.locator('[data-work-pick]').count() === 1
-  && /select one or multiple/i.test(await page.locator('[data-work-pick]').innerText()),
-  '"What are you doing here?" with the owner\'s words: select one or multiple');
-check(await page.locator('[data-work-stage]').count() === 2
-  && await page.locator('[data-work-stage="S3"]').count() === 1 && await page.locator(`[data-work-stage="${custom.id}"]`).count() === 1,
-  'only the OPEN stages of this apartment are offered (Concealed units + Extra drainage; Piping and Wall units are done)',
-  String(await page.locator('[data-work-stage]').count()));
-check(await page.locator('[data-work-start]').isDisabled(), 'Start waits for a pick');
-await page.locator('[data-work-stage="S3"]').click();
-await page.locator(`[data-work-stage="${custom.id}"]`).click();
-await page.locator('[data-work-start]').click();
-// Round 48 (owner, 2026-10-07): Start now ASKS "are you sure you will be
-// doing these today" — only Yes writes anything.
-await page.waitForTimeout(300);
-await page.locator('[data-work-confirm-yes]').click();
 await page.waitForTimeout(1200);
+// Since 2026-11-01 nothing is asked at the start: the task opens, and the close asks what he did.
 d = await store(page);
 const report = d.contractorAssignments.find(a => a.stageReport && a.apartmentId === 'A1-7');
-check(!!report && !report.completedAt && JSON.stringify(report.stageIds) === JSON.stringify(['S3', custom.id]) && report.stageId === 'S3',
-  'one OPEN report task for today carrying both stages', JSON.stringify({ ids: report?.stageIds, first: report?.stageId }));
-a7 = d.apartments.find(a => a.id === 'A1-7');
-check(a7.stageMarks?.S3 === 'doing' && a7.stageMarks?.[custom.id] === 'doing' && a7.currentStageId === 'S3',
-  'both are HAPPENING NOW on the apartment and the headline is the first of them', JSON.stringify(a7.stageMarks));
+check(!!report && !report.completedAt && report.pickAtClose && !report.stageIds?.length, 'one OPEN report task for today, nothing asked yet', JSON.stringify({ ids: report?.stageIds }));
 check(await page.locator('[data-close-job]').count() === 1, 'the task sheet opened with Close job');
-
-// the close: did you finish everything? → No → which didn't you finish → pictures per finished stage
 await page.locator('[data-close-job]').first().click();
 await page.waitForTimeout(600);
-check(await page.locator('[data-close-stage]').count() === 1 && /Did you finish doing Concealed units and Extra drainage\?/i.test(await page.locator('[data-close-stage]').innerText()),
-  'the close asks "Did you finish doing <the stages he started>?" (2026-10-18)');
+check(/What did you do here today\?/.test(await page.locator('[data-close-pick]').innerText()) && /select one or multiple/i.test(await page.locator('[data-close-pick]').innerText()),
+  '"What did you do here today?" with the owner\'s words: select one or multiple');
+const openOnes = await page.locator('[data-close-pick-stage]:not([data-state="done"])').evaluateAll(bs => bs.map(x => x.getAttribute('data-close-pick-stage')));
+check(JSON.stringify(openOnes.sort()) === JSON.stringify(['S3', custom.id].sort()), 'the OPEN stages of this apartment are offered (Concealed units + Extra drainage)', JSON.stringify(openOnes));
+check(await page.locator('[data-close-pick-stage="S2"][data-state="done"]').count() === 1, 'the finished ones are offered last, to add work to');
+await page.locator('[data-close-pick-stage="S3"]').click();
+await page.locator(`[data-close-pick-stage="${custom.id}"]`).click();
+await page.locator('[data-close-pick-next]').click();
+await page.waitForTimeout(400);
+check(await page.locator('[data-close-stage]').count() === 1 && /Did you finish all of these\?/i.test(await page.locator('[data-close-stage]').innerText()),
+  'then "Did you finish all of these?"');
 check(await page.locator('[data-close-now]').isDisabled(), 'Send waits for the answer');
 await page.locator('[data-close-finished-pick="no"]').click();
 await page.waitForTimeout(300);
-check(await page.locator('[data-close-unfinished-pick]').count() === 2, '"Which didn\'t you finish?" lists only the two he started');
-await page.locator(`[data-close-unfinished-pick="${custom.id}"]`).click();
+check(await page.locator('[data-close-unfinished-pick]').count() === 2, '"Which ones did you finish?" lists only the two he did');
+await page.locator('[data-close-unfinished-pick="S3"]').click();
 await page.locator('[data-close-carry-on]').click();
-await page.waitForTimeout(300);
-await page.locator('[data-close-more-pick="no"]').click();   // 2026-10-18: "anything else here today?"
 await page.waitForTimeout(400);
 check(await page.locator('[data-close-photo-step="S3"]').count() === 1 && await page.locator('[data-close-photo-step]').count() === 1,
   'a picture step for Concealed units first — the one he finished');

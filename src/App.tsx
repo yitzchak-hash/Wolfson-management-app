@@ -110,10 +110,13 @@ function PreviewBar() {
     const r = await restoreThisBackup();
     setBusy(false); setAsk(false); setDone(r);
   };
+  const onPortal = window.location.pathname.startsWith('/c/');
   return (
     <>
-      <div role="status" className="fixed inset-x-0 bottom-0 flex flex-wrap items-center justify-center gap-3 px-4 py-2 text-sm"
-        style={{ zIndex: 2147483000, background: '#fffbeb', borderTop: '2px solid #f59e0b', color: '#92400e', paddingBottom: 'max(8px, env(safe-area-inset-bottom, 0px))' }}>
+      {/* On the worker's screens (the test link) the bar sits on TOP: his sheets open from the bottom. */}
+      <div role="status" data-preview-bar className={`fixed inset-x-0 ${onPortal ? 'top-0' : 'bottom-0'} flex flex-wrap items-center justify-center gap-3 px-4 py-2 text-sm`}
+        style={{ zIndex: 2147483000, background: '#fffbeb', [onPortal ? 'borderBottom' : 'borderTop']: '2px solid #f59e0b', color: '#92400e',
+          ...(onPortal ? { paddingTop: 'max(6px, env(safe-area-inset-top, 0px))' } : { paddingBottom: 'max(8px, env(safe-area-inset-bottom, 0px))' }) }}>
         <span className="font-semibold">Preview of the backup from {when}</span>
         <span>{which} · {p.totalDocuments.toLocaleString()} records · nothing you do here is saved</span>
         {mayRestore && (

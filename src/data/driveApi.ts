@@ -1,3 +1,4 @@
+import { PREVIEW_ID } from './previewMode';
 // Google Drive API helpers — client-side only, no backend required
 
 declare global {
@@ -261,7 +262,10 @@ export async function findPlansPdf(driveLink: string, token: string): Promise<Dr
 const DRIVE_API_KEY = (import.meta.env.VITE_DRIVE_API_KEY as string | undefined) ?? '';
 
 export function isUploadBackendConfigured(): boolean {
-  return !!DRIVE_API_KEY;
+  // A PREVIEW (a backup, or the worker test link) keeps its pictures in the
+  // tab: nothing goes up to Drive (owner, 2026-11-01: "test everything
+  // without it actually changing in the field").
+  return !!DRIVE_API_KEY && !PREVIEW_ID;
 }
 
 /**

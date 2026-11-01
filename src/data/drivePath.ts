@@ -28,8 +28,9 @@ import { extractFolderId } from './driveApi';
 /** Per machine, never synced — see the note above. */
 const ROOT_KEY = 'drive_desktop_root';
 
+/** Where Google Drive is on this computer — G: on a Windows PC unless set otherwise (owner, 2026-11-01). */
 export const getDriveRoot = (): string =>
-  (localStorage.getItem(ROOT_KEY) ?? '').trim();
+  (localStorage.getItem(ROOT_KEY) ?? '').trim() || (typeof navigator !== 'undefined' && /Windows/i.test(navigator.userAgent) ? 'G:' : '');
 
 export const setDriveRoot = (v: string): void => {
   const clean = v.trim().replace(/[\\/]+$/, '');

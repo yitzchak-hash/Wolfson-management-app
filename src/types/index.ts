@@ -568,6 +568,13 @@ export interface Stage {
    * 2026-11-01).
    */
   examples?: string[];
+  /**
+   * One example picture per thing the stage includes (owner, 2026-11-01): the
+   * (i) window shows a tile for every word in `includes`, that word on the
+   * picture as a little bubble — the photo when one is set here (a Drive file
+   * id), an empty tile with the words in the middle when not yet.
+   */
+  exampleOf?: Record<string, string>;
   projectId?: string;   // if set, stage only appears in this project (e.g. 'general')
   /**
    * THE SET MODEL (owner's "bubbles" plan, built 2026-09-22 — on screen the
@@ -1543,6 +1550,12 @@ export interface ContractorAssignment {
    * 'pending' stage — the note of what is left hangs under it.
    */
   stageReport?: boolean;
+  /**
+   * Started with "I started working here" and NO stages (owner, 2026-11-01):
+   * the close asks what he did ("What did you do here today?"), then whether
+   * he finished it all, then the pictures.
+   */
+  pickAtClose?: boolean;
   /**
    * What the worker said at the CLOSE of a stage report (owner, 2026-09-16):
    * the stages he worked on that day, and whether he finished all of them.

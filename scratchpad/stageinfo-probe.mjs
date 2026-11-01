@@ -11,7 +11,7 @@ const TODAY = new Date().toISOString().slice(0, 10);
 const STAGES = [
   { id: 'skhtatb', name: 'Sold', color: '#64748b', order: 1, active: true, kind: 'work' },
   { id: 's1-piping', name: 'Piping', nameRu: 'Трубы', color: '#9ca3af', order: 3, active: true, kind: 'work',
-    includes: ['Soldering'], includesTr: { Soldering: { en: 'Soldering', he: 'הלחמות', ru: 'Пайка' } }, examples: ['FILE-A', 'FILE-B', 'FILE-C'] },
+    includes: ['Soldering', 'Pipes'], includesTr: { Soldering: { en: 'Soldering', he: 'הלחמות', ru: 'Пайка' }, Pipes: { en: 'Pipes', he: 'צנרת', ru: 'Трубы' } }, exampleOf: { Soldering: 'FILE-A' } },
   { id: 's-drains', name: 'Drains', nameRu: 'Дренаж', color: '#38bdf8', order: 4, active: true, kind: 'work' },
 ];
 const apt = (id, num) => ({ id, buildingId: 'A1', floor: 4, apartmentNumber: num, displayName: '', isUnnamed: false, isDuplexApt: false,
@@ -44,26 +44,32 @@ if (!(await page.locator('[data-apt-id="A1-12"]').count())) { await page.screens
 await page.locator('[data-apt-id="A1-12"]').first().click(); await page.waitForTimeout(500);
 await page.locator('[data-work-here]').click(); await page.waitForTimeout(400);
 if (await page.locator('[data-work-part-no]').count()) { await page.locator('[data-work-part-no]').click(); await page.waitForTimeout(300); }
-check(await page.locator('[data-work-pick]').count() === 1, 'the "what are you doing today" list is open');
+// Since 2026-11-01 the stages are asked when he CLOSES: "What did you do here today?"
+for (let i = 0; i < 30 && !(await page.locator('[data-close-job]').count()); i++) await page.waitForTimeout(150);
+await page.locator('[data-close-job]').first().click(); await page.waitForTimeout(600);
+check(await page.locator('[data-close-pick]').count() === 1, 'the "what did you do here today" list is open');
 check(await page.locator('[data-stage-info="s1-piping"]').count() === 1, 'Piping has the (i)');
-check(await page.locator('[data-stage-info="s-drains"]').count() === 0, 'a stage with nothing to show has no (i)');
-const pos = await page.evaluate(() => { const i = document.querySelector('[data-stage-info="s1-piping"]').getBoundingClientRect(); const l = document.querySelector('[data-work-stage="s1-piping"]').getBoundingClientRect(); return { right: i.left >= l.right - 1, row: Math.abs((i.top + i.bottom) / 2 - (l.top + l.bottom) / 2) < 6, fits: i.right <= innerWidth }; });
+// Owner, 2026-11-01: every stage has its (i) — one with nothing yet shows an empty tile with its name.
+check(await page.locator('[data-stage-info="s-drains"]').count() === 1, 'every stage has its (i), even one with no pictures yet');
+const pos = await page.evaluate(() => { const i = document.querySelector('[data-stage-info="s1-piping"]').getBoundingClientRect(); const l = document.querySelector('[data-close-pick-stage="s1-piping"]').getBoundingClientRect(); return { right: i.left >= l.right - 1, row: Math.abs((i.top + i.bottom) / 2 - (l.top + l.bottom) / 2) < 6, fits: i.right <= innerWidth }; });
 check(pos.right && pos.row && pos.fits, 'the (i) sits at the right end of the line, inside the screen', JSON.stringify(pos));
 await page.locator('[data-stage-info="s1-piping"]').click(); await page.waitForTimeout(300);
 const win = page.locator('[data-stage-info-window="s1-piping"]');
 check(await win.count() === 1, 'tapping it opens the window');
 const txt = (await win.innerText()) ?? '';
 check(/Трубы/.test(txt) && /Пайка/.test(txt) && /Что сюда входит/.test(txt) && /Примеры фото/.test(txt), 'it reads in his language: name, bubbles, headings', txt.replace(/\s+/g, ' ').slice(0, 120));
-check(await win.locator('[data-stage-info-grid] img').count() === 3, 'the example photos sit in a grid');
+check(await win.locator('[data-stage-info-tile]').count() === 2, 'one tile per thing the stage includes');
+check(await win.locator('[data-stage-info-tile="Soldering"] img').count() === 1 && /Пайка/.test(await win.locator('[data-stage-info-tile="Soldering"]').innerText()), 'a tile with a photo carries its bubble, in his language');
+check(await win.locator('[data-stage-info-tile="Pipes"][data-empty="1"]').count() === 1 && /Трубы/.test(await win.locator('[data-stage-info-tile="Pipes"]').innerText()), 'no photo yet: an empty tile with the words in the middle');
 check(asked.some(u => u.includes('id=FILE-A')), 'the photos come from Drive by their file ids');
-await win.locator('[data-stage-info-grid] button').first().click(); await page.waitForTimeout(200);
+await win.locator('[data-stage-info-tile="Soldering"]').click(); await page.waitForTimeout(200);
 check(await win.locator('[data-stage-info-grid]').count() === 0 && await win.locator('img').count() === 1, 'tapping a photo shows it big');
 await page.screenshot({ path: (process.env.SHOTS ?? '/tmp') + '/stageinfo.png' });
 await page.mouse.click(195, 20); await page.waitForTimeout(200);
 check(await win.count() === 0, 'tapping outside closes it');
-check(await page.locator('[data-work-stage="s1-piping"][data-on="1"]').count() === 0, 'the (i) never picked the stage');
-await page.locator('[data-work-stage="s1-piping"]').click(); await page.waitForTimeout(150);
-check(await page.locator('[data-work-stage="s1-piping"][data-on="1"]').count() === 1, 'the line itself still picks it');
+check(await page.locator('[data-close-pick-stage="s1-piping"][data-on="1"]').count() === 0, 'the (i) never picked the stage');
+await page.locator('[data-close-pick-stage="s1-piping"]').click(); await page.waitForTimeout(150);
+check(await page.locator('[data-close-pick-stage="s1-piping"][data-on="1"]').count() === 1, 'the line itself still picks it');
 await b.close();
 console.log(fails ? `\n${fails} FAILED` : '\nALL PASS');
 process.exit(fails ? 1 : 0);

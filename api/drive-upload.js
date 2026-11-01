@@ -61,6 +61,32 @@ export default async function handler(req, res) {
     }
   }
 
+  /**
+   * GOOGLE'S DATABASE BACKUPS (owner, 2026-11-01: "I want to see the backups
+   * also on the database backup"). The scheduled backups Google keeps of the
+   * whole database — read with the robot account, which needs the
+   * "Cloud Datastore Viewer" role on the database's project to see them.
+   */
+  if (req.method === 'GET' && req.query?.dbBackups) {
+    if (!process.env.API_KEY || req.headers['x-api-key'] !== process.env.API_KEY) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+    try {
+      const json = JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT_JSON || '{}');
+      const auth = new google.auth.GoogleAuth({ credentials: json, scopes: ['https://www.googleapis.com/auth/datastore'] });
+      const token = await (await auth.getClient()).getAccessToken();
+      const project = process.env.VITE_FIREBASE_PROJECT_ID || (/^[a-z0-9-]{4,40}$/.test(String(req.query.projectId ?? '')) ? String(req.query.projectId) : '');
+      const r = await fetch(`https://firestore.googleapis.com/v1/projects/${project}/locations/-/backups`, { headers: { Authorization: `Bearer ${token.token}` } });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) return res.json({ ok: false, needsRole: r.status === 403, robot: json.client_email ?? null, project, error: j.error?.message ?? `Google answered ${r.status}` });
+      const backups = (j.backups ?? []).map(b => ({ name: b.name, at: b.snapshotTime, expires: b.expireTime, state: b.state, sizeBytes: Number(b.stats?.sizeBytes ?? 0) }))
+        .sort((a, b) => (a.at < b.at ? 1 : -1));
+      return res.json({ ok: true, project, backups });
+    } catch (err) {
+      return res.json({ ok: false, error: err.message });
+    }
+  }
+
   const wantsFull = (req.method === 'GET' && req.query?.fullBackup) || (req.method === 'POST' && req.body?.mode === 'full-backup');
   if (wantsFull) {
     if (req.method === 'GET') {
@@ -143,6 +169,28 @@ export default async function handler(req, res) {
       }
     }
     return res.json({ ok: results.every(r => r.ok), results });
+  }
+
+  /**
+   * TRASH EMPTY FOLDERS (owner, 2026-11-01: "clean up that mess") —
+   * { mode: 'trash-empty', folderIds: [...] }, at most 200. A folder is moved
+   * to Drive's trash (30 days to take it back) ONLY when it holds nothing,
+   * checked here, right before.
+   */
+  if (req.body?.mode === 'trash-empty') {
+    const ID = /^[A-Za-z0-9_-]{10,100}$/;
+    const ids = (Array.isArray(req.body.folderIds) ? req.body.folderIds : []).filter(x => ID.test(String(x))).slice(0, 200);
+    const drive = getDrive();
+    const results = [];
+    for (const id of ids) {
+      try {
+        const kids = await drive.files.list({ q: `'${id}' in parents and trashed = false`, fields: 'files(id)', pageSize: 1, supportsAllDrives: true, includeItemsFromAllDrives: true });
+        if (kids.data.files?.length) { results.push({ id, trashed: false, why: 'not empty' }); continue; }
+        await drive.files.update({ fileId: id, requestBody: { trashed: true }, supportsAllDrives: true });
+        results.push({ id, trashed: true });
+      } catch (err) { results.push({ id, trashed: false, why: err.message }); }
+    }
+    return res.json({ ok: true, results });
   }
 
   /**

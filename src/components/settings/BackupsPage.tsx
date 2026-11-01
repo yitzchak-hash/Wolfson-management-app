@@ -17,6 +17,7 @@ import { saveAs } from 'file-saver';
 import { Download, ExternalLink, Eye, FileUp, Loader2, RefreshCw } from 'lucide-react';
 import { useStore, type FullBackupEvery } from '../../data/store';
 import { SettingBox, SettingRow } from './SettingsShell';
+import { putLocalPreview, LOCAL_PREVIEW_ID } from '../../data/previewFile';
 
 type Row = { id: string; name: string; createdTime: string; sizeKB: number; records: number | null; kind: 'full' | 'uploaded' | 'old' };
 const DRIVE_KEY = (import.meta.env.VITE_DRIVE_API_KEY as string | undefined) ?? '';
@@ -82,12 +83,21 @@ export function BackupsPage({ onToast }: { onToast: (msg: string, type?: 'succes
       const r = await fetch(`/api/drive-upload?${q}`, { headers: { 'x-api-key': DRIVE_KEY } });
       if (!r.ok) throw new Error(`Drive answered ${r.status}`);
       const j = await r.json();
-      setRows(j.files ?? []); setFolderId(j.folderId ?? null);
+      setRows((j.files ?? []).filter((f: Row) => f.kind !== 'uploaded')); setFolderId(j.folderId ?? null);
     } catch (e) { setErr(String((e as Error).message ?? e)); }
   }, []);
   React.useEffect(() => { void load(withOld); }, [load, withOld]);
 
   const lastFull = rows?.find(r => r.kind === 'full') ?? null;
+
+  // Google's own database backups (owner, 2026-11-01) — read through the server.
+  type DbB = { name: string; at: string; expires: string; state: string; sizeBytes: number };
+  const [db, setDb] = React.useState<{ ok: boolean; backups?: DbB[]; needsRole?: boolean; robot?: string | null; project?: string; error?: string } | null>(null);
+  React.useEffect(() => {
+    const q = ENV_Q(); q.set('dbBackups', '1');
+    fetch(`/api/drive-upload?${q}`, { headers: { 'x-api-key': DRIVE_KEY } })
+      .then(r => r.json()).then(setDb).catch(e => setDb({ ok: false, error: String(e) }));
+  }, []);
 
   const backUpNow = async () => {
     setBusy('now');
@@ -108,6 +118,8 @@ export function BackupsPage({ onToast }: { onToast: (msg: string, type?: 'succes
     setBusy(null);
   };
 
+  // A file from this computer opens in the preview straight from this browser —
+  // it is NOT put in Drive (owner, 2026-11-01). Only a Restore press uploads it.
   const openFile = async (f: File) => {
     setBusy('file');
     try {
@@ -115,17 +127,8 @@ export function BackupsPage({ onToast }: { onToast: (msg: string, type?: 'succes
       const text = isGz(raw) ? await gunzip(raw) : new TextDecoder().decode(raw);
       const j = JSON.parse(text) as Record<string, unknown>;
       if (j.kind !== 'tzviair-full-backup' && !Array.isArray(j.apartments)) throw new Error('This file is not a TzviAir backup');
-      if (!folderId) throw new Error('The Drive folder is not ready');
-      const gz = await gzip(text);
-      const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-      const r = await fetch('/api/drive-upload', {
-        method: 'POST', headers: { 'Content-Type': 'application/json', 'x-api-key': DRIVE_KEY },
-        body: JSON.stringify({ folderId, filename: `uploaded-${stamp}-${f.name.replace(/\.gz$/, '')}.gz`, mimeType: 'application/gzip', data: base64(gz) }),
-      });
-      if (!r.ok) throw new Error(`Drive answered ${r.status}`);
-      const { fileId } = await r.json();
-      preview(fileId);
-      void load(withOld);
+      await putLocalPreview({ name: f.name, text, folderId });
+      preview(LOCAL_PREVIEW_ID);
     } catch (e) { onToast(String((e as Error).message ?? e), 'error'); }
     setBusy(null);
     if (fileRef.current) fileRef.current.value = '';
@@ -177,11 +180,28 @@ export function BackupsPage({ onToast }: { onToast: (msg: string, type?: 'succes
         )}
       </SettingBox>
 
+      <SettingBox name="Google's database backups">
+        {!db && <SettingRow label={<span className="inline-flex items-center gap-2"><Loader2 className="animate-spin" size={16} /> Reading the list</span>} />}
+        {db?.ok && !db.backups?.length && <SettingRow label="None yet" hint="Google makes the first one on its schedule" />}
+        {db?.ok && db.backups?.map(b => (
+          <SettingRow key={b.name} label={when(b.at)} hint={`kept until ${when(b.expires)}${b.sizeBytes ? ` · ${Math.round(b.sizeBytes / 1024).toLocaleString()} KB` : ''}${b.state && b.state !== 'READY' ? ` · ${b.state.toLowerCase()}` : ''}`} />
+        ))}
+        {db && !db.ok && (
+          <SettingRow label="The app can't see them yet"
+            hint={db.needsRole && db.robot
+              ? <>In Google Cloud → IAM for <b>{db.project}</b>, give <b>{db.robot}</b> the role <b>Cloud Datastore Viewer</b>.</>
+              : db.error} />
+        )}
+        <SettingRow label="Restore from one of these" hint="Done in Google Cloud → Firestore → Disaster recovery">
+          <a className="tz-btn tz-btn-quiet" href={`https://console.cloud.google.com/firestore/databases/-default-/disaster-recovery?project=${db?.project ?? ''}`} target="_blank" rel="noreferrer" aria-label="Open in Google Cloud"><ExternalLink /></a>
+        </SettingRow>
+      </SettingBox>
+
       <SettingBox name="From a file">
-        <SettingRow label="Open a backup file" hint="It opens in the preview first">
+        <SettingRow label="Open a backup file" hint="It opens in the preview; nothing is uploaded">
           <input ref={fileRef} type="file" accept=".json,.gz,application/json,application/gzip" className="hidden"
             onChange={e => { const f = e.target.files?.[0]; if (f) void openFile(f); }} />
-          <button className="tz-btn tz-btn-secondary" onClick={() => fileRef.current?.click()} disabled={busy === 'file' || !folderId}>
+          <button className="tz-btn tz-btn-secondary" onClick={() => fileRef.current?.click()} disabled={busy === 'file'}>
             {busy === 'file' ? <Loader2 className="animate-spin" /> : <FileUp />} Choose a file
           </button>
         </SettingRow>

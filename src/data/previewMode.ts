@@ -20,6 +20,7 @@
  * This file must not import the store or firebase.ts: it runs BEFORE them.
  */
 
+import { getLocalPreview, LOCAL_PREVIEW_ID, type LocalPreviewFile } from './previewFile';
 export const PREVIEW_ID: string | null = (() => {
   // The address loses `?previewBackup` as the app moves between pages, so the
   // tab remembers it (this tab only): a reload stays a PREVIEW, never quietly
@@ -130,15 +131,22 @@ function memoryStorage(seed: Record<string, string>): Storage {
  */
 export async function bootPreview(driveKey: string): Promise<void> {
   if (!PREVIEW_ID) return;
-  const r = await fetch(`/api/drive-fetch?id=${encodeURIComponent(PREVIEW_ID)}&k=${encodeURIComponent(driveKey)}`);
-  if (!r.ok) throw new Error(`The backup file could not be read from Drive (${r.status}).`);
   let text: string;
-  const bytes = new Uint8Array(await r.arrayBuffer());
-  if (bytes[0] === 0x1f && bytes[1] === 0x8b) {
-    const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'));
-    text = await new Response(stream).text();
+  if (PREVIEW_ID === LOCAL_PREVIEW_ID) {
+    // A file opened from this computer — read from this browser, never uploaded.
+    const f = await getLocalPreview();
+    if (!f) throw new Error('The file is no longer here. Open it again from Settings → Backups.');
+    text = f.text; localFile = f;
   } else {
-    text = new TextDecoder().decode(bytes);
+    const r = await fetch(`/api/drive-fetch?id=${encodeURIComponent(PREVIEW_ID)}&k=${encodeURIComponent(driveKey)}`);
+    if (!r.ok) throw new Error(`The backup file could not be read from Drive (${r.status}).`);
+    const bytes = new Uint8Array(await r.arrayBuffer());
+    if (bytes[0] === 0x1f && bytes[1] === 0x8b) {
+      const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'));
+      text = await new Response(stream).text();
+    } else {
+      text = new TextDecoder().decode(bytes);
+    }
   }
   const parsed = JSON.parse(text) as FullBackup & Record<string, unknown>;
   const isFull = parsed.kind === 'tzviair-full-backup';
@@ -216,6 +224,7 @@ export function israelTime(iso: string): string {
 }
 
 let restoreFetch: typeof fetch | null = null;
+let localFile: LocalPreviewFile | null = null;
 let realSession: Storage | null = null;
 
 /**
@@ -226,11 +235,26 @@ let realSession: Storage | null = null;
  */
 export async function restoreThisBackup(): Promise<{ ok: boolean; put?: number; removed?: number; safetyBackup?: string | null; error?: string }> {
   if (!info || !restoreFetch) return { ok: false, error: 'Not a preview.' };
+  const key = (import.meta.env.VITE_DRIVE_API_KEY as string | undefined) ?? '';
+  let fileId = info.fileId;
+  if (fileId === LOCAL_PREVIEW_ID) {
+    // The server restores from Drive: a file from this computer goes up NOW, at the Restore press only.
+    if (!localFile?.folderId) return { ok: false, error: 'The Drive folder is not set in Settings → Backups.' };
+    const gz = new Uint8Array(await new Response(new Blob([localFile.text]).stream().pipeThrough(new CompressionStream('gzip'))).arrayBuffer());
+    let bin = ''; for (let i = 0; i < gz.length; i += 0x8000) bin += String.fromCharCode(...gz.subarray(i, i + 0x8000));
+    const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+    const up = await restoreFetch('/api/drive-upload', {
+      method: 'POST', headers: { 'Content-Type': 'application/json', 'x-api-key': key },
+      body: JSON.stringify({ folderId: localFile.folderId, filename: `uploaded-${stamp}-${localFile.name.replace(/\.gz$/, '')}.gz`, mimeType: 'application/gzip', data: btoa(bin) }),
+    });
+    if (!up.ok) return { ok: false, error: `The file could not be put in Drive (${up.status}).` };
+    fileId = (await up.json()).fileId;
+  }
   const r = await restoreFetch('/api/drive-upload', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'x-api-key': (import.meta.env.VITE_DRIVE_API_KEY as string | undefined) ?? '' },
+    headers: { 'Content-Type': 'application/json', 'x-api-key': key },
     body: JSON.stringify({
-      mode: 'full-restore', fileId: info.fileId,
+      mode: 'full-restore', fileId,
       projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID, apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
     }),
   });

@@ -29,8 +29,13 @@ export function StageInfoButton({ stage, lang }: { stage: Stage; lang: PortalLan
   const [big, setBig] = useState<string | null>(null);
   const t = (k: keyof typeof WORDS) => WORDS[k][lang] ?? WORDS[k].en;
   const items = stage.includes ?? [];
-  const pics = stage.examples ?? [];
-  if (!items.length && !pics.length) return null;
+  const ex = stage.exampleOf ?? {};
+  /** One tile per thing the stage includes; a stage with none shows one tile with its own name. */
+  const tiles: { word: string; label: string; fileId?: string }[] = items.length
+    ? items.map(word => ({ word, label: includeIn(stage, word, lang) || word, fileId: ex[word] }))
+    : [{ word: stage.name, label: stageNameIn(stage, lang), fileId: (stage.examples ?? [])[0] }];
+  const pics = tiles.filter(x => x.fileId).map(x => x.fileId!);
+  void pics;
 
   return (
     <>
@@ -68,21 +73,28 @@ export function StageInfoButton({ stage, lang }: { stage: Stage; lang: PortalLan
             )}
             <div>
               <p className="m-0 mb-1.5 font-bold text-gray-500" style={{ fontSize: 13 }}>{t('examples')}</p>
-              {pics.length ? (
-                big ? (
-                  <button type="button" className="block w-full" onClick={() => setBig(null)}>
-                    <img src={driveThumbUrl(big, 1600)} alt="" className="w-full rounded-xl bg-gray-100" style={{ maxHeight: '64vh', objectFit: 'contain' }} />
-                  </button>
-                ) : (
-                  <div data-stage-info-grid className="grid grid-cols-2 gap-2">
-                    {pics.map(id => (
-                      <button key={id} type="button" onClick={() => setBig(id)} className="block rounded-xl overflow-hidden bg-gray-100">
-                        <img src={driveThumbUrl(id, 600)} alt="" loading="lazy" className="w-full aspect-[3/4] object-cover" />
-                      </button>
-                    ))}
-                  </div>
-                )
-              ) : <p className="m-0 text-gray-400" style={{ fontSize: 14 }}>{t('none')}</p>}
+              {big ? (
+                <button type="button" className="block w-full" onClick={() => setBig(null)}>
+                  <img src={driveThumbUrl(big, 1600)} alt="" className="w-full rounded-xl bg-gray-100" style={{ maxHeight: '64vh', objectFit: 'contain' }} />
+                </button>
+              ) : (
+                <div data-stage-info-grid className="grid grid-cols-2 gap-2">
+                  {tiles.map(x => x.fileId ? (
+                    <button key={x.word} type="button" data-stage-info-tile={x.word} onClick={() => setBig(x.fileId!)}
+                      className="relative block rounded-xl overflow-hidden bg-gray-100">
+                      <img src={driveThumbUrl(x.fileId, 600)} alt={x.label} loading="lazy" className="w-full aspect-[3/4] object-cover" />
+                      <span className="absolute left-1.5 right-1.5 bottom-1.5 px-2 py-1 rounded-full text-center font-bold text-gray-900 truncate"
+                        style={{ fontSize: 12.5, backgroundColor: 'rgba(255,255,255,.92)' }}>{x.label}</span>
+                    </button>
+                  ) : (
+                    <div key={x.word} data-stage-info-tile={x.word} data-empty="1"
+                      className="rounded-xl aspect-[3/4] flex items-center justify-center text-center p-3 font-bold"
+                      style={{ fontSize: 13.5, color: '#64748b', backgroundColor: `${stage.color}10`, border: `2px dashed ${stage.color}55` }}>
+                      {x.label}
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         </div>,

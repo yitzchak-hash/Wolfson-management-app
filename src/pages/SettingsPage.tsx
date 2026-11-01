@@ -1491,7 +1491,7 @@ function ContractorsTab({ onToast }: { onToast: (msg: string, type?: 'success' |
               {/* The level is the answer for nine workers in ten, so it is on
                   the row. The fifteen switches are one press away for the
                   tenth, and stay shut otherwise. */}
-              <div className="flex items-center gap-2 mt-2.5 pt-2.5 border-t border-gray-100">
+              <div data-worker-row className="flex flex-wrap items-center gap-2 mt-2.5 pt-2.5 border-t border-gray-100 [&>*]:whitespace-nowrap">
                 <span className="text-[11px] font-semibold text-gray-500">Level</span>
                 <WorkerLevelPicker worker={c} />
                 {/* The same language setting the worker sees in his own portal.
@@ -1678,7 +1678,8 @@ function ContractorsTab({ onToast }: { onToast: (msg: string, type?: 'success' |
                 </Tooltip>
                 <button
                   onClick={() => setOpenPerms(o => (o === c.id ? null : c.id))}
-                  className="text-[11px] font-semibold"
+                  data-worker-exceptions
+                  className="text-[11px] font-semibold whitespace-nowrap"
                   style={{ color: overrideCount(c) ? '#b45309' : '#4aa8d8' }}>
                   {openPerms === c.id ? 'hide the switches'
                     : overrideCount(c)
@@ -1686,7 +1687,7 @@ function ContractorsTab({ onToast }: { onToast: (msg: string, type?: 'success' |
                       : 'change one just for them'}
                 </button>
                 <span className="flex-1" />
-                <span className="text-[10.5px] text-gray-400">
+                <span className="text-[10.5px] text-gray-400 whitespace-nowrap">
                   {WORKER_PERM_COUNT_ON(c)} of {WORKER_PERMISSIONS.length} on
                 </span>
               </div>
@@ -2755,85 +2756,51 @@ function ThisComputerCard({ onToast }: { onToast: (msg: string, type?: 'success'
   const [installed, setInstalled] = useState(helperInstalled);
   const markupScale = useMarkupScale();
   const platform = guessPlatform();
-  const guess = guessRoot();
-
+  /* Only for THIS computer (a touchscreen wants bigger buttons; every PC has its own Drive letter). */
   return (
-    <div className="bg-white border border-gray-200 rounded-xl p-5">
-      <div className="flex items-center gap-2 mb-1">
-        <HardDrive size={18} className="text-[#1e3a5f]" />
-        <h2 className="font-semibold text-gray-800">This computer</h2>
-      </div>
-      <p className="text-xs text-gray-400 mb-4">
-        These are per-machine and never shared — everyone&apos;s Drive path and screen are different.
-      </p>
-
-      {/* The markup studio's button size, for THIS screen.
-          The big touchscreen wants buttons half again the desk size, and a
-          synced setting would push those onto every desktop — so it lives
-          here, beside the other two per-machine facts. The studio follows
-          it live, even while open. */}
-      <label className="block text-xs font-semibold text-gray-700 mb-1"
-        title="How big the buttons and tool rail are in the plan markup studio, on this screen only.">
-        Markup studio button size
-      </label>
-      <div className="flex items-center gap-1.5 flex-wrap mb-4" data-markup-scale>
-        {([[1, 'Normal'], [1.25, 'Big'], [1.5, 'Bigger'], [1.8, 'Huge'], [2.2, 'Giant']] as const)
-          .map(([v, label]) => {
-            const on = Math.abs(markupScale - v) < 0.02;
-            return (
-              <button key={v} onClick={() => { setMarkupScale(v); onToast('Saved for this computer'); }}
-                className="px-3 py-2 rounded-xl text-[12px] font-bold border transition-colors"
-                style={on
-                  ? { backgroundColor: '#1e3a5f', color: '#fff', borderColor: '#1e3a5f' }
-                  : { backgroundColor: '#fff', color: '#475569', borderColor: '#e2e8f0' }}>
-                {label}
-              </button>
-            );
-          })}
-      </div>
-
-      <label className="block text-xs font-semibold text-gray-700 mb-1">Where Google Drive is</label>
-      <input
-        value={root}
-        onChange={e => setRoot(e.target.value)}
-        onBlur={() => { setDriveRoot(root); if (root.trim()) onToast('Saved for this computer'); }}
-        placeholder={guess.value}
-        className="w-full max-w-md border border-gray-200 rounded-lg px-3 py-2 text-sm font-mono
-                   outline-none focus:border-[#4aa8d8]"
-      />
-      <p className="text-[11px] text-gray-400 mt-1 mb-4">{guess.note}</p>
-
-      <div className="flex flex-wrap items-center gap-3">
-        <button
-          onClick={() => {
+    <>
+      <SettingBox>
+        <SettingRow label="Markup studio scaling" hint="This computer only">
+          <span className="inline-flex flex-wrap gap-1.5" data-markup-scale>
+            {([[1, 'Normal'], [1.25, 'Big'], [1.5, 'Bigger'], [1.8, 'Huge'], [2.2, 'Giant']] as const).map(([v, label]) => {
+              const on = Math.abs(markupScale - v) < 0.02;
+              return (
+                <button key={v} onClick={() => { setMarkupScale(v); onToast('Saved for this computer'); }}
+                  className="tz-btn" style={on ? { backgroundColor: '#1e3a5f', color: '#fff', borderColor: '#1e3a5f' } : undefined}>
+                  {label}
+                </button>
+              );
+            })}
+          </span>
+        </SettingRow>
+        <SettingRow label="Where Google Drive is" htmlFor="drive-root"
+          hint={platform === 'windows' ? <>Write the drive letter and a colon, exactly: <b>G:</b></> : <>The folder that holds “Shared drives”, e.g. <b>/Users/you/Library/CloudStorage/GoogleDrive-you@tzviair.com</b></>}>
+          <input id="drive-root" value={root} onChange={e => setRoot(e.target.value)}
+            onBlur={() => { setDriveRoot(root); if (root.trim()) onToast('Saved for this computer'); }}
+            placeholder={platform === 'windows' ? 'G:' : ''} className="tz-input w-40 font-mono" />
+        </SettingRow>
+        <SettingRow label="Folder helper" hint="Folder buttons open the folder instead of copying its path">
+          <button className="tz-btn tz-btn-secondary" onClick={() => {
             const r = (root || getDriveRoot()).trim();
             if (!r) { onToast('Fill in where Drive is first.', 'error'); return; }
             setDriveRoot(r);
             if (platform === 'windows') {
               const { cmd } = windowsInstaller(r);
               download('install-tzviair-helper.cmd', cmd);
-              onToast('One file downloaded — double-click install-tzviair-helper.cmd (More info → Run anyway if Windows asks)');
+              onToast('Downloaded — double-click install-tzviair-helper.cmd');
             } else {
               download('install-tzviair.sh', macInstaller(r));
-              onToast('Installer downloaded — run: bash install-tzviair.sh');
+              onToast('Downloaded — run: bash install-tzviair.sh');
             }
-          }}
-          className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-bold text-white"
-          style={{ backgroundColor: '#1e3a5f' }}>
-          <Download size={14} /> Download the folder helper
-        </button>
-        <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer">
-          <input type="checkbox" checked={installed}
-            onChange={e => { setInstalled(e.target.checked); setHelperInstalled(e.target.checked); }} />
-          It is installed here
-        </label>
-      </div>
-      <p className="text-[11px] text-gray-400 mt-2">
-        With it installed, every folder button in the app OPENS the folder outright.
-        Without it, the buttons copy the path — which always works and needs nothing installed.
-        It only ever opens a folder, never runs anything, and refuses folders outside your Drive.
-      </p>
-    </div>
+          }}><Download size={14} /> Download</button>
+          <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer">
+            <input type="checkbox" checked={installed}
+              onChange={e => { setInstalled(e.target.checked); setHelperInstalled(e.target.checked); }} />
+            Installed here
+          </label>
+        </SettingRow>
+      </SettingBox>
+    </>
   );
 }
 

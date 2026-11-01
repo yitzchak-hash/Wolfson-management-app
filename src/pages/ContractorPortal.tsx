@@ -865,6 +865,11 @@ export function ContractorPortal() {
   const [offOn, setOffOn] = useState(false);
   const [offText, setOffText] = useState('');
   const [moreDone, setMoreDone] = useState(false);
+  /** The close's first question for a task started without stages: what he did. */
+  const [pickSel, setPickSel] = useState<string[]>([]);
+  const [pickWords, setPickWords] = useState('');
+  const [pickExplain, setPickExplain] = useState(false);
+  const [pickDone, setPickDone] = useState(false);
   const partNeedsPicture = useStore(st => st.boardSettings.__tv?.partNeedsPicture !== false);
   const tipusStagesPortal = useStore(st => st.boardSettings[st.currentProjectId]?.tipusStages);
   /** The worker as a User, for writes the store attributes to a person. */
@@ -1745,7 +1750,9 @@ export function ContractorPortal() {
       // task with no stages of its own has nothing to ask "did you finish" about.
       const seed = worked.length ? worked
         : (liveA.stageReport && getApt(liveA.apartmentId)?.currentStageId ? [getApt(liveA.apartmentId)!.currentStageId!] : []);
-      setCloseStages(seed);
+      // Started without stages: the close begins by asking what he did.
+      setCloseStages(liveA.pickAtClose ? [] : seed);
+      setPickSel([]); setPickWords(''); setPickExplain(false); setPickDone(!liveA.pickAtClose);
       setCloseFinished('yes');
       setCloseAsked(false);
       setCloseUnfinished([]);
@@ -2091,6 +2098,8 @@ export function ContractorPortal() {
    * step per thing that needs them.
    */
   const stageClose = !!liveSel && !selProblem && !liveSel.general;
+  /** A task started without stages, still on "What did you do here today?". */
+  const pickStep = stageClose && !!liveSel?.pickAtClose && !pickDone;
   const isReportClose = stageClose && !!liveSel?.stageReport && closeStages.length > 0;
   const hasOwnStages = closeStages.length > 0;
   const closeFinishedIds = closeStages.filter(id => !closeUnfinished.includes(id));
@@ -2146,7 +2155,7 @@ export function ContractorPortal() {
   const stepOk = (st: PhotoStep) => enoughMedia(stepMedia(st), st.need);
   const closeCountFor = (sid: string) => selMedia.filter(m => m.stageId === sid).length;
   void closeCountFor;
-  const canComplete = (stageClose
+  const canComplete = !pickStep && (stageClose
     ? finishedOk && moreOk && (!photosNeeded || photoSteps.every(stepOk))
     : (enoughMedia(selMedia, MIN_CLOSE_MEDIA) || !photosNeeded))
     // A file still going up belongs to this close — its closing note names it.
@@ -4161,6 +4170,105 @@ plansPdfFileId && (
                         const yn = (on: boolean, tone: 'g' | 'o') => on
                           ? { backgroundColor: tone === 'g' ? '#16a34a' : '#f97316', borderColor: tone === 'g' ? '#16a34a' : '#f97316', color: '#fff' }
                           : { borderColor: '#e5e7eb', color: '#374151', backgroundColor: '#fff' };
+                        if (pickStep && liveSel) {
+                          const capt = getApt(liveSel.apartmentId);
+                          const allowed = contractor?.reportStages?.[currentProjectId];
+                          const set = capt ? stageSetOf(capt, wsStageList, { tipusStages: tipusStagesPortal }) : wsStageList;
+                          const stateOf = (id: string) => (capt ? liveStateOf(capt, id, wsStageList, contractorAssignments) : 'todo');
+                          const usable = set.filter(st => !isStartStage(st) && stateOf(st.id) !== 'off' && (!allowed?.length || allowed.includes(st.id)));
+                          // Half done first (he is most likely continuing it), then the rest still open, then what is finished.
+                          const rank = (id: string) => (stateOf(id) === 'pending' ? 0 : stateOf(id) === 'done' ? 2 : 1);
+                          const list = [...usable].sort((a, b) => rank(a.id) - rank(b.id) || a.order - b.order);
+                          const firstDone = list.findIndex(st => stateOf(st.id) === 'done');
+                          const toggle = (id: string) => setPickSel(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+                          const ready = pickSel.length > 0 || (pickExplain && !!pickWords.trim());
+                          const goOn = () => {
+                            const open = pickSel.filter(id => stateOf(id) !== 'done');
+                            const done = pickSel.filter(id => stateOf(id) === 'done');
+                            const words = pickExplain ? pickWords.trim() : '';
+                            setCloseStages(open);
+                            setExtraPick(Object.fromEntries(done.map(id => [id, 'added' as const])));
+                            setOffOn(!!words); setOffText(words);
+                            setMoreAsk(done.length || words ? 'yes' : 'no'); setMoreDone(true);
+                            setCloseFinished('yes'); setCloseUnfinished([]); setCloseAsked(open.length === 0);
+                            setClosePhotoIdx(0); setPickDone(true);
+                          };
+                          return (
+                            <div data-close-pick className="space-y-2">
+                              <p className="text-center font-extrabold text-gray-800" style={{ fontSize: 18, lineHeight: 1.3 }}>
+                                {w('What did you do here today?', 'מה עשית כאן היום?', 'Что вы сделали здесь сегодня?')}
+                              </p>
+                              <p className="text-center text-gray-500 mb-1" style={{ fontSize: 13 }}>
+                                {w('select one or multiple', 'בחר אחד או כמה', 'выберите один или несколько')}
+                              </p>
+                              {list.map((st, i) => {
+                                const on = pickSel.includes(st.id);
+                                const state = stateOf(st.id);
+                                return (
+                                  <React.Fragment key={st.id}>
+                                    {i === firstDone && (
+                                      <p className="text-center text-gray-400 pt-2" style={{ fontSize: 12 }}>
+                                        {w('Already finished — tap one to add work to it', 'כבר הסתיים — אפשר להוסיף לו עבודה', 'Уже готово — нажмите, чтобы добавить работу')}
+                                      </p>
+                                    )}
+                                    <div className="flex items-center gap-2">
+                                      <button data-close-pick-stage={st.id} data-on={on ? '1' : undefined} data-state={state}
+                                        onClick={() => toggle(st.id)}
+                                        className="flex-1 min-w-0 flex items-center gap-3 rounded-xl px-3.5 py-3 border-2 text-left rtl:text-right active:scale-[0.99]"
+                                        style={on ? { borderColor: st.color, backgroundColor: `${st.color}1a` }
+                                          : state === 'done' ? { borderColor: '#e2e8f0', backgroundColor: '#f8fafc' } : { borderColor: '#e5e7eb', backgroundColor: '#fff' }}>
+                                        <span className="w-5 h-5 rounded-full flex-shrink-0 flex items-center justify-center"
+                                          style={{ border: `2.5px solid ${st.color}`, backgroundColor: on ? st.color : '#fff' }}>
+                                          {on && <span className="w-2 h-2 rounded-full bg-white" />}
+                                        </span>
+                                        <span className="flex-1 min-w-0">
+                                          <span className={`block text-[15px] font-bold ${state === 'done' && !on ? 'text-gray-400' : 'text-gray-800'}`}>{stageNameIn(st, readLang)}</span>
+                                          {!!st.includes?.length && (
+                                            <span data-work-stage-includes className="flex flex-wrap gap-1 mt-1">
+                                              {st.includes.map(word => (
+                                                <span key={word} className="px-1.5 py-[1px] rounded-full text-[11px] font-semibold"
+                                                  style={{ backgroundColor: `${st.color}22`, color: '#374151' }}>
+                                                  {includeIn(st, word, readLang) || <TrText text={word} to={readLang} />}
+                                                </span>
+                                              ))}
+                                            </span>
+                                          )}
+                                        </span>
+                                        {state === 'pending' && <span className="text-[10px] font-bold uppercase" style={{ color: '#f97316' }}>{w('half done', 'חצי גמור', 'наполовину')}</span>}
+                                        {state === 'done' && <CheckCircle2 size={15} className="text-slate-400 flex-shrink-0" />}
+                                      </button>
+                                      <StageInfoButton stage={st} lang={readLang} />
+                                    </div>
+                                  </React.Fragment>
+                                );
+                              })}
+                              {/* "I don't see what I did here" — he explains it, by voice or typing. */}
+                              <button data-close-pick-explain data-on={pickExplain ? '1' : undefined}
+                                onClick={() => setPickExplain(v => !v)}
+                                className="w-full py-3 rounded-xl text-sm font-bold border-2 border-dashed active:scale-[0.99]"
+                                style={pickExplain ? { borderColor: '#1e3a5f', color: '#1e3a5f', backgroundColor: '#f1f5f9' } : { borderColor: '#94a3b8', color: '#334155', backgroundColor: '#fff' }}>
+                                {w("I don't see what I did here", 'אני לא רואה מה עשיתי כאן', 'Я не вижу, что я здесь сделал')}
+                              </button>
+                              {pickExplain && (
+                                <div data-close-explain className="space-y-1">
+                                  <p className="text-center font-bold text-gray-700 m-0" style={{ fontSize: 14 }}>
+                                    {w('Explain to us what you did here today', 'תסביר לנו מה עשית כאן היום', 'Объясните, что вы сделали здесь сегодня')}
+                                  </p>
+                                  <MessageBox hook="close-pick-words" rows={3} value={pickWords}
+                                    onChange={setPickWords}
+                                    onTranscript={t => setPickWords(prev => (prev.trim() ? `${prev} ${t}` : t))}
+                                    lang={readLang} fontSize={15}
+                                    placeholder={w('Say it or type it', 'תגיד או תכתוב', 'Скажите или напишите')} />
+                                </div>
+                              )}
+                              <button data-close-pick-next disabled={!ready} onClick={goOn}
+                                className="w-full py-3.5 rounded-xl text-base font-bold text-white disabled:opacity-40"
+                                style={{ background: 'linear-gradient(135deg, #1e3a5f, #2c4f78)' }}>
+                                {w('Next', 'הבא', 'Дальше')}
+                              </button>
+                            </div>
+                          );
+                        }
                         return (
                           <div data-close-stage className="space-y-5">
                             {/* 0 · The task's day has gone by: when did you finish? */}
@@ -4196,8 +4304,11 @@ plansPdfFileId && (
                             {hasOwnStages && whenOk && (
                               <div data-close-finished>
                                 <p data-close-finished-q className="text-center font-extrabold text-gray-800 mb-3" style={{ fontSize: 17, lineHeight: 1.3 }}>
-                                  {w('Did you finish doing', 'סיימת לעשות', 'Вы закончили')} {joined}?
+                                  {liveSel?.pickAtClose
+                                    ? w('Did you finish all of these?', 'סיימת את כל אלה?', 'Вы всё это закончили?')
+                                    : <>{w('Did you finish doing', 'סיימת לעשות', 'Вы закончили')} {joined}?</>}
                                 </p>
+                                {liveSel?.pickAtClose && <p data-close-picked className="text-center font-bold text-gray-600 -mt-2 mb-3" style={{ fontSize: 14 }}>{joined}</p>}
                                 <div className="grid grid-cols-2 gap-2">
                                   <button data-close-finished-pick="yes" data-on={closeAsked && closeFinished === 'yes' ? '1' : undefined}
                                     onClick={() => { setCloseFinished('yes'); setCloseUnfinished([]); setCloseAsked(true); setClosePhotoIdx(0); }}
@@ -4210,7 +4321,8 @@ plansPdfFileId && (
                                       setCloseFinished('no'); setClosePhotoIdx(0);
                                       // One stage: "No" already says which — never ask "which didn't you finish?".
                                       if (closeStages.length === 1) { setCloseUnfinished([closeStages[0]]); setCloseAsked(true); }
-                                      else setCloseAsked(false);
+                                      // "Which ones did you finish?" starts with none lit — he taps the ones he finished.
+                                      else { if (liveSel?.pickAtClose) setCloseUnfinished([...closeStages]); setCloseAsked(false); }
                                     }}
                                     className="py-3.5 rounded-xl text-base font-extrabold border active:scale-[0.98]"
                                     style={yn(closeFinished === 'no', 'o')}>
@@ -4223,13 +4335,16 @@ plansPdfFileId && (
                             {hasOwnStages && whenOk && closeStages.length > 1 && closeFinished === 'no' && (
                               <div data-close-unfinished>
                                 <p className="text-center font-extrabold text-gray-800 mb-2" style={{ fontSize: 16, lineHeight: 1.35 }}>
-                                  {w("Which didn't you finish?", 'מה לא סיימת?', 'Что вы не закончили?')}
+                                  {liveSel?.pickAtClose
+                                    ? w('Which ones did you finish?', 'מה סיימת?', 'Что вы закончили?')
+                                    : w("Which didn't you finish?", 'מה לא סיימת?', 'Что вы не закончили?')}
                                 </p>
                                 <div className="flex flex-wrap justify-center gap-1.5">
                                   {closeStages.map(id => {
                                     const st = wsStageList.find(x => x.id === id);
                                     if (!st) return null;
-                                    const on = closeUnfinished.includes(id);
+                                    // Pick-at-close asks which he FINISHED: a lit chip is finished there.
+                                    const on = liveSel?.pickAtClose ? !closeUnfinished.includes(id) : closeUnfinished.includes(id);
                                     return (
                                       <button key={id} data-close-unfinished-pick={id} data-on={on ? '1' : undefined}
                                         onClick={() => { setCloseUnfinished(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]); setCloseAsked(false); setClosePhotoIdx(0); }}
@@ -4253,8 +4368,14 @@ plansPdfFileId && (
                                 )}
                               </div>
                             )}
-                            {/* 2 · Did you do anything else here today? */}
-                            {finishedOk && (
+                            {liveSel?.pickAtClose && (
+                              <button data-close-pick-edit onClick={() => { setPickSel([...closeStages, ...Object.keys(extraPick)]); setPickDone(false); }}
+                                className="w-full text-center text-sm font-bold text-[#1e3a5f] underline">
+                                {w('Change what you did', 'לשנות מה עשית', 'Изменить, что сделано')}
+                              </button>
+                            )}
+                            {/* 2 · Did you do anything else here today? (not asked after "What did you do here today?") */}
+                            {finishedOk && !liveSel?.pickAtClose && (
                               <div data-close-more>
                                 <p className="text-center font-extrabold text-gray-800 mb-3" style={{ fontSize: 17, lineHeight: 1.3 }}>
                                   {w('Did you do anything else here today?', 'עשית עוד משהו כאן היום?', 'Вы сделали здесь сегодня что-то ещё?')}
@@ -4674,7 +4795,11 @@ plansPdfFileId && (
           .filter(workable)
           .filter(x => { const st = liveStateOf(apt, x.id, wsSortedAll, assignments); return st !== 'done' && st !== 'off'; })
           .filter(x => { const allowed = contractor?.reportStages?.[currentProjectId]; return !allowed?.length || allowed.includes(x.id); });
-        const goPick = (partOf: string | null) => setWorkHere({ ...workHere, step: 'pick', partOf, picks: workHere.picks ?? [] });
+        /**
+         * "I started working here" (owner, 2026-11-01): the task opens at once —
+         * nothing is asked yet. What he did is asked when he CLOSES it.
+         */
+        const goPick = (partOf: string | null) => startWork(partOf, []);
         const startWork = (partOf: string | null, pickedIds: string[] = []) => {
           const rid = mintId();
           /**
@@ -4686,7 +4811,7 @@ plansPdfFileId && (
           const marksBefore = { ...(useStore.getState().apartments.find(x => x.id === apt.id)?.stageMarks ?? {}) };
           const marksBeforeAt = new Date().toISOString();
           const pickedStages = pickedIds.map(id => wsSortedAll.find(x => x.id === id)).filter((x): x is Stage => !!x && !isStartStage(x));
-          const st = pickedStages[0] ?? curStage ?? null;
+          const st = pickedStages[0] ?? null;
           if (pickedStages.length) {
             let marks: Record<string, StageMark> | undefined = apt.stageMarks;
             for (const ps of pickedStages) if (marks?.[ps.id] !== 'done') marks = setMark(marks, ps.id, 'doing');
@@ -4742,7 +4867,7 @@ plansPdfFileId && (
             taskDescription: `${pickedStages.length ? `${pickedStages.map(x => x.name).join(' + ')} — ` : st ? `${st.name} — ` : ''}working here today`,
             dueDate: todayIso,
             stageId: st?.id ?? null,
-            ...(pickedStages.length ? { stageIds: pickedStages.map(x => x.id), stagesWorked: pickedStages.map(x => x.id) } : {}),
+            ...(pickedStages.length ? { stageIds: pickedStages.map(x => x.id), stagesWorked: pickedStages.map(x => x.id) } : { pickAtClose: true }),
             priority: 'normal',
             completedAt: null,
             stageReport: true,
@@ -4851,7 +4976,9 @@ plansPdfFileId && (
                       className="w-full py-4 rounded-xl text-base font-bold text-white flex items-center justify-center gap-2 active:scale-[0.98]"
                       style={{ background: 'linear-gradient(135deg, #1e3a5f, #2c4f78)' }}>
                       <Hammer size={19} />
-                      {s.goingToWorkBtn || (w("I'm going to work here", 'אני הולך לעבוד כאן', 'Я буду здесь работать'))}
+                      {assignments.some(t => t.apartmentId === apt.id && t.contractorId === contractorId && t.stageReport)
+                        ? w('Continue working here', 'ממשיך לעבוד כאן', 'Продолжаю работать здесь')
+                        : w('I started working here', 'התחלתי לעבוד כאן', 'Я начал работать здесь')}
                     </button>
                     )}
                   </>
