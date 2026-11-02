@@ -3433,7 +3433,28 @@ const MAIN_UI_FIELD_LABELS: { key: keyof Omit<MainUiStrings, 'isRtl'>; label: st
   { key: 'loginFooterBrand', label: 'Login: footer brand name', group: 'Login' },
 ];
 
+/* His language, one press (owner, 2026-11-02: "Why don't we have just a
+   button on top, English, Hebrew, that's it"). The choice was only a dropdown
+   in Appearance and he could not find it here, under the long word lists.
+   It is the same per-person choice (setUiLang): the words change, the layout
+   stays. The word lists below are re-read in the new language. */
 function LanguageTab({ onToast }: { onToast: (msg: string, type?: 'success' | 'error') => void }) {
+  const uiLang = useStore(st => st.uiLang);
+  const setUiLang = useStore(st => st.setUiLang);
+  const pick = (lang: 'en' | 'he') =>
+    `flex-1 sm:flex-none sm:w-40 px-5 py-2.5 text-base font-semibold rounded-lg transition-colors ${uiLang === lang ? 'bg-[#1e3a5f] text-white' : 'text-gray-700 hover:bg-gray-100'}`;
+  return (
+    <div className="space-y-5">
+      <div data-lang-switch className="bg-white border border-gray-200 rounded-xl p-2 flex gap-2">
+        <button type="button" data-lang="en" aria-pressed={uiLang === 'en'} className={pick('en')} onClick={() => setUiLang('en')}>English</button>
+        <button type="button" data-lang="he" aria-pressed={uiLang === 'he'} lang="he" className={pick('he')} onClick={() => setUiLang('he')}>עברית</button>
+      </div>
+      <LanguageEditor key={uiLang} onToast={onToast} />
+    </div>
+  );
+}
+
+function LanguageEditor({ onToast }: { onToast: (msg: string, type?: 'success' | 'error') => void }) {
   const { contractorUiStrings, updateContractorUiStrings, mainUiStrings, updateMainUiStrings } = useStore();
   const s = mainUiStrings;
   const [draft, setDraft] = useState<ContractorUiStrings>({ ...contractorUiStrings });
