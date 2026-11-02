@@ -583,6 +583,11 @@ export function Header() {
         {currentUser && <PendingStagesBell light={lightTheme} />}
         <CloudSyncBadge light={lightTheme} />
 
+        {/* EN | עב, always in the bar at every width (owner, 2026-11-02: "every
+            app … on the top taskbar should always be visible, a little Hebrew
+            English toggle"). The same per-person choice as Settings › Language. */}
+        <LangToggle light={lightTheme} />
+
         {currentUser && (
           <Tooltip text={s.appSettingsTitle}>
             <button
@@ -648,5 +653,23 @@ export function Header() {
       </div>
     )}
 </>
+  );
+}
+
+function LangToggle({ light }: { light: boolean }) {
+  const uiLang = useStore(st => st.uiLang);
+  const setUiLang = useStore(st => st.setUiLang);
+  const half = (on: boolean) =>
+    `px-2 h-7 [@media(pointer:coarse)]:min-w-[32px] text-xs font-semibold transition-colors ${on ? 'bg-[#1e3a5f] text-white' : ''}`;
+  const off = { color: light ? '#6b7280' : '#cbd5e1' };
+  return (
+    <div data-lang-toggle role="group" aria-label="Language" dir="ltr"
+      className="flex flex-shrink-0 items-stretch rounded-md overflow-hidden border mx-0.5"
+      style={{ borderColor: light ? '#e5e7eb' : 'rgba(255,255,255,0.25)' }}>
+      <button type="button" data-lang="en" aria-pressed={uiLang === 'en'} className={half(uiLang === 'en')}
+        style={uiLang === 'en' ? undefined : off} onClick={() => setUiLang('en')}>EN</button>
+      <button type="button" data-lang="he" lang="he" aria-pressed={uiLang === 'he'} className={half(uiLang === 'he')}
+        style={uiLang === 'he' ? undefined : off} onClick={() => setUiLang('he')}>עב</button>
+    </div>
   );
 }

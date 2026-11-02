@@ -312,7 +312,11 @@ function AptCell({
       // Addressable by id, so "show me where it is" can scroll to the cell and
       // a harness can reach one without matching on its text.
       data-apt-id={apt?.id}
-      className={`relative flex flex-col items-center justify-center cursor-pointer select-none rounded-md overflow-hidden transition-all duration-100 ${scale}`}
+      // apt-tile: a size container — a NARROW placed tile (the Galaxy Fold's
+      // big screen, 2026-11-02: the tipus sat on the number, names torn
+      // mid-word) moves its tipus under the number (index.css).
+      data-has-tipus={placed && tipusLine ? '1' : undefined}
+      className={`${placed ? 'apt-tile ' : ''}relative flex flex-col items-center justify-center cursor-pointer select-none rounded-md overflow-hidden transition-all duration-100 ${scale}`}
       onMouseEnter={() => apt && onHover?.(apt.id)}
       onMouseLeave={() => onHover?.(null)}
       style={{
@@ -416,9 +420,16 @@ function AptCell({
           )}
           <span data-cell-name className="absolute text-center font-bold"
             style={{ left: 6, right: 6, top: 31, fontSize: '12.5px', lineHeight: 1.15,
-              display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', overflowWrap: 'break-word',
               fontWeight: unsold ? 500 : 700, fontStyle: unsold ? 'italic' : undefined, opacity: isDimmed ? 0.55 : unsold ? 0.7 : 1 }}>
-            {nameLabel || (unsold ? ui.notSoldWord : '')}
+            {/* The family name and the first name are two unbreakable pieces:
+                one line when they fit, else one under the other, each cut at
+                its END with "…" — never torn mid-word ("Weinst / ein" on a
+                narrow tile). */}
+            {nameLabel
+              ? splitName(nameLabel).map((ln, i, all) => (
+                  <span key={i}>{i > 0 && ' '}<span className="inline-block max-w-full truncate align-top">{ln}{i < all.length - 1 ? ',' : ''}</span></span>
+                ))
+              : unsold ? <span className="block">{ui.notSoldWord}</span> : null}
           </span>
           {taskInfo && (
             <span data-cell-task className="absolute text-center whitespace-nowrap overflow-hidden text-ellipsis"
@@ -1274,4 +1285,12 @@ function StripPhotos({ piece, stages, apartments, onKeep, onClose }: {
       )}
     </div>
   );
+}
+
+/** "Weinstein, Steven" → ["Weinstein", "Steven"]; a name without a comma stays one line. */
+function splitName(name: string): string[] {
+  const i = name.indexOf(',');
+  if (i < 0) return [name];
+  const rest = name.slice(i + 1).trim();
+  return rest ? [name.slice(0, i).trim(), rest] : [name.slice(0, i).trim()];
 }
