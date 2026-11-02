@@ -15,6 +15,7 @@
 //       done, and the headline moves on by itself;
 //   5 · a task form's pill shows every stage the task is for.
 import { chromium } from 'playwright';
+import { sendLocked, sendReady } from './wiz.mjs';
 
 const APP = process.env.APP || 'http://localhost:5173';
 let fails = 0;
@@ -180,31 +181,36 @@ check(JSON.stringify(openOnes.sort()) === JSON.stringify(['S3', custom.id].sort(
 check(await page.locator('[data-close-pick-stage="S2"][data-state="done"]').count() === 1, 'the finished ones are offered last, to add work to');
 await page.locator('[data-close-pick-stage="S3"]').click();
 await page.locator(`[data-close-pick-stage="${custom.id}"]`).click();
-await page.locator('[data-close-pick-next]').click();
+await page.locator('[data-close-next="pick"]').click();
 await page.waitForTimeout(400);
 check(await page.locator('[data-close-stage]').count() === 1 && /Did you finish all of these\?/i.test(await page.locator('[data-close-stage]').innerText()),
   'then "Did you finish all of these?"');
-check(await page.locator('[data-close-now]').isDisabled(), 'Send waits for the answer');
+check(await sendLocked(page), 'Send waits for the answer');
 await page.locator('[data-close-finished-pick="no"]').click();
 await page.waitForTimeout(300);
 check(await page.locator('[data-close-unfinished-pick]').count() === 2, '"Which ones did you finish?" lists only the two he did');
 await page.locator('[data-close-unfinished-pick="S3"]').click();
-await page.locator('[data-close-carry-on]').click();
+await page.locator('[data-close-next="which"]').click();
+await page.waitForTimeout(400);
+// Something left → "What's left / when are you back" (2026-11-02): "I don't know yet".
+check(await page.locator('[data-close-left]').count() === 1, '"What\'s left? When are you coming back?" after an unfinished stage');
+await page.locator('[data-close-back="unknown"]').click();
+await page.locator('[data-close-next="left"]').click();
 await page.waitForTimeout(400);
 check(await page.locator('[data-close-photo-step="S3"]').count() === 1 && await page.locator('[data-close-photo-step]').count() === 1,
   'a picture step for Concealed units first — the one he finished');
-check((await page.locator('[data-close-count]').innerText()).trim() === '0/1' && await page.locator('[data-close-now]').isDisabled(), '0/1 (one file by default since 2026-10-18), Send locked');
+check((await page.locator('[data-close-count]').innerText()).trim() === '0/1' && await sendLocked(page), '0/1 (one file by default since 2026-10-18), Send locked');
 await page.locator('input[type="file"][accept*="video"][accept*=".zip"]').setInputFiles(files(3));
 await page.waitForTimeout(2500);
 check((await page.locator('[data-close-count]').innerText()).trim() === '✓ 3', '✓ 3 after three pictures');
 // 2026-10-18 (recording 14:28): what he left unfinished gets a one-picture step too.
-check(await page.locator('[data-close-now]').isDisabled(), 'Send still waits — the unfinished stage needs its own picture');
-await page.locator('[data-close-photo-next]').click();
+check(await sendLocked(page), 'Send still waits — the unfinished stage needs its own picture');
+await page.locator('[data-close-next^="photo:"]').click();
 await page.waitForTimeout(300);
 check(await page.locator(`[data-close-photo-step="${custom.id}"]`).count() === 1, 'the next step is Extra drainage, one picture');
 await page.locator('input[type="file"][accept*="video"][accept*=".zip"]').setInputFiles(files(1));
 await page.waitForTimeout(1800);
-check(!(await page.locator('[data-close-now]').isDisabled()), 'Send unlocks');
+check(await sendReady(page), 'Send unlocks');
 d = await store(page);
 const tagged = d.contractorPhotos.filter(p => p.assignmentId === report.id && p.stageId === 'S3').length;
 check(tagged === 3, 'the three pictures are tagged with the stage they show', String(tagged));

@@ -68,33 +68,41 @@ check(/What did you do here today\?/.test(await page.locator('[data-close-pick]'
 const order = await page.locator('[data-close-pick-stage]').evaluateAll(bs => bs.map(x => x.getAttribute('data-close-pick-stage')));
 check(order[0] === 's1-piping' && order[order.length - 1] === 's1-fans' && !order.includes('skhtatb'), '2 · half done first, finished last, never Sold', JSON.stringify(order));
 check(await page.locator('[data-close-pick] [data-stage-info]').count() === order.length, '2 · every line has its (i)');
-check(await page.locator('[data-close-now]').isDisabled(), '2 · Send waits');
+check(await page.locator('[data-close-now]').count() === 0, '2 · no Send on this screen');
 await page.locator('[data-close-pick-stage="s-drilling"]').click();
 await page.locator('[data-close-pick-stage="s1-piping"]').click();
 await page.locator('[data-close-pick-stage="s1-fans"]').click();
 await page.locator('[data-close-pick-explain]').click();
 check(/Explain to us what you did here today/.test(await page.locator('[data-close-explain]').innerText()), '2 · "I don\'t see what I did here" asks him to explain');
 await page.locator('[data-close-explain] textarea').fill('fixed a leak in the bathroom ceiling');
-await page.locator('[data-close-pick-next]').click(); await page.waitForTimeout(300);
+await page.locator('[data-close-next="pick"]').click(); await page.waitForTimeout(300);
 check(/Did you finish all of these\?/.test(await page.locator('[data-close-finished-q]').innerText()) && /Drilling/.test(await page.locator('[data-close-picked]').innerText()) && /Piping/.test(await page.locator('[data-close-picked]').innerText()),
   '3 · "Did you finish all of these?" with what he picked', await page.locator('[data-close-picked]').innerText());
 await page.locator('[data-close-finished-pick="no"]').click(); await page.waitForTimeout(200);
 check(/Which ones did you finish\?/.test(await page.locator('[data-close-unfinished]').innerText()), '3 · No → "Which ones did you finish?"');
 check(await page.locator('[data-close-unfinished-pick][data-on="1"]').count() === 0, '3 · none lit until he taps');
 await page.locator('[data-close-unfinished-pick="s-drilling"]').click(); await page.waitForTimeout(150);
-await page.locator('[data-close-carry-on]').click(); await page.waitForTimeout(300);
+await page.locator('[data-close-next="which"]').click(); await page.waitForTimeout(300);
 check(await page.locator('[data-close-more]').count() === 0, '3 · no "anything else?" question after that');
+// 3b · what's left / when back — "I don't know yet"
+await page.locator('[data-close-back="unknown"]').click(); await page.waitForTimeout(150);
+await page.locator('[data-close-next="left"]').click(); await page.waitForTimeout(300);
 const steps = page.locator('[data-close-photo-step]');
 check(await steps.count() === 1, '4 · one picture step', String(await steps.count()));
 await page.locator('input[type="file"][accept*="video"][accept*=".zip"]').first().setInputFiles([{ name: 'a.png', mimeType: 'image/png', buffer: PNG }, { name: 'b.png', mimeType: 'image/png', buffer: PNG }]);
-for (let i = 0; i < 40 && await page.locator('[data-close-now]').isDisabled(); i++) await page.waitForTimeout(250);
-check(!(await page.locator('[data-close-now]').isDisabled()), '4 · Send unlocks with the pictures');
+const pn = page.locator('[data-close-next^="photo:"]');
+for (let i = 0; i < 40 && await pn.isDisabled(); i++) await page.waitForTimeout(250);
+check(!(await pn.isDisabled()), '4 · Next unlocks with the pictures');
+await pn.click(); await page.waitForTimeout(300);
+check(/The office will set the day/.test(await page.locator('[data-close-summary]').innerText()), '4 · the summary says the office sets the day');
 await page.locator('[data-close-now]').click(); await page.waitForTimeout(1500);
 d = await data(); t = d.contractorAssignments.find(x => x.id === t.id);
 const a = d.apartments.find(x => x.id === 'A1-12');
 check(!!t.completedAt, '4 · the task is closed today');
 check(a.stageMarks['s-drilling'] === 'done' && a.stageMarks['s1-piping'] === 'pending' && a.stageMarks['s1-fans'] === 'done', '4 · Drilling done, Piping stays half done, Fans stays done', JSON.stringify(a.stageMarks));
 check(t.offList?.[0]?.text?.startsWith('fixed a leak'), '4 · his explanation reaches the office', JSON.stringify(t.offList));
+check(d.contractorAssignments.length === 1, '4 · "I don\'t know yet" books no day', String(d.contractorAssignments.length));
+check((d.contractorNotes || []).some(x => /Coming back: not known yet\. Please set the day\./.test(x.text)), '4 · the office is asked to set the day');
 check(sorts.length === 1 && sorts[0].stages.map(x => x.id).sort().join() === 's-drilling,s1-fans,s1-piping', '4 · the AI sorts the pictures among what he did', JSON.stringify(sorts[0]?.stages?.map(x => x.id)));
 // the next visit (a fresh page, the same phone)
 await page.close();

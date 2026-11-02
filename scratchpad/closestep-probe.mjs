@@ -75,17 +75,24 @@ await page.locator('[data-close-job]').first().click(); await page.waitForTimeou
 await page.locator('[data-close-finished-pick="yes"]').click(); await page.waitForTimeout(250);
 await page.locator('[data-close-more-pick="yes"]').click(); await page.waitForTimeout(250);
 await page.locator('[data-close-extra="S4"]').click(); await page.waitForTimeout(200);
-await page.locator('[data-close-more-next]').click(); await page.waitForTimeout(300);
+// One screen per step (2026-11-02): the "anything else" list has its own Next.
+check(await page.locator('[data-close-more]').count() === 0 && await page.locator('[data-close-now]').count() === 0, 'the list is a screen of its own, no Send on it');
+await page.locator('[data-close-next="moreList"]').click(); await page.waitForTimeout(300);
 const steps = page.locator('[data-close-photo-step]');
 check(await steps.count() === 1 && await page.locator('[data-close-photo-all]').count() === 1, 'after Next: ONE picture step for the whole day');
 const head = (await steps.innerText()).replace(/\s+/g, ' ');
 check(/Pictures of today's work/.test(head) && /Fans/.test(head) && /Concealed units/.test(head) && /Wall units/.test(head), 'it says "Pictures of today\'s work" and names every stage he did', head.slice(0, 120));
 check(await page.locator('[data-close-photo-next]').count() === 0, 'no per-stage Next →');
 check(await steps.getAttribute('data-step-need') === '1', 'the close minimum (1) is asked once');
-check(await page.locator('[data-close-now]').isDisabled(), 'Send waits for the pictures');
+const pnext = page.locator('[data-close-next^="photo:"]');
+check(await page.locator('[data-close-now]').count() === 0 && await pnext.isDisabled(), 'Next waits for the pictures (Send is on the last screen)');
 await page.locator('input[type="file"][accept*="video"][accept*=".zip"]').first().setInputFiles([pic(1), pic(2)]);
-for (let i = 0; i < 40 && await page.locator('[data-close-now]').isDisabled(); i++) await page.waitForTimeout(250);
-check(!(await page.locator('[data-close-now]').isDisabled()), 'with the pictures in, Send unlocks', (await steps.innerText()).replace(/\s+/g, ' ').slice(0, 300));
+for (let i = 0; i < 40 && await pnext.isDisabled(); i++) await page.waitForTimeout(250);
+check(!(await pnext.isDisabled()), 'with the pictures in, Next unlocks', (await steps.innerText()).replace(/\s+/g, ' ').slice(0, 300));
+await pnext.click(); await page.waitForTimeout(300);
+const sum = await page.locator('[data-close-summary]').innerText();
+check(/Fans — finished/.test(sum) && /Concealed units — finished/.test(sum) && /Wall units — finished/.test(sum) && /2 pictures/.test(sum), 'the last screen sums it up', sum.replace(/\n/g, ' | '));
+check(!(await page.locator('[data-close-now]').isDisabled()), 'Send is ready on the last screen');
 await page.locator('[data-close-now]').click(); await page.waitForTimeout(1500);
 const d = await page.evaluate(() => JSON.parse(localStorage.getItem('wolfson_app_data')));
 check(!!d.contractorAssignments.find(a => a.id === 'T-1').completedAt, 'the job is closed at once');

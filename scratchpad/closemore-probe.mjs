@@ -13,6 +13,7 @@
 //       "Make it a task of its own" makes a closed task.
 // All names are made up.
 import { chromium } from 'playwright';
+import { sendLocked, sendReady } from './wiz.mjs';
 
 const APP = process.env.APP || 'http://localhost:5173';
 let fails = 0;
@@ -89,7 +90,7 @@ check(await page.locator('[data-close-more]').count() === 0, '1 · "anything els
 await page.locator('[data-close-finished-pick="yes"]').click();
 await page.waitForTimeout(250);
 check(/anything else here today/i.test(await page.locator('[data-close-more]').innerText()), '1 · then "Did you do anything else here today?"');
-check(await page.locator('[data-close-now]').isDisabled(), '1 · Send waits for it');
+check(await sendLocked(page), '1 · Send waits for it');
 await page.locator('[data-close-more-pick="yes"]').click();
 await page.waitForTimeout(250);
 const chips = await page.locator('[data-close-extras] .flex-wrap > button').evaluateAll(bs => bs.map(b => b.getAttribute('data-close-extra') || (b.hasAttribute('data-close-offlist') ? 'OFF' : '?')));
@@ -97,27 +98,27 @@ check(JSON.stringify(chips) === JSON.stringify(['OFF', 'S4', 'S5', 'S6']), '1 ·
 await page.locator('[data-close-extra="S4"]').click();
 await page.locator('[data-close-extra-part="S4"]').click();
 await page.waitForTimeout(200);
-check(await page.locator('[data-close-more-next]').isDisabled(), '1 · Part of it cannot go on without his words');
+check(await page.locator('[data-close-next="moreList"]').isDisabled(), '1 · Part of it cannot go on without his words');
 await page.locator('[data-close-part-words="S4"] textarea').fill('hung the brackets only');
 await page.locator('[data-close-offlist]').click();
 await page.waitForTimeout(200);
-check(await page.locator('[data-close-more-next]').isDisabled(), '1 · Not on this list cannot go on empty either');
+check(await page.locator('[data-close-next="moreList"]').isDisabled(), '1 · Not on this list cannot go on empty either');
 await page.locator('[data-close-offlist-box] textarea').fill('took out garbage, there was a lot of it');
-check(!(await page.locator('[data-close-more-next]').isDisabled()), '1 · with both written, Next unlocks');
-await page.locator('[data-close-more-next]').click();
+check(!(await page.locator('[data-close-next="moreList"]').isDisabled()), '1 · with both written, Next unlocks');
+await page.locator('[data-close-next="moreList"]').click();
 await page.waitForTimeout(300);
 const step1 = await page.locator('[data-close-photo-step]').getAttribute('data-step-need');
 check(step1 === '1', '1 · the job\'s own step needs one file by default (2026-10-18)', step1);
 await page.locator(media).first().setInputFiles([pic(1), film]);
 await page.waitForTimeout(2500);
 check((await page.locator('[data-close-count]').innerText()).trim() === '✓ 2', '1 · a picture and a video are (more than) enough', await page.locator('[data-close-count]').innerText());
-await page.locator('[data-close-photo-next]').click();
+await page.locator('[data-close-next^="photo:"]').click();
 await page.waitForTimeout(300);
 check(await page.locator('[data-close-photo-step="S4"]').getAttribute('data-step-need') === '1', '1 · the part-of-it stage asks for ONE picture');
-check(await page.locator('[data-close-now]').isDisabled(), '1 · Send still locked');
+check(await sendLocked(page), '1 · Send still locked');
 await page.locator(media).first().setInputFiles([pic(2)]);
 await page.waitForTimeout(2000);
-check(!(await page.locator('[data-close-now]').isDisabled()), '1 · Send unlocks');
+check(await sendReady(page), '1 · Send unlocks');
 await page.locator('[data-close-now]').click();
 await page.waitForTimeout(1800);
 let d = await wolf(page);
@@ -149,13 +150,14 @@ await page.locator('[data-close-extra-part="S3"]').click();
 await page.locator('[data-close-part-words="S3"] textarea').fill('connections only');
 await page.locator('[data-close-offlist]').click();
 await page.locator('[data-close-offlist-box] textarea').fill('swept the stairs');
-await page.locator('[data-close-more-next]').click();
+await page.locator('[data-close-next="moreList"]').click();
 await page.waitForTimeout(300);
 await page.locator(media).first().setInputFiles([pic(3), pic(4), pic(5)]);
 await page.waitForTimeout(2500);
-check(await page.locator('[data-close-photo-next]').count() === 0 && await page.locator('[data-close-photo-step="S3"]').count() === 0,
+const pr2 = (await page.locator('[data-close-progress]').getAttribute('data-close-progress')).split('/').map(Number);
+check(await page.locator('[data-close-next="photo:0"]').count() === 1 && await page.locator('[data-close-photo-step="S3"]').count() === 0 && pr2[1] - pr2[0] === 1,
   '2 · with the setting off, the part stage asks for no picture');
-check(!(await page.locator('[data-close-now]').isDisabled()), '2 · three pictures of the job are enough to close');
+check(await sendReady(page), '2 · three pictures of the job are enough to close');
 await page.locator('[data-close-now]').click();
 await page.waitForTimeout(1800);
 await page.close();

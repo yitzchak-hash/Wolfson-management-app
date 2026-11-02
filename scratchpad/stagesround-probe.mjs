@@ -8,6 +8,7 @@
 //       fills the bubble with the words (the transcriber stubbed here).
 // Plain server on 5173 for A–C, keyed 5174 for D. All names made up.
 import { chromium } from 'playwright';
+import { sendLocked, sendReady } from './wiz.mjs';
 import { PDFDocument, rgb } from 'pdf-lib';
 
 const APP = process.env.APP || 'http://localhost:5173';
@@ -79,9 +80,9 @@ const b = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-124
   await page.locator('[data-close-pick-explain]').click();
   await page.waitForTimeout(200);
   check(await page.locator('[data-close-explain]').count() === 1, 'B · "I don\'t see what I did here" asks him to explain');
-  check(await page.locator('[data-close-pick-next]').isDisabled(), 'B · Next waits for words');
+  check(await page.locator('[data-close-next="pick"]').isDisabled(), 'B · Next waits for words');
   await page.locator('[data-close-explain] textarea').fill('сварка труб на крыше');
-  check(!(await page.locator('[data-close-pick-next]').isDisabled()), 'B · with his words, he can go on');
+  check(!(await page.locator('[data-close-next="pick"]').isDisabled()), 'B · with his words, he can go on');
   await ctx.close();
 }
 

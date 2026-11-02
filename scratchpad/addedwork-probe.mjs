@@ -15,6 +15,7 @@
 // Runs against the KEYED server (Drive backend on, every route stubbed).
 // All names are made up.
 import { chromium } from 'playwright';
+import { sendLocked, sendReady } from './wiz.mjs';
 
 const APP = process.env.APP || 'http://localhost:5174';
 let fails = 0;
@@ -119,23 +120,23 @@ await page.waitForTimeout(200);
 check(await page.locator('[data-close-added-row="S3"]').count() === 1, '2 · picking it says it stays finished');
 check(/stays finished/i.test(await page.locator('[data-close-added-row="S3"]').innerText()), '2 · in words');
 check(await page.locator('[data-close-extra-part="S3"]').count() === 0, '2 · no All of it / Part of it for a finished stage');
-check(!(await page.locator('[data-close-more-next]').isDisabled()), '2 · his words are optional — Next is open');
+check(!(await page.locator('[data-close-next="moreList"]').isDisabled()), '2 · his words are optional — Next is open');
 await page.locator('[data-close-added-row="S3"] textarea').fill('fixed a leak on one unit');
-await page.locator('[data-close-more-next]').click();
+await page.locator('[data-close-next="moreList"]').click();
 await page.waitForTimeout(300);
 await page.locator(media).first().setInputFiles([pic(1)]);
 await page.waitForTimeout(2500);
-await page.locator('[data-close-photo-next]').click();
+await page.locator('[data-close-next^="photo:"]').click();
 await page.waitForTimeout(300);
 const st = page.locator('[data-close-photo-step="S3"]');
 check(await st.count() === 1 && await st.getAttribute('data-step-need') === '1', '2 · a picture step of its own, one picture');
 check(/work added to a finished stage/i.test(await st.innerText()), '2 · named for what it is');
-check(await page.locator('[data-close-now]').isDisabled(), '2 · Send waits for that picture');
+check(await sendLocked(page), '2 · Send waits for that picture');
 const before = folders.length;
 await page.locator(media).first().setInputFiles([pic(2)]);
 await page.waitForTimeout(2500);
 check(folders.slice(before).includes('Concealed units'), "2 · the picture goes into the finished stage's own folder", JSON.stringify(folders));
-check(!(await page.locator('[data-close-now]').isDisabled()), '2 · Send unlocks');
+check(await sendReady(page), '2 · Send unlocks');
 await page.locator('[data-close-now]').click();
 await page.waitForTimeout(2000);
 const d = await wolf();

@@ -7,7 +7,7 @@ import { ContractorAssignment, ContractorPhoto, Contractor, Apartment, Project, 
 import { transcribeMemo } from '../data/transcribe';
 import { setActiveSpeaker } from '../data/speakLang';
 import { daysOf, futureDaysOf, dayIso, parseDay } from '../data/taskDays';
-import { notFinishedPlan, notFinishedLine, morningAskDay, needsNewDay, daysBetween } from '../data/notFinished';
+import { notFinishedPlan, notFinishedLine, morningAskDay, needsNewDay, daysBetween, comeBackDay } from '../data/notFinished';
 import { NotFinishedSheet, unfinishedWords } from '../components/tasks/NotFinishedSheet';
 import { PlanPinOverlay } from '../components/apartment/PlanPinOverlay';
 import { printSheet, printEsc } from '../data/printing';
@@ -20,6 +20,7 @@ import {
   BookOpen, Download, Paperclip, MessageSquare, CloudUpload,
   ChevronLeft, ChevronRight, ChevronDown, History, PenLine, Mic,
   Settings as SettingsIcon, Bell, Info, ArrowRightLeft, Video, FolderOpen, Trash2,
+  ChevronsRight, HelpCircle,
 } from 'lucide-react';
 import { BuildingDiagram } from '../components/diagram/BuildingDiagram';
 import { permsOf } from '../data/workerLevels';
@@ -870,6 +871,28 @@ export function ContractorPortal() {
   const [pickWords, setPickWords] = useState('');
   const [pickExplain, setPickExplain] = useState(false);
   const [pickDone, setPickDone] = useState(false);
+  /**
+   * THE CLOSING WIZARD (owner, 2026-11-02 — "1 screen per step"): the close
+   * of a stage job in a building workspace shows ONE question per screen, a
+   * thin progress bar, a back arrow, and "Send and close the job" only on
+   * the last screen. `wizKey` is the screen showing; `wizGo` asks the next
+   * render to move one screen on (the list of screens depends on the answer
+   * just given, so it is read after that answer has landed).
+   */
+  const [wizKey, setWizKey] = useState<string | null>(null);
+  const [wizGo, setWizGo] = useState(false);
+  /** The pick screen's Next, kept from the render that drew it. */
+  const pickGoRef = useRef<(() => void) | null>(null);
+  /** The closing screen's scrolling body — each wizard screen starts at its top. */
+  const closeScrollRef = useRef<HTMLDivElement | null>(null);
+  /**
+   * The "Not finished today" button's two questions, now inside the close
+   * (asked only after "No"): what is left (optional), and when he is coming
+   * back (required). Tomorrow or a day puts the flat on his list that day.
+   */
+  const [leftWords, setLeftWords] = useState('');
+  const [backWhen, setBackWhen] = useState<'tomorrow' | 'pick' | 'unknown' | null>(null);
+  const [backPicked, setBackPicked] = useState('');
   const partNeedsPicture = useStore(st => st.boardSettings.__tv?.partNeedsPicture !== false);
   const tipusStagesPortal = useStore(st => st.boardSettings[st.currentProjectId]?.tipusStages);
   /** The worker as a User, for writes the store attributes to a person. */
@@ -1759,6 +1782,7 @@ export function ContractorPortal() {
       setCloseWhen(null);
       setClosePhotoIdx(0);
       setMoreAsk(null); setExtraPick({}); setPartWords({}); setAddedWords({}); setOffOn(false); setOffText(''); setMoreDone(false);
+      setWizKey(null); setWizGo(false); setLeftWords(''); setBackWhen(null); setBackPicked('');
       closeStageRef.current = null;
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1801,6 +1825,37 @@ export function ContractorPortal() {
     updateContractorAssignment(selectedAssignment.id, closeWhen === 'past'
       ? { completedAt, days: liveA.days }
       : { completedAt });
+    /**
+     * The day he is coming back puts this flat on his list that day, and on
+     * the office's notebook (owner's answer 1, 2026-11-02): an open "working
+     * here" task started without stages, so that day's close asks what he
+     * did, half-done stages first. Never a second one for the same flat and
+     * day. "I don't know yet" books nothing — the closing message asks the
+     * office to set the day.
+     */
+    if (wizard && leftAsk && backNext) {
+      const already = useStore.getState().contractorAssignments.some(x => x.stageReport && !x.completedAt && !x.problem && !x.general
+        && x.contractorId === contractorId && x.apartmentId === selectedAssignment.apartmentId && x.dueDate === backNext);
+      if (!already) {
+        const names = closeUnfinishedIds.map(id => wsStageList.find(x => x.id === id)?.name).filter(Boolean);
+        addContractorAssignment({
+          id: `SR-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`,
+          contractorId,
+          apartmentId: selectedAssignment.apartmentId,
+          buildingId: selectedAssignment.buildingId,
+          // English, always (a stored record); every screen translates it.
+          taskDescription: `${names.length ? `${names.join(' + ')} — ` : ''}working here today`,
+          dueDate: backNext,
+          stageId: null,
+          pickAtClose: true,
+          priority: 'normal',
+          completedAt: null,
+          stageReport: true,
+          createdBy: contractorId,
+          createdByName: contractor?.name ?? '',
+        } as never);
+      }
+    }
     addActivityLog({
       apartmentId: selectedAssignment.apartmentId,
       apartmentNumber: apt?.apartmentNumber ?? '',
@@ -1903,7 +1958,15 @@ export function ContractorPortal() {
       return { name: st?.name ?? '', part: extraPick[id] === 'part', words: (partWords[id] ?? '').trim() };
     }).filter(e => e.name);
     const off = moreAsk === 'yes' && offOn && offText.trim() ? [offText.trim()] : [];
-    const text = [extrasLine(extras, off, added), closingComment.trim()].filter(Boolean).join('\n\n');
+    // What is left and when he is back (the wizard's "No" path) — English, a stored record.
+    const leftLine = wizard && leftAsk ? [
+      `Not finished: ${closeUnfinishedIds.map(id => wsStageList.find(x => x.id === id)?.name ?? id).join(', ')} (half done).`,
+      leftWords.trim() ? `What's left: ${leftWords.trim()}` : '',
+      backNext
+        ? `Coming back ${parseDay(backNext).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })}.`
+        : 'Coming back: not known yet. Please set the day.',
+    ].filter(Boolean).join('\n') : '';
+    const text = [extrasLine(extras, off, added), leftLine, closingComment.trim()].filter(Boolean).join('\n\n');
     const newPhotoIds = getMedia(selectedAssignment.id)
       .map(m => m.id)
       .filter(id => !preClosingIds.current.has(id));
@@ -2098,6 +2161,8 @@ export function ContractorPortal() {
    * step per thing that needs them.
    */
   const stageClose = !!liveSel && !selProblem && !liveSel.general;
+  const dayLocale = readLang === 'he' ? 'he-IL' : readLang === 'ru' ? 'ru-RU' : 'en-GB';
+  const niceDay = (iso: string) => parseDay(iso).toLocaleDateString(dayLocale, { weekday: 'short', day: 'numeric', month: 'short' });
   /** A task started without stages, still on "What did you do here today?". */
   const pickStep = stageClose && !!liveSel?.pickAtClose && !pickDone;
   const isReportClose = stageClose && !!liveSel?.stageReport && closeStages.length > 0;
@@ -2155,8 +2220,69 @@ export function ContractorPortal() {
   const stepOk = (st: PhotoStep) => enoughMedia(stepMedia(st), st.need);
   const closeCountFor = (sid: string) => selMedia.filter(m => m.stageId === sid).length;
   void closeCountFor;
+  /**
+   * THE CLOSING WIZARD — every stage job in a building workspace. The Job
+   * Board's jobs and problems keep their own close for now (owner's answer 4,
+   * 2026-11-02). The screens, in order, each only when it has a question:
+   * what did you do · when did you finish · did you finish · which ones ·
+   * what's left and when are you back · anything else · is it one of these ·
+   * the pictures · the summary with the office box and Send.
+   */
+  const wizard = stageClose && currentProjectId !== 'general';
+  /** Something of his own stays half done — the not-finished questions are asked. */
+  const leftAsk = hasOwnStages && closeFinished === 'no';
+  const closeToday = dayIso(new Date());
+  /** The day he is coming back: a day, null for "I don't know yet", '' while unanswered. */
+  const backNext: string | null = backWhen === 'tomorrow' ? comeBackDay(closeToday)
+    : backWhen === 'pick' ? (backPicked > closeToday ? backPicked : '')
+    : backWhen === 'unknown' ? null : '';
+  const leftOk = backWhen !== null && backNext !== '';
+  const wizScreens: string[] = !wizard ? [] : [
+    ...(liveSel?.pickAtClose ? ['pick'] : []),
+    ...(closePastDay ? ['when'] : []),
+    ...(hasOwnStages ? ['finished'] : []),
+    ...(hasOwnStages && closeStages.length > 1 && closeFinished === 'no' ? ['which'] : []),
+    ...(leftAsk ? ['left'] : []),
+    ...(!liveSel?.pickAtClose ? ['more'] : []),
+    ...(!liveSel?.pickAtClose && moreAsk === 'yes' ? ['moreList'] : []),
+    ...(photosNeeded ? photoSteps.map((_, i) => `photo:${i}`) : []),
+    'send',
+  ];
+  const wizCur = wizKey && wizScreens.includes(wizKey) ? wizKey : (wizScreens[0] ?? 'send');
+  const wizIdx = wizScreens.indexOf(wizCur);
+  /** A yes/no screen moves on by itself the moment it is answered — no Next. */
+  const wizAuto = wizCur === 'when' || wizCur === 'finished' || wizCur === 'more';
+  const wizStep = wizCur.startsWith('photo:') ? photoSteps[Number(wizCur.slice(6))] : undefined;
+  const wizOk = wizCur === 'pick' ? (pickSel.length > 0 || (pickExplain && !!pickWords.trim()))
+    : wizCur === 'which' ? closeUnfinished.length > 0
+    : wizCur === 'moreList' ? moreValid
+    : wizCur === 'left' ? leftOk
+    : wizStep ? stepOk(wizStep)
+    : true;
+  useEffect(() => {
+    if (!wizGo) return;
+    setWizGo(false);
+    const i = wizScreens.indexOf(wizCur);
+    if (i >= 0 && i < wizScreens.length - 1) setWizKey(wizScreens[i + 1]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [wizGo]);
+  useEffect(() => { closeScrollRef.current?.scrollTo?.({ top: 0 }); }, [wizCur]);
+  const wizNext = () => {
+    if (!wizOk) return;
+    if (wizCur === 'pick') pickGoRef.current?.();
+    if (wizCur === 'which') setCloseAsked(true);
+    if (wizCur === 'moreList') setMoreDone(true);
+    setWizGo(true);
+  };
+  const wizBack = () => {
+    const prev = wizScreens[wizIdx - 1];
+    if (!prev) { setFinishAsk(null); setClosing(false); return; }
+    // Back to "What did you do?" with his picks kept.
+    if (prev === 'pick') { setPickSel([...closeStages, ...Object.keys(extraPick)]); setPickDone(false); }
+    setWizKey(prev);
+  };
   const canComplete = !pickStep && (stageClose
-    ? finishedOk && moreOk && (!photosNeeded || photoSteps.every(stepOk))
+    ? finishedOk && moreOk && (!photosNeeded || photoSteps.every(stepOk)) && (!wizard || !leftAsk || leftOk)
     : (enoughMedia(selMedia, MIN_CLOSE_MEDIA) || !photosNeeded))
     // A file still going up belongs to this close — its closing note names it.
     && !uploading
@@ -2580,7 +2706,11 @@ plansPdfFileId && (
                       {UW.yes}
                     </button>
                     <button type="button" data-morning-no
-                      onClick={() => { arriveNotFinishedRef.current = true; openTask(projectId, a); }}
+                      onClick={() => {
+                        // A building job's "No" is the close's own "No" now — the close asks what is left.
+                        if (projectId === 'general') arriveNotFinishedRef.current = true; else arriveClosingRef.current = true;
+                        openTask(projectId, a);
+                      }}
                       className="py-2.5 rounded-xl text-[14px] font-bold text-amber-900 bg-white border-2 border-amber-400">
                       {UW.no}
                     </button>
@@ -4028,8 +4158,10 @@ plansPdfFileId && (
                   /* Close job — and beside it, for an ordinary job, "Not
                      finished today" (owner, 2026-10-11): the job stays open
                      and moves to the day he is coming back. */
-                  <div className={!(a.problem && isLiveProblem(a)) ? 'grid grid-cols-2 gap-2' : ''}>
-                  {!(a.problem && isLiveProblem(a)) && (
+                  <div className={!(a.problem && isLiveProblem(a)) && currentProjectId === 'general' ? 'grid grid-cols-2 gap-2' : ''}>
+                  {/* Building jobs ask "what's left / when are you back" inside the
+                      close now (owner, 2026-11-02); only the Job Board keeps the button. */}
+                  {!(a.problem && isLiveProblem(a)) && currentProjectId === 'general' && (
                     <button
                       data-not-finished-btn
                       onClick={() => setNotFinishedOpen(true)}
@@ -4102,7 +4234,7 @@ plansPdfFileId && (
               <div data-closing-panel className="fixed inset-0 z-[60] bg-white flex flex-col">
                 <div className="flex items-center gap-3 px-4 py-3.5 flex-shrink-0 text-white"
                   style={{ backgroundColor: '#1e3a5f' }}>
-                  <button onClick={() => { setFinishAsk(null); setClosing(false); }}
+                  <button data-close-back-arrow onClick={() => { if (wizard && !finishAsk) wizBack(); else { setFinishAsk(null); setClosing(false); } }}
                     className="p-1.5 rounded-lg hover:bg-white/10 flex-shrink-0" title={s.cancel}>
                     {s.isRtl ? <ChevronRight size={22} /> : <ChevronLeft size={22} />}
                   </button>
@@ -4115,8 +4247,16 @@ plansPdfFileId && (
                     </div>
                   </div>
                 </div>
+                {/* The wizard's thin bar: one piece per screen, lit up to this one. */}
+                {wizard && !finishAsk && wizScreens.length > 1 && (
+                  <div data-close-progress={`${wizIdx + 1}/${wizScreens.length}`} className="flex gap-1.5 px-4 pt-3 flex-shrink-0">
+                    {wizScreens.map((k, i) => (
+                      <div key={k} className="flex-1 h-1.5 rounded-full" style={{ backgroundColor: i <= wizIdx ? '#1e3a5f' : '#d9dee6' }} />
+                    ))}
+                  </div>
+                )}
 
-                <div className="flex-1 overflow-y-auto px-4 py-5" style={{ overscrollBehavior: 'contain' }}>
+                <div ref={closeScrollRef} className="flex-1 overflow-y-auto px-4 py-5" style={{ overscrollBehavior: 'contain' }}>
                   {finishAsk ? (
                     /* The finish-early ask — big simple words in the
                        worker's own language, only reachable after the
@@ -4163,7 +4303,9 @@ plansPdfFileId && (
                         const andWord = w(' and ', ' ו', ' и ');
                         const joined = names.length > 1 ? `${names.slice(0, -1).join(', ')}${andWord}${names[names.length - 1]}` : (names[0] ?? '');
                         const showSteps = finishedOk && moreOk && photosNeeded;
-                        const step = showSteps ? photoSteps[Math.min(closePhotoIdx, Math.max(0, photoSteps.length - 1))] : undefined;
+                        const step = wizard ? wizStep : showSteps ? photoSteps[Math.min(closePhotoIdx, Math.max(0, photoSteps.length - 1))] : undefined;
+                        /** The wizard draws one screen; the Job Board's close still draws them all. */
+                        const show = (k: string) => !wizard || wizCur === k;
                         closeStageRef.current = step && step.id ? step.id : null;
                         const stepName = (st: PhotoStep) => st.ids.length ? st.ids.map(nm).join(' · ') : (apt ? aptLabel(apt) : '');
                         const stepColor = (st: PhotoStep) => wsStageList.find(x => x.id === st.ids[0])?.color ?? '#1e3a5f';
@@ -4193,6 +4335,7 @@ plansPdfFileId && (
                             setCloseFinished('yes'); setCloseUnfinished([]); setCloseAsked(open.length === 0);
                             setClosePhotoIdx(0); setPickDone(true);
                           };
+                          pickGoRef.current = goOn;
                           return (
                             <div data-close-pick className="space-y-2">
                               <p className="text-center font-extrabold text-gray-800" style={{ fontSize: 18, lineHeight: 1.3 }}>
@@ -4261,25 +4404,25 @@ plansPdfFileId && (
                                     placeholder={w('Say it or type it', 'תגיד או תכתוב', 'Скажите или напишите')} />
                                 </div>
                               )}
-                              <button data-close-pick-next disabled={!ready} onClick={goOn}
+                              {!wizard && <button data-close-pick-next disabled={!ready} onClick={goOn}
                                 className="w-full py-3.5 rounded-xl text-base font-bold text-white disabled:opacity-40"
                                 style={{ background: 'linear-gradient(135deg, #1e3a5f, #2c4f78)' }}>
                                 {w('Next', 'הבא', 'Дальше')}
-                              </button>
+                              </button>}
                             </div>
                           );
                         }
                         return (
                           <div data-close-stage className="space-y-5">
                             {/* 0 · The task's day has gone by: when did you finish? */}
-                            {closePastDay && (
+                            {closePastDay && show('when') && (
                               <div data-close-when>
                                 <p className="text-center font-extrabold text-gray-800 mb-3" style={{ fontSize: 17, lineHeight: 1.3 }}>
                                   {w('When did you finish?', 'מתי סיימת?', 'Когда вы закончили?')}
                                 </p>
                                 <div className="grid grid-cols-2 gap-2">
                                   <button data-close-when-pick="past" data-on={closeWhen === 'past' ? '1' : undefined}
-                                    onClick={() => { setCloseWhen('past'); setClosePhotoIdx(0); }}
+                                    onClick={() => { setCloseWhen('past'); setClosePhotoIdx(0); if (wizard) setWizGo(true); }}
                                     className="py-3.5 px-2 rounded-xl text-base font-extrabold border active:scale-[0.98]"
                                     style={yn(closeWhen === 'past', 'g')}>
                                     {daysBetween(closePastDay, dayIso(new Date())) === 1
@@ -4287,7 +4430,7 @@ plansPdfFileId && (
                                       : format(parseDay(closePastDay), 'EEE d MMM')}
                                   </button>
                                   <button data-close-when-pick="today" data-on={closeWhen === 'today' ? '1' : undefined}
-                                    onClick={() => { setCloseWhen('today'); setClosePhotoIdx(0); }}
+                                    onClick={() => { setCloseWhen('today'); setClosePhotoIdx(0); if (wizard) setWizGo(true); }}
                                     className="py-3.5 px-2 rounded-xl text-base font-extrabold border active:scale-[0.98]"
                                     style={yn(closeWhen === 'today', 'g')}>
                                     {w('Today', 'היום', 'Сегодня')}
@@ -4301,7 +4444,7 @@ plansPdfFileId && (
                               </div>
                             )}
                             {/* 1 · Did you finish doing …? */}
-                            {hasOwnStages && whenOk && (
+                            {hasOwnStages && whenOk && show('finished') && (
                               <div data-close-finished>
                                 <p data-close-finished-q className="text-center font-extrabold text-gray-800 mb-3" style={{ fontSize: 17, lineHeight: 1.3 }}>
                                   {liveSel?.pickAtClose
@@ -4311,7 +4454,7 @@ plansPdfFileId && (
                                 {liveSel?.pickAtClose && <p data-close-picked className="text-center font-bold text-gray-600 -mt-2 mb-3" style={{ fontSize: 14 }}>{joined}</p>}
                                 <div className="grid grid-cols-2 gap-2">
                                   <button data-close-finished-pick="yes" data-on={closeAsked && closeFinished === 'yes' ? '1' : undefined}
-                                    onClick={() => { setCloseFinished('yes'); setCloseUnfinished([]); setCloseAsked(true); setClosePhotoIdx(0); }}
+                                    onClick={() => { setCloseFinished('yes'); setCloseUnfinished([]); setCloseAsked(true); setClosePhotoIdx(0); if (wizard) setWizGo(true); }}
                                     className="py-3.5 rounded-xl text-base font-extrabold border active:scale-[0.98]"
                                     style={yn(closeAsked && closeFinished === 'yes', 'g')}>
                                     {w('Yes', 'כן', 'Да')}
@@ -4323,6 +4466,7 @@ plansPdfFileId && (
                                       if (closeStages.length === 1) { setCloseUnfinished([closeStages[0]]); setCloseAsked(true); }
                                       // "Which ones did you finish?" starts with none lit — he taps the ones he finished.
                                       else { if (liveSel?.pickAtClose) setCloseUnfinished([...closeStages]); setCloseAsked(false); }
+                                      if (wizard) setWizGo(true);
                                     }}
                                     className="py-3.5 rounded-xl text-base font-extrabold border active:scale-[0.98]"
                                     style={yn(closeFinished === 'no', 'o')}>
@@ -4332,7 +4476,7 @@ plansPdfFileId && (
                               </div>
                             )}
                             {/* 1b · Which didn't you finish? — only the task's own. */}
-                            {hasOwnStages && whenOk && closeStages.length > 1 && closeFinished === 'no' && (
+                            {hasOwnStages && whenOk && closeStages.length > 1 && closeFinished === 'no' && show('which') && (
                               <div data-close-unfinished>
                                 <p className="text-center font-extrabold text-gray-800 mb-2" style={{ fontSize: 16, lineHeight: 1.35 }}>
                                   {liveSel?.pickAtClose
@@ -4358,7 +4502,14 @@ plansPdfFileId && (
                                     );
                                   })}
                                 </div>
-                                {!closeAsked && (
+                                {wizard && liveSel?.pickAtClose && (
+                                  <p data-close-stays-half className="text-center text-gray-500 mt-3" style={{ fontSize: 13 }}>
+                                    {closeUnfinishedIds.length === closeStages.length
+                                      ? w('Tap the ones you finished. The rest stays half done.', 'סמן את מה שסיימת. השאר יישאר חצי גמור.', 'Отметьте, что закончили. Остальное останется наполовину.')
+                                      : <>{closeUnfinishedIds.map(nm).join(', ')} {w('stays half done', 'יישאר חצי גמור', 'останется наполовину')}</>}
+                                  </p>
+                                )}
+                                {!closeAsked && !wizard && (
                                   <button data-close-carry-on disabled={!closeUnfinished.length}
                                     onClick={() => { setCloseAsked(true); setClosePhotoIdx(0); }}
                                     className="mt-3 w-full py-3 rounded-xl text-base font-bold text-white disabled:opacity-40"
@@ -4368,27 +4519,27 @@ plansPdfFileId && (
                                 )}
                               </div>
                             )}
-                            {liveSel?.pickAtClose && (
+                            {liveSel?.pickAtClose && !wizard && (
                               <button data-close-pick-edit onClick={() => { setPickSel([...closeStages, ...Object.keys(extraPick)]); setPickDone(false); }}
                                 className="w-full text-center text-sm font-bold text-[#1e3a5f] underline">
                                 {w('Change what you did', 'לשנות מה עשית', 'Изменить, что сделано')}
                               </button>
                             )}
                             {/* 2 · Did you do anything else here today? (not asked after "What did you do here today?") */}
-                            {finishedOk && !liveSel?.pickAtClose && (
+                            {finishedOk && !liveSel?.pickAtClose && show('more') && (
                               <div data-close-more>
                                 <p className="text-center font-extrabold text-gray-800 mb-3" style={{ fontSize: 17, lineHeight: 1.3 }}>
                                   {w('Did you do anything else here today?', 'עשית עוד משהו כאן היום?', 'Вы сделали здесь сегодня что-то ещё?')}
                                 </p>
                                 <div className="grid grid-cols-2 gap-2">
                                   <button data-close-more-pick="yes" data-on={moreAsk === 'yes' ? '1' : undefined}
-                                    onClick={() => { setMoreAsk('yes'); setMoreDone(false); setClosePhotoIdx(0); }}
+                                    onClick={() => { setMoreAsk('yes'); setMoreDone(false); setClosePhotoIdx(0); if (wizard) setWizGo(true); }}
                                     className="py-3.5 rounded-xl text-base font-extrabold border active:scale-[0.98]"
                                     style={yn(moreAsk === 'yes', 'g')}>
                                     {w('Yes', 'כן', 'Да')}
                                   </button>
                                   <button data-close-more-pick="no" data-on={moreAsk === 'no' ? '1' : undefined}
-                                    onClick={() => { setMoreAsk('no'); setMoreDone(false); setClosePhotoIdx(0); }}
+                                    onClick={() => { setMoreAsk('no'); setMoreDone(false); setClosePhotoIdx(0); if (wizard) setWizGo(true); }}
                                     className="py-3.5 rounded-xl text-base font-extrabold border active:scale-[0.98]"
                                     style={yn(moreAsk === 'no', 'g')}>
                                     {w('No', 'לא', 'Нет')}
@@ -4397,7 +4548,7 @@ plansPdfFileId && (
                               </div>
                             )}
                             {/* 3 · Is it one of these? — the stages still open here, "Not on this list…" first. */}
-                            {finishedOk && moreAsk === 'yes' && !moreDone && (
+                            {finishedOk && moreAsk === 'yes' && (wizard ? wizCur === 'moreList' : !moreDone) && (
                               <div data-close-extras className="rounded-2xl border border-gray-200 p-3 space-y-3">
                                 <div>
                                   <p className="text-center font-extrabold text-gray-800" style={{ fontSize: 16, lineHeight: 1.3 }}>
@@ -4520,15 +4671,15 @@ plansPdfFileId && (
                                       placeholder={w('e.g. took out the garbage', 'למשל: הוצאתי את הזבל', 'например: вынес мусор')} />
                                   </div>
                                 )}
-                                <button data-close-more-next disabled={!moreValid}
+                                {!wizard && <button data-close-more-next disabled={!moreValid}
                                   onClick={() => { setMoreDone(true); setClosePhotoIdx(0); }}
                                   className="w-full py-3 rounded-xl text-base font-bold text-white disabled:opacity-40"
                                   style={{ background: 'linear-gradient(135deg, #1e3a5f, #2c4f78)' }}>
                                   {w('Next', 'הבא', 'Дальше')}
-                                </button>
+                                </button>}
                               </div>
                             )}
-                            {finishedOk && moreAsk === 'yes' && moreDone && (
+                            {finishedOk && moreAsk === 'yes' && moreDone && !wizard && (
                               <button data-close-more-edit onClick={() => setMoreDone(false)}
                                 className="w-full text-center text-sm font-bold text-[#1e3a5f] underline">
                                 {w('Change what else you did', 'לשנות מה עוד עשית', 'Изменить, что ещё сделано')}
@@ -4551,7 +4702,7 @@ plansPdfFileId && (
                                     : step.part
                                     ? w('part of it · one picture or video', 'חלק · תמונה או סרטון', 'часть · одно фото или видео')
                                     : needWords(step.need)}
-                                  {photoSteps.length > 1 && <> · {closePhotoIdx + 1}/{photoSteps.length}</>}
+                                  {photoSteps.length > 1 && <> · {(wizard ? Number(wizCur.slice(6)) : closePhotoIdx) + 1}/{photoSteps.length}</>}
                                 </p>
                                 <div className="flex items-center justify-center gap-2 mb-1">
                                   <span data-close-count className="px-3 py-1 rounded-full text-sm font-black tabular-nums"
@@ -4569,7 +4720,7 @@ plansPdfFileId && (
                                     </div>
                                   )}
                                 </div>
-                                <div className="flex gap-2 mt-2">
+                                {!wizard && <div className="flex gap-2 mt-2">
                                   {closePhotoIdx > 0 && (
                                     <button data-close-photo-prev onClick={() => setClosePhotoIdx(i => i - 1)}
                                       className="px-3 py-2 rounded-xl text-sm font-bold text-gray-600 border border-gray-200">‹</button>
@@ -4582,10 +4733,87 @@ plansPdfFileId && (
                                       {w('Next →', 'הבא ←', 'Дальше →')}
                                     </button>
                                   )}
-                                </div>
+                                </div>}
                               </div>
                             )}
-                            {finishedOk && moreOk && photosNeeded && photoSteps.length === 0 && (
+                            {/* What's left, and when are you coming back? — only after "No" (the old
+                                "Not finished today" button's two questions). */}
+                            {wizard && wizCur === 'left' && (() => {
+                              const back = comeBackDay(closeToday);
+                              const backLabel = daysBetween(closeToday, back) === 1
+                                ? w('Tomorrow', 'מחר', 'Завтра')
+                                : parseDay(back).toLocaleDateString(dayLocale, { weekday: 'long' });
+                              const minPick = dayIso(addDaysFns(parseDay(closeToday), 1));
+                              const btn = (key: 'tomorrow' | 'pick' | 'unknown', Icon: typeof Clock, label: string, sub?: string) => (
+                                <button type="button" data-close-back={key} data-on={backWhen === key ? '1' : undefined}
+                                  onClick={() => setBackWhen(key)}
+                                  className="w-full flex items-center gap-3 rounded-xl px-4 py-3 text-left rtl:text-right border-2 active:scale-[0.99]"
+                                  style={{ borderColor: backWhen === key ? '#1e3a5f' : '#e5e7eb', backgroundColor: backWhen === key ? '#eef2f7' : '#fff' }}>
+                                  <Icon size={20} className="flex-shrink-0" style={{ color: backWhen === key ? '#1e3a5f' : '#64748b' }} />
+                                  <span className="min-w-0 flex-1">
+                                    <span className="block font-bold text-gray-900" style={{ fontSize: 15 }}>{label}</span>
+                                    {sub && <span className="block text-gray-500" style={{ fontSize: 12.5 }}>{sub}</span>}
+                                  </span>
+                                  {backWhen === key && <CheckCircle2 size={18} className="text-[#1e3a5f] flex-shrink-0" />}
+                                </button>
+                              );
+                              return (
+                                <div data-close-left className="space-y-5">
+                                  <div>
+                                    <p className="text-center font-extrabold text-gray-800 mb-1" style={{ fontSize: 17, lineHeight: 1.3 }}>
+                                      {w("What's left?", 'מה נשאר?', 'Что осталось?')}
+                                    </p>
+                                    <p className="text-center text-gray-500 mb-2" style={{ fontSize: 12.5 }}>
+                                      {closeUnfinishedIds.map(nm).join(', ')} · {w('optional', 'לא חובה', 'по желанию')}
+                                    </p>
+                                    <MessageBox hook="close-left-words" rows={2} value={leftWords} onChange={setLeftWords}
+                                      onTranscript={t => setLeftWords(prev => (prev.trim() ? `${prev} ${t}` : t))}
+                                      lang={readLang} fontSize={15}
+                                      placeholder={w('Say it or type it…', 'תגיד או תכתוב…', 'Скажите или напишите…')} />
+                                  </div>
+                                  <div data-close-back-q className="space-y-2">
+                                    <p className="text-center font-extrabold text-gray-800 mb-1" style={{ fontSize: 17, lineHeight: 1.3 }}>
+                                      {w('When are you coming back?', 'מתי אתה חוזר?', 'Когда вы вернётесь?')}
+                                    </p>
+                                    {btn('tomorrow', ChevronsRight, backLabel, niceDay(back))}
+                                    {btn('pick', CalendarDays, w('Pick a day', 'בחר יום', 'Выбрать день'), backWhen === 'pick' && backPicked > closeToday ? niceDay(backPicked) : undefined)}
+                                    {backWhen === 'pick' && (
+                                      <input type="date" data-close-back-date min={minPick} value={backPicked}
+                                        onChange={e => setBackPicked(e.target.value)}
+                                        className="w-full rounded-xl border-2 border-gray-300 px-3 py-2.5 font-semibold" style={{ fontSize: 15 }} />
+                                    )}
+                                    {btn('unknown', HelpCircle, w("I don't know yet", 'עוד לא יודע', 'Пока не знаю'), w('The office will set the day.', 'המשרד יקבע את היום.', 'Офис назначит день.'))}
+                                  </div>
+                                </div>
+                              );
+                            })()}
+                            {/* The last screen: what he is sending, so he can check it. */}
+                            {wizard && wizCur === 'send' && (() => {
+                              const ok = (hasOwnStages ? closeFinishedIds : []).concat(moreAsk === 'yes' ? extraIds.filter(id => extraPick[id] === 'all') : []);
+                              const half = [...closeUnfinishedIds, ...(moreAsk === 'yes' ? extraIds.filter(id => extraPick[id] === 'part') : [])];
+                              const added = moreAsk === 'yes' ? addedIds : [];
+                              const shots = selMedia.filter(m => !preClosingIds.current.has(m.id)).length;
+                              const row = (key: string, color: string, mark: string, text: React.ReactNode) => (
+                                <p key={key} className="font-semibold" style={{ fontSize: 14.5, color }}>{mark} {text}</p>
+                              );
+                              return (
+                                <div data-close-summary className="rounded-2xl border border-gray-200 bg-white p-3.5 space-y-1">
+                                  <p className="font-extrabold text-gray-800 mb-1" style={{ fontSize: 15 }}>{w('You are sending', 'אתה שולח', 'Вы отправляете')}</p>
+                                  {ok.map(id => row(`ok-${id}`, '#15803d', '✓', <>{nm(id)} — {w('finished', 'הסתיים', 'закончено')}</>))}
+                                  {added.map(id => row(`ad-${id}`, '#15803d', '+', <>{nm(id)} — {w('work added', 'נוספה עבודה', 'добавлена работа')}</>))}
+                                  {half.map(id => row(`hf-${id}`, '#c2410c', '◐', <>{nm(id)} — {w('stays half done', 'נשאר חצי גמור', 'остаётся наполовину')}</>))}
+                                  {moreAsk === 'yes' && offOn && offText.trim() && row('off', '#334155', '•', offText.trim())}
+                                  {leftAsk && leftWords.trim() && row('left', '#334155', '•', <>{w("What's left:", 'מה נשאר:', 'Что осталось:')} {leftWords.trim()}</>)}
+                                  {leftAsk && backWhen && row('back', '#1e3a5f', '→', backNext
+                                    ? <>{w('Coming back', 'חוזר', 'Вернусь')} {niceDay(backNext)}</>
+                                    : w('The office will set the day', 'המשרד יקבע את היום', 'Офис назначит день'))}
+                                  <p data-close-summary-shots className="text-gray-500 pt-1" style={{ fontSize: 13.5 }}>
+                                    {shots === 1 ? w('1 picture', 'תמונה אחת', '1 фото') : w(`${shots} pictures`, `${shots} תמונות`, `${shots} фото`)}
+                                  </p>
+                                </div>
+                              );
+                            })()}
+                            {finishedOk && moreOk && photosNeeded && photoSteps.length === 0 && !wizard && (
                               <p data-close-nothing-finished className="text-center text-gray-500" style={{ fontSize: 13 }}>
                                 {w('Nothing finished — no pictures needed. Write what is left below.', 'לא סיימת כלום — אין צורך בתמונות. כתוב למטה מה נשאר.', 'Ничего не закончено — фото не нужны. Напишите ниже, что осталось.')}
                               </p>
@@ -4598,7 +4826,7 @@ plansPdfFileId && (
                       {/* The add-files row stands on its own only where there is no picture
                           step to hold it: a problem's close, or once every question is
                           answered and nothing needs a picture (photos optional / nothing finished). */}
-                      {(!stageClose || (finishedOk && moreOk && !(photosNeeded && photoSteps.length))) && (
+                      {(!stageClose || (finishedOk && moreOk && !(photosNeeded && photoSteps.length))) && (!wizard || wizCur === 'send') && (
                       <div>
                         {photosNeeded && !stageClose && (
                           <p className="text-center font-extrabold text-gray-800 mb-3"
@@ -4628,8 +4856,9 @@ plansPdfFileId && (
                       )}
 
                       {/* 2 · one comment box — paperclip and microphone
-                          INSIDE it, bottom corner, the General-notes idiom. */}
-                      <div>
+                          INSIDE it, bottom corner, the General-notes idiom.
+                          The wizard asks it on its last screen only. */}
+                      {(!wizard || wizCur === 'send') && <div>
                         {/* One question, no "comment" heading (owner, 2026-10-15). */}
                         <div className="font-semibold text-gray-700 mb-2" style={{ fontSize: 15 }} data-closing-ask-office>
                           {s.closingAskOffice || (w('Anything the office should know?', 'משהו שהמשרד צריך לדעת?', 'Что-нибудь, что офису нужно знать?'))}
@@ -4668,12 +4897,22 @@ plansPdfFileId && (
                             ))}
                           </div>
                         )}
-                      </div>
+                      </div>}
                     </div>
                   )}
                 </div>
 
-                {!finishAsk && (
+                {!finishAsk && wizard && wizCur !== 'send' && !wizAuto && (
+                  <div className="px-4 py-3 border-t border-gray-100 flex-shrink-0"
+                    style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 12px)' }}>
+                    <button data-close-next={wizCur} disabled={!wizOk} onClick={wizNext}
+                      className="w-full py-3.5 rounded-xl text-base font-bold text-white disabled:opacity-40"
+                      style={{ background: 'linear-gradient(135deg, #1e3a5f, #2c4f78)' }}>
+                      {w('Next', 'הבא', 'Дальше')}
+                    </button>
+                  </div>
+                )}
+                {!finishAsk && (!wizard || wizCur === 'send') && (
                   <div className="px-4 py-3 border-t border-gray-100 flex-shrink-0"
                     style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 12px)' }}>
                     <button

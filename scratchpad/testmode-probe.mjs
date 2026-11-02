@@ -3,6 +3,7 @@
 // it, add a picture, Send — the cloud has no new task, no picture, no mark.
 // Needs the Firestore emulator on 8085 and the emulator-wired server on 5176.
 import { chromium } from 'playwright';
+import { sendLocked, sendReady, waitReady } from './wiz.mjs';
 import { encodeValue } from '../lib/fullRestore.js';
 const APP = process.env.APP_EMU || 'http://localhost:5176';
 const BASE = 'http://127.0.0.1:8085/v1/projects/demo-patch/databases/(default)/documents';
@@ -43,11 +44,13 @@ for (let i = 0; i < 30 && !(await page.locator('[data-close-job]').count()); i++
 check(await page.locator('[data-close-job]').count() >= 1, 'he can start work — the task opens on screen');
 await page.locator('[data-close-job]').first().click(); await page.waitForTimeout(600);
 await page.locator('[data-close-pick-stage="s-drilling"]').click();
-await page.locator('[data-close-pick-next]').click(); await page.waitForTimeout(300);
-await page.locator('[data-close-finished-pick="yes"]').click(); await page.waitForTimeout(300);
+await page.locator('[data-close-next="pick"]').click(); await page.waitForTimeout(300);
+// "No" → coming back tomorrow: that books the flat on a new day — which test mode must not save either.
+await page.locator('[data-close-finished-pick="no"]').click(); await page.waitForTimeout(300);
+await page.locator('[data-close-back="tomorrow"]').click();
+await page.locator('[data-close-next="left"]').click(); await page.waitForTimeout(300);
 await page.locator('input[type="file"][accept*="video"][accept*=".zip"]').first().setInputFiles([{ name: 'a.png', mimeType: 'image/png', buffer: PNG }]);
-for (let i = 0; i < 40 && await page.locator('[data-close-now]').isDisabled(); i++) await page.waitForTimeout(250);
-check(!(await page.locator('[data-close-now]').isDisabled()), 'the picture goes in and Send unlocks');
+check(await waitReady(page), 'the picture goes in and Send unlocks');
 await page.locator('[data-close-now]').click(); await page.waitForTimeout(2500);
 check(await count('contractorAssignments') === 0, 'the cloud has NO task');
 check(await count('contractorPhotos') === 0, 'and NO picture');
