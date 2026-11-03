@@ -666,8 +666,8 @@ export function ProjectDiagramPage() {
         <div className="short-scroll-body flex-1 overflow-auto scrollbar-thin bg-gray-100 print:overflow-visible print:bg-white">
           {showTrio ? (
             <div className="h-full p-4" style={{ minHeight: 560 }} data-building-view-wrap>
-              <BuildingTrio buildings={trioBuildings} stages={stages} onOpen={handleAptClick} interiorSrc={WOLFSON_INTERIOR} lower={lowerLevels}
-                words={{ floor: s.floorWindowTitle, notSold: s.notSoldWord, notStarted: s.notStartedOption.replace(/[—–]/g, '').trim(), upgraded: s.upgradedWord, open: s.bvOpen, floorsHint: s.bvHint, joinedWith: s.bvJoined }} />
+              <BuildingTrio buildings={trioBuildings} stages={stages} onOpen={handleAptClick} interiorSrc={WOLFSON_INTERIOR} lower={lowerLevels} customButtons={boardSet?.customButtons}
+                words={{ floor: s.floorWindowTitle, notSold: s.notSoldWord, notStarted: s.notStartedOption.replace(/[—–]/g, '').trim(), upgraded: s.upgradedWord, open: s.bvOpen, floorsHint: s.bvHint, joinedWith: s.bvJoined, yes: s.customYes, no: s.customNo, unknown: s.customUnknown }} />
             </div>
           ) : showBuilding ? (
             <div className="h-full p-4" style={{ minHeight: 560 }} data-building-view-wrap>
@@ -677,9 +677,9 @@ export function ProjectDiagramPage() {
                 onOpen={handleAptClick}
                 floorLabels={buildingFloorLabels}
                 interiorSrc={WOLFSON_INTERIOR}
-                lower={lowerLevels}
+                lower={lowerLevels} customButtons={boardSet?.customButtons}
                 tower={Math.max(0, buildings.filter(b => /^A\d/.test(b.id)).findIndex(b => b.id === selectedBuilding))}
-                words={{ floor: s.floorWindowTitle, notSold: s.notSoldWord, notStarted: s.notStartedOption.replace(/[—–]/g, '').trim(), upgraded: s.upgradedWord, open: s.bvOpen, floorsHint: s.bvHint, joinedWith: s.bvJoined }}
+                words={{ floor: s.floorWindowTitle, notSold: s.notSoldWord, notStarted: s.notStartedOption.replace(/[—–]/g, '').trim(), upgraded: s.upgradedWord, open: s.bvOpen, floorsHint: s.bvHint, joinedWith: s.bvJoined, yes: s.customYes, no: s.customNo, unknown: s.customUnknown }}
               />
             </div>
           ) : (

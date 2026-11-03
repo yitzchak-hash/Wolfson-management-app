@@ -14,7 +14,7 @@
  * landed floor changes.
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { Apartment, Stage } from '../../types';
+import type { Apartment, Stage, CustomButton } from '../../types';
 import { realName } from '../../data/aptSale';
 import {
   CARD_CORNER, CORE, CORE_PH14, CORE_PH15, PH_BOX, FLOOR_NO_AT, PH_DRAWING, isPenthouseShape, LABEL_AT, LEVEL_FLOORS, STRIP, zoneFor, PLAN_BOX, SHAPES, pathOf, shapesOf, stripFor, type ShapeKey, type LowerLevel,
@@ -30,10 +30,13 @@ export interface BuildingViewWords {
   floorsHint: string;
   apt: string;
   joinedWith: string;
+  yes: string;
+  no: string;
+  unknown: string;
 }
 const EN: BuildingViewWords = {
   floor: 'Floor', notSold: 'Not sold', notStarted: 'Not started', upgraded: 'Upgraded',
-  open: 'Open', floorsHint: 'Scroll to move between floors', apt: 'Apt', joinedWith: 'Joined with',
+  open: 'Open', floorsHint: 'Scroll to move between floors', apt: 'Apt', joinedWith: 'Joined with', yes: 'Yes', no: 'No', unknown: "Don't know",
 };
 
 export interface BuildingViewProps {
@@ -66,6 +69,12 @@ export interface BuildingViewProps {
   title?: string;
   /** The shared levels under the towers, bottom first; this tower's own slice is lit, the rest grey. */
   lower?: LowerLevel[];
+  /**
+   * The project's own buttons (owner, video 2026-11-03: "we want to see wall
+   * yes, wall no … between the C1 and the U") — each flat's answers ride on
+   * its floor tag and its card.
+   */
+  customButtons?: CustomButton[];
   /** Which tower this is (0 = A1), for where it stands on the shared levels. */
   tower?: number;
   /** In the trio the shared levels are drawn ONCE, wide, under the three — the tower leaves them out. */
@@ -123,7 +132,12 @@ function slabOf(row: FloorRow): ShapeKey[] {
   return used.some(k => k === 'WL' || k === 'WR' || isPenthouseShape(k)) ? used : ['A', 'B', 'C1', 'C2'];
 }
 
-export default function BuildingView({ apartments, stages, onOpen, words, initialFloor, floorLabels, interiorSrc, bus: sharedBus, compact, title, lower, tower = 0, hideLower }: BuildingViewProps) {
+export default function BuildingView({ apartments, stages, onOpen, words, initialFloor, floorLabels, interiorSrc, bus: sharedBus, compact, title, lower, tower = 0, hideLower, customButtons = [] }: BuildingViewProps) {
+  /** A flat's answers as short words: "Wall ✓", "Wall ✗", "Wall ?". */
+  const answersOf = (a: Apartment) => customButtons.flatMap(cb => {
+    const v = a.customAnswers?.[cb.id];
+    return v ? [{ id: cb.id, name: cb.name, v, mark: v === 'yes' ? '✓' : v === 'no' ? '✗' : '?' }] : [];
+  });
   const lab = (f: number, row?: FloorRow) => row?.lower ? row.lower.label : floorLabels?.[f] || String(f);
   const w = { ...EN, ...words };
   const stageById = useMemo(() => new Map(stages.map(s => [s.id, s])), [stages]);
@@ -393,6 +407,16 @@ export default function BuildingView({ apartments, stages, onOpen, words, initia
                             </g>);
                           x += w2 + 10;
                         }
+                        for (const an of answersOf(apt)) {
+                          const label = `${an.name}: ${an.v === 'yes' ? w.yes : an.v === 'no' ? w.no : '?'}`;
+                          const w3 = Math.max(60, label.length * 17 + 30);
+                          parts.push(
+                            <g key={`c-${an.id}`} className="bv-flat-ans" data-flat-answer={an.v}>
+                              <rect x={x} y={ly - 24} width={w3} height={48} rx={10} />
+                              <text x={x + w3 / 2} y={ly}>{label}</text>
+                            </g>);
+                          x += w3 + 10;
+                        }
                         if (up) parts.push(
                           <g key="u" className="bv-flat-u" data-flat-upgraded>
                             <rect x={x} y={ly - 24} width={56} height={48} rx={14} />
@@ -444,6 +468,9 @@ export default function BuildingView({ apartments, stages, onOpen, words, initia
               <span className="bv-card-top">
                 <span className="bv-card-no">{apt.apartmentNumber}</span>
                 {apt.tipus && <span className="bv-card-tip">{apt.tipus}</span>}
+                {answersOf(apt).map(an => (
+                  <span key={an.id} className="bv-card-ans" data-card-answer={an.v}>{an.name}: {an.v === 'yes' ? w.yes : an.v === 'no' ? w.no : w.unknown}</span>
+                ))}
                 {apt.classification === 'shinui' && <span className="bv-card-u" title={w.upgraded}>U</span>}
               </span>
               {mate && <span className="bv-card-joined" data-card-joined>{w.joinedWith} {numOf.get(mate)}</span>}

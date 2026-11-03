@@ -18,6 +18,7 @@ for (const [tag, vp, mobile] of [['pc', { width: 1440, height: 900 }, false], ['
   await ctx.addInitScript(() => {
     const raw = localStorage.getItem('wolfson_app_data'); if (!raw) return;
     const d = JSON.parse(raw); if (d.__sp) return; d.__sp = 1;
+    d.boardSettings = { ...(d.boardSettings ?? {}), wolfson: { ...((d.boardSettings ?? {}).wolfson ?? {}), customButtons: [{ id: 'cb-wall', name: 'Wall' }] } };
     for (const a of d.apartments ?? []) if (a.id === 'A1-53') a.plansPdfLink = 'https://drive.google.com/file/d/HARNESSPLAN1/view';
     localStorage.setItem('wolfson_app_data', JSON.stringify(d));
     window.__shared = [];
@@ -42,6 +43,15 @@ for (const [tag, vp, mobile] of [['pc', { width: 1440, height: 900 }, false], ['
   T(s.length === 1, `${tag}: the share menu was opened once`);
   T(s[0]?.n === 1 && s[0]?.type === 'application/pdf' && s[0]?.head === '%PDF-', `${tag}: it carries a real PDF file (${s[0]?.name}, ${s[0]?.size} bytes)`);
   T(!s[0]?.url, `${tag}: no link is sent, only the file`);
+  if (!mobile) {
+    T(await p.locator('[data-custom-buttons]').count() <= 1 && await p.locator('.drawer-panel input[placeholder="Address"]').count() === 0, 'Wolfson: no address or phone in the details');
+    const full = p.locator('.drawer-panel button:has(svg.lucide-maximize2), .drawer-panel [title="Full screen"]').first();
+    await p.locator('button:has(svg.lucide-maximize-2)').first().click().catch(() => {}); await p.waitForTimeout(1500);
+    const fb = p.locator('[data-plan-share-full]');
+    T(await fb.count() === 1, 'Share is on the full-screen plan too');
+    if (await fb.count()) { await fb.click(); await p.waitForTimeout(1000); T((await p.evaluate(() => window.__shared.length)) === 2, 'full screen: the share menu opened with the PDF'); }
+    await p.screenshot({ path: `${OUT}/share-full.png` });
+  }
   await ctx.close();
 }
 // the worker's portal: Share on the plan's corner, beside Download

@@ -113,6 +113,7 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
     contractorPhotos, updateContractorPhoto, planAnnotations, stageNotes, planPins,
     contractorNotes, addContractorNote } = useStore();
   const isGeneralProject = currentProjectId === 'general';
+  const isWolfsonProject = currentProjectId === 'wolfson';
   const tipusim = useStore(st => st.boardSettings[st.currentProjectId]?.tipusim ?? EMPTY_TIPUSIM);
   const customButtons = useStore(st => st.boardSettings[st.currentProjectId]?.customButtons ?? EMPTY_BUTTONS);
   const users = useStore(st => st.users);
@@ -2112,6 +2113,43 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                 )}
 
 
+              {/* Wolfson (owner, video 2026-11-03): no address or phone here — the
+                  project's own buttons (Wall yes / no …) stand in their place. */}
+              {/* The project's own information buttons — answer, nothing else. */}
+              {isWolfsonProject && customButtons.length > 0 && (
+                <div data-custom-buttons className="space-y-1.5">
+                  <div className="text-sm font-bold text-gray-800">{ui.customButtonsTitle}</div>
+                  {customButtons.map(cb => {
+                    const ans = apartment.customAnswers?.[cb.id];
+                    // Only the people Settings picked may change it; nobody picked = everyone.
+                    const mayChange = !cb.editors?.length || cb.editors.includes(currentUser?.id);
+                    const lockTip = mayChange ? undefined : ui.customOnlyFor.replace('{names}',
+                      cb.editors!.map(id => users.find(u => u.id === id)?.name).filter(Boolean).join(', '));
+                    return (
+                      <div key={cb.id} data-custom-button={cb.id} data-custom-locked={mayChange ? '0' : '1'} title={lockTip}
+                        className="flex items-center gap-3 justify-between">
+                        <span className="text-sm text-gray-800 min-w-0 truncate">{cb.name}</span>
+                        <span className="inline-flex border border-gray-200 rounded-lg overflow-hidden flex-shrink-0">
+                          {(['yes', 'no', 'unknown'] as const).map(v => (
+                            <button key={v} type="button" data-custom-answer={v} aria-pressed={ans === v}
+                              disabled={!mayChange}
+                              onClick={() => {
+                                const nextAns = { ...(apartment.customAnswers ?? {}) };
+                                if (ans === v) delete nextAns[cb.id]; else nextAns[cb.id] = v;
+                                trackUndo(null, () => updateApartment(apartment.id, { customAnswers: nextAns }, currentUser));
+                              }}
+                              className={`px-3 py-1.5 text-xs font-semibold border-s border-gray-200 first:border-s-0 ${ans === v ? 'bg-[#1e3a5f] text-white' : 'bg-white text-gray-600 hover:bg-gray-50'} disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-white`}>
+                              {v === 'yes' ? ui.customYes : v === 'no' ? ui.customNo : ui.customUnknown}
+                            </button>
+                          ))}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              {!isWolfsonProject && (<>
               {/* Address and phone — one row on desktop, stacked on a phone.
                   The same block for apartments and General jobs on purpose. */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -2174,7 +2212,7 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                   />
                 </div>
               </div>
-
+              </>)}
               {/* General notes — drawn the way the notes tab draws a stage
                   (owner, 2026-09-06): every note is a bullet with who wrote it
                   and when, a memo or a file is a note card in the same list,
@@ -2424,8 +2462,8 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                 onOpenPhotos={(items, index) => setLightbox({ items, index })}
               />
 
-              {/* The project's own information buttons — answer, nothing else. */}
-              {customButtons.length > 0 && (
+              {/* Elsewhere they stay below the stages. */}
+              {!isWolfsonProject && customButtons.length > 0 && (
                 <div data-custom-buttons className="space-y-1.5">
                   <div className="text-sm font-bold text-gray-800">{ui.customButtonsTitle}</div>
                   {customButtons.map(cb => {
@@ -2457,6 +2495,7 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                   })}
                 </div>
               )}
+
 
               {/* The Engineering Plans block used to live here AND on the right,
                   so every job with a plan showed it twice. It is on the right
@@ -3520,6 +3559,13 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
           onClose={() => setAnnotating(null)}
           onToast={onToast}
         />
+        {/* Share in full screen too (owner, video 2026-11-03). Floating in the
+            corner, so the plan studio itself stays the shared copy it is. */}
+        <button type="button" data-plan-share data-plan-share-full onClick={sharePlan} disabled={sharing}
+          className="fixed z-[170] flex items-center gap-1.5 px-3.5 py-2 rounded-full text-[13px] font-bold text-white shadow-lg disabled:opacity-60"
+          style={{ right: 16, bottom: 'calc(16px + env(safe-area-inset-bottom, 0px))', backgroundColor: '#1e3a5f' }}>
+          {sharing ? <Loader2 size={14} className="animate-spin" /> : <Share2 size={14} />} {ui.planShare}
+        </button>
         </Suspense>
       )}
 

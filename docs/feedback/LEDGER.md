@@ -30,7 +30,8 @@ ask built or answered) · **not this app** (a recording of another project — r
 
 | 18 | Screen Recording 2026-11-02 155444.mp4 (186.7 MB) | `1oBE6kqCWX2lOYaRplaJeuuwXAJzSStgV` | 4:35 | done (building view, built and live 2026-11-03) | (worked in chat; the artifact) |
 | 19 | Recording 2026-11-03 132739.mp4 (57.8 MB) | `1gj_TTcLmNcarXqMg1BUlBSYExiCUHM4I` | 1:22 | open (built on preview; S1 asked) | [2026-11-03-132739.md](2026-11-03-132739.md) |
-Folder last listed: 2026-11-03 — recordings 18 and 19 at the top. 1–18 are done and belong in Processed.
+| 20 | Recording 2026-11-03 135021.mp4 (40.6 MB; also a duplicate copy) | `1WyIWzYmpqcZM0isF-vaq1i7_3dWw7nG6` | 1:15 | open (built on preview) | [2026-11-03-135021.md](2026-11-03-135021.md) |
+Folder last listed: 2026-11-03 — recordings 18, 19 and 20 at the top (19 and 20 each twice). 1–18 are done and belong in Processed.
 
 ## The folder's two subfolders (owner, 2026-10-18)
 After every new video a helper sorts the folder: **Processed**

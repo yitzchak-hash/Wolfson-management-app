@@ -35,6 +35,16 @@ export const WHATS_NEW: WhatsNewEntry[] = [
     title: 'Send a plan as a PDF',
     items: [
       {
+        title: 'Wall yes / no where you look',
+        body: 'The project\'s own buttons (like Wall) now show their answer on the floor in Building, beside the apartment\'s number, and on the card that comes up when you hover. In Wolfson the apartment window shows those buttons at the top, where the address and phone were.',
+        demo: 'tap',
+      },
+      {
+        title: 'Share from full screen',
+        body: 'A plan opened full screen has a Share button in the corner too.',
+        demo: 'tap',
+      },
+      {
         title: 'The folder button opens every job',
         body: 'The "open the folder on this computer" button said "Not on this computer yet" for jobs whose folder name has a slash in it (like "Building 3/17"). It finds those folders now.',
         demo: 'tap',

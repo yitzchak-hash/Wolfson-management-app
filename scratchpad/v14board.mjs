@@ -9,7 +9,8 @@ seed.apartments.forEach(a => { if (a.apartmentNumber && a.colPosition) a.tipus =
 // a joined pair, as the office has them (38/39 on A1)
 const j1 = seed.apartments.find(a => a.id === 'A2-50'), j2 = seed.apartments.find(a => a.id === 'A2-51');
 if (j1 && j2) { j1.mergedWith = j2.id; j2.mergedWith = j1.id; }
-const upg = seed.apartments.find(a => a.id === 'A2-49'); if (upg) upg.classification = 'shinui';
+const upg = seed.apartments.find(a => a.id === 'A2-49'); if (upg) { upg.classification = 'shinui'; upg.customAnswers = { 'cb-wall': 'yes' }; }
+seed.boardSettings = { ...(seed.boardSettings ?? {}), wolfson: { ...((seed.boardSettings ?? {}).wolfson ?? {}), customButtons: [{ id: 'cb-wall', name: 'Wall' }] } };
 // lower-level slots as the office names them (FAKE labels): a spa, a lobby, a storage room, and one with no known area
 const slot = (b, floor, col, name) => { const s = seed.apartments.find(a => a.buildingId === b && a.floor === floor && a.colPosition === col); if (s) { s.displayName = name; } return !!s; };
 globalThis.__slots = [slot('A1', -0.5, 1, 'ספא'), slot('A2', 1, 1, 'קרקע'), slot('A2', -2, 1, '-2'), slot('A3', -1, 2, 'Generator room')];
@@ -117,6 +118,12 @@ if (await j.count()) {
   T(await p.locator('[data-card-joined]').count() === 2, 'both cards say they are joined');
 T(await p.locator('.bv-plate[data-current="1"] [data-flat-tipus]').count() === 4, 'every flat wears its tipus beside its number');
 T(await p.locator('.bv-plate[data-current="1"] [data-flat-upgraded]').count() >= 1, 'an upgraded flat wears the U');
+T(await p.locator('.bv-plate[data-current="1"] [data-flat-answer="yes"]').count() === 1, 'the Wall answer lies on the floor beside the number');
+{ const n = p.locator('.bv-plate[data-current="1"] [data-apt="A2-49"] text.bv-flat-no'); const nb = await n.boundingBox();
+  await p.mouse.move(nb.x + nb.width / 2, nb.y + nb.height / 2 + 14); await p.waitForTimeout(400);
+  const order = await p.evaluate(() => { const c = document.querySelector('[data-card="A2-49"] .bv-card-top'); return c ? [...c.children].map(e => e.className.split(' ')[0]) : []; });
+  T(order.join(',') === 'bv-card-no,bv-card-tip,bv-card-ans,bv-card-u', `the card says Wall between the tipus and the U (${order})`);
+  await p.screenshot({ path: OUT + '/v16-answers.png' }); }
   await p.screenshot({ path: OUT + '/v14-joined.png' });
 } else T(false, 'flat 50 on floor 13');
 await p.screenshot({ path: OUT + '/v14-one-b1.png' });

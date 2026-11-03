@@ -173,3 +173,15 @@
 .bv-flat-u text { font-size: 34px; font-weight: 800; font-family: Inter, Arial, sans-serif; fill: #ffffff; text-anchor: middle; dominant-baseline: central; }
 .bv-flat-tip, .bv-flat-u { pointer-events: none; }
 .bv-plate[data-solid='0'] .bv-flat-tip, .bv-plate[data-solid='0'] .bv-flat-u { display: none; }
+
+/* The project's own answers ("Wall ✓") beside the number, and on the card. */
+.bv-flat-ans rect { fill: #ecfdf5; stroke: #059669; stroke-width: 3; }
+.bv-flat-ans[data-flat-answer='no'] rect { fill: #fef2f2; stroke: #dc2626; }
+.bv-flat-ans[data-flat-answer='unknown'] rect { fill: #f8fafc; stroke: #94a3b8; }
+.bv-flat-ans text { font-size: 28px; font-weight: 700; fill: #1f2937; text-anchor: middle; dominant-baseline: central; }
+.bv-flat-ans { pointer-events: none; }
+.bv-plate[data-solid='0'] .bv-flat-ans { display: none; }
+.bv-card-ans { font-size: 11.5px; font-weight: 700; padding: 2px 7px; border-radius: 6px; background: #ecfdf5; color: #047857; white-space: nowrap; }
+.bv-card-ans[data-card-answer='no'] { background: #fef2f2; color: #b91c1c; }
+.bv-card-ans[data-card-answer='unknown'] { background: #f1f5f9; color: #475569; }
+.bv-card-top { flex-wrap: wrap; }

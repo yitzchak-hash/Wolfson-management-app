@@ -12,9 +12,9 @@ import { STRIP, CORES_X, zoneFor, type LowerLevel } from './wolfsonPlan';
 
 export interface TrioBuilding { id: string; title: string; apartments: Apartment[]; floorLabels?: Record<number, string> }
 
-export default function BuildingTrio({ buildings, stages, onOpen, words, interiorSrc, lower = [] }: {
+export default function BuildingTrio({ buildings, stages, onOpen, words, interiorSrc, lower = [], customButtons }: {
   buildings: TrioBuilding[]; stages: Stage[]; onOpen: (apt: Apartment) => void;
-  words?: Partial<BuildingViewWords>; interiorSrc?: string; lower?: LowerLevel[];
+  words?: Partial<BuildingViewWords>; interiorSrc?: string; lower?: LowerLevel[]; customButtons?: import('../../types').CustomButton[];
 }) {
   // The floors every building has, bottom first — the rail and the bus count them.
   const floors = useMemo(() => {
@@ -56,7 +56,7 @@ export default function BuildingTrio({ buildings, stages, onOpen, words, interio
         {buildings.map((b, i) => (
           <BuildingView key={b.id} compact title={b.title} bus={bus} apartments={b.apartments} stages={stages}
             onOpen={onOpen} words={words} floorLabels={b.floorLabels} interiorSrc={interiorSrc}
-            lower={lower} tower={i} hideLower />
+            lower={lower} tower={i} hideLower customButtons={customButtons} />
         ))}
       </div>
       <nav className="bv-rail" aria-label={words?.floor ?? 'Floor'}>
