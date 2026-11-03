@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef, lazy, Suspense } from 'react';
-import { Mic, X, Save, Building2, MessageSquare, AlertTriangle, Link, Unlink, ExternalLink, BookOpen, Download, Eye, EyeOff, Activity, RefreshCw, Paperclip, Trash2, ChevronDown, ChevronRight, ClipboardList, CheckCircle2, CalendarDays, FileText, UserCheck, Plus, Camera, Play, ChevronLeft, FolderOpen, Clock, RotateCcw, Edit2, BarChart3, PenLine, Maximize2, Printer, Phone as PhoneIcon, Loader2, Folder, Star, ArrowRightLeft } from 'lucide-react';
+import { Mic, X, Save, Building2, MessageSquare, AlertTriangle, Link, Unlink, ExternalLink, BookOpen, Download, Eye, EyeOff, Activity, RefreshCw, Paperclip, Trash2, ChevronDown, ChevronRight, ClipboardList, CheckCircle2, CalendarDays, FileText, UserCheck, Plus, Camera, Play, ChevronLeft, FolderOpen, Clock, RotateCcw, Edit2, BarChart3, PenLine, Maximize2, Printer, Share2, Phone as PhoneIcon, Loader2, Folder, Star, ArrowRightLeft } from 'lucide-react';
 import { Apartment, User, getStageName, TaskAttachment, TaskPriority, aptLabel, ContractorAssignment, CustomButton } from '../../types';
 import { TaskThread } from '../tasks/TaskThread';
 import { Translated } from '../ui/Translated';
@@ -43,6 +43,7 @@ import { problemState } from '../../data/problems';
 import { PlanPinOverlay } from './PlanPinOverlay';
 import { PlanBrowser, Crumb, TileFile } from '../plans/PlanBrowser';
 import { prefetchPlans } from '../../data/planCache';
+import { sharePlanFile } from '../../data/sharePlan';
 import { cachedPlanAspect, measurePlanAspect } from '../../data/planAspect';
 // Lazy, deliberately. The markup studio carries pdf.js — about a megabyte of
 // PDF engine — and nobody should pay for that on the login screen. It arrives
@@ -696,6 +697,7 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
   useEffect(() => { ensureDriveShared(currentPlanFileId); }, [currentPlanFileId]);
   useEffect(() => { ensureDriveShared(latestStampedFileId); }, [latestStampedFileId]);
 
+  const [sharing, setSharing] = useState(false);
   if (!apartment) return null;
 
   const detectedPdfId = availablePdfs[selectedPdfIdx]?.id ?? null;
@@ -726,6 +728,19 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
       fileId: studioFileId, name, jobId: apartment.id, projectId: currentProjectId,
       folderId: driveLink ? extractFolderId(driveLink) : null,
     });
+  }
+  /** Share the plan's PDF itself through the phone's or computer's share menu. */
+  async function sharePlan() {
+    if (!studioFileId || sharing) return;
+    const name = browsePreview?.file.id === studioFileId ? browsePreview.file.name
+      : (planSet.plans.find(p => p.id === studioFileId)?.name ?? availablePdfs[selectedPdfIdx]?.name);
+    setSharing(true);
+    const fallback = apartment ? `${buildingShort(apartment.buildingId)}-${apartment.apartmentNumber} ${realName(apartment) || ''} plan`.replace(/\s+/g, ' ').trim() : undefined;
+    const out = await sharePlanFile(studioFileId, name || fallback, apartment ? `${apartment.apartmentNumber} ${apartment.displayName ?? ''}`.trim() : undefined);
+    setSharing(false);
+    if (out === 'downloaded') onToast(ui.planShareDownloaded);
+    else if (out === 'again') onToast(ui.planShareAgain);
+    else if (out === 'failed') onToast(ui.planShareFailed, 'error');
   }
   const starredPlanId = plansPdfLink ? extractFileId(plansPdfLink) : null;
   /** The shown plan is the app's latest-activity GUESS — nobody starred one. */
@@ -1337,6 +1352,13 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
         {planSet.plansFolderId && (
           <DriveDesktopPath driveLink={planSet.plansFolderId} onToast={onToast} />
         )}
+
+        <Tooltip text={ui.planShareTip}>
+          <button onClick={sharePlan} data-plan-share disabled={sharing}
+            className="flex items-center gap-1.5 px-2.5 py-1 min-h-[30px] rounded-lg text-[11px] font-bold text-white bg-white/15 hover:bg-white/25 disabled:opacity-60">
+            {sharing ? <Loader2 size={11} className="animate-spin" /> : <Share2 size={11} />} {ui.planShare}
+          </button>
+        </Tooltip>
 
         <Tooltip text={ui.openInSketcherTip}>
           <button onClick={openPlanInSketcher} data-open-sketcher

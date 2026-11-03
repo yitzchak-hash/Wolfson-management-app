@@ -31,6 +31,17 @@ export interface WhatsNewEntry {
 
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    date: '2027-02-24',
+    title: 'Send a plan as a PDF',
+    items: [
+      {
+        title: 'Share',
+        body: 'Above the plan, next to Open in Sketcher, press Share: your phone\'s or computer\'s share menu opens with the plan as a PDF file, ready for WhatsApp, mail or anything else. The file itself is sent, not a link.',
+        demo: 'tap',
+      },
+    ],
+  },
+  {
     date: '2027-02-23',
     title: 'One building, big — and the building in 3D',
     items: [

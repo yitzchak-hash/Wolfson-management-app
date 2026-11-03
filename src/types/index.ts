@@ -3449,6 +3449,11 @@ export interface MainUiStrings {
   upgradedWord: string;
   openInSketcher: string;
   openInSketcherTip: string;
+  planShare: string;
+  planShareTip: string;
+  planShareDownloaded: string;
+  planShareAgain: string;
+  planShareFailed: string;
   notUpgradedWord: string;
   upgradedBadge: string;
   upgradedTooltip: string;
@@ -4463,6 +4468,11 @@ export const DEFAULT_MAIN_UI_STRINGS: MainUiStrings = {
   upgradedWord: 'Upgraded',
   openInSketcher: 'Open in Sketcher',
   openInSketcherTip: 'Opens this plan in the Plan Sketcher, in a new tab',
+  planShare: 'Share',
+  planShareTip: 'Send this plan as a PDF file (WhatsApp, mail…)',
+  planShareDownloaded: 'The PDF was downloaded; this browser cannot open the share menu',
+  planShareAgain: 'The plan is ready, tap Share again',
+  planShareFailed: 'Could not get the plan from Drive',
   notUpgradedWord: 'Not upgraded',
   upgradedBadge: 'U',
   upgradedTooltip: 'Upgraded apartment',
@@ -5467,6 +5477,11 @@ export const HEBREW_MAIN_UI_STRINGS: MainUiStrings = {
   upgradedWord: 'משודרג',
   openInSketcher: 'פתיחה בסקצ׳ר',
   openInSketcherTip: 'פותח את התוכנית בסקצ׳ר, בלשונית חדשה',
+  planShare: 'שיתוף',
+  planShareTip: 'שליחת התוכנית כקובץ PDF (וואטסאפ, מייל…)',
+  planShareDownloaded: 'ה-PDF הורד; הדפדפן הזה לא יכול לפתוח את תפריט השיתוף',
+  planShareAgain: 'התוכנית מוכנה, לחצו שוב על שיתוף',
+  planShareFailed: 'לא ניתן להביא את התוכנית מהדרייב',
   notUpgradedWord: 'לא משודרג',
   upgradedBadge: 'ש',
   upgradedTooltip: 'דירה משודרגת',
