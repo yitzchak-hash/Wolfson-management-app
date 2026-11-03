@@ -13,7 +13,7 @@
  * documented smoulder). React state changes only when the hovered flat or the
  * landed floor changes.
  */
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Apartment, Stage } from '../../types';
 import { realName } from '../../data/aptSale';
 import {
@@ -376,6 +376,29 @@ export default function BuildingView({ apartments, stages, onOpen, words, initia
                     >
                       {shapes.map(s => <path key={s} d={pathOf(SHAPES[s])} />)}
                       <text x={lx} y={ly} className="bv-flat-no">{apt.apartmentNumber}</text>
+                      {/* The tipus and the upgrade "U" lie on the plan beside the number, like on the board's tile (owner, 2026-11-03). */}
+                      {(() => {
+                        const tip = (apt.tipus ?? '').trim();
+                        const up = apt.classification === 'shinui';
+                        const nW = String(apt.apartmentNumber).length * 27;
+                        let x = lx + nW / 2 + 14;
+                        const parts: React.ReactNode[] = [];
+                        if (tip) {
+                          const w2 = Math.max(56, tip.length * 26 + 24);
+                          parts.push(
+                            <g key="t" className="bv-flat-tip" data-flat-tipus>
+                              <rect x={x} y={ly - 24} width={w2} height={48} rx={10} />
+                              <text x={x + w2 / 2} y={ly}>{tip}</text>
+                            </g>);
+                          x += w2 + 10;
+                        }
+                        if (up) parts.push(
+                          <g key="u" className="bv-flat-u" data-flat-upgraded>
+                            <rect x={x} y={ly - 24} width={56} height={48} rx={14} />
+                            <text x={x + 28} y={ly + 1}>U</text>
+                          </g>);
+                        return parts;
+                      })()}
                     </g>
                   );
                 })}

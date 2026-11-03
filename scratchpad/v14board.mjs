@@ -9,6 +9,7 @@ seed.apartments.forEach(a => { if (a.apartmentNumber && a.colPosition) a.tipus =
 // a joined pair, as the office has them (38/39 on A1)
 const j1 = seed.apartments.find(a => a.id === 'A2-50'), j2 = seed.apartments.find(a => a.id === 'A2-51');
 if (j1 && j2) { j1.mergedWith = j2.id; j2.mergedWith = j1.id; }
+const upg = seed.apartments.find(a => a.id === 'A2-49'); if (upg) upg.classification = 'shinui';
 // lower-level slots as the office names them (FAKE labels): a spa, a lobby, a storage room, and one with no known area
 const slot = (b, floor, col, name) => { const s = seed.apartments.find(a => a.buildingId === b && a.floor === floor && a.colPosition === col); if (s) { s.displayName = name; } return !!s; };
 globalThis.__slots = [slot('A1', -0.5, 1, 'ספא'), slot('A2', 1, 1, 'קרקע'), slot('A2', -2, 1, '-2'), slot('A3', -1, 2, 'Generator room')];
@@ -47,7 +48,7 @@ T(await p.locator('[data-view-switch]').count() === 1, 'the Board · Building sw
 await p.click('[data-view="building"]'); await p.waitForTimeout(1200);
 T(await p.locator('[data-building-view]').count() === 1, 'the building view shows');
 await p.screenshot({ path: OUT + '/v14-building.png' });
-const flat = p.locator('.bv-plate[data-current="1"] [data-apt] text').first();
+const flat = p.locator('.bv-plate[data-current="1"] [data-apt] text.bv-flat-no').first();
 const fb = await flat.boundingBox();
 await p.mouse.click(fb.x + fb.width / 2, fb.y + fb.height / 2 + 15); await p.waitForTimeout(900);
 T(await p.locator('.drawer-panel').count() > 0, 'a press on a flat opens its window');
@@ -83,7 +84,7 @@ await p.click('[data-rail-floor="-1"]'); await p.waitForTimeout(1200);
 T(await p.locator('.bv-plate[data-solid="1"] svg[data-lower="b1"]').count() === 1, 'one building: basement -1 shows, its slice lit');
 // penthouses: one shape each, their own drawing
 await p.click('[data-rail-floor="14"]'); await p.waitForTimeout(1200);
-const nums = await p.evaluate(() => Object.fromEntries([...document.querySelectorAll('.bv-plate[data-current="1"] [data-apt]')].map(g => [g.querySelector('text').textContent, g.querySelector('text').getAttribute('x')])));
+const nums = await p.evaluate(() => Object.fromEntries([...document.querySelectorAll('.bv-plate[data-current="1"] [data-apt]')].map(g => [g.querySelector('text.bv-flat-no').textContent, g.querySelector('text.bv-flat-no').getAttribute('x')])));
 T(Number(nums['54']) < Number(nums['53']), `floor 14 as he marked it: 54 on the one side, 53 the other (${JSON.stringify(nums)})`);
 const ph = await p.evaluate(() => [...document.querySelectorAll('.bv-plate[data-current="1"] [data-apt]')].map(g => g.querySelectorAll('path').length));
 T(ph.length === 2 && ph.every(n => n === 1), `floor 14: two penthouses, each one shape (${ph})`);
@@ -100,12 +101,14 @@ T(await p.locator('.bv-plate[data-current="1"] [data-slot][data-zone="1"]').coun
 await p.screenshot({ path: OUT + '/v14-b2slot.png' });
 await p.screenshot({ path: OUT + '/v14-ground.png' });
 await p.click('[data-rail-floor="13"]'); await p.waitForTimeout(1200);
-const j = p.locator('.bv-plate[data-current="1"] [data-apt="A2-50"] text');
+const j = p.locator('.bv-plate[data-current="1"] [data-apt="A2-50"] text.bv-flat-no');
 if (await j.count()) {
   const jb = await j.boundingBox(); await p.mouse.move(jb.x + jb.width / 2, jb.y + jb.height / 2 + 12); await p.waitForTimeout(400);
   const litN = await p.locator('.bv-plate[data-current="1"] [data-apt][data-on="1"]').count();
   T(litN === 2, `a joined pair lights together (${litN})`);
   T(await p.locator('[data-card-joined]').count() === 2, 'both cards say they are joined');
+T(await p.locator('.bv-plate[data-current="1"] [data-flat-tipus]').count() === 4, 'every flat wears its tipus beside its number');
+T(await p.locator('.bv-plate[data-current="1"] [data-flat-upgraded]').count() >= 1, 'an upgraded flat wears the U');
   await p.screenshot({ path: OUT + '/v14-joined.png' });
 } else T(false, 'flat 50 on floor 13');
 await p.screenshot({ path: OUT + '/v14-one-b1.png' });

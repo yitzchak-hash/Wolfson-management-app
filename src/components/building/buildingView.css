@@ -164,3 +164,11 @@
 
 .bv-trio[data-low='1'] .bv-trio-row > .bv-root { pointer-events: none; }
 .bv-trio[data-low='1'] .bv-wide { z-index: 2; }
+
+/* The tipus and the upgrade bubble beside a flat's number, lying on the plan. */
+.bv-flat-tip rect { fill: #ffffff; stroke: #1e3a5f; stroke-width: 3; }
+.bv-flat-tip text { font-size: 32px; font-weight: 700; fill: #1e3a5f; text-anchor: middle; dominant-baseline: central; }
+.bv-flat-u rect { fill: #f59e0b; stroke: #ffffff; stroke-width: 4; }
+.bv-flat-u text { font-size: 34px; font-weight: 800; font-family: Inter, Arial, sans-serif; fill: #ffffff; text-anchor: middle; dominant-baseline: central; }
+.bv-flat-tip, .bv-flat-u { pointer-events: none; }
+.bv-plate[data-solid='0'] .bv-flat-tip, .bv-plate[data-solid='0'] .bv-flat-u { display: none; }
