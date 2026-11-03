@@ -36,7 +36,7 @@ export const WHATS_NEW: WhatsNewEntry[] = [
     items: [
       {
         title: 'Apartment labels stay on the apartment',
-        body: 'In Building, the number, type and U never run off the edge of an apartment any more, on any screen. The project\'s answer sits on its own line underneath and reads simply "Wall: Yes".',
+        body: 'In Building, the number, type and U never run off the edge of an apartment any more, on any screen, and they lie on top of the plan so its lines never cross them. The project\'s answer sits on its own line underneath and reads simply "Wall: Yes".',
         demo: 'zoom',
       },
       {

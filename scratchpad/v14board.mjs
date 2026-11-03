@@ -50,7 +50,7 @@ T(await p.locator('[data-view-switch]').count() === 1, 'the Board · Building sw
 await p.click('[data-view="building"]'); await p.waitForTimeout(1200);
 T(await p.locator('[data-building-view]').count() === 1, 'the building view shows');
 await p.screenshot({ path: OUT + '/v14-building.png' });
-const flat = p.locator('.bv-plate[data-current="1"] [data-apt] text.bv-flat-no').first();
+const flat = p.locator('.bv-plate[data-current="1"] [data-apt-labels] text.bv-flat-no').first();
 const fb = await flat.boundingBox();
 await p.mouse.click(fb.x + fb.width / 2, fb.y + fb.height / 2 + 15); await p.waitForTimeout(900);
 T(await p.locator('.drawer-panel').count() > 0, 'a press on a flat opens its window');
@@ -59,7 +59,7 @@ T(await p.locator('[data-view-switch]').count() === 1, 'the switch shows on All 
 T(await p.locator('text=/^Clear$/').count() === 0, 'no Clear on All with nothing filtered');
 await p.click('[data-view="building"]'); await p.waitForTimeout(1200);
 T(await p.locator('[data-building-trio] [data-building-view]').count() === 3, 'Building on All shows the three side by side');
-{ const f = p.locator('[data-building-trio] .bv-plate[data-current="1"] [data-apt] text.bv-flat-no').first(); const fb = await f.boundingBox();
+{ const f = p.locator('[data-building-trio] .bv-plate[data-current="1"] [data-apt-labels] text.bv-flat-no').first(); const fb = await f.boundingBox();
   await p.mouse.move(fb.x + fb.width / 2, fb.y + fb.height / 2 + 10); await p.waitForTimeout(400);
   const cb = await p.locator('[data-building-trio] .bv-card').first().boundingBox();
   const sb = await p.locator('[data-building-trio]').boundingBox();
@@ -93,7 +93,7 @@ await p.click('[data-rail-floor="-1"]'); await p.waitForTimeout(1200);
 T(await p.locator('.bv-plate[data-solid="1"] svg[data-lower="b1"]').count() === 1, 'one building: basement -1 shows, its slice lit');
 // penthouses: one shape each, their own drawing
 await p.click('[data-rail-floor="14"]'); await p.waitForTimeout(1200);
-const nums = await p.evaluate(() => Object.fromEntries([...document.querySelectorAll('.bv-plate[data-current="1"] [data-apt]')].map(g => [g.querySelector('text.bv-flat-no').textContent, g.querySelector('text.bv-flat-no').getAttribute('x')])));
+const nums = await p.evaluate(() => Object.fromEntries([...document.querySelectorAll('.bv-plate[data-current="1"] [data-apt-labels]')].map(g => [g.querySelector('text.bv-flat-no').textContent, g.querySelector('text.bv-flat-no').getAttribute('x')])));
 T(Number(nums['54']) < Number(nums['53']), `floor 14 as he marked it: 54 on the one side, 53 the other (${JSON.stringify(nums)})`);
 const ph = await p.evaluate(() => [...document.querySelectorAll('.bv-plate[data-current="1"] [data-apt]')].map(g => g.querySelectorAll('path:not(.bv-terrace)').length));
 T(ph.length === 2 && ph.every(n => n === 1), `floor 14: two penthouses, each one shape (${ph})`);
@@ -115,7 +115,7 @@ T(await p.locator('.bv-plate[data-current="1"] [data-slot][data-zone="1"]').coun
 await p.screenshot({ path: OUT + '/v14-b2slot.png' });
 await p.screenshot({ path: OUT + '/v14-ground.png' });
 await p.click('[data-rail-floor="13"]'); await p.waitForTimeout(1200);
-const j = p.locator('.bv-plate[data-current="1"] [data-apt="A2-50"] text.bv-flat-no');
+const j = p.locator('.bv-plate[data-current="1"] [data-apt-labels="A2-50"] text.bv-flat-no');
 if (await j.count()) {
   const jb = await j.boundingBox(); await p.mouse.move(jb.x + jb.width / 2, jb.y + jb.height / 2 + 12); await p.waitForTimeout(400);
   const litN = await p.locator('.bv-plate[data-current="1"] [data-apt][data-on="1"]').count();
@@ -124,7 +124,7 @@ if (await j.count()) {
 T(await p.locator('.bv-plate[data-current="1"] [data-flat-tipus]').count() === 4, 'every flat wears its tipus beside its number');
 T(await p.locator('.bv-plate[data-current="1"] [data-flat-upgraded]').count() >= 1, 'an upgraded flat wears the U');
 T(await p.locator('.bv-plate[data-current="1"] [data-flat-answer="yes"]').count() === 1, 'the Wall answer lies on the floor beside the number');
-{ const n = p.locator('.bv-plate[data-current="1"] [data-apt="A2-49"] text.bv-flat-no'); const nb = await n.boundingBox();
+{ const n = p.locator('.bv-plate[data-current="1"] [data-apt-labels="A2-49"] text.bv-flat-no'); const nb = await n.boundingBox();
   await p.mouse.move(nb.x + nb.width / 2, nb.y + nb.height / 2 + 14); await p.waitForTimeout(400);
   const order = await p.evaluate(() => { const c = document.querySelector('[data-card="A2-49"] .bv-card-top'); return c ? [...c.children].map(e => e.className.split(' ')[0]) : []; });
   T(order.join(',') === 'bv-card-no,bv-card-tip,bv-card-ans,bv-card-u', `the card says Wall between the tipus and the U (${order})`);
@@ -133,9 +133,15 @@ T(await p.locator('.bv-plate[data-current="1"] [data-flat-answer="yes"]').count(
   // every tag stays inside its own apartment (owner: "the info is dragging off the apartment")
   const off = await p.evaluate(() => [...document.querySelectorAll('.bv-plate[data-current="1"] [data-apt]')].flatMap(g => {
     const b = [...g.querySelectorAll(':scope > path:not(.bv-terrace)')].map(e => e.getBBox()).reduce((a, r) => ({ x0: Math.min(a.x0, r.x), x1: Math.max(a.x1, r.x + r.width) }), { x0: 1e9, x1: -1e9 });
-    return [...g.querySelectorAll('rect, text.bv-flat-no')].map(e => e.getBBox()).filter(r => r.x < b.x0 - 1 || r.x + r.width > b.x1 + 1).map(() => g.getAttribute('data-apt'));
+    const lab = g.closest('svg').querySelector(`[data-apt-labels="${g.getAttribute('data-apt')}"]`);
+    return [...lab.querySelectorAll('rect, text.bv-flat-no')].map(e => e.getBBox()).filter(r => r.x < b.x0 - 1 || r.x + r.width > b.x1 + 1).map(() => g.getAttribute('data-apt'));
   }));
   T(off.length === 0, `every tag stands inside its apartment (${off})`);
+  // the labels lie above the plan's drawing (owner: "it's getting hidden behind the lines of the plan")
+  const above = await p.evaluate(() => { const svg = document.querySelector('.bv-plate[data-current="1"] svg.bv-svg'); const kids = [...svg.children];
+    const lastImg = Math.max(...kids.map((k, i) => (k.classList.contains('bv-interior') ? i : -1)));
+    const firstLab = kids.findIndex(k => k.hasAttribute('data-apt-labels')); return lastImg >= 0 && firstLab > lastImg; });
+  T(above, 'the labels are drawn over the plan, not under its lines');
   await p.screenshot({ path: OUT + '/v16-answers.png' }); }
   await p.screenshot({ path: OUT + '/v14-joined.png' });
 } else T(false, 'flat 50 on floor 13');

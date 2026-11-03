@@ -381,7 +381,6 @@ export default function BuildingView({ apartments, stages, onOpen, words, initia
                   const f = fillOf(apt);
                   const on = lit(apt.id) && i === landed;
                   const joined = partner.has(apt.id);
-                  const [lx, ly] = LABEL_AT[shapes[0]];
                   return (
                     <g
                       key={apt.id}
@@ -397,6 +396,28 @@ export default function BuildingView({ apartments, stages, onOpen, words, initia
                     >
                       {shapes.flatMap(s => (PH_TERRACES[s] ?? []).map((t, j) => <path key={`${s}-t${j}`} className="bv-terrace" d={pathOf(t)} />))}
                       {shapes.map(s => <path key={s} d={pathOf(SHAPES[s])} />)}
+                    </g>
+                  );
+                })}
+                {phDrawing(row) && (
+                  <g className="bv-interior" pointerEvents="none">
+                    {/* Cut to the building and its terraces when it was drawn (the sheet also carries the floors below). */}
+                    <image href={phDrawing(row)} x={PH_BOX.x} y={PH_BOX.y} width={PH_BOX.w} height={PH_BOX.h} preserveAspectRatio="none" />
+                  </g>
+                )}
+                {interiorSrc && isTypical(row) && (
+                  <g className="bv-interior" pointerEvents="none">
+                    <clipPath id={`bv-clip-${row.floor}`}><path d={slabOf(row).map(k => pathOf(SHAPES[k])).join(' ') + ' ' + pathOf(CORE.outline)} /></clipPath>
+                    <image href={interiorSrc} x={PLAN_BOX.x} y={PLAN_BOX.y} width={PLAN_BOX.w} height={PLAN_BOX.h}
+                      clipPath={`url(#bv-clip-${row.floor})`} preserveAspectRatio="none" />
+                  </g>
+                )}
+                {/* The labels lie ABOVE the plan's drawing, so its lines never cross them (owner, 2026-11-03:
+                    "it's getting hidden behind the lines of the plan"). */}
+                {row.flats.map(({ apt, shapes }) => {
+                  const [lx, ly] = LABEL_AT[shapes[0]];
+                  return (
+                    <g key={`l-${apt.id}`} className="bv-flat-labels" data-apt-labels={apt.id} pointerEvents="none">
                       {/* The number, the tipus and the upgrade "U" on one line, the project's own answers ("Wall: Yes")
                           on the line under it — both kept INSIDE the apartment (owner, 2026-11-03: "the info is
                           dragging off the apartment … fix that on all devices"). */}
@@ -445,19 +466,6 @@ export default function BuildingView({ apartments, stages, onOpen, words, initia
                     </g>
                   );
                 })}
-                {phDrawing(row) && (
-                  <g className="bv-interior" pointerEvents="none">
-                    {/* Cut to the building and its terraces when it was drawn (the sheet also carries the floors below). */}
-                    <image href={phDrawing(row)} x={PH_BOX.x} y={PH_BOX.y} width={PH_BOX.w} height={PH_BOX.h} preserveAspectRatio="none" />
-                  </g>
-                )}
-                {interiorSrc && isTypical(row) && (
-                  <g className="bv-interior" pointerEvents="none">
-                    <clipPath id={`bv-clip-${row.floor}`}><path d={slabOf(row).map(k => pathOf(SHAPES[k])).join(' ') + ' ' + pathOf(CORE.outline)} /></clipPath>
-                    <image href={interiorSrc} x={PLAN_BOX.x} y={PLAN_BOX.y} width={PLAN_BOX.w} height={PLAN_BOX.h}
-                      clipPath={`url(#bv-clip-${row.floor})`} preserveAspectRatio="none" />
-                  </g>
-                )}
                 <text x={FLOOR_NO_AT[0]} y={FLOOR_NO_AT[1]} className="bv-floor-no">{lab(row.floor)}</text>
               </svg>
               )}
