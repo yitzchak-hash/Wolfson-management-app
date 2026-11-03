@@ -29,17 +29,16 @@ export const SHAPES: Record<ShapeKey, Pt[]> = {
   WL: [[122,420],[262,420],[262,542],[97,542],[97,525],[122,525]],
   WR: [[848,420],[979,420],[979,525],[1007,525],[1007,542],[848,542]],
   // THE PENTHOUSES, each ONE apartment (owner, 2026-11-03: "they feel like two
-  // connected apartments … a line in the middle"). The outlines are the ones he
-  // marked by hand on the printed floor 14 and 15 A sheets (terraces included;
-  // on 15 a box beside the core is not 56's). Their rooms are read off
-  // the engineers' floor 14 and floor 15 A sheets (TES 2441-08/-09), whose own
-  // vectors are drawn into the plan's units — the stairs land on the typical
-  // floor's stairs (1.145 plan units per sheet half-point). Floor 15 is set
-  // back: below the core it is terrace.
-  PL14: [[9,32],[472,32],[472,282],[234,282],[234,517],[472,517],[472,640],[423,640],[423,763],[9,763]],
-  PR14: [[472,32],[935,32],[935,763],[423,763],[423,640],[472,640],[472,517],[704,517],[704,282],[472,282]],
-  PL15: [[0,21],[469,21],[469,275],[228,275],[228,513],[469,513],[469,699],[0,699]],
-  PR15: [[469,21],[937,21],[937,699],[469,699],[469,606],[544,606],[544,539],[469,539],[469,513],[704,513],[704,275],[469,275]],
+  // connected apartments … a line in the middle"). Video 2026-11-03 14:56 ("just
+  // a square, there's no actual shape of a building"): the outlines are now
+  // TRACED off the engineers' own walls on the floor 14 and floor 15 A sheets
+  // (TES 2441-08/-09, drawn into the plan's units — their stairs land on the
+  // typical floor's), the rooms only; the open terraces are PH_TERRACES. The two
+  // flats meet on the party wall at x 555, as C2 and C1 do.
+  PL14: [[120,115],[230,115],[230,55],[500,55],[500,190],[555,190],[555,305],[290,305],[290,540],[555,540],[555,705],[120,705]],
+  PR14: [[600,55],[890,55],[890,130],[985,130],[985,705],[555,705],[555,540],[790,540],[790,305],[555,305],[555,190],[600,190]],
+  PL15: [[115,107],[230,107],[230,50],[490,50],[490,190],[555,190],[555,300],[315,300],[315,558],[115,558]],
+  PR15: [[600,50],[895,50],[895,120],[990,120],[990,558],[790,558],[790,300],[555,300],[555,190],[600,190]],
 };
 
 /** The penthouse floors' core, and each penthouse floor's own drawing. */
@@ -51,8 +50,15 @@ export const SHAPES: Record<ShapeKey, Pt[]> = {
  * on one side.
  */
 export const PH_BOX = { x: -20, y: 0, w: 1045, h: 820 };
-export const CORE_PH14: [number, number][] = [[234,282],[704,282],[704,517],[234,517]];
-export const CORE_PH15: [number, number][] = [[228,275],[704,275],[704,513],[228,513]];
+export const CORE_PH14: [number, number][] = [[290,305],[790,305],[790,540],[290,540]];
+export const CORE_PH15: [number, number][] = [[315,300],[790,300],[790,558],[315,558]];
+/** Each penthouse's open terraces, read off the same sheets: drawn lighter than its rooms. */
+export const PH_TERRACES: Partial<Record<ShapeKey, Pt[][]>> = {
+  PL14: [[[500,55],[555,55],[555,190],[500,190]]],
+  PR14: [[[555,55],[600,55],[600,190],[555,190]]],
+  PL15: [[[490,50],[555,50],[555,190],[490,190]], [[115,558],[555,558],[555,700],[115,700]]],
+  PR15: [[[555,50],[600,50],[600,190],[555,190]], [[555,558],[995,558],[995,700],[555,700]]],
+};
 export const CORE_PH: [number, number][] = CORE_PH14;
 /** The floor number stands in the middle of the stair core, on every floor. */
 export const FLOOR_NO_AT: [number, number] = [551, 444];
@@ -61,7 +67,7 @@ export function isPenthouseShape(k: ShapeKey): boolean { return k.startsWith('P'
 
 /** Where an apartment's number sits — inside its biggest room (the living wing). */
 export const LABEL_AT: Record<ShapeKey, Pt> = {
-  A: [178, 215], B: [930, 228], C2: [178, 640], C1: [930, 640], WL: [180, 480], WR: [925, 480], PL14: [150, 640], PR14: [800, 640], PL15: [150, 610], PR15: [800, 620],
+  A: [178, 215], B: [930, 228], C2: [178, 640], C1: [930, 640], WL: [180, 480], WR: [925, 480], PL14: [150, 640], PR14: [800, 640], PL15: [160, 470], PR15: [830, 470],
 };
 
 /** The core: the corridor band, two stairwells and the lifts. */

@@ -95,12 +95,17 @@ T(await p.locator('.bv-plate[data-solid="1"] svg[data-lower="b1"]').count() === 
 await p.click('[data-rail-floor="14"]'); await p.waitForTimeout(1200);
 const nums = await p.evaluate(() => Object.fromEntries([...document.querySelectorAll('.bv-plate[data-current="1"] [data-apt]')].map(g => [g.querySelector('text.bv-flat-no').textContent, g.querySelector('text.bv-flat-no').getAttribute('x')])));
 T(Number(nums['54']) < Number(nums['53']), `floor 14 as he marked it: 54 on the one side, 53 the other (${JSON.stringify(nums)})`);
-const ph = await p.evaluate(() => [...document.querySelectorAll('.bv-plate[data-current="1"] [data-apt]')].map(g => g.querySelectorAll('path').length));
+const ph = await p.evaluate(() => [...document.querySelectorAll('.bv-plate[data-current="1"] [data-apt]')].map(g => g.querySelectorAll('path:not(.bv-terrace)').length));
 T(ph.length === 2 && ph.every(n => n === 1), `floor 14: two penthouses, each one shape (${ph})`);
+// video 21: the real building shape, not a square — each penthouse's rooms outline has the notches, and its terrace is apart
+const pts = await p.evaluate(() => [...document.querySelectorAll('.bv-plate[data-current="1"] [data-apt] path:not(.bv-terrace)')].map(e => (e.getAttribute('d').match(/L/g) || []).length + 1));
+T(pts.every(n => n >= 10), `floor 14: each penthouse is its traced outline, not a box (${pts} corners)`);
+T(await p.locator('.bv-plate[data-current="1"] [data-apt] path.bv-terrace').count() === 2, 'floor 14: the top terraces drawn apart, lighter');
 T(await p.locator('.bv-plate[data-current="1"] .bv-interior image[href*="ph14"]').count() === 1, 'floor 14 shows its own drawing');
 await p.screenshot({ path: OUT + '/v14-ph14.png' });
 await p.click('[data-rail-floor="15"]'); await p.waitForTimeout(1200);
 T(await p.locator('.bv-plate[data-current="1"] .bv-interior image[href*="ph15"]').count() === 1, 'floor 15 shows its own drawing');
+T(await p.locator('.bv-plate[data-current="1"] [data-apt] path.bv-terrace').count() === 4, 'floor 15: the terraces (top and the long one below) drawn apart');
 await p.screenshot({ path: OUT + '/v14-ph15.png' });
 // the board's slots on the ground floor of building 2: Lobby lights its area
 await p.click('[data-rail-floor="0"]'); await p.waitForTimeout(1200);

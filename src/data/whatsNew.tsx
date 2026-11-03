@@ -35,6 +35,11 @@ export const WHATS_NEW: WhatsNewEntry[] = [
     title: 'Send a plan as a PDF',
     items: [
       {
+        title: 'The penthouse floors in their real shape',
+        body: 'In Building, floors 14 and 15 now have the building\'s true outline, taken from the engineers\' own plans — not a plain box. Each penthouse lights up in its stage colour, and the open terraces show paler beside it.',
+        demo: 'zoom',
+      },
+      {
         title: 'Wall yes / no where you look',
         body: 'The project\'s own buttons (like Wall) now show their answer on the floor in Building, beside the apartment\'s number, and on the card that comes up when you hover. In Wolfson the apartment window shows those buttons at the top, where the address and phone were.',
         demo: 'tap',

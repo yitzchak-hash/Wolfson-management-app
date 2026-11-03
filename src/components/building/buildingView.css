@@ -46,6 +46,9 @@
   stroke-width: 3; stroke-linejoin: round;
   transition: fill .25s ease, stroke-width .2s ease, filter .25s ease;
 }
+/* a penthouse's open terrace: the same colour, paler, a thin dashed edge */
+.bv-flat path.bv-terrace { fill: color-mix(in srgb, var(--bv-c) 9%, #ffffff); stroke-width: 2; stroke-dasharray: 8 6; filter: none; }
+.bv-flat[data-on='1'] path.bv-terrace { fill: color-mix(in srgb, var(--bv-c) 26%, #ffffff); stroke-width: 2.5; stroke-dasharray: 8 6; filter: none; }
 .bv-flat[data-unsold='1'] path { fill: #ffffff; stroke: #94a3b8; stroke-dasharray: 10 8; }
 .bv-flat[data-on='1'] path {
   fill: color-mix(in srgb, var(--bv-c) 62%, #ffffff); stroke: #1e3a5f; stroke-width: 6; stroke-dasharray: none;

@@ -17,7 +17,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { Apartment, Stage, CustomButton } from '../../types';
 import { realName } from '../../data/aptSale';
 import {
-  CARD_CORNER, CORE, CORE_PH14, CORE_PH15, PH_BOX, FLOOR_NO_AT, PH_DRAWING, isPenthouseShape, LABEL_AT, LEVEL_FLOORS, STRIP, zoneFor, PLAN_BOX, SHAPES, pathOf, shapesOf, stripFor, type ShapeKey, type LowerLevel,
+  CARD_CORNER, CORE, CORE_PH14, CORE_PH15, PH_BOX, PH_TERRACES, FLOOR_NO_AT, PH_DRAWING, isPenthouseShape, LABEL_AT, LEVEL_FLOORS, STRIP, zoneFor, PLAN_BOX, SHAPES, pathOf, shapesOf, stripFor, type ShapeKey, type LowerLevel,
 } from './wolfsonPlan';
 import './buildingView.css';
 
@@ -127,6 +127,10 @@ function coreOf(row: FloorRow): [number, number][] {
 }
 
 /** The floor's own outline: a typical floor is all four flats; the set-back top floor only what its flats cover. */
+/** Every outline of the floor (rooms, then a penthouse's terraces) as one path. */
+function slabPath(row: FloorRow, core: [number, number][]): string {
+  return slabOf(row).flatMap(k => [SHAPES[k], ...(PH_TERRACES[k] ?? [])]).map(pathOf).join(' ') + ' ' + pathOf(core);
+}
 function slabOf(row: FloorRow): ShapeKey[] {
   const used = row.flats.flatMap(f => f.shapes);
   return used.some(k => k === 'WL' || k === 'WR' || isPenthouseShape(k)) ? used : ['A', 'B', 'C1', 'C2'];
@@ -353,7 +357,7 @@ export default function BuildingView({ apartments, stages, onOpen, words, initia
                 );
               })()) : (
               <svg viewBox={`${PLAN_BOX.x} ${PLAN_BOX.y} ${PLAN_BOX.w} ${PLAN_BOX.h}`} className="bv-svg">
-                <path className="bv-slab" d={slabOf(row).map(k => pathOf(SHAPES[k])).join(' ') + ' ' + pathOf(coreOf(row))} />
+                <path className="bv-slab" d={slabPath(row, coreOf(row))} />
                 <g className="bv-core" data-plain={(interiorSrc && isTypical(row)) || phDrawing(row) ? '0' : '1'}>
                   <path d={pathOf(coreOf(row))} />
                   {CORE.stairs.map(([x, y, sw, sh], j) => (
@@ -389,6 +393,7 @@ export default function BuildingView({ apartments, stages, onOpen, words, initia
                       onPointerLeave={() => setHover(h => (h === apt.id ? null : h))}
                       onClick={() => i === landed && onOpen(apt)}
                     >
+                      {shapes.flatMap(s => (PH_TERRACES[s] ?? []).map((t, j) => <path key={`${s}-t${j}`} className="bv-terrace" d={pathOf(t)} />))}
                       {shapes.map(s => <path key={s} d={pathOf(SHAPES[s])} />)}
                       <text x={lx} y={ly} className="bv-flat-no">{apt.apartmentNumber}</text>
                       {/* The tipus and the upgrade "U" lie on the plan beside the number, like on the board's tile (owner, 2026-11-03). */}
@@ -429,6 +434,7 @@ export default function BuildingView({ apartments, stages, onOpen, words, initia
                 })}
                 {phDrawing(row) && (
                   <g className="bv-interior" pointerEvents="none">
+                    {/* Cut to the building and its terraces when it was drawn (the sheet also carries the floors below). */}
                     <image href={phDrawing(row)} x={PH_BOX.x} y={PH_BOX.y} width={PH_BOX.w} height={PH_BOX.h} preserveAspectRatio="none" />
                   </g>
                 )}
