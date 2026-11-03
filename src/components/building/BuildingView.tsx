@@ -54,6 +54,12 @@ const ABOVE_SHOWN = 1, BELOW_SHOWN = 6;
 
 interface FloorRow { floor: number; flats: { apt: Apartment; shapes: ShapeKey[] }[] }
 
+/** The floor's own outline: a typical floor is all four flats; the set-back top floor only what its flats cover. */
+function slabOf(row: FloorRow): ShapeKey[] {
+  const used = row.flats.flatMap(f => f.shapes);
+  return used.some(k => k === 'WL' || k === 'WR') ? used : ['A', 'B', 'C1', 'C2'];
+}
+
 export default function BuildingView({ apartments, stages, onOpen, words, initialFloor, floorLabels }: BuildingViewProps) {
   const lab = (f: number) => floorLabels?.[f] || String(f);
   const w = { ...EN, ...words };
@@ -211,7 +217,7 @@ export default function BuildingView({ apartments, stages, onOpen, words, initia
               data-current={i === landed ? '1' : '0'}
             >
               <svg viewBox={`${PLAN_BOX.x} ${PLAN_BOX.y} ${PLAN_BOX.w} ${PLAN_BOX.h}`} className="bv-svg">
-                <path className="bv-slab" d={(['A', 'B', 'C1', 'C2'] as ShapeKey[]).map(k => pathOf(SHAPES[k])).join(' ') + ' ' + pathOf(CORE.outline)} />
+                <path className="bv-slab" d={slabOf(row).map(k => pathOf(SHAPES[k])).join(' ') + ' ' + pathOf(CORE.outline)} />
                 <g className="bv-core">
                   <path d={pathOf(CORE.outline)} />
                   {CORE.stairs.map(([x, y, sw, sh], j) => (

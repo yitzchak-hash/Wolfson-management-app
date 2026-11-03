@@ -12,7 +12,7 @@
  *
  * Pure data: no React, nothing from the store.
  */
-export type ShapeKey = 'A' | 'B' | 'C1' | 'C2';
+export type ShapeKey = 'A' | 'B' | 'C1' | 'C2' | 'WL' | 'WR';
 type Pt = [number, number];
 
 /** The view box that holds the whole floor, with a little air round it. */
@@ -23,11 +23,16 @@ export const SHAPES: Record<ShapeKey, Pt[]> = {
   B:  [[712,38],[885,38],[885,137],[1007,137],[1007,305],[979,305],[979,420],[848,420],[848,300],[662,300],[662,197],[712,197]],
   C2: [[122,420],[262,420],[262,542],[550,542],[550,630],[495,630],[495,800],[225,800],[225,740],[97,740],[97,525],[122,525]],
   C1: [[848,420],[979,420],[979,525],[1007,525],[1007,740],[885,740],[885,800],[610,800],[610,630],[550,630],[550,542],[848,542]],
+  // The top penthouse floor is set back: below the core it is open terrace
+  // (the engineers' "קומה 15 A/B" sheets). What is left of the two lower
+  // wings beside the core joins the penthouse on its side.
+  WL: [[122,420],[262,420],[262,542],[97,542],[97,525],[122,525]],
+  WR: [[848,420],[979,420],[979,525],[1007,525],[1007,542],[848,542]],
 };
 
 /** Where an apartment's number sits — inside its biggest room (the living wing). */
 export const LABEL_AT: Record<ShapeKey, Pt> = {
-  A: [178, 215], B: [930, 228], C2: [178, 640], C1: [930, 640],
+  A: [178, 215], B: [930, 228], C2: [178, 640], C1: [930, 640], WL: [180, 480], WR: [925, 480],
 };
 
 /** The core: the corridor band, two stairwells and the lifts. */
@@ -46,10 +51,18 @@ export function shapeOfColumn(col: number): ShapeKey {
   return (['A', 'B', 'C1', 'C2'] as const)[(Math.max(1, Math.min(4, col)) - 1)];
 }
 
-export function shapesOf(apt: { tipus?: string; colPosition: number; colSpan?: number }): ShapeKey[] {
+export function shapesOf(apt: { tipus?: string; colPosition: number; colSpan?: number; isDuplexApt?: boolean; apartmentNumber?: string }): ShapeKey[] {
   const span = Math.max(1, apt.colSpan ?? 1);
-  // A merged penthouse covers several columns: its outline is theirs together.
-  if (span > 1) return Array.from({ length: span }, (_, i) => shapeOfColumn(apt.colPosition + i));
+  // A penthouse is half a floor, split LEFT and RIGHT (the engineers'
+  // Wolfson sheets, "קומה 14" and "קומה 15 A/B", 2026-11-03): the one at the
+  // board's first columns is the left half (A over C2), the other the right
+  // (B over C1). The top one (55/56, two storeys) sits on the set-back floor.
+  if (span > 1) {
+    const left = apt.colPosition <= 2;
+    const top = !!apt.isDuplexApt || Number(apt.apartmentNumber) >= 55;
+    if (top) return left ? ['A', 'WL'] : ['B', 'WR'];
+    return left ? ['A', 'C2'] : ['B', 'C1'];
+  }
   const t = (apt.tipus ?? '').trim().toUpperCase();
   const m = t.match(/^(A|B|C1|C2)\b/);
   return [m ? (m[1] as ShapeKey) : shapeOfColumn(apt.colPosition)];
@@ -61,5 +74,5 @@ export function pathOf(pts: Pt[]): string {
 
 /** The corner of the screen each apartment's card stands in (his red boxes). */
 export const CARD_CORNER: Record<ShapeKey, 'tl' | 'tr' | 'bl' | 'br'> = {
-  A: 'tl', B: 'tr', C2: 'bl', C1: 'br',
+  A: 'tl', B: 'tr', C2: 'bl', C1: 'br', WL: 'bl', WR: 'br',
 };
