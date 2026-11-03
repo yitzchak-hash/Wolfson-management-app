@@ -1,0 +1,51 @@
+// Video 14 (2026-11-02): one building big · the floor window on All · Board/Building switch.
+import { chromium } from '/opt/node22/lib/node_modules/playwright/index.mjs';
+import { realisticWolfson, applySeed } from './seed.mjs';
+const OUT = process.env.SHOTS || '/tmp';
+const browser = await chromium.launch();
+const seed = JSON.parse(await realisticWolfson(browser));
+const TIP = ['A', 'B', 'C1', 'C2'];
+seed.apartments.forEach(a => { if (a.apartmentNumber && a.colPosition) a.tipus = TIP[(a.colPosition - 1) % 4]; });
+const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+await applySeed(ctx, JSON.stringify(seed));
+const p = await ctx.newPage();
+const errs = []; p.on('pageerror', e => errs.push(e.message));
+let ok = 0, bad = 0; const T = (c, m) => { c ? ok++ : bad++; console.log((c ? 'ok  ' : 'BAD ') + m); };
+await p.goto('http://localhost:5173/project'); await p.waitForTimeout(2500);
+// 1. the floor window on All
+const lab = p.locator('[data-floor-open]').first();
+T(await lab.count() > 0, 'floor numbers are presses on All');
+await lab.click(); await p.waitForTimeout(600);
+const win = p.locator('[data-floor-window]');
+T(await win.count() === 1, 'the floor window opens');
+const tiles = await win.locator('[data-apt-id]').count();
+T(tiles >= 2 && tiles <= 4, `it holds only that floor's flats (${tiles})`);
+const big = await win.locator('[data-apt-id][data-big]').count();
+T(big === tiles, 'its tiles are the big ones');
+const ww = await win.locator('[role=dialog]').boundingBox();
+T(ww.width > 1300, `it spans across (${Math.round(ww.width)}px)`);
+await p.screenshot({ path: OUT + '/v14-floorwin.png' });
+await p.keyboard.press('Escape'); await p.waitForTimeout(300);
+T(await win.count() === 0, 'Escape closes it');
+// 2. one building big
+await p.locator('button:visible', { hasText: /^2$/ }).first().click(); await p.waitForTimeout(800);
+const bigTiles = await p.locator('[data-apt-id][data-big]').count();
+T(bigTiles > 10, `one building: big tiles (${bigTiles})`);
+const tw = await p.locator('[data-apt-id][data-big]').first().boundingBox();
+T(tw.width > 200 && tw.height > 170, `a tile is big (${Math.round(tw.width)}×${Math.round(tw.height)})`);
+T(await p.locator('[data-cell-progress]').count() > 0, 'tiles say their progress');
+T(await p.locator('[data-floor-open]').count() === 0, 'no floor window presses with one building');
+await p.screenshot({ path: OUT + '/v14-big.png' });
+// 3. Board · Building
+T(await p.locator('[data-view-switch]').count() === 1, 'the Board · Building switch is there');
+await p.click('[data-view="building"]'); await p.waitForTimeout(1200);
+T(await p.locator('[data-building-view]').count() === 1, 'the building view shows');
+await p.screenshot({ path: OUT + '/v14-building.png' });
+const flat = p.locator('.bv-plate[data-current="1"] [data-apt] text').first();
+const fb = await flat.boundingBox();
+await p.mouse.click(fb.x + fb.width / 2, fb.y + fb.height / 2 + 15); await p.waitForTimeout(900);
+T(await p.locator('.drawer-panel').count() > 0, 'a press on a flat opens its window');
+await p.goto('http://localhost:5173/project'); await p.waitForTimeout(1500);
+T(await p.locator('[data-view-switch]').count() === 0, 'no switch on All');
+console.log(`\n${ok} ok · ${bad} bad · errors: ${errs.length ? errs.join(' | ') : 'none'}`);
+await browser.close();

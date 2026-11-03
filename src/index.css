@@ -962,3 +962,16 @@ html.board-full [data-board-page-root] {
   .apt-tile [data-cell-name] { left: 4px !important; right: 4px !important; font-size: 11.5px !important; }
   .apt-tile[data-has-tipus] [data-cell-name] { top: 40px !important; }
 }
+
+/* ONE building on a computer (owner, recording 2026-11-02): the building fills
+   the view, so every piece of a placed tile is set bigger here. */
+.apt-tile[data-big] [data-cell-number] { left: 12px !important; top: 11px !important; font-size: 22px !important; }
+.apt-tile[data-big] [data-tipus-line] { top: 10px !important; font-size: 15px !important; padding: 3px 10px !important; }
+.apt-tile[data-big] [data-cell-name] { left: 12px !important; right: 12px !important; top: 50px !important; font-size: 19px !important; line-height: 1.2 !important; }
+.apt-tile[data-big] [data-cell-task] { top: 104px !important; font-size: 13px !important; }
+.apt-tile[data-big] [data-cell-stage] { top: 124px !important; font-size: 14px !important; left: 40px !important; right: 40px !important; }
+.apt-tile[data-big] [data-cell-more] { font-size: 12.5px; left: 42px !important; right: 42px !important; }
+.apt-tile[data-big] [data-upgraded-badge] { width: 28px !important; height: 28px !important; left: 8px !important; bottom: 26px !important; }
+.apt-tile[data-big] [data-upgraded-badge] span { font-size: 14px !important; }
+.apt-tile[data-big] [data-cell-strip] { height: 14px !important; left: 6px !important; right: 6px !important; bottom: 6px !important; }
+.apt-tile[data-big] > button[title] { width: 28px !important; height: 28px !important; font-size: 20px !important; top: 6px !important; right: 6px !important; }

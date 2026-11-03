@@ -3436,6 +3436,14 @@ export interface MainUiStrings {
   shinuiTooltip: string;
   soldWord: string;
   notSoldWord: string;
+  viewBoard: string;
+  viewBuilding: string;
+  floorWindowOpen: string;
+  floorWindowTitle: string;
+  bigStagesDone: string;
+  bigNext: string;
+  bvOpen: string;
+  bvHint: string;
   upgradedWord: string;
   openInSketcher: string;
   openInSketcherTip: string;
@@ -4440,6 +4448,14 @@ export const DEFAULT_MAIN_UI_STRINGS: MainUiStrings = {
   shinuiTooltip: 'Apartment has modifications (Shinui)',
   soldWord: 'Sold',
   notSoldWord: 'Not sold',
+  viewBoard: 'Board',
+  viewBuilding: 'Building',
+  floorWindowOpen: 'Open floor',
+  floorWindowTitle: 'Floor',
+  bigStagesDone: 'stages done',
+  bigNext: 'next:',
+  bvOpen: 'Open',
+  bvHint: 'Scroll to move between floors',
   upgradedWord: 'Upgraded',
   openInSketcher: 'Open in Sketcher',
   openInSketcherTip: 'Opens this plan in the Plan Sketcher, in a new tab',
@@ -5434,6 +5450,14 @@ export const HEBREW_MAIN_UI_STRINGS: MainUiStrings = {
   shinuiTooltip: 'דירת שינוי',
   soldWord: 'נמכר',
   notSoldWord: 'לא נמכר',
+  viewBoard: 'לוח',
+  viewBuilding: 'בניין',
+  floorWindowOpen: 'פתח קומה',
+  floorWindowTitle: 'קומה',
+  bigStagesDone: 'שלבים בוצעו',
+  bigNext: 'הבא:',
+  bvOpen: 'פתח',
+  bvHint: 'גלול כדי לעבור בין הקומות',
   upgradedWord: 'משודרג',
   openInSketcher: 'פתיחה בסקצ׳ר',
   openInSketcherTip: 'פותח את התוכנית בסקצ׳ר, בלשונית חדשה',

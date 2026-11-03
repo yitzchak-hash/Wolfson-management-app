@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { Link2, Lock, LockOpen } from 'lucide-react';
-import { Apartment, BuildingId, Stage } from '../../types';
+import { Apartment, BuildingId, Stage, relativeTime } from '../../types';
 import { useStore } from '../../data/store';
 import { PROBLEM_FILL } from '../../data/problems';
 import { progressOf, StageProgress, isStartStage } from '../../data/stageMarks';
@@ -87,6 +87,9 @@ const PHONE_CELL_CHROME = 5;   // the cell's own 1.5px border + 1px padding, bot
 // A phone always shows one building, and a single building is capped at this by
 // the wrapper below — so on a narrow desktop window the cells stop widening here.
 const SINGLE_COL_MAX_W = 560;
+/** One building on a computer: the floors are this much taller, the building as wide as the view allows. */
+const BIG_ROW = 1.75;
+const BIG_MAX_W = 1600;
 
 /** Px of text width one apartment cell gets, given how many share the floor. */
 function phoneCellTextWidth(cols: number): number {
@@ -208,6 +211,20 @@ interface AptCellProps {
   onStripPiece?: (p: StripPiece | null) => void;
 }
 
+/**
+ * How the board is being looked at (owner, recording 2026-11-02):
+ * `big` — ONE building chosen on a computer: the building fills the view, the
+ * tiles are much bigger and carry more (progress, next stage, who touched it
+ * last). Never on All. `onFloorClick` — on All, a press on a floor's number
+ * opens that floor's row big in a window of its own.
+ */
+export const DiagramLook = React.createContext<{
+  big: boolean;
+  onFloorClick?: (buildingId: BuildingId, rowKey: string, label: string) => void;
+  /** Draw only this floor row (the floor window). */
+  onlyRow?: string;
+}>({ big: false });
+
 /** One piece of a tile's stage strip, for the photos it opens. */
 export interface StripPiece { aptId: string; stageId: string; state: string; rect: DOMRect; pinned?: boolean }
 
@@ -274,6 +291,7 @@ function AptCell({
    * cut short. Other workspaces keep the one-line tile.
    */
   const placed = !phone && !compact && !!apt && /^A\d/.test(apt.buildingId) && !rowFloorType;
+  const bigCell = React.useContext(DiagramLook).big && placed;
   /** Desktop tiles elsewhere carry the number and the name on ONE line, the tipus under it. */
   const oneLine = !phone && !compact && !mergedLabel && !placed;
   /**
@@ -285,7 +303,8 @@ function AptCell({
   const displayLabel = numberLabel || nameLabel;
   const tipusLine = tipus && numberLabel ? tipus : '';
 
-  const scale = isHighlighted && !isDimmed ? 'scale-[1.04] z-10' : '';
+  // A big tile is already big; growing it 4% ran it over the floor numbers.
+  const scale = isHighlighted && !isDimmed && !bigCell ? 'scale-[1.04] z-10' : '';
   const stageWords = problem === 'open'
     ? `${ui.problemLabel.toUpperCase()}${hasStage ? ` · ${ui.problemWas} ${stage!.name}` : ''}`
     : problem === 'waiting' ? ui.problemWaiting
@@ -316,6 +335,7 @@ function AptCell({
       // big screen, 2026-11-02: the tipus sat on the number, names torn
       // mid-word) moves its tipus under the number (index.css).
       data-has-tipus={placed && tipusLine ? '1' : undefined}
+      data-big={bigCell ? '1' : undefined}
       className={`${placed ? 'apt-tile ' : ''}relative flex flex-col items-center justify-center cursor-pointer select-none rounded-md overflow-hidden transition-all duration-100 ${scale}`}
       onMouseEnter={() => apt && onHover?.(apt.id)}
       onMouseLeave={() => onHover?.(null)}
@@ -448,6 +468,20 @@ function AptCell({
               {allTasksDone && <span style={{ color: isDimmed ? '#9ca3af' : '#22c55e', marginLeft: '1px' }}>✓</span>}
             </span>
           )}
+          {/* One building on a computer: room for more (owner, recording
+              2026-11-02 — "show much more information in each tile"). */}
+          {bigCell && (progress?.total || apt?.updatedByName) ? (
+            <span data-cell-more className="absolute text-center" style={{ left: 8, right: 8, top: 146, lineHeight: 1.3, opacity: isDimmed ? 0.5 : 0.85 }}>
+              {progress && progress.total > 0 && (
+                <span className="block truncate" data-cell-progress>
+                  <b>{progress.done}/{progress.total}</b> {ui.bigStagesDone}{nextStageName ? ` · ${ui.bigNext} ${nextStageName}` : ''}
+                </span>
+              )}
+              {apt?.updatedByName && apt.updatedAt && (
+                <span className="block truncate" data-cell-touched>{apt.updatedByName} · {relativeTime(apt.updatedAt)}</span>
+              )}
+            </span>
+          ) : null}
         </>
       )}
       {placed ? null : displayLabel ? (
@@ -856,7 +890,9 @@ function BuildingColumn({
     () => buildFloorRows(buildingId, apartments, heights, layout),
     [buildingId, apartments, heights, layout]);
   const mode: RowMode = compact ? 'compact' : phone ? 'phone' : 'desktop';
-  const rowPx = useMemo(() => rows.map(r => rowHeightPx(r, buildingId, mode)), [rows, buildingId, mode]);
+  const look = React.useContext(DiagramLook);
+  const big = look.big && !compact && !phone;
+  const rowPx = useMemo(() => rows.map(r => Math.round(rowHeightPx(r, buildingId, mode) * (big ? BIG_ROW : 1))), [rows, buildingId, mode, big]);
   const roofH = roofHeightPx(mode);
   const LABEL_W = compact ? 26 : 34;
   const padClass = compact || phone ? 'p-0.5 gap-0.5' : 'p-1 gap-1';
@@ -920,6 +956,7 @@ function BuildingColumn({
         style={{ border: '1px solid #e2e8f0', backgroundColor: '#f8fafc' }}
       >
         {/* Roof */}
+        {!look.onlyRow && (
         <div className="flex items-stretch" data-floor-row="roof"
           style={{ height: `${roofH}px`, minHeight: `${roofH}px`, borderBottom: '1px solid #e9edf2' }}>
           {!phone && (
@@ -929,7 +966,7 @@ function BuildingColumn({
           <div className={`flex flex-1 items-stretch ${padClass}`}>
             <div className="flex-1 rounded-md" style={{ backgroundColor: '#bfdbfe' }} />
           </div>
-        </div>
+        </div>)}
 
         {/* What the four squares across a row are CALLED, when the office
             named them in the layout studio. Drawn once under the roof — a
@@ -963,6 +1000,7 @@ function BuildingColumn({
         })()}
 
         {rows.map((row, ri) => {
+          if (look.onlyRow && row.key !== look.onlyRow) return null;
           const h = rowPx[ri];
           const cells = rowCells(row, pos);
           const leftN = Math.ceil(row.cols / 2);
@@ -1038,9 +1076,15 @@ function BuildingColumn({
            * floor reads straight across A1, A2 and A3.
            */
           const band = row.kind === 'normal' || row.kind === 'wide' ? (ri % 2 ? '#EEF2F7' : '#FFFFFF') : undefined;
+          const floorPress = !!look.onFloorClick && !phone && !compact && (row.kind === 'normal' || row.kind === 'wide');
           const floorLabelBox = (side: 'left' | 'right') => (
-            <div className="flex flex-col items-center justify-center flex-shrink-0 text-gray-500"
+            <div className={`flex flex-col items-center justify-center flex-shrink-0 text-gray-500${floorPress ? ' cursor-pointer hover:bg-[#e0e9f3] transition-colors' : ''}`}
               data-floor-label={side === 'left' ? label : undefined} data-floor-label-right={side === 'right' ? label : undefined}
+              data-floor-open={floorPress ? row.key : undefined}
+              role={floorPress ? 'button' : undefined} tabIndex={floorPress ? 0 : undefined}
+              title={floorPress ? `${ui.floorWindowOpen} ${label}` : undefined}
+              onClick={floorPress ? () => look.onFloorClick!(buildingId, row.key, label) : undefined}
+              onKeyDown={floorPress ? e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); look.onFloorClick!(buildingId, row.key, label); } } : undefined}
               style={{ width: `${LABEL_W}px`, [side === 'left' ? 'borderRight' : 'borderLeft']: '1px solid #e2e8f0', backgroundColor: band ?? rowBgOf(row), fontWeight: 700 }}>
               {/* The owner asked for bigger floor numbers (2026-10-28) — at 9px
                   they were hard to find down the side of a tall building. */}
@@ -1110,6 +1154,7 @@ export function BuildingDiagram({
   const buildingOrder: BuildingId[] = isRtl ? [...buildings].reverse().map(b => b.id) : buildings.map(b => b.id);
   const visibleBuildings = selectedBuilding === 'all' ? buildingOrder : [selectedBuilding];
   const single = selectedBuilding !== 'all';
+  const bigLook = React.useContext(DiagramLook).big && single && !compact && !phone;
 
   const aptsByBuilding = useMemo(() => {
     const m = new Map<BuildingId, Apartment[]>();
@@ -1173,7 +1218,7 @@ export function BuildingDiagram({
   return (
     <div
       className={`flex ${gapClass} ${padClass} ${single && !compact ? 'justify-center' : 'w-full'}`}
-      style={single && !compact ? { maxWidth: `${SINGLE_COL_MAX_W}px`, margin: '0 auto' } : {}}
+      style={single && !compact ? { maxWidth: `${bigLook ? BIG_MAX_W : SINGLE_COL_MAX_W}px`, margin: '0 auto', ...(bigLook ? { width: '100%' } : null) } : {}}
     >
       {visibleBuildings.map(bId => {
         const isWolfsonBuilding = /^A\d/.test(bId);

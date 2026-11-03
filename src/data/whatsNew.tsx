@@ -31,6 +31,27 @@ export interface WhatsNewEntry {
 
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    date: '2027-02-23',
+    title: 'One building, big — and the building in 3D',
+    items: [
+      {
+        title: 'One building fills the screen',
+        body: 'Pick 1, 2 or 3 at the top: that building now fills the screen with big tiles that also show how many stages are done, the next stage, and who touched it last.',
+        demo: 'zoom',
+      },
+      {
+        title: 'A floor on its own',
+        body: 'On All, press a floor\'s number at the side: that floor opens big in a window across the screen. Press an apartment there to open it.',
+        demo: 'tap',
+      },
+      {
+        title: 'Board · Building',
+        body: 'With one building picked, switch to Building: the floors stack up see-through, each apartment in its real shape. Scroll to go up and down the floors, hover an apartment to light it up, press it to open it.',
+        demo: 'sparkle',
+      },
+    ],
+  },
+  {
     date: '2027-02-22',
     title: 'A pin board never loses its jobs',
     items: [

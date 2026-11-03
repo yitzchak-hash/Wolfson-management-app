@@ -12,8 +12,10 @@ Vercel serverless functions in `/api`.
 - `npx tsc --noEmit -p .` and `npx vite build` before pushing.
 
 ## Facts worth knowing
-- **Push ONLY to the production branch, and push rarely** (owner, 2026-10-29 — Vercel's build minutes):
-  one push when a round is finished, never a work branch beside it (every branch push is a Vercel build).
+- **Build on the PREVIEW branch first, push live only on his word** (owner, 2026-11-03: "only build in this preview branch
+  before you push live"). The preview branch is `claude/magical-darwin-6py813`; Vercel builds it at its own preview address.
+  He looks there, and when the day's round is done it is merged into production (`claude/blissful-cray-spTFY`) in ONE push.
+  Push rarely (Vercel's build minutes, 2026-10-29): one push per finished piece, never a third branch.
 - **Never let an on-open repair write before the workspace's records have arrived from the cloud**
   (`cloudSyncedProject`, 2026-10-29): a new browser's starter copy once wrote empty progress over every
   Wolfson flat. A write that would DELETE a field the cloud has (`undefined` → deleteField) needs a reason.

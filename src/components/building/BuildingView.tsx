@@ -1,0 +1,307 @@
+/**
+ * THE BUILDING VIEW (owner, recording 2026-11-02): a second view of a Wolfson
+ * building, beside the board — "a square diagram of a building with semi
+ * see-through floors where when we scroll up it kind of moves through the
+ * floors", each floor "lands in", the apartments drawn in their TRUE shape,
+ * the floor number big in the middle, and "when I hover … it lights up a bit
+ * along with the information box on the side" (his red boxes in the four
+ * corners). A press opens the apartment.
+ *
+ * The floors are a stack of plates in one 3D scene. The motion is a spring
+ * run in requestAnimationFrame that writes each plate's transform straight to
+ * the DOM — never React state per frame (a re-render per frame is the
+ * documented smoulder). React state changes only when the hovered flat or the
+ * landed floor changes.
+ */
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { Apartment, Stage } from '../../types';
+import { realName } from '../../data/aptSale';
+import {
+  CARD_CORNER, CORE, LABEL_AT, PLAN_BOX, SHAPES, pathOf, shapesOf, type ShapeKey,
+} from './wolfsonPlan';
+import './buildingView.css';
+
+export interface BuildingViewWords {
+  floor: string;
+  notSold: string;
+  notStarted: string;
+  upgraded: string;
+  open: string;
+  floorsHint: string;
+  apt: string;
+}
+const EN: BuildingViewWords = {
+  floor: 'Floor', notSold: 'Not sold', notStarted: 'Not started', upgraded: 'Upgraded',
+  open: 'Open', floorsHint: 'Scroll to move between floors', apt: 'Apt',
+};
+
+export interface BuildingViewProps {
+  /** One building's flats (blank placeholders are left out here). */
+  apartments: Apartment[];
+  stages: Stage[];
+  onOpen: (apt: Apartment) => void;
+  words?: Partial<BuildingViewWords>;
+  /** The floor it opens on; the top floor when absent. */
+  initialFloor?: number;
+  /** The number the board prints on each floor (record floor → label), so both views agree. */
+  floorLabels?: Record<number, string>;
+}
+
+/** A stack spring that overshoots a hair and settles — "it lands in". */
+const K = 150, C = 19;
+const GAP = 92;                 // px between plates along the stack
+const ABOVE_SHOWN = 1, BELOW_SHOWN = 6;
+
+interface FloorRow { floor: number; flats: { apt: Apartment; shapes: ShapeKey[] }[] }
+
+export default function BuildingView({ apartments, stages, onOpen, words, initialFloor, floorLabels }: BuildingViewProps) {
+  const lab = (f: number) => floorLabels?.[f] || String(f);
+  const w = { ...EN, ...words };
+  const stageById = useMemo(() => new Map(stages.map(s => [s.id, s])), [stages]);
+
+  const floors: FloorRow[] = useMemo(() => {
+    const by = new Map<number, FloorRow>();
+    for (const apt of apartments) {
+      if (apt.isUnnamed || apt.coveredBy || !apt.apartmentNumber) continue;
+      const row = by.get(apt.floor) ?? { floor: apt.floor, flats: [] };
+      row.flats.push({ apt, shapes: shapesOf(apt) });
+      by.set(apt.floor, row);
+    }
+    return [...by.values()].sort((a, b) => a.floor - b.floor);
+  }, [apartments]);
+
+  const topIdx = floors.length - 1;
+  const startIdx = useMemo(() => {
+    const i = initialFloor == null ? -1 : floors.findIndex(f => f.floor === initialFloor);
+    return i >= 0 ? i : topIdx;
+  }, [floors, initialFloor, topIdx]);
+
+  // The landed floor (an index into `floors`) — state, because the cards read it.
+  const [landed, setLanded] = useState(startIdx);
+  const [hover, setHover] = useState<string | null>(null);
+  const target = useRef(startIdx);
+  const pos = useRef(startIdx);
+  const vel = useRef(0);
+  const plates = useRef<(HTMLDivElement | null)[]>([]);
+  const raf = useRef(0);
+  const last = useRef(0);
+
+  const paint = useCallback(() => {
+    const p = pos.current;
+    plates.current.forEach((el, i) => {
+      if (!el) return;
+      const o = i - p; // > 0 above the floor in view
+      const shown = o > ABOVE_SHOWN + 0.5 || o < -(BELOW_SHOWN + 0.5) ? 0 : 1;
+      // The landed floor solid; below it a fading, see-through stack; above it
+      // the next floors only as a faint glass so they never hide this one.
+      const op = !shown ? 0
+        : o <= 0 ? Math.max(0.12, 1 - 0.2 * -o)
+        : o < 1 ? 1 - 0.93 * o
+        : 0.07;
+      el.style.transform = `translate3d(0,0,${o * GAP}px) scale(${1 + Math.max(0, o) * 0.03})`;
+      el.style.opacity = op.toFixed(3);
+      el.style.visibility = op < 0.01 ? 'hidden' : 'visible';
+      el.dataset.solid = Math.abs(o) < 0.5 ? '1' : '0';
+    });
+  }, []);
+
+  const step = useCallback((t: number) => {
+    const dt = Math.min(0.033, last.current ? (t - last.current) / 1000 : 0.016);
+    last.current = t;
+    const a = K * (target.current - pos.current) - C * vel.current;
+    vel.current += a * dt;
+    pos.current += vel.current * dt;
+    paint();
+    if (Math.abs(target.current - pos.current) < 0.0015 && Math.abs(vel.current) < 0.002) {
+      pos.current = target.current; vel.current = 0; paint();
+      raf.current = 0; last.current = 0;
+      return;
+    }
+    raf.current = requestAnimationFrame(step);
+  }, [paint]);
+
+  const go = useCallback((idx: number) => {
+    const i = Math.max(0, Math.min(topIdx, idx));
+    if (i === target.current) return;
+    target.current = i;
+    setLanded(i);
+    setHover(null);
+    if (!raf.current) raf.current = requestAnimationFrame(step);
+  }, [step, topIdx]);
+
+  useEffect(() => { paint(); return () => cancelAnimationFrame(raf.current); }, [paint, floors.length]);
+
+  // The wheel moves one floor per notch (a trackpad's small deltas add up);
+  // never the page underneath while the pointer is over the building.
+  const stageRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = stageRef.current;
+    if (!el) return;
+    let acc = 0, quietUntil = 0;
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      const now = performance.now();
+      acc += e.deltaY;
+      if (Math.abs(acc) < 40 || now < quietUntil) return;
+      go(target.current + (acc < 0 ? 1 : -1));   // up the wheel = up the building
+      acc = 0; quietUntil = now + 170;
+    };
+    el.addEventListener('wheel', onWheel, { passive: false });
+    return () => el.removeEventListener('wheel', onWheel);
+  }, [go]);
+
+  // A finger: a vertical swipe moves floors (one per 60px).
+  const touch = useRef<{ y: number; moved: number } | null>(null);
+  const onPointerDown = (e: React.PointerEvent) => {
+    if (e.pointerType !== 'touch') return;
+    touch.current = { y: e.clientY, moved: 0 };
+  };
+  const onPointerMove = (e: React.PointerEvent) => {
+    const t = touch.current;
+    if (!t) return;
+    const dy = e.clientY - t.y;
+    if (Math.abs(dy) > 60) { go(target.current + (dy > 0 ? 1 : -1)); t.y = e.clientY; t.moved++; }
+  };
+  const onPointerUp = () => { touch.current = null; };
+
+  // Keys: ↑ ↓, Page Up/Down, Home/End.
+  const onKeyDown = (e: React.KeyboardEvent) => {
+    const k = e.key;
+    if (k === 'ArrowUp' || k === 'PageUp') { e.preventDefault(); go(target.current + 1); }
+    else if (k === 'ArrowDown' || k === 'PageDown') { e.preventDefault(); go(target.current - 1); }
+    else if (k === 'Home') { e.preventDefault(); go(topIdx); }
+    else if (k === 'End') { e.preventDefault(); go(0); }
+  };
+
+  const here = floors[landed];
+  const flatInfo = (apt: Apartment) => {
+    const st = apt.currentStageId ? stageById.get(apt.currentStageId) : undefined;
+    const name = realName(apt);
+    return { st, name };
+  };
+  const fillOf = (apt: Apartment) => {
+    const { st, name } = flatInfo(apt);
+    if (!name) return { fill: '#ffffff', tint: '#cbd5e1', dashed: true };
+    return { fill: st?.color ?? '#94a3b8', tint: st?.color ?? '#94a3b8', dashed: false };
+  };
+
+  if (!floors.length) return null;
+
+  return (
+    <div className="bv-root" data-building-view>
+      <div
+        ref={stageRef}
+        className="bv-stage"
+        tabIndex={0}
+        role="group"
+        aria-label={`${w.floor} ${here ? lab(here.floor) : ''}`}
+        onKeyDown={onKeyDown}
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={onPointerUp}
+        onPointerCancel={onPointerUp}
+      >
+        <div className="bv-world">
+          {floors.map((row, i) => (
+            <div
+              key={row.floor}
+              ref={el => { plates.current[i] = el; }}
+              className="bv-plate"
+              data-floor={row.floor}
+              data-current={i === landed ? '1' : '0'}
+            >
+              <svg viewBox={`${PLAN_BOX.x} ${PLAN_BOX.y} ${PLAN_BOX.w} ${PLAN_BOX.h}`} className="bv-svg">
+                <path className="bv-slab" d={(['A', 'B', 'C1', 'C2'] as ShapeKey[]).map(k => pathOf(SHAPES[k])).join(' ') + ' ' + pathOf(CORE.outline)} />
+                <g className="bv-core">
+                  <path d={pathOf(CORE.outline)} />
+                  {CORE.stairs.map(([x, y, sw, sh], j) => (
+                    <g key={j}>
+                      <rect x={x} y={y} width={sw} height={sh} className="bv-stair" />
+                      {Array.from({ length: 9 }, (_, n) => (
+                        <line key={n} x1={x} x2={x + sw} y1={y + (n + 1) * sh / 10} y2={y + (n + 1) * sh / 10} className="bv-tread" />
+                      ))}
+                    </g>
+                  ))}
+                  {CORE.lifts.map(([x, y, lw, lh], j) => (
+                    <g key={j} className="bv-lift">
+                      <rect x={x} y={y} width={lw} height={lh} />
+                      <path d={`M${x} ${y}L${x + lw} ${y + lh}M${x + lw} ${y}L${x} ${y + lh}`} />
+                    </g>
+                  ))}
+                  <text x={555} y={470} className="bv-floor-no">{lab(row.floor)}</text>
+                </g>
+                {row.flats.map(({ apt, shapes }) => {
+                  const f = fillOf(apt);
+                  const on = hover === apt.id && i === landed;
+                  const [lx, ly] = LABEL_AT[shapes[0]];
+                  return (
+                    <g
+                      key={apt.id}
+                      className="bv-flat"
+                      data-apt={apt.id}
+                      data-on={on ? '1' : '0'}
+                      data-unsold={f.dashed ? '1' : '0'}
+                      style={{ ['--bv-c' as string]: f.tint }}
+                      onPointerEnter={() => i === landed && setHover(apt.id)}
+                      onPointerLeave={() => setHover(h => (h === apt.id ? null : h))}
+                      onClick={() => i === landed && onOpen(apt)}
+                    >
+                      {shapes.map(s => <path key={s} d={pathOf(SHAPES[s])} />)}
+                      <text x={lx} y={ly} className="bv-flat-no">{apt.apartmentNumber}</text>
+                    </g>
+                  );
+                })}
+              </svg>
+            </div>
+          ))}
+        </div>
+
+        {/* His red boxes: one card per flat of the landed floor, in its corner. */}
+        {here && here.flats.map(({ apt, shapes }) => {
+          const { st, name } = flatInfo(apt);
+          const on = hover === apt.id;
+          return (
+            <button
+              key={`${here.floor}-${apt.id}`}
+              type="button"
+              className={`bv-card bv-${CARD_CORNER[shapes[0]]}`}
+              data-card={apt.id}
+              data-on={on ? '1' : '0'}
+              style={{ ['--bv-c' as string]: st?.color ?? '#94a3b8' }}
+              onPointerEnter={() => setHover(apt.id)}
+              onPointerLeave={() => setHover(h => (h === apt.id ? null : h))}
+              onFocus={() => setHover(apt.id)}
+              onBlur={() => setHover(h => (h === apt.id ? null : h))}
+              onClick={() => onOpen(apt)}
+            >
+              <span className="bv-card-top">
+                <span className="bv-card-no">{apt.apartmentNumber}</span>
+                {apt.tipus && <span className="bv-card-tip">{apt.tipus}</span>}
+                {apt.classification === 'shinui' && <span className="bv-card-u" title={w.upgraded}>U</span>}
+              </span>
+              <span className={`bv-card-name${name ? '' : ' bv-muted'}`}><bdi>{name || w.notSold}</bdi></span>
+              <span className="bv-card-stage">
+                <span className="bv-dot" />
+                <span>{st?.name ?? w.notStarted}</span>
+              </span>
+              <span className="bv-card-open">{w.open} →</span>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* The floors, top to bottom — a press goes straight there. */}
+      <nav className="bv-rail" aria-label={w.floor}>
+        {[...floors].reverse().map(row => {
+          const i = floors.indexOf(row);
+          return (
+            <button key={row.floor} type="button" data-rail-floor={row.floor}
+              className="bv-rail-btn" data-on={i === landed ? '1' : '0'} onClick={() => go(i)}>
+              {lab(row.floor)}
+            </button>
+          );
+        })}
+      </nav>
+    </div>
+  );
+}

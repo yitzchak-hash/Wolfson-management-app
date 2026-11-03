@@ -7,7 +7,9 @@ import { useStore, trackUndo } from '../data/store';
 import { Apartment, BuildingId, isCountableApartment } from '../types';
 import { setMark, isWorkStage } from '../data/stageMarks';
 import { problemStates } from '../data/problems';
-import { BuildingDiagram, SaleFilter } from '../components/diagram/BuildingDiagram';
+import { BuildingDiagram, SaleFilter, DiagramLook } from '../components/diagram/BuildingDiagram';
+import BuildingView from '../components/building/BuildingView';
+import { buildFloorRows, rowLabelText } from '../data/floorRows';
 import { StageLegend, StageFilterMenu } from '../components/diagram/StageLegend';
 import { buildingShort } from '../data/aptSale';
 import { StageBar } from '../components/diagram/StageBar';
@@ -66,6 +68,10 @@ export function ProjectDiagramPage() {
   const isNarrow = useNarrow();
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [selectedBuilding, setSelectedBuilding] = useState<BuildingId | 'all'>('all');
+  /** Board or the see-through building (owner, recording 2026-11-02), for one Wolfson building. */
+  const [view, setView] = useState<'board' | 'building'>('board');
+  /** On All, the floor whose row is open big in its own window. */
+  const [floorWin, setFloorWin] = useState<{ b: BuildingId; key: string; label: string } | null>(null);
   const [activeStageIds, setActiveStageIds] = useState<string[]>([]);
   const [classFilter, setClassFilter] = useState<ClassFilter>('all');
   const [searchQuery, setSearchQuery] = useState('');
@@ -240,6 +246,21 @@ export function ProjectDiagramPage() {
   const phoneBuilding: BuildingId | 'all' =
     selectedBuilding === 'all' ? (buildings[0]?.id ?? 'all') : selectedBuilding;
   const effectiveBuilding = isNarrow ? phoneBuilding : selectedBuilding;
+  const canBuildingView = !isNarrow && selectedBuilding !== 'all' && /^A\d/.test(selectedBuilding);
+  const showBuilding = canBuildingView && view === 'building';
+  const boardSet = useStore(st => st.boardSettings[st.currentProjectId]);
+  /** The board's own floor numbers, so the building view and the board say the same floor. */
+  const buildingFloorLabels = useMemo(() => {
+    if (!showBuilding) return undefined;
+    const b = selectedBuilding as BuildingId;
+    const rows = buildFloorRows(b, apartments.filter(a => a.buildingId === b), boardSet?.floorHeights?.[b], boardSet?.buildingLayout?.[b]);
+    return Object.fromEntries(rows.map(r => [r.floor, rowLabelText(r, s.lobby, s.groundCommercial)]));
+  }, [showBuilding, selectedBuilding, apartments, boardSet, s.lobby, s.groundCommercial]);
+  const lookValue = useMemo(() => ({
+    big: !isNarrow && selectedBuilding !== 'all',
+    onFloorClick: !isNarrow && selectedBuilding === 'all' && !bulkMode
+      ? (b: BuildingId, key: string, label: string) => setFloorWin({ b, key, label }) : undefined,
+  }), [isNarrow, selectedBuilding, bulkMode]);
   // Chips beyond the stage legend that the phone Filters button should count.
   const phoneFilterCount = activeStageIds.length + (classFilter !== 'all' ? 1 : 0) + (tipusFilter ? 1 : 0);
 
@@ -498,6 +519,19 @@ export function ProjectDiagramPage() {
               ))}
             </div>
 
+            {/* Board · Building — only with ONE Wolfson building chosen. */}
+            {canBuildingView && (
+              <div className="flex items-center gap-1 bg-gray-100 rounded-xl p-1" data-view-switch>
+                {(['board', 'building'] as const).map(v => (
+                  <button key={v} type="button" data-view={v} aria-pressed={view === v}
+                    onClick={() => setView(v)}
+                    className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${view === v ? 'bg-[#1e3a5f] text-white shadow-sm' : 'text-gray-600 hover:text-gray-900'}`}>
+                    {v === 'board' ? s.viewBoard : s.viewBuilding}
+                  </button>
+                ))}
+              </div>
+            )}
+
             {/* Sale filter — Sold · Not sold · Upgraded · Not upgraded, one at a
                 time (owner, recording 2026-10-28). It replaced All · Standard ·
                 Changes and the separate Changes switch. */}
@@ -630,6 +664,18 @@ export function ProjectDiagramPage() {
 
         {/* Main diagram */}
         <div className="short-scroll-body flex-1 overflow-auto scrollbar-thin bg-gray-100 print:overflow-visible print:bg-white">
+          {showBuilding ? (
+            <div className="h-full p-4" style={{ minHeight: 560 }} data-building-view-wrap>
+              <BuildingView
+                apartments={apartments.filter(a => a.buildingId === selectedBuilding)}
+                stages={stages}
+                onOpen={handleAptClick}
+                floorLabels={buildingFloorLabels}
+                words={{ floor: s.floorWindowTitle, notSold: s.notSoldWord, notStarted: s.notStartedOption.replace(/[—–]/g, '').trim(), upgraded: s.upgradedWord, open: s.bvOpen, floorsHint: s.bvHint }}
+              />
+            </div>
+          ) : (
+          <DiagramLook.Provider value={lookValue}>
           <BuildingDiagram
             apartments={apartments}
             stages={stages}
@@ -651,7 +697,53 @@ export function ProjectDiagramPage() {
             aptCompletedData={aptCompletedData}
             onNameUnnamed={bulkMode ? undefined : handleNameUnnamed}
           />
+          </DiagramLook.Provider>
+          )}
         </div>
+
+        {/* On All, a floor opened big in its own window (owner, recording
+            2026-11-02: "a small window … just the row in bigger format
+            spanning across"). The same tiles, the same presses. */}
+        {floorWin && (
+          <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 print:hidden"
+            style={{ background: 'rgba(15,23,42,.35)' }} data-floor-window={`${floorWin.b}-${floorWin.key}`}
+            onMouseDown={e => { if (e.target === e.currentTarget) setFloorWin(null); }}
+            onKeyDown={e => { if (e.key === 'Escape') setFloorWin(null); }}>
+            <div role="dialog" aria-label={`${buildingShort(floorWin.b)} · ${s.floorWindowTitle} ${floorWin.label}`}
+              className="bg-white rounded-xl border border-gray-200 w-full overflow-hidden flex flex-col"
+              style={{ maxWidth: 1500, maxHeight: '90vh', boxShadow: '0 20px 50px rgba(15,23,42,.25)' }}>
+              <div className="flex items-center gap-3 px-5 py-3 border-b border-gray-200">
+                <span className="w-1.5 h-6 rounded-full bg-[#1e3a5f]" />
+                <h2 className="m-0 text-lg font-semibold text-gray-900">
+                  {buildingShort(floorWin.b)} · {s.floorWindowTitle} {floorWin.label}
+                </h2>
+                <button type="button" autoFocus data-floor-window-close aria-label="Close"
+                  onClick={() => setFloorWin(null)}
+                  className="ms-auto p-2 rounded-lg text-gray-500 hover:bg-gray-100"><X size={18} /></button>
+              </div>
+              <div className="overflow-auto bg-gray-100">
+                <DiagramLook.Provider value={{ big: true, onlyRow: floorWin.key }}>
+                  <BuildingDiagram
+                    apartments={apartments.filter(a => a.buildingId === floorWin.b)}
+                    stages={stages}
+                    activeStageIds={activeStageIds}
+                    classFilter={classFilter}
+                    tipusFilter={tipusFilter}
+                    problemStates={problemMap}
+                    searchQuery={searchQuery}
+                    selectedBuilding={floorWin.b}
+                    onApartmentClick={apt => { setFloorWin(null); handleAptClick(apt); }}
+                    showShinuiBadge={showShinuiBadge}
+                    aptTaskData={aptTaskData}
+                    nextStageLabels={nextStageLabels}
+                    onAddTask={handleAddTask}
+                    aptCompletedData={aptCompletedData}
+                  />
+                </DiagramLook.Provider>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Detail drawer — hidden on print */}
         {!bulkMode && liveApt && currentUser && (
