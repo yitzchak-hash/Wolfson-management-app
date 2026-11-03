@@ -10,7 +10,7 @@ seed.apartments.forEach(a => { if (a.apartmentNumber && a.colPosition) a.tipus =
 const j1 = seed.apartments.find(a => a.id === 'A2-50'), j2 = seed.apartments.find(a => a.id === 'A2-51');
 if (j1 && j2) { j1.mergedWith = j2.id; j2.mergedWith = j1.id; }
 const upg = seed.apartments.find(a => a.id === 'A2-49'); if (upg) { upg.classification = 'shinui'; upg.customAnswers = { 'cb-wall': 'yes' }; }
-seed.boardSettings = { ...(seed.boardSettings ?? {}), wolfson: { ...((seed.boardSettings ?? {}).wolfson ?? {}), customButtons: [{ id: 'cb-wall', name: 'Wall' }] } };
+seed.boardSettings = { ...(seed.boardSettings ?? {}), wolfson: { ...((seed.boardSettings ?? {}).wolfson ?? {}), customButtons: [{ id: 'cb-wall', name: 'Wall Yes/No' }] } };
 // lower-level slots as the office names them (FAKE labels): a spa, a lobby, a storage room, and one with no known area
 const slot = (b, floor, col, name) => { const s = seed.apartments.find(a => a.buildingId === b && a.floor === floor && a.colPosition === col); if (s) { s.displayName = name; } return !!s; };
 globalThis.__slots = [slot('A1', -0.5, 1, 'ספא'), slot('A2', 1, 1, 'קרקע'), slot('A2', -2, 1, '-2'), slot('A3', -1, 2, 'Generator room')];
@@ -128,6 +128,14 @@ T(await p.locator('.bv-plate[data-current="1"] [data-flat-answer="yes"]').count(
   await p.mouse.move(nb.x + nb.width / 2, nb.y + nb.height / 2 + 14); await p.waitForTimeout(400);
   const order = await p.evaluate(() => { const c = document.querySelector('[data-card="A2-49"] .bv-card-top'); return c ? [...c.children].map(e => e.className.split(' ')[0]) : []; });
   T(order.join(',') === 'bv-card-no,bv-card-tip,bv-card-ans,bv-card-u', `the card says Wall between the tipus and the U (${order})`);
+  const ansTxt = await p.locator('[data-card="A2-49"] .bv-card-ans').first().textContent();
+  T(ansTxt === 'Wall: Yes', `the card says "Wall: Yes", not "Wall Yes/No: Yes" (${ansTxt})`);
+  // every tag stays inside its own apartment (owner: "the info is dragging off the apartment")
+  const off = await p.evaluate(() => [...document.querySelectorAll('.bv-plate[data-current="1"] [data-apt]')].flatMap(g => {
+    const b = [...g.querySelectorAll(':scope > path:not(.bv-terrace)')].map(e => e.getBBox()).reduce((a, r) => ({ x0: Math.min(a.x0, r.x), x1: Math.max(a.x1, r.x + r.width) }), { x0: 1e9, x1: -1e9 });
+    return [...g.querySelectorAll('rect, text.bv-flat-no')].map(e => e.getBBox()).filter(r => r.x < b.x0 - 1 || r.x + r.width > b.x1 + 1).map(() => g.getAttribute('data-apt'));
+  }));
+  T(off.length === 0, `every tag stands inside its apartment (${off})`);
   await p.screenshot({ path: OUT + '/v16-answers.png' }); }
   await p.screenshot({ path: OUT + '/v14-joined.png' });
 } else T(false, 'flat 50 on floor 13');

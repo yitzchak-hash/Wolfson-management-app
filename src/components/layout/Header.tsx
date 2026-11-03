@@ -104,7 +104,10 @@ function PendingStagesBell({ light }: { light: boolean }) {
 
   const stages = allStages.filter(st =>
     currentProjectId === 'general' ? st.projectId === 'general' : !st.projectId);
-  const rows = useMemo(() => pendingStages(apartments, stages), [apartments, stages]);
+  // The half-done stages' orange clock is GONE from the top bar (owner, 2026-11-03: "half done stages clock on
+  // top i said to remove"); a half-done stage still shows its clock inside the apartment. Problems stay here.
+  const rows: ReturnType<typeof pendingStages> = [];
+  void stages;
   /**
    * Open problems — red rows beside the half-done clocks (owner, 2026-09-06).
    * An open one first, then the ones waiting for approval; each opens its

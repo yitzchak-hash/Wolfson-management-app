@@ -140,7 +140,9 @@ export default function BuildingView({ apartments, stages, onOpen, words, initia
   /** A flat's answers as short words: "Wall ✓", "Wall ✗", "Wall ?". */
   const answersOf = (a: Apartment) => customButtons.flatMap(cb => {
     const v = a.customAnswers?.[cb.id];
-    return v ? [{ id: cb.id, name: cb.name, v, mark: v === 'yes' ? '✓' : v === 'no' ? '✗' : '?' }] : [];
+    // "Wall Yes/No" is the button's name; the answer already says yes or no, so it reads "Wall: Yes" (owner, 2026-11-03).
+    const name = cb.name.replace(/\s*\(?\s*(yes\s*\/\s*no|כן\s*\/\s*לא)\s*\)?\s*\??\s*$/i, '').trim() || cb.name;
+    return v ? [{ id: cb.id, name, v, mark: v === 'yes' ? '✓' : v === 'no' ? '✗' : '?' }] : [];
   });
   const lab = (f: number, row?: FloorRow) => row?.lower ? row.lower.label : floorLabels?.[f] || String(f);
   const w = { ...EN, ...words };
@@ -395,16 +397,25 @@ export default function BuildingView({ apartments, stages, onOpen, words, initia
                     >
                       {shapes.flatMap(s => (PH_TERRACES[s] ?? []).map((t, j) => <path key={`${s}-t${j}`} className="bv-terrace" d={pathOf(t)} />))}
                       {shapes.map(s => <path key={s} d={pathOf(SHAPES[s])} />)}
-                      <text x={lx} y={ly} className="bv-flat-no">{apt.apartmentNumber}</text>
-                      {/* The tipus and the upgrade "U" lie on the plan beside the number, like on the board's tile (owner, 2026-11-03). */}
+                      {/* The number, the tipus and the upgrade "U" on one line, the project's own answers ("Wall: Yes")
+                          on the line under it — both kept INSIDE the apartment (owner, 2026-11-03: "the info is
+                          dragging off the apartment … fix that on all devices"). */}
                       {(() => {
                         const tip = (apt.tipus ?? '').trim();
                         const up = apt.classification === 'shinui';
+                        const xs = shapes.flatMap(s => SHAPES[s].map(p => p[0]));
+                        const minX = Math.min(...xs) + 18, maxX = Math.max(...xs) - 18;
+                        const fit = (wd: number, want: number) => Math.max(minX, Math.min(want, maxX - wd));
                         const nW = String(apt.apartmentNumber).length * 27;
-                        let x = lx + nW / 2 + 14;
-                        const parts: React.ReactNode[] = [];
+                        const w2 = tip ? Math.max(56, tip.length * 26 + 24) : 0;
+                        const row1 = nW + (tip ? 14 + w2 : 0) + (up ? 10 + 56 : 0);
+                        let x = fit(row1, lx - nW / 2);
+                        const parts: React.ReactNode[] = [
+                          <text key="n" x={x + nW / 2} y={ly} className="bv-flat-no">{apt.apartmentNumber}</text>,
+                        ];
+                        const left = x;
+                        x += nW + 14;
                         if (tip) {
-                          const w2 = Math.max(56, tip.length * 26 + 24);
                           parts.push(
                             <g key="t" className="bv-flat-tip" data-flat-tipus>
                               <rect x={x} y={ly - 24} width={w2} height={48} rx={10} />
@@ -412,21 +423,23 @@ export default function BuildingView({ apartments, stages, onOpen, words, initia
                             </g>);
                           x += w2 + 10;
                         }
-                        for (const an of answersOf(apt)) {
-                          const label = `${an.name}: ${an.v === 'yes' ? w.yes : an.v === 'no' ? w.no : '?'}`;
-                          const w3 = Math.max(60, label.length * 17 + 30);
-                          parts.push(
-                            <g key={`c-${an.id}`} className="bv-flat-ans" data-flat-answer={an.v}>
-                              <rect x={x} y={ly - 24} width={w3} height={48} rx={10} />
-                              <text x={x + w3 / 2} y={ly}>{label}</text>
-                            </g>);
-                          x += w3 + 10;
-                        }
                         if (up) parts.push(
                           <g key="u" className="bv-flat-u" data-flat-upgraded>
                             <rect x={x} y={ly - 24} width={56} height={48} rx={14} />
                             <text x={x + 28} y={ly + 1}>U</text>
                           </g>);
+                        let y2 = ly + 58;
+                        for (const an of answersOf(apt)) {
+                          const label = `${an.name}: ${an.v === 'yes' ? w.yes : an.v === 'no' ? w.no : '?'}`;
+                          const w3 = Math.max(60, label.length * 17 + 30);
+                          const x3 = fit(w3, left);
+                          parts.push(
+                            <g key={`c-${an.id}`} className="bv-flat-ans" data-flat-answer={an.v}>
+                              <rect x={x3} y={y2 - 24} width={w3} height={48} rx={10} />
+                              <text x={x3 + w3 / 2} y={y2}>{label}</text>
+                            </g>);
+                          y2 += 56;
+                        }
                         return parts;
                       })()}
                     </g>

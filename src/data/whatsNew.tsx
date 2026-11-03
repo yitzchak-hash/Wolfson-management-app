@@ -35,6 +35,16 @@ export const WHATS_NEW: WhatsNewEntry[] = [
     title: 'Send a plan as a PDF',
     items: [
       {
+        title: 'Apartment labels stay on the apartment',
+        body: 'In Building, the number, type and U never run off the edge of an apartment any more, on any screen. The project\'s answer sits on its own line underneath and reads simply "Wall: Yes".',
+        demo: 'zoom',
+      },
+      {
+        title: 'No orange clock in the top bar',
+        body: 'The half-done stages list is gone from the top of the screen. A half-done stage still shows its clock inside the apartment.',
+        demo: 'tap',
+      },
+      {
         title: 'The penthouse floors in their real shape',
         body: 'In Building, floors 14 and 15 now have the building\'s true outline, taken from the engineers\' own plans — not a plain box. Each penthouse lights up in its stage colour, and the open terraces show paler beside it.',
         demo: 'zoom',
