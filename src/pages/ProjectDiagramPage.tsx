@@ -248,6 +248,9 @@ export function ProjectDiagramPage() {
   const effectiveBuilding = isNarrow ? phoneBuilding : selectedBuilding;
   const canBuildingView = !isNarrow && selectedBuilding !== 'all' && /^A\d/.test(selectedBuilding);
   const showBuilding = canBuildingView && view === 'building';
+  /** The switch shows on All too (owner, 2026-11-03: he looked for it there twice); Building on All opens the first building. */
+  const firstWolfson = buildings.find(b => /^A\d/.test(b.id))?.id;
+  const showSwitch = !isNarrow && !!firstWolfson;
   const boardSet = useStore(st => st.boardSettings[st.currentProjectId]);
   /** The board's own floor numbers, so the building view and the board say the same floor. */
   const buildingFloorLabels = useMemo(() => {
@@ -520,15 +523,21 @@ export function ProjectDiagramPage() {
             </div>
 
             {/* Board · Building — only with ONE Wolfson building chosen. */}
-            {canBuildingView && (
+            {showSwitch && (
               <div className="flex items-center gap-1 bg-gray-100 rounded-xl p-1" data-view-switch>
-                {(['board', 'building'] as const).map(v => (
-                  <button key={v} type="button" data-view={v} aria-pressed={view === v}
-                    onClick={() => setView(v)}
-                    className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${view === v ? 'bg-[#1e3a5f] text-white shadow-sm' : 'text-gray-600 hover:text-gray-900'}`}>
-                    {v === 'board' ? s.viewBoard : s.viewBuilding}
-                  </button>
-                ))}
+                {(['board', 'building'] as const).map(v => {
+                  const on = (v === 'building') === showBuilding;
+                  return (
+                    <button key={v} type="button" data-view={v} aria-pressed={on}
+                      onClick={() => {
+                        setView(v);
+                        if (v === 'building' && !canBuildingView && firstWolfson) setSelectedBuilding(firstWolfson);
+                      }}
+                      className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${on ? 'bg-[#1e3a5f] text-white shadow-sm' : 'text-gray-600 hover:text-gray-900'}`}>
+                      {v === 'board' ? s.viewBoard : s.viewBuilding}
+                    </button>
+                  );
+                })}
               </div>
             )}
 
