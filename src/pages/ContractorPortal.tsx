@@ -7,6 +7,7 @@ import { ContractorAssignment, ContractorPhoto, Contractor, Apartment, Project, 
 import { transcribeMemo } from '../data/transcribe';
 import { setActiveSpeaker } from '../data/speakLang';
 import { daysOf, futureDaysOf, dayIso, parseDay } from '../data/taskDays';
+import { sharePlanFile } from '../data/sharePlan';
 import { notFinishedPlan, notFinishedLine, morningAskDay, needsNewDay, daysBetween, comeBackDay } from '../data/notFinished';
 import { NotFinishedSheet, unfinishedWords } from '../components/tasks/NotFinishedSheet';
 import { PlanPinOverlay } from '../components/apartment/PlanPinOverlay';
@@ -21,6 +22,7 @@ import {
   ChevronLeft, ChevronRight, ChevronDown, History, PenLine, Mic,
   Settings as SettingsIcon, Bell, Info, ArrowRightLeft, Video, FolderOpen, Trash2,
   ChevronsRight, HelpCircle,
+  Share2,
 } from 'lucide-react';
 import { BuildingDiagram } from '../components/diagram/BuildingDiagram';
 import { permsOf } from '../data/workerLevels';
@@ -800,6 +802,8 @@ export function ContractorPortal() {
    *  taken on that screen" is exactly the difference. */
   const preClosingIds = useRef<Set<string>>(new Set());
   const [planDlBusy, setPlanDlBusy] = useState(false);
+  /** The share menu needs a fresh press when the plan had to download first. */
+  const [shareAgain, setShareAgain] = useState(false);
   /**
    * The map's "I'm going to work here" flow (owner, 2026-09-15) — one small
    * screen at a time: the button, (which general job it is part of), the
@@ -2416,6 +2420,18 @@ plansPdfFileId && (
                             title={s.download}
                             className="flex items-center gap-1 text-[11.5px] font-bold px-2.5 py-1.5 rounded-full bg-white/95 text-[#1e3a5f] border border-gray-200 shadow-sm disabled:opacity-50">
                             <Download size={12} /> {planDlBusy ? '…' : s.download}
+                          </button>
+                          {/* Share the plan's PDF itself (owner, 2026-11-03) — the phone's own share menu. */}
+                          <button data-plan-share
+                            onClick={async () => {
+                              setPlanDlBusy(true);
+                              const out = await sharePlanFile(plansPdfFileId, `${safeFileName(`${aptLabel(apt)} — ${s.engineeringPlans}`)}.pdf`);
+                              setPlanDlBusy(false);
+                              setShareAgain(out === 'again');
+                            }}
+                            disabled={planDlBusy}
+                            className="flex items-center gap-1 text-[11.5px] font-bold px-2.5 py-1.5 rounded-full bg-white/95 text-[#1e3a5f] border border-gray-200 shadow-sm disabled:opacity-50">
+                            <Share2 size={12} /> {shareAgain ? w('Tap again', 'לחצו שוב', 'Ещё раз') : w('Share', 'שיתוף', 'Поделиться')}
                           </button>
                           {perms.markUpPlans && (
                             <button data-portal-markup data-plan-markup
