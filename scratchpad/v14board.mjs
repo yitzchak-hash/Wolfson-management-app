@@ -6,6 +6,9 @@ const browser = await chromium.launch();
 const seed = JSON.parse(await realisticWolfson(browser));
 const TIP = ['A', 'B', 'C1', 'C2'];
 seed.apartments.forEach(a => { if (a.apartmentNumber && a.colPosition) a.tipus = TIP[(a.colPosition - 1) % 4]; });
+// a joined pair, as the office has them (38/39 on A1)
+const j1 = seed.apartments.find(a => a.id === 'A2-50'), j2 = seed.apartments.find(a => a.id === 'A2-51');
+if (j1 && j2) { j1.mergedWith = j2.id; j2.mergedWith = j1.id; }
 const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
 await applySeed(ctx, JSON.stringify(seed));
 const p = await ctx.newPage();
@@ -58,5 +61,23 @@ T(after !== before, `a wheel over one moves them (${before} → ${after})`);
 const solid = await p.evaluate(() => [...document.querySelectorAll('[data-building-trio] [data-building-view]')].map(v => v.querySelector('.bv-plate[data-solid="1"]')?.getAttribute('data-floor')));
 T(new Set(solid).size === 1, `all three on the same floor (${solid.join(',')})`);
 await p.screenshot({ path: OUT + '/v14-trio.png' });
+// the shared levels: one wide floor under the three on All
+await p.click('[data-building-trio] [data-rail-floor="-1"]'); await p.waitForTimeout(900);
+T(await p.locator('.bv-wide-plate[data-wide="b1"][data-solid="1"]').count() === 1, 'On All, basement -1 is one wide floor');
+await p.screenshot({ path: OUT + '/v14-trio-b1.png' });
+// one building: its own slice lit, the rest grey
+await p.locator('button:visible', { hasText: /^2$/ }).first().click(); await p.waitForTimeout(500);
+await p.click('[data-rail-floor="-1"]'); await p.waitForTimeout(1200);
+T(await p.locator('.bv-plate[data-solid="1"] svg[data-lower="b1"]').count() === 1, 'one building: basement -1 shows, its slice lit');
+await p.click('[data-rail-floor="13"]'); await p.waitForTimeout(1200);
+const j = p.locator('.bv-plate[data-current="1"] [data-apt="A2-50"] text');
+if (await j.count()) {
+  const jb = await j.boundingBox(); await p.mouse.move(jb.x + jb.width / 2, jb.y + jb.height / 2 + 12); await p.waitForTimeout(400);
+  const litN = await p.locator('.bv-plate[data-current="1"] [data-apt][data-on="1"]').count();
+  T(litN === 2, `a joined pair lights together (${litN})`);
+  T(await p.locator('[data-card-joined]').count() === 2, 'both cards say they are joined');
+  await p.screenshot({ path: OUT + '/v14-joined.png' });
+} else T(false, 'flat 50 on floor 13');
+await p.screenshot({ path: OUT + '/v14-one-b1.png' });
 console.log(`\n${ok} ok · ${bad} bad · errors: ${errs.length ? errs.join(' | ') : 'none'}`);
 await browser.close();

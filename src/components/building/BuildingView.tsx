@@ -17,7 +17,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Apartment, Stage } from '../../types';
 import { realName } from '../../data/aptSale';
 import {
-  CARD_CORNER, CORE, LABEL_AT, PLAN_BOX, SHAPES, pathOf, shapesOf, type ShapeKey,
+  CARD_CORNER, CORE, LABEL_AT, PLAN_BOX, SHAPES, pathOf, shapesOf, stripFor, type ShapeKey, type LowerLevel,
 } from './wolfsonPlan';
 import './buildingView.css';
 
@@ -29,10 +29,11 @@ export interface BuildingViewWords {
   open: string;
   floorsHint: string;
   apt: string;
+  joinedWith: string;
 }
 const EN: BuildingViewWords = {
   floor: 'Floor', notSold: 'Not sold', notStarted: 'Not started', upgraded: 'Upgraded',
-  open: 'Open', floorsHint: 'Scroll to move between floors', apt: 'Apt',
+  open: 'Open', floorsHint: 'Scroll to move between floors', apt: 'Apt', joinedWith: 'Joined with',
 };
 
 export interface BuildingViewProps {
@@ -63,6 +64,12 @@ export interface BuildingViewProps {
   compact?: boolean;
   /** The building's name, drawn over it when compact. */
   title?: string;
+  /** The shared levels under the towers, bottom first; this tower's own slice is lit, the rest grey. */
+  lower?: LowerLevel[];
+  /** Which tower this is (0 = A1), for where it stands on the shared levels. */
+  tower?: number;
+  /** In the trio the shared levels are drawn ONCE, wide, under the three — the tower leaves them out. */
+  hideLower?: boolean;
 }
 
 /** The floor in view, shared: a fractional index into the floors, bottom = 0. */
@@ -85,7 +92,7 @@ const K = 150, C = 19;
 const GAP = 92;                 // px between plates along the stack
 const ABOVE_SHOWN = 1, BELOW_SHOWN = 6;
 
-interface FloorRow { floor: number; flats: { apt: Apartment; shapes: ShapeKey[] }[] }
+interface FloorRow { floor: number; flats: { apt: Apartment; shapes: ShapeKey[] }[]; lower?: LowerLevel }
 
 /** A typical floor: four flats, none of them a penthouse half. */
 function isTypical(row: FloorRow): boolean {
@@ -98,8 +105,8 @@ function slabOf(row: FloorRow): ShapeKey[] {
   return used.some(k => k === 'WL' || k === 'WR') ? used : ['A', 'B', 'C1', 'C2'];
 }
 
-export default function BuildingView({ apartments, stages, onOpen, words, initialFloor, floorLabels, interiorSrc, bus: sharedBus, compact, title }: BuildingViewProps) {
-  const lab = (f: number) => floorLabels?.[f] || String(f);
+export default function BuildingView({ apartments, stages, onOpen, words, initialFloor, floorLabels, interiorSrc, bus: sharedBus, compact, title, lower, tower = 0, hideLower }: BuildingViewProps) {
+  const lab = (f: number, row?: FloorRow) => row?.lower ? row.lower.label : floorLabels?.[f] || String(f);
   const w = { ...EN, ...words };
   const stageById = useMemo(() => new Map(stages.map(s => [s.id, s])), [stages]);
 
@@ -111,8 +118,10 @@ export default function BuildingView({ apartments, stages, onOpen, words, initia
       row.flats.push({ apt, shapes: shapesOf(apt) });
       by.set(apt.floor, row);
     }
-    return [...by.values()].sort((a, b) => a.floor - b.floor);
-  }, [apartments]);
+    const towers = [...by.values()].sort((a, b) => a.floor - b.floor);
+    const low = (lower ?? []).map((l, i) => ({ floor: -1000 + i, flats: [], lower: l } as FloorRow));
+    return [...low, ...towers];
+  }, [apartments, lower]);
 
   const topIdx = floors.length - 1;
   const startIdx = useMemo(() => {
@@ -230,6 +239,19 @@ export default function BuildingView({ apartments, stages, onOpen, words, initia
     else if (k === 'End') { e.preventDefault(); go(0); }
   };
 
+  /**
+   * Joined apartments (owner, 2026-11-03: "connected apartments need to show
+   * hovering together … they both need to show it like connected"): a hover on
+   * either lights both, and both carry the join.
+   */
+  const partner = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const a of apartments) if (a.mergedWith) { m.set(a.id, a.mergedWith); m.set(a.mergedWith, a.id); }
+    return m;
+  }, [apartments]);
+  const lit = (id: string) => !!hover && (hover === id || partner.get(hover) === id);
+  const numOf = useMemo(() => new Map(apartments.map(a => [a.id, a.apartmentNumber])), [apartments]);
+
   const here = floors[landed];
   const flatInfo = (apt: Apartment) => {
     const st = apt.currentStageId ? stageById.get(apt.currentStageId) : undefined;
@@ -252,7 +274,7 @@ export default function BuildingView({ apartments, stages, onOpen, words, initia
         className="bv-stage"
         tabIndex={0}
         role="group"
-        aria-label={`${w.floor} ${here ? lab(here.floor) : ''}`}
+        aria-label={`${w.floor} ${here ? lab(here.floor, here) : ''}`}
         onKeyDown={onKeyDown}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
@@ -268,6 +290,20 @@ export default function BuildingView({ apartments, stages, onOpen, words, initia
               data-floor={row.floor}
               data-current={i === landed ? '1' : '0'}
             >
+              {row.lower ? (hideLower ? null : (() => {
+                const s = stripFor(tower);
+                return (
+                  <svg viewBox={`${PLAN_BOX.x} ${PLAN_BOX.y} ${PLAN_BOX.w} ${PLAN_BOX.h}`} className="bv-svg bv-lower" data-lower={row.lower.key}>
+                    <clipPath id={`bv-slice-${tower}-${row.lower.key}`}><rect x={s.sliceX} y={s.y} width={s.sliceW} height={s.h} /></clipPath>
+                    <rect className="bv-lower-ground" x={s.x} y={s.y} width={s.w} height={s.h} />
+                    <image href={row.lower.src} x={s.x} y={s.y} width={s.w} height={s.h} opacity={0.22} preserveAspectRatio="none" />
+                    <rect className="bv-lower-mine" x={s.sliceX} y={s.y} width={s.sliceW} height={s.h} />
+                    <image href={row.lower.src} x={s.x} y={s.y} width={s.w} height={s.h} preserveAspectRatio="none"
+                      clipPath={`url(#bv-slice-${tower}-${row.lower.key})`} />
+                    <text x={555} y={470} className="bv-floor-no">{row.lower.label}</text>
+                  </svg>
+                );
+              })()) : (
               <svg viewBox={`${PLAN_BOX.x} ${PLAN_BOX.y} ${PLAN_BOX.w} ${PLAN_BOX.h}`} className="bv-svg">
                 <path className="bv-slab" d={slabOf(row).map(k => pathOf(SHAPES[k])).join(' ') + ' ' + pathOf(CORE.outline)} />
                 <g className="bv-core" data-plain={interiorSrc && isTypical(row) ? '0' : '1'}>
@@ -289,7 +325,8 @@ export default function BuildingView({ apartments, stages, onOpen, words, initia
                 </g>
                 {row.flats.map(({ apt, shapes }) => {
                   const f = fillOf(apt);
-                  const on = hover === apt.id && i === landed;
+                  const on = lit(apt.id) && i === landed;
+                  const joined = partner.has(apt.id);
                   const [lx, ly] = LABEL_AT[shapes[0]];
                   return (
                     <g
@@ -298,6 +335,7 @@ export default function BuildingView({ apartments, stages, onOpen, words, initia
                       data-apt={apt.id}
                       data-on={on ? '1' : '0'}
                       data-unsold={f.dashed ? '1' : '0'}
+                      data-joined={joined ? '1' : undefined}
                       style={{ ['--bv-c' as string]: f.tint }}
                       onPointerEnter={() => i === landed && setHover(apt.id)}
                       onPointerLeave={() => setHover(h => (h === apt.id ? null : h))}
@@ -317,14 +355,16 @@ export default function BuildingView({ apartments, stages, onOpen, words, initia
                 )}
                 <text x={555} y={470} className="bv-floor-no">{lab(row.floor)}</text>
               </svg>
+              )}
             </div>
           ))}
         </div>
 
         {/* His red boxes: one card per flat of the landed floor, in its corner. */}
-        {here && here.flats.filter(f => !compact || f.apt.id === hover).map(({ apt, shapes }) => {
+        {here && here.flats.filter(f => !compact || lit(f.apt.id)).map(({ apt, shapes }) => {
           const { st, name } = flatInfo(apt);
-          const on = hover === apt.id;
+          const on = lit(apt.id);
+          const mate = partner.get(apt.id);
           return (
             <button
               key={`${here.floor}-${apt.id}`}
@@ -344,6 +384,7 @@ export default function BuildingView({ apartments, stages, onOpen, words, initia
                 {apt.tipus && <span className="bv-card-tip">{apt.tipus}</span>}
                 {apt.classification === 'shinui' && <span className="bv-card-u" title={w.upgraded}>U</span>}
               </span>
+              {mate && <span className="bv-card-joined" data-card-joined>{w.joinedWith} {numOf.get(mate)}</span>}
               <span className={`bv-card-name${name ? '' : ' bv-muted'}`}><bdi>{name || w.notSold}</bdi></span>
               <span className="bv-card-stage">
                 <span className="bv-dot" />
@@ -360,9 +401,9 @@ export default function BuildingView({ apartments, stages, onOpen, words, initia
         {[...floors].reverse().map(row => {
           const i = floors.indexOf(row);
           return (
-            <button key={row.floor} type="button" data-rail-floor={row.floor}
+            <button key={row.floor} type="button" data-rail-floor={lab(row.floor, row)}
               className="bv-rail-btn" data-on={i === landed ? '1' : '0'} onClick={() => go(i)}>
-              {lab(row.floor)}
+              {lab(row.floor, row)}
             </button>
           );
         })}

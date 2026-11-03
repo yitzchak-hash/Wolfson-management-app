@@ -3444,6 +3444,8 @@ export interface MainUiStrings {
   bigNext: string;
   bvOpen: string;
   bvHint: string;
+  bvJoined: string;
+  bvSpa: string;
   upgradedWord: string;
   openInSketcher: string;
   openInSketcherTip: string;
@@ -4456,6 +4458,8 @@ export const DEFAULT_MAIN_UI_STRINGS: MainUiStrings = {
   bigNext: 'next:',
   bvOpen: 'Open',
   bvHint: 'Scroll to move between floors',
+  bvJoined: 'Joined with',
+  bvSpa: 'Spa',
   upgradedWord: 'Upgraded',
   openInSketcher: 'Open in Sketcher',
   openInSketcherTip: 'Opens this plan in the Plan Sketcher, in a new tab',
@@ -5458,6 +5462,8 @@ export const HEBREW_MAIN_UI_STRINGS: MainUiStrings = {
   bigNext: 'הבא:',
   bvOpen: 'פתח',
   bvHint: 'גלול כדי לעבור בין הקומות',
+  bvJoined: 'מחובר עם',
+  bvSpa: 'ספא',
   upgradedWord: 'משודרג',
   openInSketcher: 'פתיחה בסקצ׳ר',
   openInSketcherTip: 'פותח את התוכנית בסקצ׳ר, בלשונית חדשה',

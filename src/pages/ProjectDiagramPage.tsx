@@ -10,6 +10,7 @@ import { problemStates } from '../data/problems';
 import { BuildingDiagram, SaleFilter, DiagramLook } from '../components/diagram/BuildingDiagram';
 import BuildingView from '../components/building/BuildingView';
 import BuildingTrio from '../components/building/BuildingTrio';
+import { WOLFSON_LOWER } from '../components/building/wolfsonPlan';
 /** The typical floor's walls, doors, windows and furniture, off the architects' plan (owner liked it, 2026-11-03). */
 const WOLFSON_INTERIOR = '/building/wolfson-typical.png';
 import { buildFloorRows, rowLabelText } from '../data/floorRows';
@@ -257,6 +258,7 @@ export function ProjectDiagramPage() {
   /** On All, Building shows the three side by side, moving together. */
   const showTrio = !isNarrow && view === 'building' && selectedBuilding === 'all' && !!firstWolfson;
     const boardSet = useStore(st => st.boardSettings[st.currentProjectId]);
+  const lowerLevels = useMemo(() => WOLFSON_LOWER.map(l => (l.key === 'spa' ? { ...l, label: s.bvSpa } : l)), [s.bvSpa]);
   /** The board's own floor numbers, so the building view and the board say the same floor. */
   const floorLabelsOf = useCallback((b: BuildingId) => {
     const rows = buildFloorRows(b, apartments.filter(a => a.buildingId === b), boardSet?.floorHeights?.[b], boardSet?.buildingLayout?.[b]);
@@ -683,8 +685,8 @@ export function ProjectDiagramPage() {
         <div className="short-scroll-body flex-1 overflow-auto scrollbar-thin bg-gray-100 print:overflow-visible print:bg-white">
           {showTrio ? (
             <div className="h-full p-4" style={{ minHeight: 560 }} data-building-view-wrap>
-              <BuildingTrio buildings={trioBuildings} stages={stages} onOpen={handleAptClick} interiorSrc={WOLFSON_INTERIOR}
-                words={{ floor: s.floorWindowTitle, notSold: s.notSoldWord, notStarted: s.notStartedOption.replace(/[—–]/g, '').trim(), upgraded: s.upgradedWord, open: s.bvOpen, floorsHint: s.bvHint }} />
+              <BuildingTrio buildings={trioBuildings} stages={stages} onOpen={handleAptClick} interiorSrc={WOLFSON_INTERIOR} lower={lowerLevels}
+                words={{ floor: s.floorWindowTitle, notSold: s.notSoldWord, notStarted: s.notStartedOption.replace(/[—–]/g, '').trim(), upgraded: s.upgradedWord, open: s.bvOpen, floorsHint: s.bvHint, joinedWith: s.bvJoined }} />
             </div>
           ) : showBuilding ? (
             <div className="h-full p-4" style={{ minHeight: 560 }} data-building-view-wrap>
@@ -694,7 +696,9 @@ export function ProjectDiagramPage() {
                 onOpen={handleAptClick}
                 floorLabels={buildingFloorLabels}
                 interiorSrc={WOLFSON_INTERIOR}
-                words={{ floor: s.floorWindowTitle, notSold: s.notSoldWord, notStarted: s.notStartedOption.replace(/[—–]/g, '').trim(), upgraded: s.upgradedWord, open: s.bvOpen, floorsHint: s.bvHint }}
+                lower={lowerLevels}
+                tower={Math.max(0, buildings.filter(b => /^A\d/.test(b.id)).findIndex(b => b.id === selectedBuilding))}
+                words={{ floor: s.floorWindowTitle, notSold: s.notSoldWord, notStarted: s.notStartedOption.replace(/[—–]/g, '').trim(), upgraded: s.upgradedWord, open: s.bvOpen, floorsHint: s.bvHint, joinedWith: s.bvJoined }}
               />
             </div>
           ) : (

@@ -35,6 +35,26 @@ export const WHATS_NEW: WhatsNewEntry[] = [
     title: 'One building, big — and the building in 3D',
     items: [
       {
+        title: 'Walls, doors and furniture',
+        body: 'In Building, every floor now shows its real walls, doors, windows and furniture, taken from the architects\' plan.',
+        demo: 'zoom',
+      },
+      {
+        title: 'The basements and the spa',
+        body: 'Below floor 1 are the ground floor, the spa level and basements -1 and -2. On All they are one wide floor under the three buildings; with one building picked, its own part is clear and the rest is faint.',
+        demo: 'list',
+      },
+      {
+        title: 'All three at once',
+        body: 'On All, Building shows the three buildings side by side, moving together. Scrolling glides and settles on a floor.',
+        demo: 'sparkle',
+      },
+      {
+        title: 'Joined apartments light up together',
+        body: 'Hover one apartment of a joined pair and both light up; each card says which apartment it is joined with.',
+        demo: 'tap',
+      },
+      {
         title: 'One building fills the screen',
         body: 'Pick 1, 2 or 3 at the top: that building now fills the screen with big tiles that also show how many stages are done, the next stage, and who touched it last.',
         demo: 'zoom',

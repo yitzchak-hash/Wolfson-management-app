@@ -76,3 +76,34 @@ export function pathOf(pts: Pt[]): string {
 export const CARD_CORNER: Record<ShapeKey, 'tl' | 'tr' | 'bl' | 'br'> = {
   A: 'tl', B: 'tr', C2: 'bl', C1: 'br', WL: 'bl', WR: 'br',
 };
+
+/**
+ * THE LEVELS UNDER THE TOWERS (owner, 2026-11-03: "the basements … one wide
+ * floor under all three"). Ground, the spa level and the two basements are ONE
+ * long floor under A1, A2 and A3, read off the engineers' sheets 2441-06, -05,
+ * -04, -03 (all 1:100 and all drawn in one frame, so they stack exactly). STRIP
+ * is that frame in the sheet's points; the three cores stand at CORES_X, at
+ * CORE_Y; a tower's own slice runs between the midpoints (CUTS). The typical
+ * floor is 1:100 too, so one sheet point is one plan unit and a tower's core
+ * centre (CORE_C) lands on its core in the strip.
+ */
+export interface LowerLevel { key: string; label: string; src: string }
+export const STRIP = { x: 120, y: 760, w: 4040, h: 1070 };
+export const CORES_X = [860, 2000, 3160];
+export const CORE_Y = 1324;
+export const CUTS = [1430, 2580];
+export const CORE_C: [number, number] = [555, 421];
+export const WOLFSON_LOWER: LowerLevel[] = [
+  { key: 'b2', label: '-2', src: '/building/wolfson-basement-2.png' },
+  { key: 'b1', label: '-1', src: '/building/wolfson-basement-1.png' },
+  { key: 'spa', label: 'Spa', src: '/building/wolfson-spa.png' },
+  { key: 'g', label: '0', src: '/building/wolfson-ground.png' },
+];
+/** Where the strip lands in tower `i`'s plan units, and that tower's own slice of it. */
+export function stripFor(i: number) {
+  const cx = CORES_X[i] ?? CORES_X[0];
+  const dx = CORE_C[0] - cx, dy = CORE_C[1] - CORE_Y;
+  const from = i === 0 ? STRIP.x : CUTS[i - 1];
+  const to = i >= CUTS.length ? STRIP.x + STRIP.w : CUTS[i];
+  return { x: STRIP.x + dx, y: STRIP.y + dy, w: STRIP.w, h: STRIP.h, sliceX: from + dx, sliceW: to - from };
+}
