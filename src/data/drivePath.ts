@@ -204,7 +204,7 @@ export async function folderPath(driveLinkOrId: string): Promise<FolderPath | nu
  * a ":" in the path.
  */
 export function localName(name: string, sep: '\\' | '/'): string {
-  return sep === '\\' ? name.replace(/[\\/:*?"<>|]/g, '_') : name.replace(/\//g, ':');
+  return sep === '\\' ? name.replace(/\//g, ' ').replace(/[\\:*?"<>|]/g, '_') : name.replace(/\//g, ':');
 }
 
 export function composeLocalPath(root: string, path: FolderPath, sharedName = getSharedName(), driveName = getDriveName()): string {
