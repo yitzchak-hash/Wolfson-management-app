@@ -474,7 +474,7 @@ function AptCell({
             <span data-cell-more className="absolute text-center" style={{ left: 8, right: 8, top: 146, lineHeight: 1.3, opacity: isDimmed ? 0.5 : 0.85 }}>
               {progress && progress.total > 0 && (
                 <span className="block truncate" data-cell-progress>
-                  <b>{progress.done}/{progress.total}</b> {ui.bigStagesDone}{nextStageName ? ` · ${ui.bigNext} ${nextStageName}` : ''}
+                  <b>{progress.done}/{progress.total}</b> {ui.bigStagesDone}
                 </span>
               )}
               {apt?.updatedByName && apt.updatedAt && (

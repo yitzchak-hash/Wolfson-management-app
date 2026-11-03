@@ -17,7 +17,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Apartment, Stage } from '../../types';
 import { realName } from '../../data/aptSale';
 import {
-  CARD_CORNER, CORE, LABEL_AT, PLAN_BOX, SHAPES, pathOf, shapesOf, stripFor, type ShapeKey, type LowerLevel,
+  CARD_CORNER, CORE, CORE_PH, PH_DRAWING, isPenthouseShape, LABEL_AT, LEVEL_FLOORS, STRIP, zoneFor, PLAN_BOX, SHAPES, pathOf, shapesOf, stripFor, type ShapeKey, type LowerLevel,
 } from './wolfsonPlan';
 import './buildingView.css';
 
@@ -92,17 +92,34 @@ const K = 150, C = 19;
 const GAP = 92;                 // px between plates along the stack
 const ABOVE_SHOWN = 1, BELOW_SHOWN = 6;
 
-interface FloorRow { floor: number; flats: { apt: Apartment; shapes: ShapeKey[] }[]; lower?: LowerLevel }
+interface FloorRow { floor: number; flats: { apt: Apartment; shapes: ShapeKey[] }[]; lower?: LowerLevel; slots?: Apartment[] }
+
+/** A slot's name as the board shows it (the office's label, else its number). */
+export function slotName(a: Apartment): string { return (a.displayName || '').trim() || (a.apartmentNumber || '').trim(); }
+/** The board's slots on a lower level: records on that level's floors that carry a name. */
+export function slotsOn(apartments: Apartment[], level: string): Apartment[] {
+  const fl = LEVEL_FLOORS[level] ?? [];
+  return apartments.filter(a => fl.includes(a.floor) && !a.coveredBy && !!(a.displayName || '').trim())
+    .sort((x, y) => (x.colPosition ?? 0) - (y.colPosition ?? 0));
+}
 
 /** A typical floor: four flats, none of them a penthouse half. */
 function isTypical(row: FloorRow): boolean {
-  return row.flats.every(f => f.shapes.length === 1);
+  return !row.lower && row.flats.every(f => f.shapes.every(k => k === 'A' || k === 'B' || k === 'C1' || k === 'C2'));
+}
+/** A penthouse floor's own drawing, when it is one. */
+function phDrawing(row: FloorRow): string | undefined {
+  for (const f of row.flats) for (const k of f.shapes) if (isPenthouseShape(k)) return PH_DRAWING[k];
+  return undefined;
+}
+function coreOf(row: FloorRow): [number, number][] {
+  return phDrawing(row) ? CORE_PH : CORE.outline;
 }
 
 /** The floor's own outline: a typical floor is all four flats; the set-back top floor only what its flats cover. */
 function slabOf(row: FloorRow): ShapeKey[] {
   const used = row.flats.flatMap(f => f.shapes);
-  return used.some(k => k === 'WL' || k === 'WR') ? used : ['A', 'B', 'C1', 'C2'];
+  return used.some(k => k === 'WL' || k === 'WR' || isPenthouseShape(k)) ? used : ['A', 'B', 'C1', 'C2'];
 }
 
 export default function BuildingView({ apartments, stages, onOpen, words, initialFloor, floorLabels, interiorSrc, bus: sharedBus, compact, title, lower, tower = 0, hideLower }: BuildingViewProps) {
@@ -119,7 +136,7 @@ export default function BuildingView({ apartments, stages, onOpen, words, initia
       by.set(apt.floor, row);
     }
     const towers = [...by.values()].sort((a, b) => a.floor - b.floor);
-    const low = (lower ?? []).map((l, i) => ({ floor: -1000 + i, flats: [], lower: l } as FloorRow));
+    const low = (lower ?? []).map((l, i) => ({ floor: -1000 + i, flats: [], lower: l, slots: slotsOn(apartments, l.key) } as FloorRow));
     return [...low, ...towers];
   }, [apartments, lower]);
 
@@ -300,14 +317,30 @@ export default function BuildingView({ apartments, stages, onOpen, words, initia
                     <rect className="bv-lower-mine" x={s.sliceX} y={s.y} width={s.sliceW} height={s.h} />
                     <image href={row.lower.src} x={s.x} y={s.y} width={s.w} height={s.h} preserveAspectRatio="none"
                       clipPath={`url(#bv-slice-${tower}-${row.lower.key})`} />
-                    <text x={555} y={470} className="bv-floor-no">{row.lower.label}</text>
+                    {/* The board's own slots on this level: its named area lit, the name a press that opens it. */}
+                    {(row.slots ?? []).map((a, j) => {
+                      const z = zoneFor(row.lower!.key, slotName(a), tower);
+                      const dx = s.x - STRIP.x, dy = s.y - STRIP.y;
+                      const on = hover === a.id && i === landed;
+                      const cx = z ? (z[0] + z[2]) / 2 + dx : 555;
+                      const cy = z ? (z[1] + z[3]) / 2 + dy - 40 + (j % 2) * 0 : 600 + j * 62;
+                      return (
+                        <g key={a.id} className="bv-slot" data-slot={a.id} data-on={on ? '1' : '0'} data-zone={z ? '1' : '0'}
+                          onPointerEnter={() => i === landed && setHover(a.id)} onPointerLeave={() => setHover(h => (h === a.id ? null : h))}
+                          onClick={() => i === landed && onOpen(a)}>
+                          {z && <rect className="bv-zone" x={z[0] + dx} y={z[1] + dy} width={z[2] - z[0]} height={z[3] - z[1]} rx={18} />}
+                          <SlotChip x={cx} y={cy} name={slotName(a)} />
+                        </g>
+                      );
+                    })}
+                    {!(row.slots ?? []).length && <text x={555} y={470} className="bv-floor-no">{row.lower.label}</text>}
                   </svg>
                 );
               })()) : (
               <svg viewBox={`${PLAN_BOX.x} ${PLAN_BOX.y} ${PLAN_BOX.w} ${PLAN_BOX.h}`} className="bv-svg">
-                <path className="bv-slab" d={slabOf(row).map(k => pathOf(SHAPES[k])).join(' ') + ' ' + pathOf(CORE.outline)} />
-                <g className="bv-core" data-plain={interiorSrc && isTypical(row) ? '0' : '1'}>
-                  <path d={pathOf(CORE.outline)} />
+                <path className="bv-slab" d={slabOf(row).map(k => pathOf(SHAPES[k])).join(' ') + ' ' + pathOf(coreOf(row))} />
+                <g className="bv-core" data-plain={(interiorSrc && isTypical(row)) || phDrawing(row) ? '0' : '1'}>
+                  <path d={pathOf(coreOf(row))} />
                   {CORE.stairs.map(([x, y, sw, sh], j) => (
                     <g key={j}>
                       <rect x={x} y={y} width={sw} height={sh} className="bv-stair" />
@@ -346,6 +379,11 @@ export default function BuildingView({ apartments, stages, onOpen, words, initia
                     </g>
                   );
                 })}
+                {phDrawing(row) && (
+                  <g className="bv-interior" pointerEvents="none">
+                    <image href={phDrawing(row)} x={PLAN_BOX.x} y={PLAN_BOX.y} width={PLAN_BOX.w} height={PLAN_BOX.h} preserveAspectRatio="none" />
+                  </g>
+                )}
                 {interiorSrc && isTypical(row) && (
                   <g className="bv-interior" pointerEvents="none">
                     <clipPath id={`bv-clip-${row.floor}`}><path d={slabOf(row).map(k => pathOf(SHAPES[k])).join(' ') + ' ' + pathOf(CORE.outline)} /></clipPath>
@@ -409,5 +447,16 @@ export default function BuildingView({ apartments, stages, onOpen, words, initia
         })}
       </nav>}
     </div>
+  );
+}
+
+/** A slot's name on a lower level, as a pill (plan units). */
+export function SlotChip({ x, y, name, size = 34 }: { x: number; y: number; name: string; size?: number }) {
+  const w = Math.max(size * 3, name.length * size * 0.62 + size * 1.2), h = size * 1.6;
+  return (
+    <g className="bv-chip">
+      <rect x={x - w / 2} y={y - h / 2} width={w} height={h} rx={h / 2} />
+      <text x={x} y={y} style={{ fontSize: size }}>{name}</text>
+    </g>
   );
 }

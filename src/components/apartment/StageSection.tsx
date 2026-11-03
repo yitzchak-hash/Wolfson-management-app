@@ -138,8 +138,9 @@ export function StageSection({
         <span className="text-sm font-bold text-gray-800">{ui.stagesTitle}</span>
         {counted.length > 0 && (
           <span data-stage-next data-fraction={`${doneN}/${counted.length}`} className="text-xs text-gray-700 bg-sky-50 border border-sky-100 rounded-md px-2 py-1">
+            {/* No "Next" (owner, 2026-11-03): the trades work at their own speeds, so there is no one next stage. */}
             {next
-              ? ui.stageNextLine.replace('{stage}', getStageName(next.stage, rtl)).replace('{done}', String(doneN)).replace('{total}', String(counted.length))
+              ? ui.setProgressLabel.replace('{d}', String(doneN)).replace('{t}', String(counted.length))
               : ui.stageAllDone.replace('{done}', String(doneN)).replace('{total}', String(counted.length))}
           </span>
         )}

@@ -50,6 +50,21 @@ export const WHATS_NEW: WhatsNewEntry[] = [
         demo: 'sparkle',
       },
       {
+        title: 'The bottom floors hold the board\'s own slots',
+        body: 'The slots you keep on the board\'s bottom floors (the spa, a lobby, storage…) now stand on those floors in Building. A slot named for an area lights that area on the plan; press it to open it, with its Drive links.',
+        demo: 'tap',
+      },
+      {
+        title: 'Penthouses are one apartment each',
+        body: 'Floors 14 and 15 show each penthouse as one apartment, its number in the middle, with its real rooms from the plans.',
+        demo: 'zoom',
+      },
+      {
+        title: 'Stages: just how many are done',
+        body: 'An apartment\'s Stages now says only "3 of 9 done". There is no "next" stage, since every trade moves at its own speed.',
+        demo: 'list',
+      },
+      {
         title: 'Joined apartments light up together',
         body: 'Hover one apartment of a joined pair and both light up; each card says which apartment it is joined with.',
         demo: 'tap',

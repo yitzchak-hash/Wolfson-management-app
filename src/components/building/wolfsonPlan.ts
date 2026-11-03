@@ -12,7 +12,7 @@
  *
  * Pure data: no React, nothing from the store.
  */
-export type ShapeKey = 'A' | 'B' | 'C1' | 'C2' | 'WL' | 'WR';
+export type ShapeKey = 'A' | 'B' | 'C1' | 'C2' | 'WL' | 'WR' | 'PL14' | 'PR14' | 'PL15' | 'PR15';
 type Pt = [number, number];
 
 /** The view box that holds the whole floor, with a little air round it. */
@@ -28,11 +28,26 @@ export const SHAPES: Record<ShapeKey, Pt[]> = {
   // wings beside the core joins the penthouse on its side.
   WL: [[122,420],[262,420],[262,542],[97,542],[97,525],[122,525]],
   WR: [[848,420],[979,420],[979,525],[1007,525],[1007,542],[848,542]],
+  // THE PENTHOUSES, each ONE apartment (owner, 2026-11-03: "they feel like two
+  // connected apartments … a line in the middle"): their outline is read off
+  // the engineers' floor 14 and floor 15 A sheets (TES 2441-08/-09), whose own
+  // vectors are drawn into the plan's units — the stairs land on the typical
+  // floor's stairs (1.145 plan units per sheet half-point). Floor 15 is set
+  // back: below the core it is terrace.
+  PL14: [[132,45],[550,45],[550,290],[320,290],[320,520],[550,520],[550,690],[132,690]],
+  PR14: [[550,45],[977,45],[977,690],[550,690],[550,520],[780,520],[780,290],[550,290]],
+  PL15: [[132,45],[550,45],[550,290],[320,290],[320,520],[550,520],[550,545],[132,545]],
+  PR15: [[550,45],[977,45],[977,545],[550,545],[550,520],[780,520],[780,290],[550,290]],
 };
+
+/** The penthouse floors' core, and each penthouse floor's own drawing. */
+export const CORE_PH: [number, number][] = [[320,290],[780,290],[780,520],[320,520]];
+export const PH_DRAWING: Record<string, string> = { PL14: '/building/wolfson-ph14.png', PR14: '/building/wolfson-ph14.png', PL15: '/building/wolfson-ph15.png', PR15: '/building/wolfson-ph15.png' };
+export function isPenthouseShape(k: ShapeKey): boolean { return k.startsWith('P'); }
 
 /** Where an apartment's number sits — inside its biggest room (the living wing). */
 export const LABEL_AT: Record<ShapeKey, Pt> = {
-  A: [178, 215], B: [930, 228], C2: [178, 640], C1: [930, 640], WL: [180, 480], WR: [925, 480],
+  A: [178, 215], B: [930, 228], C2: [178, 640], C1: [930, 640], WL: [180, 480], WR: [925, 480], PL14: [235, 600], PR14: [875, 600], PL15: [235, 420], PR15: [875, 420],
 };
 
 /** The core: the corridor band, two stairwells and the lifts. */
@@ -60,8 +75,8 @@ export function shapesOf(apt: { tipus?: string; colPosition: number; colSpan?: n
   if (span > 1) {
     const left = apt.colPosition <= 2;
     const top = !!apt.isDuplexApt || Number(apt.apartmentNumber) >= 55;
-    if (top) return left ? ['A', 'WL'] : ['B', 'WR'];
-    return left ? ['A', 'C2'] : ['B', 'C1'];
+    if (top) return [left ? 'PL15' : 'PR15'];
+    return [left ? 'PL14' : 'PR14'];
   }
   const t = (apt.tipus ?? '').trim().toUpperCase();
   const m = t.match(/^(A|B|C1|C2)\b/);
@@ -74,7 +89,7 @@ export function pathOf(pts: Pt[]): string {
 
 /** The corner of the screen each apartment's card stands in (his red boxes). */
 export const CARD_CORNER: Record<ShapeKey, 'tl' | 'tr' | 'bl' | 'br'> = {
-  A: 'tl', B: 'tr', C2: 'bl', C1: 'br', WL: 'bl', WR: 'br',
+  A: 'tl', B: 'tr', C2: 'bl', C1: 'br', WL: 'bl', WR: 'br', PL14: 'tl', PR14: 'tr', PL15: 'tl', PR15: 'tr',
 };
 
 /**
@@ -106,4 +121,35 @@ export function stripFor(i: number) {
   const from = i === 0 ? STRIP.x : CUTS[i - 1];
   const to = i >= CUTS.length ? STRIP.x + STRIP.w : CUTS[i];
   return { x: STRIP.x + dx, y: STRIP.y + dy, w: STRIP.w, h: STRIP.h, sliceX: from + dx, sliceW: to - from };
+}
+
+/**
+ * THE BOARD'S OWN SLOTS on the lower levels (owner, 2026-11-03: "you see how in
+ * the board view we have a bunch of drive links and slots on the bottom floors?
+ * … bring it into the bottom floors of the building … find out what sections
+ * want, for example the spa, and have that kind of highlight on that floor").
+ * Which board floors each level holds, and the areas a slot's NAME lights:
+ * read off the sheets (the spa fills the left end of the spa level, the
+ * storage rooms the left end of basement -2, parking the rest; the lobbies sit
+ * round each core on the ground floor). In the strip's points.
+ */
+export const LEVEL_FLOORS: Record<string, number[]> = { g: [0, 1], spa: [-0.5], b1: [-1], b2: [-2, -3, -4] };
+export interface Zone { key: string; level: string; words: RegExp; rect?: [number, number, number, number]; perTower?: [number, number, number, number] }
+export const ZONES: Zone[] = [
+  { key: 'spa', level: 'spa', words: /spa|ספא|pool|בריכ|gym|כושר|sauna|סאונה|wellness/i, rect: [150, 820, 1450, 1700] },
+  { key: 'storage', level: 'b2', words: /storage|מחסנ|מחסן|store ?room/i, rect: [150, 830, 1000, 1760] },
+  { key: 'parking', level: 'b1', words: /park|חני/i, rect: [1450, 830, 4100, 1760] },
+  { key: 'parking2', level: 'b2', words: /park|חני/i, rect: [1000, 830, 4100, 1760] },
+  // round each tower's core: [dx0, y0, dx1, y1] from the core's x
+  { key: 'lobby', level: 'g', words: /lobby|לובי|entrance|כניס/i, perTower: [-380, 1050, 380, 1560] },
+  { key: 'shop', level: 'g', words: /commerc|מסחר|shop|חנו|store\b/i, perTower: [-520, 840, 520, 1620] },
+];
+/** The area a slot lights on its level, in strip points, for tower i; none when its name names no area. */
+export function zoneFor(level: string, name: string, tower: number): [number, number, number, number] | null {
+  for (const z of ZONES) {
+    if (z.level !== level || !z.words.test(name)) continue;
+    if (z.rect) return z.rect;
+    if (z.perTower) { const cx = CORES_X[tower] ?? CORES_X[0]; return [cx + z.perTower[0], z.perTower[1], cx + z.perTower[2], z.perTower[3]]; }
+  }
+  return null;
 }

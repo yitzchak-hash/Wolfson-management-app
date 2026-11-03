@@ -147,3 +147,20 @@
 .bv-stage { overflow: hidden; }
 .bv-lower, .bv-lower * { pointer-events: none; }
 .bv-rail { position: relative; z-index: 3; }
+
+/* The board's slots on the lower levels: the named area lit, the name a press. */
+.bv-zone { fill: rgba(14,165,233,.16); stroke: #0ea5e9; stroke-width: 6; stroke-dasharray: 18 12; transition: fill .2s ease; }
+.bv-slot { cursor: pointer; pointer-events: auto; }
+.bv-slot[data-on='1'] .bv-zone { fill: rgba(14,165,233,.38); stroke-dasharray: none; }
+.bv-chip rect { fill: #ffffff; stroke: #1e3a5f; stroke-width: 4; }
+.bv-chip text { fill: #1e3a5f; font-weight: 700; text-anchor: middle; dominant-baseline: central; }
+.bv-slot[data-on='1'] .bv-chip rect { fill: #1e3a5f; }
+.bv-slot[data-on='1'] .bv-chip text { fill: #ffffff; }
+.bv-plate[data-solid='0'] .bv-slot { display: none; }
+.bv-lower .bv-slot, .bv-lower .bv-slot * { pointer-events: auto; }
+.bv-wide-plate[data-solid='0'] .bv-slot { display: none; }
+.bv-wide-plate[data-solid='1'] .bv-slot { pointer-events: auto; }
+.bv-wide-label { opacity: .18; }
+
+.bv-trio[data-low='1'] .bv-trio-row > .bv-root { pointer-events: none; }
+.bv-trio[data-low='1'] .bv-wide { z-index: 2; }
