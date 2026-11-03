@@ -291,7 +291,8 @@ export function ProjectDiagramPage() {
     setSelectedBuilding('all');
   }
 
-  const hasFilters = activeStageIds.length > 0 || classFilter !== 'all' || !!tipusFilter || searchQuery || selectedBuilding !== 'all';
+  // Picking a building is where you look, not a filter (owner, video 2026-11-03: "when I filter a building … this pops up … unnecessary").
+  const hasFilters = activeStageIds.length > 0 || classFilter !== 'all' || !!tipusFilter || searchQuery;
 
   function exitBulkMode() {
     setBulkMode(false);
@@ -373,10 +374,6 @@ export function ProjectDiagramPage() {
     setToast({ msg, type });
   }
 
-  const stageStats = sortedStages.map(s => ({
-    stage: s,
-    count: apartments.filter(a => a.currentStageId === s.id).length,
-  }));
   // Only real units count — blank placeholder slots are not apartments
   const countable = apartments.filter(isCountableApartment);
   const noStage = countable.filter(a => !a.currentStageId).length;
@@ -662,24 +659,8 @@ export function ProjectDiagramPage() {
 
         </div>
 
-        {/* Stage progress mini bar — wide screens only (below 900 the counts
-            live inside the stage bar); hidden on print */}
-        <div className="hidden diag:flex bg-gray-50 border-b border-gray-200 px-5 py-2 items-center gap-3 overflow-x-auto flex-shrink-0 print:hidden">
-          {stageStats.map(({ stage, count }) => (
-            count > 0 && (
-              <div key={stage.id} className="flex items-center gap-1.5 flex-shrink-0">
-                <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: stage.color }} />
-                <span className="text-xs text-gray-600 font-medium">{count}</span>
-              </div>
-            )
-          ))}
-          {noStage > 0 && (
-            <div className="flex items-center gap-1.5 flex-shrink-0">
-              <span className="w-2.5 h-2.5 rounded-full bg-gray-300" />
-              <span className="text-xs text-gray-500">{noStage}</span>
-            </div>
-          )}
-        </div>
+        {/* The coloured stage-count strip that stood here is gone (owner,
+            video 2026-11-03: "get rid of this whole bar … unnecessary"). */}
 
         {/* Main diagram */}
         <div className="short-scroll-body flex-1 overflow-auto scrollbar-thin bg-gray-100 print:overflow-visible print:bg-white">

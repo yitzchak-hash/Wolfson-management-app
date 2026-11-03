@@ -28,7 +28,9 @@ ask built or answered) · **not this app** (a recording of another project — r
 | 16 | Recording 2026-10-26 094647.mp4 (151.1 MB, 1920×1032) — in **Not processed** | `1aU3Sbyi88pKC-LvzYcna3PFO-mjv8nTS` | 4:45 | done | [2026-10-26-094647.md](2026-10-26-094647.md) |
 | 17 | Recording 2026-10-28 102505.mp4 (266.3 MB, 1920×1074) — in **Not processed** | `1244pyAr28lBecO_wlVssUuL9GFavzw0X` | 8:28 | done (built 2026-10-28 on his "build it"; tipus map approved) | [2026-10-28-102505.md](2026-10-28-102505.md) |
 
-Folder last listed: 2026-10-28 — 14 recordings at the top, **Processed** empty, recordings 15, 16 and 17 in **Not processed**. All 17 are done and belong in Processed.
+| 18 | Screen Recording 2026-11-02 155444.mp4 (186.7 MB) | `1oBE6kqCWX2lOYaRplaJeuuwXAJzSStgV` | 4:35 | done (building view, built and live 2026-11-03) | (worked in chat; the artifact) |
+| 19 | Recording 2026-11-03 132739.mp4 (57.8 MB) | `1gj_TTcLmNcarXqMg1BUlBSYExiCUHM4I` | 1:22 | open (built on preview; S1 asked) | [2026-11-03-132739.md](2026-11-03-132739.md) |
+Folder last listed: 2026-11-03 — recordings 18 and 19 at the top. 1–18 are done and belong in Processed.
 
 ## The folder's two subfolders (owner, 2026-10-18)
 After every new video a helper sorts the folder: **Processed**

@@ -36,6 +36,7 @@ await p.keyboard.press('Escape'); await p.waitForTimeout(300);
 T(await win.count() === 0, 'Escape closes it');
 // 2. one building big
 await p.locator('button:visible', { hasText: /^2$/ }).first().click(); await p.waitForTimeout(800);
+T(await p.locator('button:visible', { hasText: /^Clear$/ }).count() === 0, 'picking a building is not a filter: no Clear');
 const bigTiles = await p.locator('[data-apt-id][data-big]').count();
 T(bigTiles > 10, `one building: big tiles (${bigTiles})`);
 const tw = await p.locator('[data-apt-id][data-big]').first().boundingBox();
@@ -54,8 +55,15 @@ await p.mouse.click(fb.x + fb.width / 2, fb.y + fb.height / 2 + 15); await p.wai
 T(await p.locator('.drawer-panel').count() > 0, 'a press on a flat opens its window');
 await p.goto('http://localhost:5173/project'); await p.waitForTimeout(1500);
 T(await p.locator('[data-view-switch]').count() === 1, 'the switch shows on All too');
+T(await p.locator('text=/^Clear$/').count() === 0, 'no Clear on All with nothing filtered');
 await p.click('[data-view="building"]'); await p.waitForTimeout(1200);
 T(await p.locator('[data-building-trio] [data-building-view]').count() === 3, 'Building on All shows the three side by side');
+{ const f = p.locator('[data-building-trio] .bv-plate[data-current="1"] [data-apt] text.bv-flat-no').first(); const fb = await f.boundingBox();
+  await p.mouse.move(fb.x + fb.width / 2, fb.y + fb.height / 2 + 10); await p.waitForTimeout(400);
+  const cb = await p.locator('[data-building-trio] .bv-card').first().boundingBox();
+  const sb = await p.locator('[data-building-trio]').boundingBox();
+  T(!!cb && cb.y >= sb.y && cb.y + cb.height <= sb.y + sb.height, 'on All the hover card stands whole, above the plans');
+  await p.screenshot({ path: OUT + '/v15-trio-hover.png' }); }
 const before = await p.locator('[data-rail-floor][data-on="1"]').textContent();
 const st = await p.locator('[data-building-view]').first().boundingBox();
 await p.mouse.move(st.x + st.width / 2, st.y + st.height / 2);

@@ -17,7 +17,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { Apartment, Stage } from '../../types';
 import { realName } from '../../data/aptSale';
 import {
-  CARD_CORNER, CORE, CORE_PH, PH_DRAWING, isPenthouseShape, LABEL_AT, LEVEL_FLOORS, STRIP, zoneFor, PLAN_BOX, SHAPES, pathOf, shapesOf, stripFor, type ShapeKey, type LowerLevel,
+  CARD_CORNER, CORE, CORE_PH14, CORE_PH15, PH_BOX, FLOOR_NO_AT, PH_DRAWING, isPenthouseShape, LABEL_AT, LEVEL_FLOORS, STRIP, zoneFor, PLAN_BOX, SHAPES, pathOf, shapesOf, stripFor, type ShapeKey, type LowerLevel,
 } from './wolfsonPlan';
 import './buildingView.css';
 
@@ -113,7 +113,8 @@ function phDrawing(row: FloorRow): string | undefined {
   return undefined;
 }
 function coreOf(row: FloorRow): [number, number][] {
-  return phDrawing(row) ? CORE_PH : CORE.outline;
+  const d = phDrawing(row);
+  return d ? (d.includes('ph15') ? CORE_PH15 : CORE_PH14) : CORE.outline;
 }
 
 /** The floor's own outline: a typical floor is all four flats; the set-back top floor only what its flats cover. */
@@ -404,7 +405,7 @@ export default function BuildingView({ apartments, stages, onOpen, words, initia
                 })}
                 {phDrawing(row) && (
                   <g className="bv-interior" pointerEvents="none">
-                    <image href={phDrawing(row)} x={PLAN_BOX.x} y={PLAN_BOX.y} width={PLAN_BOX.w} height={PLAN_BOX.h} preserveAspectRatio="none" />
+                    <image href={phDrawing(row)} x={PH_BOX.x} y={PH_BOX.y} width={PH_BOX.w} height={PH_BOX.h} preserveAspectRatio="none" />
                   </g>
                 )}
                 {interiorSrc && isTypical(row) && (
@@ -414,7 +415,7 @@ export default function BuildingView({ apartments, stages, onOpen, words, initia
                       clipPath={`url(#bv-clip-${row.floor})`} preserveAspectRatio="none" />
                   </g>
                 )}
-                <text x={555} y={470} className="bv-floor-no">{lab(row.floor)}</text>
+                <text x={FLOOR_NO_AT[0]} y={FLOOR_NO_AT[1]} className="bv-floor-no">{lab(row.floor)}</text>
               </svg>
               )}
             </div>

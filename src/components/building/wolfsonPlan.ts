@@ -36,20 +36,32 @@ export const SHAPES: Record<ShapeKey, Pt[]> = {
   // vectors are drawn into the plan's units — the stairs land on the typical
   // floor's stairs (1.145 plan units per sheet half-point). Floor 15 is set
   // back: below the core it is terrace.
-  PL14: [[100,45],[553,45],[553,290],[320,290],[320,520],[553,520],[553,640],[505,640],[505,760],[100,760]],
-  PR14: [[553,45],[1005,45],[1005,760],[505,760],[505,640],[553,640],[553,520],[780,520],[780,290],[553,290]],
-  PL15: [[100,45],[553,45],[553,290],[320,290],[320,520],[553,520],[553,700],[100,700]],
-  PR15: [[553,45],[1005,45],[1005,700],[553,700],[553,610],[625,610],[625,545],[553,545],[553,520],[780,520],[780,290],[553,290]],
+  PL14: [[9,32],[472,32],[472,282],[234,282],[234,517],[472,517],[472,640],[423,640],[423,763],[9,763]],
+  PR14: [[472,32],[935,32],[935,763],[423,763],[423,640],[472,640],[472,517],[704,517],[704,282],[472,282]],
+  PL15: [[0,21],[469,21],[469,275],[228,275],[228,513],[469,513],[469,699],[0,699]],
+  PR15: [[469,21],[937,21],[937,699],[469,699],[469,606],[544,606],[544,539],[469,539],[469,513],[704,513],[704,275],[469,275]],
 };
 
 /** The penthouse floors' core, and each penthouse floor's own drawing. */
-export const CORE_PH: [number, number][] = [[320,290],[780,290],[780,520],[320,520]];
+/**
+ * The penthouse floors are fitted by their STAIRS and LIFTS onto the typical
+ * floor's (owner, video 2026-11-03: "this is the staircase … here the layout
+ * of that is different") — one shaft through the building. Their drawings are
+ * drawn on a wider frame (PH_BOX), since the set-back floors stand further out
+ * on one side.
+ */
+export const PH_BOX = { x: -20, y: 0, w: 1045, h: 820 };
+export const CORE_PH14: [number, number][] = [[234,282],[704,282],[704,517],[234,517]];
+export const CORE_PH15: [number, number][] = [[228,275],[704,275],[704,513],[228,513]];
+export const CORE_PH: [number, number][] = CORE_PH14;
+/** The floor number stands in the middle of the stair core, on every floor. */
+export const FLOOR_NO_AT: [number, number] = [551, 444];
 export const PH_DRAWING: Record<string, string> = { PL14: '/building/wolfson-ph14.png', PR14: '/building/wolfson-ph14.png', PL15: '/building/wolfson-ph15.png', PR15: '/building/wolfson-ph15.png' };
 export function isPenthouseShape(k: ShapeKey): boolean { return k.startsWith('P'); }
 
 /** Where an apartment's number sits — inside its biggest room (the living wing). */
 export const LABEL_AT: Record<ShapeKey, Pt> = {
-  A: [178, 215], B: [930, 228], C2: [178, 640], C1: [930, 640], WL: [180, 480], WR: [925, 480], PL14: [235, 640], PR14: [870, 640], PL15: [235, 610], PR15: [870, 620],
+  A: [178, 215], B: [930, 228], C2: [178, 640], C1: [930, 640], WL: [180, 480], WR: [925, 480], PL14: [150, 640], PR14: [800, 640], PL15: [150, 610], PR15: [800, 620],
 };
 
 /** The core: the corridor band, two stairwells and the lifts. */

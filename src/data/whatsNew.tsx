@@ -35,6 +35,11 @@ export const WHATS_NEW: WhatsNewEntry[] = [
     title: 'Send a plan as a PDF',
     items: [
       {
+        title: 'Building view, tidier',
+        body: 'The penthouse floors\' stairs now stand right over the stairs below; the floor number sits in the middle of the stairs; on All the hover card shows whole above the plans; the coloured count strip is gone; picking a building no longer shows Clear.',
+        demo: 'sparkle',
+      },
+      {
         title: 'Share',
         body: 'Above the plan, next to Open in Sketcher, press Share: your phone\'s or computer\'s share menu opens with the plan as a PDF file, ready for WhatsApp, mail or anything else. The file itself is sent, not a link.',
         demo: 'tap',
