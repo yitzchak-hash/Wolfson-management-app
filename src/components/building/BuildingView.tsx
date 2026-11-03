@@ -53,6 +53,31 @@ export interface BuildingViewProps {
    * rooms, so it is drawn without it.
    */
   interiorSrc?: string;
+  /**
+   * Several buildings moving as one (owner, 2026-11-03: on All, "all three of
+   * them on one screen … let's make it scroll together"): they share one
+   * FloorBus, so a wheel over any of them moves all of them.
+   */
+  bus?: FloorBus;
+  /** Small, beside its neighbours: no corner cards and no rail — one card for the flat under the pointer. */
+  compact?: boolean;
+  /** The building's name, drawn over it when compact. */
+  title?: string;
+}
+
+/** The floor in view, shared: a fractional index into the floors, bottom = 0. */
+export interface FloorBus {
+  get(): number;
+  set(v: number): void;
+  subscribe(fn: (v: number) => void): () => void;
+}
+export function makeFloorBus(start: number): FloorBus {
+  let v = start; const fns = new Set<(v: number) => void>();
+  return {
+    get: () => v,
+    set: (n: number) => { if (n === v) return; v = n; fns.forEach(f => f(n)); },
+    subscribe: fn => { fns.add(fn); return () => { fns.delete(fn); }; },
+  };
 }
 
 /** A stack spring that overshoots a hair and settles — "it lands in". */
@@ -73,7 +98,7 @@ function slabOf(row: FloorRow): ShapeKey[] {
   return used.some(k => k === 'WL' || k === 'WR') ? used : ['A', 'B', 'C1', 'C2'];
 }
 
-export default function BuildingView({ apartments, stages, onOpen, words, initialFloor, floorLabels, interiorSrc }: BuildingViewProps) {
+export default function BuildingView({ apartments, stages, onOpen, words, initialFloor, floorLabels, interiorSrc, bus: sharedBus, compact, title }: BuildingViewProps) {
   const lab = (f: number) => floorLabels?.[f] || String(f);
   const w = { ...EN, ...words };
   const stageById = useMemo(() => new Map(stages.map(s => [s.id, s])), [stages]);
@@ -139,55 +164,68 @@ export default function BuildingView({ apartments, stages, onOpen, words, initia
     raf.current = requestAnimationFrame(step);
   }, [paint]);
 
-  const go = useCallback((idx: number) => {
-    const i = Math.max(0, Math.min(topIdx, idx));
-    if (i === target.current) return;
-    target.current = i;
-    setLanded(i);
-    setHover(null);
+  // The ONE floor in view lives on the bus (this view's own when none is shared).
+  const ownBus = useMemo(() => makeFloorBus(startIdx), []); // eslint-disable-line react-hooks/exhaustive-deps
+  const bus = sharedBus ?? ownBus;
+  useEffect(() => bus.subscribe(v => {
+    const t2 = Math.max(0, Math.min(topIdx, v));
+    target.current = t2;
+    const r = Math.round(t2);
+    setLanded(l => (l === r ? l : r));
     if (!raf.current) raf.current = requestAnimationFrame(step);
-  }, [step, topIdx]);
+  }), [bus, step, topIdx]);
+  useEffect(() => { const v = bus.get(); target.current = pos.current = Math.max(0, Math.min(topIdx, v)); setLanded(Math.round(target.current)); paint(); }, [bus, topIdx, paint]);
 
-  useEffect(() => { paint(); return () => cancelAnimationFrame(raf.current); }, [paint, floors.length]);
+  const go = useCallback((idx: number) => {
+    setHover(null);
+    bus.set(Math.max(0, Math.min(topIdx, Math.round(idx))));
+  }, [bus, topIdx]);
 
-  // The wheel moves one floor per notch (a trackpad's small deltas add up);
-  // never the page underneath while the pointer is over the building.
+  /**
+   * The wheel GLIDES (owner, 2026-11-03: "how do we make it work a bit less
+   * stucky?"): a trackpad moves the stack with the fingers, a mouse notch is
+   * one floor, and the moment the hand rests the stack settles on the nearest
+   * floor. Never the page underneath while the pointer is over the building.
+   */
   const stageRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const el = stageRef.current;
     if (!el) return;
-    let acc = 0, quietUntil = 0;
+    let settle = 0;
     const onWheel = (e: WheelEvent) => {
       e.preventDefault();
-      const now = performance.now();
-      acc += e.deltaY;
-      if (Math.abs(acc) < 40 || now < quietUntil) return;
-      go(target.current + (acc < 0 ? 1 : -1));   // up the wheel = up the building
-      acc = 0; quietUntil = now + 170;
+      const cur = bus.get();
+      const notch = e.deltaMode === 1 || Math.abs(e.deltaY) >= 50;
+      const next = notch
+        ? Math.round(cur) + (e.deltaY < 0 ? 1 : -1)          // up the wheel = up the building
+        : cur - e.deltaY / 110;
+      bus.set(Math.max(0, Math.min(topIdx, next)));
+      setHover(null);
+      window.clearTimeout(settle);
+      settle = window.setTimeout(() => bus.set(Math.max(0, Math.min(topIdx, Math.round(bus.get())))), 140);
     };
     el.addEventListener('wheel', onWheel, { passive: false });
-    return () => el.removeEventListener('wheel', onWheel);
-  }, [go]);
+    return () => { el.removeEventListener('wheel', onWheel); window.clearTimeout(settle); };
+  }, [bus, topIdx]);
 
-  // A finger: a vertical swipe moves floors (one per 60px).
-  const touch = useRef<{ y: number; moved: number } | null>(null);
+  // A finger drags the stack with it (80px a floor) and lets go onto the nearest floor.
+  const touch = useRef<{ y: number; from: number } | null>(null);
   const onPointerDown = (e: React.PointerEvent) => {
     if (e.pointerType !== 'touch') return;
-    touch.current = { y: e.clientY, moved: 0 };
+    touch.current = { y: e.clientY, from: bus.get() };
   };
   const onPointerMove = (e: React.PointerEvent) => {
-    const t = touch.current;
-    if (!t) return;
-    const dy = e.clientY - t.y;
-    if (Math.abs(dy) > 60) { go(target.current + (dy > 0 ? 1 : -1)); t.y = e.clientY; t.moved++; }
+    const t2 = touch.current;
+    if (!t2) return;
+    bus.set(Math.max(0, Math.min(topIdx, t2.from + (e.clientY - t2.y) / 80)));
   };
-  const onPointerUp = () => { touch.current = null; };
+  const onPointerUp = () => { if (touch.current) bus.set(Math.round(bus.get())); touch.current = null; };
 
   // Keys: ↑ ↓, Page Up/Down, Home/End.
   const onKeyDown = (e: React.KeyboardEvent) => {
-    const k = e.key;
-    if (k === 'ArrowUp' || k === 'PageUp') { e.preventDefault(); go(target.current + 1); }
-    else if (k === 'ArrowDown' || k === 'PageDown') { e.preventDefault(); go(target.current - 1); }
+    const k = e.key, cur = Math.round(bus.get());
+    if (k === 'ArrowUp' || k === 'PageUp') { e.preventDefault(); go(cur + 1); }
+    else if (k === 'ArrowDown' || k === 'PageDown') { e.preventDefault(); go(cur - 1); }
     else if (k === 'Home') { e.preventDefault(); go(topIdx); }
     else if (k === 'End') { e.preventDefault(); go(0); }
   };
@@ -207,7 +245,8 @@ export default function BuildingView({ apartments, stages, onOpen, words, initia
   if (!floors.length) return null;
 
   return (
-    <div className="bv-root" data-building-view>
+    <div className={`bv-root${compact ? ' bv-compact' : ''}`} data-building-view={title ?? ''}>
+      {compact && title && <div className="bv-title">{title}</div>}
       <div
         ref={stageRef}
         className="bv-stage"
@@ -283,14 +322,14 @@ export default function BuildingView({ apartments, stages, onOpen, words, initia
         </div>
 
         {/* His red boxes: one card per flat of the landed floor, in its corner. */}
-        {here && here.flats.map(({ apt, shapes }) => {
+        {here && here.flats.filter(f => !compact || f.apt.id === hover).map(({ apt, shapes }) => {
           const { st, name } = flatInfo(apt);
           const on = hover === apt.id;
           return (
             <button
               key={`${here.floor}-${apt.id}`}
               type="button"
-              className={`bv-card bv-${CARD_CORNER[shapes[0]]}`}
+              className={`bv-card bv-${compact ? 'tl' : CARD_CORNER[shapes[0]]}`}
               data-card={apt.id}
               data-on={on ? '1' : '0'}
               style={{ ['--bv-c' as string]: st?.color ?? '#94a3b8' }}
@@ -317,7 +356,7 @@ export default function BuildingView({ apartments, stages, onOpen, words, initia
       </div>
 
       {/* The floors, top to bottom — a press goes straight there. */}
-      <nav className="bv-rail" aria-label={w.floor}>
+      {!compact && <nav className="bv-rail" aria-label={w.floor}>
         {[...floors].reverse().map(row => {
           const i = floors.indexOf(row);
           return (
@@ -327,7 +366,7 @@ export default function BuildingView({ apartments, stages, onOpen, words, initia
             </button>
           );
         })}
-      </nav>
+      </nav>}
     </div>
   );
 }

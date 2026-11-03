@@ -110,3 +110,15 @@
 .bv-plate[data-solid='0'] .bv-interior { display: none; }
 .bv-core[data-plain='0'] rect, .bv-core[data-plain='0'] line, .bv-core[data-plain='0'] .bv-lift { display: none; }
 .bv-plate[data-solid='1'] .bv-flat-no { paint-order: stroke; stroke: #ffffff; stroke-width: 9px; }
+
+/* All three on one screen — each a compact view, one rail for the three. */
+.bv-trio { display: flex; width: 100%; height: 100%; min-height: 520px; border-radius: 12px; overflow: hidden;
+  background: radial-gradient(120% 90% at 50% 35%, #ffffff 0%, #eef2f7 55%, #e2e8f0 100%); }
+.bv-trio-row { flex: 1; min-width: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.bv-compact { background: transparent; border-radius: 0; min-height: 0; }
+.bv-compact .bv-world { width: 84%; top: 46%; }
+.bv-compact .bv-card { width: 200px; }
+.bv-title { position: absolute; top: 12px; left: 50%; transform: translateX(-50%); z-index: 3;
+  font-size: 15px; font-weight: 700; color: #1e3a5f; background: #ffffff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 3px 12px; }
+.bv-compact .bv-card { top: auto; bottom: 14px; left: 50%; transform: translateX(-50%); }
+.bv-compact .bv-card[data-on='1'] { transform: translateX(-50%) translateY(-2px); }

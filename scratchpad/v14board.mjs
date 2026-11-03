@@ -48,6 +48,15 @@ T(await p.locator('.drawer-panel').count() > 0, 'a press on a flat opens its win
 await p.goto('http://localhost:5173/project'); await p.waitForTimeout(1500);
 T(await p.locator('[data-view-switch]').count() === 1, 'the switch shows on All too');
 await p.click('[data-view="building"]'); await p.waitForTimeout(1200);
-T(await p.locator('[data-building-view]').count() === 1, 'Building on All opens the first building');
+T(await p.locator('[data-building-trio] [data-building-view]').count() === 3, 'Building on All shows the three side by side');
+const before = await p.locator('[data-rail-floor][data-on="1"]').textContent();
+const st = await p.locator('[data-building-view]').first().boundingBox();
+await p.mouse.move(st.x + st.width / 2, st.y + st.height / 2);
+await p.mouse.wheel(0, 100); await p.waitForTimeout(900);
+const after = await p.locator('[data-rail-floor][data-on="1"]').textContent();
+T(after !== before, `a wheel over one moves them (${before} → ${after})`);
+const solid = await p.evaluate(() => [...document.querySelectorAll('[data-building-trio] [data-building-view]')].map(v => v.querySelector('.bv-plate[data-solid="1"]')?.getAttribute('data-floor')));
+T(new Set(solid).size === 1, `all three on the same floor (${solid.join(',')})`);
+await p.screenshot({ path: OUT + '/v14-trio.png' });
 console.log(`\n${ok} ok · ${bad} bad · errors: ${errs.length ? errs.join(' | ') : 'none'}`);
 await browser.close();

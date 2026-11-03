@@ -9,6 +9,9 @@ import { setMark, isWorkStage } from '../data/stageMarks';
 import { problemStates } from '../data/problems';
 import { BuildingDiagram, SaleFilter, DiagramLook } from '../components/diagram/BuildingDiagram';
 import BuildingView from '../components/building/BuildingView';
+import BuildingTrio from '../components/building/BuildingTrio';
+/** The typical floor's walls, doors, windows and furniture, off the architects' plan (owner liked it, 2026-11-03). */
+const WOLFSON_INTERIOR = '/building/wolfson-typical.png';
 import { buildFloorRows, rowLabelText } from '../data/floorRows';
 import { StageLegend, StageFilterMenu } from '../components/diagram/StageLegend';
 import { buildingShort } from '../data/aptSale';
@@ -251,14 +254,19 @@ export function ProjectDiagramPage() {
   /** The switch shows on All too (owner, 2026-11-03: he looked for it there twice); Building on All opens the first building. */
   const firstWolfson = buildings.find(b => /^A\d/.test(b.id))?.id;
   const showSwitch = !isNarrow && !!firstWolfson;
-  const boardSet = useStore(st => st.boardSettings[st.currentProjectId]);
+  /** On All, Building shows the three side by side, moving together. */
+  const showTrio = !isNarrow && view === 'building' && selectedBuilding === 'all' && !!firstWolfson;
+    const boardSet = useStore(st => st.boardSettings[st.currentProjectId]);
   /** The board's own floor numbers, so the building view and the board say the same floor. */
-  const buildingFloorLabels = useMemo(() => {
-    if (!showBuilding) return undefined;
-    const b = selectedBuilding as BuildingId;
+  const floorLabelsOf = useCallback((b: BuildingId) => {
     const rows = buildFloorRows(b, apartments.filter(a => a.buildingId === b), boardSet?.floorHeights?.[b], boardSet?.buildingLayout?.[b]);
-    return Object.fromEntries(rows.map(r => [r.floor, rowLabelText(r, s.lobby, s.groundCommercial)]));
-  }, [showBuilding, selectedBuilding, apartments, boardSet, s.lobby, s.groundCommercial]);
+    return Object.fromEntries(rows.map(r => [r.floor, rowLabelText(r, s.lobby, s.groundCommercial)])) as Record<number, string>;
+  }, [apartments, boardSet, s.lobby, s.groundCommercial]);
+  const buildingFloorLabels = useMemo(() => (showBuilding ? floorLabelsOf(selectedBuilding as BuildingId) : undefined),
+    [showBuilding, selectedBuilding, floorLabelsOf]);
+  const trioBuildings = useMemo(() => (showTrio
+    ? buildings.filter(b => /^A\d/.test(b.id)).map(b => ({ id: b.id, title: buildingShort(b.id), apartments: apartments.filter(a => a.buildingId === b.id), floorLabels: floorLabelsOf(b.id) }))
+    : []), [showTrio, buildings, apartments, floorLabelsOf]);
   const lookValue = useMemo(() => ({
     big: !isNarrow && selectedBuilding !== 'all',
     onFloorClick: !isNarrow && selectedBuilding === 'all' && !bulkMode
@@ -526,12 +534,12 @@ export function ProjectDiagramPage() {
             {showSwitch && (
               <div className="flex items-center gap-1 bg-gray-100 rounded-xl p-1" data-view-switch>
                 {(['board', 'building'] as const).map(v => {
-                  const on = (v === 'building') === showBuilding;
+                  const on = (v === 'building') === (showBuilding || showTrio);
                   return (
                     <button key={v} type="button" data-view={v} aria-pressed={on}
                       onClick={() => {
                         setView(v);
-                        if (v === 'building' && !canBuildingView && firstWolfson) setSelectedBuilding(firstWolfson);
+                        if (v === 'building' && selectedBuilding !== 'all' && !canBuildingView && firstWolfson) setSelectedBuilding(firstWolfson);
                       }}
                       className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${on ? 'bg-[#1e3a5f] text-white shadow-sm' : 'text-gray-600 hover:text-gray-900'}`}>
                       {v === 'board' ? s.viewBoard : s.viewBuilding}
@@ -673,13 +681,19 @@ export function ProjectDiagramPage() {
 
         {/* Main diagram */}
         <div className="short-scroll-body flex-1 overflow-auto scrollbar-thin bg-gray-100 print:overflow-visible print:bg-white">
-          {showBuilding ? (
+          {showTrio ? (
+            <div className="h-full p-4" style={{ minHeight: 560 }} data-building-view-wrap>
+              <BuildingTrio buildings={trioBuildings} stages={stages} onOpen={handleAptClick} interiorSrc={WOLFSON_INTERIOR}
+                words={{ floor: s.floorWindowTitle, notSold: s.notSoldWord, notStarted: s.notStartedOption.replace(/[—–]/g, '').trim(), upgraded: s.upgradedWord, open: s.bvOpen, floorsHint: s.bvHint }} />
+            </div>
+          ) : showBuilding ? (
             <div className="h-full p-4" style={{ minHeight: 560 }} data-building-view-wrap>
               <BuildingView
                 apartments={apartments.filter(a => a.buildingId === selectedBuilding)}
                 stages={stages}
                 onOpen={handleAptClick}
                 floorLabels={buildingFloorLabels}
+                interiorSrc={WOLFSON_INTERIOR}
                 words={{ floor: s.floorWindowTitle, notSold: s.notSoldWord, notStarted: s.notStartedOption.replace(/[—–]/g, '').trim(), upgraded: s.upgradedWord, open: s.bvOpen, floorsHint: s.bvHint }}
               />
             </div>
