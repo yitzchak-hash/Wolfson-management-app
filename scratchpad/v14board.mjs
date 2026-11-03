@@ -11,7 +11,7 @@ const j1 = seed.apartments.find(a => a.id === 'A2-50'), j2 = seed.apartments.fin
 if (j1 && j2) { j1.mergedWith = j2.id; j2.mergedWith = j1.id; }
 // lower-level slots as the office names them (FAKE labels): a spa, a lobby, a storage room, and one with no known area
 const slot = (b, floor, col, name) => { const s = seed.apartments.find(a => a.buildingId === b && a.floor === floor && a.colPosition === col); if (s) { s.displayName = name; } return !!s; };
-globalThis.__slots = [slot('A1', -0.5, 1, 'Spa'), slot('A2', 0, 1, 'Lobby'), slot('A1', -2, 1, 'Storage'), slot('A3', -1, 2, 'Generator room')];
+globalThis.__slots = [slot('A1', -0.5, 1, 'ספא'), slot('A2', 1, 1, 'קרקע'), slot('A2', -2, 1, '-2'), slot('A3', -1, 2, 'Generator room')];
 const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
 await applySeed(ctx, JSON.stringify(seed));
 const p = await ctx.newPage();
@@ -83,6 +83,8 @@ await p.click('[data-rail-floor="-1"]'); await p.waitForTimeout(1200);
 T(await p.locator('.bv-plate[data-solid="1"] svg[data-lower="b1"]').count() === 1, 'one building: basement -1 shows, its slice lit');
 // penthouses: one shape each, their own drawing
 await p.click('[data-rail-floor="14"]'); await p.waitForTimeout(1200);
+const nums = await p.evaluate(() => Object.fromEntries([...document.querySelectorAll('.bv-plate[data-current="1"] [data-apt]')].map(g => [g.querySelector('text').textContent, g.querySelector('text').getAttribute('x')])));
+T(Number(nums['54']) < Number(nums['53']), `floor 14 as he marked it: 54 on the one side, 53 the other (${JSON.stringify(nums)})`);
 const ph = await p.evaluate(() => [...document.querySelectorAll('.bv-plate[data-current="1"] [data-apt]')].map(g => g.querySelectorAll('path').length));
 T(ph.length === 2 && ph.every(n => n === 1), `floor 14: two penthouses, each one shape (${ph})`);
 T(await p.locator('.bv-plate[data-current="1"] .bv-interior image[href*="ph14"]').count() === 1, 'floor 14 shows its own drawing');
@@ -92,7 +94,10 @@ T(await p.locator('.bv-plate[data-current="1"] .bv-interior image[href*="ph15"]'
 await p.screenshot({ path: OUT + '/v14-ph15.png' });
 // the board's slots on the ground floor of building 2: Lobby lights its area
 await p.click('[data-rail-floor="0"]'); await p.waitForTimeout(1200);
-T(await p.locator('.bv-plate[data-current="1"] [data-slot][data-zone="1"]').count() >= 1, 'ground floor: the Lobby slot lights its area');
+T(await p.locator('.bv-plate[data-current="1"] [data-slot][data-zone="1"]').count() >= 1, 'ground floor: the קרקע slot lights its building\'s part');
+await p.click('[data-rail-floor="-2"]'); await p.waitForTimeout(1200);
+T(await p.locator('.bv-plate[data-current="1"] [data-slot][data-zone="1"]').count() === 1, 'basement -2: the -2 slot lights its building\'s part');
+await p.screenshot({ path: OUT + '/v14-b2slot.png' });
 await p.screenshot({ path: OUT + '/v14-ground.png' });
 await p.click('[data-rail-floor="13"]'); await p.waitForTimeout(1200);
 const j = p.locator('.bv-plate[data-current="1"] [data-apt="A2-50"] text');

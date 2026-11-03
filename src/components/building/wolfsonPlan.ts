@@ -29,15 +29,17 @@ export const SHAPES: Record<ShapeKey, Pt[]> = {
   WL: [[122,420],[262,420],[262,542],[97,542],[97,525],[122,525]],
   WR: [[848,420],[979,420],[979,525],[1007,525],[1007,542],[848,542]],
   // THE PENTHOUSES, each ONE apartment (owner, 2026-11-03: "they feel like two
-  // connected apartments … a line in the middle"): their outline is read off
+  // connected apartments … a line in the middle"). The outlines are the ones he
+  // marked by hand on the printed floor 14 and 15 A sheets (terraces included;
+  // on 15 a box beside the core is not 56's). Their rooms are read off
   // the engineers' floor 14 and floor 15 A sheets (TES 2441-08/-09), whose own
   // vectors are drawn into the plan's units — the stairs land on the typical
   // floor's stairs (1.145 plan units per sheet half-point). Floor 15 is set
   // back: below the core it is terrace.
-  PL14: [[132,45],[550,45],[550,290],[320,290],[320,520],[550,520],[550,690],[132,690]],
-  PR14: [[550,45],[977,45],[977,690],[550,690],[550,520],[780,520],[780,290],[550,290]],
-  PL15: [[132,45],[550,45],[550,290],[320,290],[320,520],[550,520],[550,545],[132,545]],
-  PR15: [[550,45],[977,45],[977,545],[550,545],[550,520],[780,520],[780,290],[550,290]],
+  PL14: [[100,45],[553,45],[553,290],[320,290],[320,520],[553,520],[553,640],[505,640],[505,760],[100,760]],
+  PR14: [[553,45],[1005,45],[1005,760],[505,760],[505,640],[553,640],[553,520],[780,520],[780,290],[553,290]],
+  PL15: [[100,45],[553,45],[553,290],[320,290],[320,520],[553,520],[553,700],[100,700]],
+  PR15: [[553,45],[1005,45],[1005,700],[553,700],[553,610],[625,610],[625,545],[553,545],[553,520],[780,520],[780,290],[553,290]],
 };
 
 /** The penthouse floors' core, and each penthouse floor's own drawing. */
@@ -47,7 +49,7 @@ export function isPenthouseShape(k: ShapeKey): boolean { return k.startsWith('P'
 
 /** Where an apartment's number sits — inside its biggest room (the living wing). */
 export const LABEL_AT: Record<ShapeKey, Pt> = {
-  A: [178, 215], B: [930, 228], C2: [178, 640], C1: [930, 640], WL: [180, 480], WR: [925, 480], PL14: [235, 600], PR14: [875, 600], PL15: [235, 420], PR15: [875, 420],
+  A: [178, 215], B: [930, 228], C2: [178, 640], C1: [930, 640], WL: [180, 480], WR: [925, 480], PL14: [235, 640], PR14: [870, 640], PL15: [235, 610], PR15: [870, 620],
 };
 
 /** The core: the corridor band, two stairwells and the lifts. */
@@ -75,6 +77,13 @@ export function shapesOf(apt: { tipus?: string; colPosition: number; colSpan?: n
   if (span > 1) {
     const left = apt.colPosition <= 2;
     const top = !!apt.isDuplexApt || Number(apt.apartmentNumber) >= 55;
+    // By NUMBER, as he marked the sheets: 54 and 55 are the one side, 53 and 56
+    // the other (55 stands over 54) — whatever columns the board gives them.
+    const n = Number(apt.apartmentNumber);
+    if (n === 54) return ['PL14'];
+    if (n === 53) return ['PR14'];
+    if (n === 55) return ['PL15'];
+    if (n === 56) return ['PR15'];
     if (top) return [left ? 'PL15' : 'PR15'];
     return [left ? 'PL14' : 'PR14'];
   }
@@ -133,7 +142,7 @@ export function stripFor(i: number) {
  * storage rooms the left end of basement -2, parking the rest; the lobbies sit
  * round each core on the ground floor). In the strip's points.
  */
-export const LEVEL_FLOORS: Record<string, number[]> = { g: [0, 1], spa: [-0.5], b1: [-1], b2: [-2, -3, -4] };
+export const LEVEL_FLOORS: Record<string, number[]> = { g: [0, 1], spa: [-0.5], b1: [-1, -1.5], b2: [-2, -3, -4] };
 export interface Zone { key: string; level: string; words: RegExp; rect?: [number, number, number, number]; perTower?: [number, number, number, number] }
 export const ZONES: Zone[] = [
   { key: 'spa', level: 'spa', words: /spa|ספא|pool|בריכ|gym|כושר|sauna|סאונה|wellness/i, rect: [150, 820, 1450, 1700] },
@@ -142,12 +151,20 @@ export const ZONES: Zone[] = [
   { key: 'parking2', level: 'b2', words: /park|חני/i, rect: [1000, 830, 4100, 1760] },
   // round each tower's core: [dx0, y0, dx1, y1] from the core's x
   { key: 'lobby', level: 'g', words: /lobby|לובי|entrance|כניס/i, perTower: [-380, 1050, 380, 1560] },
+  // A slot named for its level ("-2", "-1", "קרקע" — the office's own names)
+  // is that tower's whole part of the level.
+  { key: 'whole', level: '*', words: /^\s*-?\d+(\.\d+)?\s*$|^\s*(קרקע|ground|basement|מרתף)/i, perTower: [0, 0, 0, 0] },
   { key: 'shop', level: 'g', words: /commerc|מסחר|shop|חנו|store\b/i, perTower: [-520, 840, 520, 1620] },
 ];
 /** The area a slot lights on its level, in strip points, for tower i; none when its name names no area. */
 export function zoneFor(level: string, name: string, tower: number): [number, number, number, number] | null {
   for (const z of ZONES) {
-    if (z.level !== level || !z.words.test(name)) continue;
+    if ((z.level !== level && z.level !== '*') || !z.words.test(name)) continue;
+    if (z.key === 'whole') {
+      const from = tower === 0 ? STRIP.x + 30 : CUTS[tower - 1];
+      const to = tower >= CUTS.length ? STRIP.x + STRIP.w - 60 : CUTS[tower];
+      return [from + 20, STRIP.y + 60, to - 20, STRIP.y + STRIP.h - 40];
+    }
     if (z.rect) return z.rect;
     if (z.perTower) { const cx = CORES_X[tower] ?? CORES_X[0]; return [cx + z.perTower[0], z.perTower[1], cx + z.perTower[2], z.perTower[3]]; }
   }
