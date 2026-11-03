@@ -103,3 +103,10 @@
 }
 @media (pointer: coarse) { .bv-rail-btn { min-height: 40px; } }
 @media (prefers-reduced-motion: reduce) { .bv-card, .bv-flat path { transition: none; animation: none; } }
+
+/* The plan's own drawing on a typical floor: crisp on the floor in view,
+   gone on the stack around it (it would only be noise there). */
+.bv-interior { opacity: 1; }
+.bv-plate[data-solid='0'] .bv-interior { display: none; }
+.bv-core[data-plain='0'] rect, .bv-core[data-plain='0'] line, .bv-core[data-plain='0'] .bv-lift { display: none; }
+.bv-plate[data-solid='1'] .bv-flat-no { paint-order: stroke; stroke: #ffffff; stroke-width: 9px; }

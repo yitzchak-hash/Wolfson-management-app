@@ -45,6 +45,14 @@ export interface BuildingViewProps {
   initialFloor?: number;
   /** The number the board prints on each floor (record floor → label), so both views agree. */
   floorLabels?: Record<number, string>;
+  /**
+   * The typical floor's own drawing — walls, doors, windows, furniture —
+   * taken off the architects' plan in the plan's units (PLAN_BOX), laid on
+   * every typical floor (owner, 2026-11-03: "add like walls, doors, windows,
+   * and a little bit of furniture"). The set-back penthouse floor has its own
+   * rooms, so it is drawn without it.
+   */
+  interiorSrc?: string;
 }
 
 /** A stack spring that overshoots a hair and settles — "it lands in". */
@@ -54,13 +62,18 @@ const ABOVE_SHOWN = 1, BELOW_SHOWN = 6;
 
 interface FloorRow { floor: number; flats: { apt: Apartment; shapes: ShapeKey[] }[] }
 
+/** A typical floor: four flats, none of them a penthouse half. */
+function isTypical(row: FloorRow): boolean {
+  return row.flats.every(f => f.shapes.length === 1);
+}
+
 /** The floor's own outline: a typical floor is all four flats; the set-back top floor only what its flats cover. */
 function slabOf(row: FloorRow): ShapeKey[] {
   const used = row.flats.flatMap(f => f.shapes);
   return used.some(k => k === 'WL' || k === 'WR') ? used : ['A', 'B', 'C1', 'C2'];
 }
 
-export default function BuildingView({ apartments, stages, onOpen, words, initialFloor, floorLabels }: BuildingViewProps) {
+export default function BuildingView({ apartments, stages, onOpen, words, initialFloor, floorLabels, interiorSrc }: BuildingViewProps) {
   const lab = (f: number) => floorLabels?.[f] || String(f);
   const w = { ...EN, ...words };
   const stageById = useMemo(() => new Map(stages.map(s => [s.id, s])), [stages]);
@@ -218,7 +231,7 @@ export default function BuildingView({ apartments, stages, onOpen, words, initia
             >
               <svg viewBox={`${PLAN_BOX.x} ${PLAN_BOX.y} ${PLAN_BOX.w} ${PLAN_BOX.h}`} className="bv-svg">
                 <path className="bv-slab" d={slabOf(row).map(k => pathOf(SHAPES[k])).join(' ') + ' ' + pathOf(CORE.outline)} />
-                <g className="bv-core">
+                <g className="bv-core" data-plain={interiorSrc && isTypical(row) ? '0' : '1'}>
                   <path d={pathOf(CORE.outline)} />
                   {CORE.stairs.map(([x, y, sw, sh], j) => (
                     <g key={j}>
@@ -234,7 +247,6 @@ export default function BuildingView({ apartments, stages, onOpen, words, initia
                       <path d={`M${x} ${y}L${x + lw} ${y + lh}M${x + lw} ${y}L${x} ${y + lh}`} />
                     </g>
                   ))}
-                  <text x={555} y={470} className="bv-floor-no">{lab(row.floor)}</text>
                 </g>
                 {row.flats.map(({ apt, shapes }) => {
                   const f = fillOf(apt);
@@ -257,6 +269,14 @@ export default function BuildingView({ apartments, stages, onOpen, words, initia
                     </g>
                   );
                 })}
+                {interiorSrc && isTypical(row) && (
+                  <g className="bv-interior" pointerEvents="none">
+                    <clipPath id={`bv-clip-${row.floor}`}><path d={slabOf(row).map(k => pathOf(SHAPES[k])).join(' ') + ' ' + pathOf(CORE.outline)} /></clipPath>
+                    <image href={interiorSrc} x={PLAN_BOX.x} y={PLAN_BOX.y} width={PLAN_BOX.w} height={PLAN_BOX.h}
+                      clipPath={`url(#bv-clip-${row.floor})`} preserveAspectRatio="none" />
+                  </g>
+                )}
+                <text x={555} y={470} className="bv-floor-no">{lab(row.floor)}</text>
               </svg>
             </div>
           ))}
