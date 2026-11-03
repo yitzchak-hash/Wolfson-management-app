@@ -195,6 +195,18 @@ export async function folderPath(driveLinkOrId: string): Promise<FolderPath | nu
  * office typed — asking somebody to include them is asking them to get one of
  * two spellings right for no reason.
  */
+/**
+ * A Drive folder's NAME as it stands on the computer (owner, 2026-11-03: some
+ * jobs' folders said "Not on this computer yet"). A name like "Building 3/17"
+ * holds a slash, and joined into a path the slash became a folder break
+ * ("Building 3\17"), a folder that exists nowhere. Drive for desktop writes a
+ * character Windows refuses as "_" in the name; on a Mac a slash in a name is
+ * a ":" in the path.
+ */
+export function localName(name: string, sep: '\\' | '/'): string {
+  return sep === '\\' ? name.replace(/[\\/:*?"<>|]/g, '_') : name.replace(/\//g, ':');
+}
+
 export function composeLocalPath(root: string, path: FolderPath, sharedName = getSharedName(), driveName = getDriveName()): string {
   const sep = separatorFor(root);
   // The drive's name: what the server said, else what a pasted path taught
@@ -204,5 +216,5 @@ export function composeLocalPath(root: string, path: FolderPath, sharedName = ge
   const top = path.inSharedDrive
     ? [sharedName || defaultSharedName(), drive]
     : ['My Drive'];
-  return [root.replace(/[\\/]+$/, ''), ...top, ...path.segments].join(sep);
+  return [root.replace(/[\\/]+$/, ''), ...top, ...path.segments.map(s => localName(s, sep))].join(sep);
 }

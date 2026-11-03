@@ -35,6 +35,11 @@ export const WHATS_NEW: WhatsNewEntry[] = [
     title: 'Send a plan as a PDF',
     items: [
       {
+        title: 'The folder button opens every job',
+        body: 'The "open the folder on this computer" button said "Not on this computer yet" for jobs whose folder name has a slash in it (like "Building 3/17"). It finds those folders now.',
+        demo: 'tap',
+      },
+      {
         title: 'Building view, tidier',
         body: 'The penthouse floors\' stairs now stand right over the stairs below; the floor number sits in the middle of the stairs; on All the hover card shows whole above the plans; the coloured count strip is gone; picking a building no longer shows Clear.',
         demo: 'sparkle',
