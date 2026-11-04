@@ -10,7 +10,7 @@ change after that commit belongs in this list.
 ## Waiting to be brought across
 | Date | What changed (plain words) | Where in the code | Commit |
 |------|----------------------------|-------------------|--------|
-| 2026-11-04 | Share opens the phone's share menu on the FIRST tap (the PDF is made ready while the plan is on screen) | `src/data/sharePlan.ts`, the drawer's warm-up | see git log after 4ff0b5d |
+| 2026-11-04 | Share opens the phone's share menu on the FIRST tap (the PDF is made ready while the plan is on screen) | `src/data/sharePlan.ts`, the drawer's warm-up | 5e8d7f9 (all four rows) |
 | 2026-11-04 | A Share button in the plan's black zoom bar, beside the plan (inline and full screen) | `PlanAnnotator.tsx` (`onShare` prop), `ApartmentDetailDrawer.tsx` | ″ |
 | 2026-11-04 | The page count "1 / 2" stays on one line in a narrow plan panel | `PlanAnnotator.tsx` (zoom bar) | ″ |
 | 2026-11-04 | Board · Building on a phone held upright (the stage filter bar steps aside in Building) | `ProjectDiagramPage.tsx` | ″ |
