@@ -21,6 +21,10 @@ Vercel serverless functions in `/api`.
 - **Never let an on-open repair write before the workspace's records have arrived from the cloud**
   (`cloudSyncedProject`, 2026-10-29): a new browser's starter copy once wrote empty progress over every
   Wolfson flat. A write that would DELETE a field the cloud has (`undefined` → deleteField) needs a reason.
+- **Wolfson Practice (`claude/practice`) is NEVER touched from the regular work chat** (owner, 2026-11-04): it has its
+  own practice database and is where the CRM link is being built. Normal updates go on the preview branch as always,
+  and EVERY one is added to `docs/PRACTICE-CARRYOVER.md`, so they can be brought across to Practice in one go when the
+  day's round goes live.
 - Production is the branch `claude/blissful-cray-spTFY`; pushing it deploys
   wolfson-management-app.vercel.app.
 - Vercel's plan allows at most 12 files in `/api`. A 13th breaks every deploy.

@@ -38,10 +38,20 @@ export function canShareFiles(): boolean {
   } catch { return false; }
 }
 
-export async function sharePlanFile(fileId: string, name: string | undefined, title?: string): Promise<ShareOutcome> {
-  let buf: ArrayBuffer;
-  try { buf = await fetchPlanCached(fileId); } catch { return 'failed'; }
-  const file = new File([buf], pdfName(name), { type: 'application/pdf' });
+/**
+ * THE FILE MADE READY BEFORE THE PRESS (owner, video 2026-11-04 on the Galaxy Fold: "we're trying to share … it's not
+ * letting"). Samsung's browser refuses a share sheet that opens after ANY wait, even the plan cache's own — so the
+ * File is built while the plan is on screen (`warmPlanShare`) and a press hands it over with nothing awaited first.
+ */
+const ready = new Map<string, File>();
+export function warmPlanShare(fileId: string | null | undefined, name: string | undefined): void {
+  if (!fileId) return;
+  const want = pdfName(name);
+  if (ready.get(fileId)?.name === want) return;
+  fetchPlanCached(fileId).then(buf => { ready.set(fileId, new File([buf], want, { type: 'application/pdf' })); }, () => {});
+}
+
+async function handOver(file: File, title?: string): Promise<ShareOutcome> {
   if (!(navigator.canShare && navigator.canShare({ files: [file] }))) { download(file); return 'downloaded'; }
   try {
     await navigator.share({ files: [file], title: title || file.name });
@@ -50,6 +60,23 @@ export async function sharePlanFile(fileId: string, name: string | undefined, ti
     const n = (e as Error)?.name;
     if (n === 'AbortError') return 'cancelled';
     if (n === 'NotAllowedError') return 'again';   // the press expired while the plan downloaded
+    // Some phone browsers turn down a title beside a file: the file alone, once.
+    try { await navigator.share({ files: [file] }); return 'shared'; } catch (e2) {
+      const n2 = (e2 as Error)?.name;
+      if (n2 === 'AbortError') return 'cancelled';
+      if (n2 === 'NotAllowedError') return 'again';
+    }
     download(file); return 'downloaded';
   }
+}
+
+export async function sharePlanFile(fileId: string, name: string | undefined, title?: string): Promise<ShareOutcome> {
+  const want = pdfName(name);
+  const warm = ready.get(fileId);
+  if (warm) return handOver(warm.name === want ? warm : new File([warm], want, { type: 'application/pdf' }), title);
+  let buf: ArrayBuffer;
+  try { buf = await fetchPlanCached(fileId); } catch { return 'failed'; }
+  const file = new File([buf], want, { type: 'application/pdf' });
+  ready.set(fileId, file);
+  return handOver(file, title);
 }

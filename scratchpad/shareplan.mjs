@@ -47,7 +47,8 @@ for (const [tag, vp, mobile] of [['pc', { width: 1440, height: 900 }, false], ['
     T(await p.locator('[data-custom-buttons]').count() <= 1 && await p.locator('.drawer-panel input[placeholder="Address"]').count() === 0, 'Wolfson: no address or phone in the details');
     const full = p.locator('.drawer-panel button:has(svg.lucide-maximize2), .drawer-panel [title="Full screen"]').first();
     await p.locator('button:has(svg.lucide-maximize-2)').first().click().catch(() => {}); await p.waitForTimeout(1500);
-    const fb = p.locator('[data-plan-share-full]');
+    // Viewing full screen, Share stands in the plan's zoom bar (video 2026-11-04); the floating one is for marking up.
+    const fb = p.locator('[data-plan-share-full]').or(p.locator('[data-plan-share-bar]').nth(1));
     T(await fb.count() === 1, 'Share is on the full-screen plan too');
     if (await fb.count()) { await fb.click(); await p.waitForTimeout(1000); T((await p.evaluate(() => window.__shared.length)) === 2, 'full screen: the share menu opened with the PDF'); }
     await p.screenshot({ path: `${OUT}/share-full.png` });

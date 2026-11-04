@@ -43,7 +43,7 @@ import { problemState } from '../../data/problems';
 import { PlanPinOverlay } from './PlanPinOverlay';
 import { PlanBrowser, Crumb, TileFile } from '../plans/PlanBrowser';
 import { prefetchPlans } from '../../data/planCache';
-import { sharePlanFile } from '../../data/sharePlan';
+import { sharePlanFile, warmPlanShare } from '../../data/sharePlan';
 import { cachedPlanAspect, measurePlanAspect } from '../../data/planAspect';
 // Lazy, deliberately. The markup studio carries pdf.js — about a megabyte of
 // PDF engine — and nobody should pay for that on the login screen. It arrives
@@ -699,6 +699,9 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
   useEffect(() => { ensureDriveShared(latestStampedFileId); }, [latestStampedFileId]);
 
   const [sharing, setSharing] = useState(false);
+  // The plan on screen is made ready to share before the press (a phone browser refuses a late share sheet).
+  const shareWarmId = browsePreview?.file.id ?? shownPlanId ?? availablePdfs[selectedPdfIdx]?.id ?? null;
+  useEffect(() => { warmPlanShare(shareWarmId, undefined); }, [shareWarmId]);
   if (!apartment) return null;
 
   const detectedPdfId = availablePdfs[selectedPdfIdx]?.id ?? null;
@@ -1578,6 +1581,9 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
               driveFolderUrl={apartment!.driveLink}
               authorName={currentUser?.name ?? ''}
               onClose={() => { /* part of the pane */ }}
+              onShare={sharePlan}
+              shareBusy={sharing}
+              shareLabel={ui.planShare}
               barExtrasRef={setPlanBarSlot}
               barInto={viewerBarSlot}
               barInto2={viewerBar2Slot}
@@ -3558,14 +3564,17 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
           onStartMarkup={() => { setAnnotating(null); openPlanInSketcher(); }}
           onClose={() => setAnnotating(null)}
           onToast={onToast}
+          onShare={sharePlan}
+          shareBusy={sharing}
+          shareLabel={ui.planShare}
         />
-        {/* Share in full screen too (owner, video 2026-11-03). Floating in the
-            corner, so the plan studio itself stays the shared copy it is. */}
-        <button type="button" data-plan-share data-plan-share-full onClick={sharePlan} disabled={sharing}
+        {/* Share in full screen too (owner, video 2026-11-03). Viewing, it is in the zoom bar beside the plan
+            (video 2026-11-04); marking up, the bar is gone, so it floats in the corner. */}
+        {annotating !== 'view' && <button type="button" data-plan-share data-plan-share-full onClick={sharePlan} disabled={sharing}
           className="fixed z-[170] flex items-center gap-1.5 px-3.5 py-2 rounded-full text-[13px] font-bold text-white shadow-lg disabled:opacity-60"
           style={{ right: 16, bottom: 'calc(16px + env(safe-area-inset-bottom, 0px))', backgroundColor: '#1e3a5f' }}>
           {sharing ? <Loader2 size={14} className="animate-spin" /> : <Share2 size={14} />} {ui.planShare}
-        </button>
+        </button>}
         </Suspense>
       )}
 

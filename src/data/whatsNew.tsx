@@ -31,6 +31,22 @@ export interface WhatsNewEntry {
 
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    date: '2027-02-25',
+    title: 'Share from the phone, and Building held upright',
+    items: [
+      {
+        title: 'Share right beside the plan',
+        body: 'The plan\'s black zoom bar at the bottom now has Share. Look at the plan, then tap Share right there — on a phone the share menu opens on the first tap.',
+        demo: 'tap',
+      },
+      {
+        title: 'Building on a phone held upright',
+        body: 'Board · Building now sits next to the building tabs on a phone held upright too, not only on its side.',
+        demo: 'tap',
+      },
+    ],
+  },
+  {
     date: '2027-02-24',
     title: 'Send a plan as a PDF',
     items: [

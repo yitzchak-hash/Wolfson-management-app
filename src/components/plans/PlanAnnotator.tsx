@@ -3,7 +3,7 @@ import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useSta
 import { createPortal } from 'react-dom';
 import {
   X, Undo2, Redo2, Trash2, HardDrive, AlertTriangle, SquareDashedMousePointer,
-  Save, Printer, Download, ChevronLeft, ChevronRight,
+  Save, Printer, Download, ChevronLeft, ChevronRight, Share2,
   Plus, Minus, Maximize2, Minimize2, Loader2, Pen, Pencil, Highlighter, Eraser, Minus as LineIcon,
   ArrowUpRight, Square, Circle, Type, Hand, Layers, FileDown, Check, ExternalLink,
   MessageSquare, Move, Layers2, ChevronsUpDown, User as UserIcon,
@@ -803,7 +803,7 @@ function PlanEditor({
   barExtrasRef, barInto, barInto2,
   touchScale = 1, chooseSaveFolder = false, sheetOverlay,
   tabStrip, initialWork, workRef, onOpenPlanNewTab, onUnsavedChange,
-  onClose, onToast, onPickPlan, onStartMarkup, onSavedToDrive,
+  onClose, onToast, onPickPlan, onStartMarkup, onSavedToDrive, onShare, shareBusy, shareLabel,
   onPreviewPlan, onStarPlan, starredPlanId, starAuto, autoPlanNote, autoPlanYesLabel, autoPlanOtherLabel, onConfirmAutoPlan, approvedNote,
 }: {
   planFileId: string;
@@ -941,6 +941,13 @@ function PlanEditor({
    * saved ten seconds ago without waiting for the drawer to reopen.
    */
   onSavedToDrive?: (p: PlanChoice) => void;
+  /**
+   * Share the plan from the viewer's own bar (owner, video 2026-11-04: "I like the plan, I check the plan, I press
+   * share right there"). The host owns the sharing; the bar only offers the press.
+   */
+  onShare?: () => void;
+  shareBusy?: boolean;
+  shareLabel?: string;
 }) {
   /**
    * The shape of the screen, which on a phone is two different problems.
@@ -4615,14 +4622,14 @@ function PlanEditor({
             </button>
           </>)}
           {locked && doc && (
-            <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-20 flex items-center gap-0.5
-                            rounded-full px-1.5 py-1 shadow-lg backdrop-blur"
+            <div data-plan-zoombar className="absolute bottom-4 left-1/2 -translate-x-1/2 z-20 flex items-center gap-0.5
+                            rounded-full px-1.5 py-1 shadow-lg backdrop-blur whitespace-nowrap max-w-[calc(100%-16px)]"
               style={{ backgroundColor: 'rgba(32,33,36,.92)', color: '#e8eaed' }}>
               {doc.numPages > 1 && (<>
                 <button onClick={() => setPage(p => Math.max(0, p - 1))} disabled={page === 0}
                   title="Previous page"
                   className="px-2 py-1 rounded-full hover:bg-white/10 disabled:opacity-30">‹</button>
-                <span className="px-1.5 text-[12px] font-semibold tabular-nums select-none">
+                <span className="px-1.5 text-[12px] font-semibold tabular-nums select-none whitespace-nowrap">
                   {page + 1} / {doc.numPages}
                 </span>
                 <button onClick={() => setPage(p => Math.min(doc.numPages - 1, p + 1))}
@@ -4652,6 +4659,15 @@ function PlanEditor({
                 className="px-2.5 py-1 rounded-full hover:bg-white/10">
                 <Square size={12} />
               </button>
+              {onShare && (<>
+                <span className="mx-1 w-px self-stretch bg-white/20" />
+                <button data-plan-share data-plan-share-bar onClick={onShare} disabled={shareBusy}
+                  title={shareLabel || 'Share'}
+                  className="flex items-center gap-1 px-2.5 py-1 rounded-full text-[12px] font-semibold hover:bg-white/10 disabled:opacity-50">
+                  {shareBusy ? <Loader2 size={13} className="animate-spin" /> : <Share2 size={13} />}
+                  {shareLabel || 'Share'}
+                </button>
+              </>)}
             </div>
           )}
 

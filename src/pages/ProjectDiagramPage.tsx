@@ -250,11 +250,16 @@ export function ProjectDiagramPage() {
   const phoneBuilding: BuildingId | 'all' =
     selectedBuilding === 'all' ? (buildings[0]?.id ?? 'all') : selectedBuilding;
   const effectiveBuilding = isNarrow ? phoneBuilding : selectedBuilding;
-  const canBuildingView = !isNarrow && selectedBuilding !== 'all' && /^A\d/.test(selectedBuilding);
+  /** The building the Building view draws: on a narrow screen, the tab that is chosen (All resolves to the first). */
+  const bvBuilding = isNarrow ? phoneBuilding : selectedBuilding;
+  // A phone held upright has the Building view too (owner, video 2026-11-04 on the Fold: "only on landscape view we
+  // have the building button").
+  const canBuildingView = bvBuilding !== 'all' && /^A\d/.test(bvBuilding);
   const showBuilding = canBuildingView && view === 'building';
   /** The switch shows on All too (owner, 2026-11-03: he looked for it there twice); Building on All opens the first building. */
   const firstWolfson = buildings.find(b => /^A\d/.test(b.id))?.id;
   const showSwitch = !isNarrow && !!firstWolfson;
+  const showNarrowSwitch = isNarrow && canBuildingView;
   /** On All, Building shows the three side by side, moving together. */
   const showTrio = !isNarrow && view === 'building' && selectedBuilding === 'all' && !!firstWolfson;
     const boardSet = useStore(st => st.boardSettings[st.currentProjectId]);
@@ -264,8 +269,8 @@ export function ProjectDiagramPage() {
     const rows = buildFloorRows(b, apartments.filter(a => a.buildingId === b), boardSet?.floorHeights?.[b], boardSet?.buildingLayout?.[b]);
     return Object.fromEntries(rows.map(r => [r.floor, rowLabelText(r, s.lobby, s.groundCommercial)])) as Record<number, string>;
   }, [apartments, boardSet, s.lobby, s.groundCommercial]);
-  const buildingFloorLabels = useMemo(() => (showBuilding ? floorLabelsOf(selectedBuilding as BuildingId) : undefined),
-    [showBuilding, selectedBuilding, floorLabelsOf]);
+  const buildingFloorLabels = useMemo(() => (showBuilding ? floorLabelsOf(bvBuilding as BuildingId) : undefined),
+    [showBuilding, bvBuilding, floorLabelsOf]);
   const trioBuildings = useMemo(() => (showTrio
     ? buildings.filter(b => /^A\d/.test(b.id)).map(b => ({ id: b.id, title: buildingShort(b.id), apartments: apartments.filter(a => a.buildingId === b.id), floorLabels: floorLabelsOf(b.id) }))
     : []), [showTrio, buildings, apartments, floorLabelsOf]);
@@ -488,6 +493,19 @@ export function ProjectDiagramPage() {
                 {buildingShort(b.id)}
               </button>
             ))}
+            {showNarrowSwitch && (
+              <div className="flex items-center gap-0.5 bg-gray-100 rounded-md p-0.5 flex-shrink-0" data-view-switch data-view-switch-narrow>
+                {(['board', 'building'] as const).map(v => {
+                  const on = (v === 'building') === showBuilding;
+                  return (
+                    <button key={v} type="button" data-view={v} aria-pressed={on} onClick={() => setView(v)}
+                      className={`px-2.5 py-1 rounded text-[12px] font-bold transition-all ${on ? 'bg-[#1e3a5f] text-white shadow-sm' : 'text-gray-600'}`}>
+                      {v === 'board' ? s.viewBoard : s.viewBuilding}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
             <span className="flex-shrink-0 pl-1 text-[11px] leading-tight text-gray-400 tabular-nums text-right">
               {bulkMode
                 ? `${bulkSelected.size} ${s.bulkSelected}`
@@ -499,7 +517,7 @@ export function ProjectDiagramPage() {
         {/* The stage bar — the narrow diagram's picture of the whole project,
             in place of the desktop toolbar's bubbles and the bare-number
             strip (decision 5). */}
-        <div className="diag:hidden print:hidden">
+        <div className={`diag:hidden print:hidden ${showBuilding ? 'hidden' : ''}`}>
           <StageBar
             stages={sortedStages}
             apartments={apartments}
@@ -672,13 +690,13 @@ export function ProjectDiagramPage() {
           ) : showBuilding ? (
             <div className="h-full p-4" style={{ minHeight: 560 }} data-building-view-wrap>
               <BuildingView
-                apartments={apartments.filter(a => a.buildingId === selectedBuilding)}
+                apartments={apartments.filter(a => a.buildingId === bvBuilding)}
                 stages={stages}
                 onOpen={handleAptClick}
                 floorLabels={buildingFloorLabels}
                 interiorSrc={WOLFSON_INTERIOR}
                 lower={lowerLevels} customButtons={boardSet?.customButtons}
-                tower={Math.max(0, buildings.filter(b => /^A\d/.test(b.id)).findIndex(b => b.id === selectedBuilding))}
+                tower={Math.max(0, buildings.filter(b => /^A\d/.test(b.id)).findIndex(b => b.id === bvBuilding))}
                 words={{ floor: s.floorWindowTitle, notSold: s.notSoldWord, notStarted: s.notStartedOption.replace(/[—–]/g, '').trim(), upgraded: s.upgradedWord, open: s.bvOpen, floorsHint: s.bvHint, joinedWith: s.bvJoined, yes: s.customYes, no: s.customNo, unknown: s.customUnknown }}
               />
             </div>
