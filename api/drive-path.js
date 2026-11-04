@@ -1,3 +1,4 @@
+import { refuseOnPractice } from '../lib/practice.js';
 // Where a Drive folder sits, as a path from the top of its drive.
 //
 // The app stores a folder ID; Google Drive for desktop presents a folder as a
@@ -40,6 +41,7 @@ export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, x-api-key');
 
   if (req.method === 'OPTIONS') return res.status(200).end();
+  if (refuseOnPractice(res)) return;
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
   if (!process.env.API_KEY || req.headers['x-api-key'] !== process.env.API_KEY) {
     return res.status(401).json({ error: 'Unauthorized' });

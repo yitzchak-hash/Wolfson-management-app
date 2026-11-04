@@ -1,3 +1,4 @@
+import { PRACTICE, refuseOnPractice } from '../lib/practice.js';
 /**
  * Turn a typed address into a coordinate.
  *
@@ -67,6 +68,7 @@ const TS_CACHE_MAX = 800;
 const TS_MAX_BYTES = 12 * 1024 * 1024;
 
 async function driveBytes(fileId) {
+  if (PRACTICE) throw new Error('Google Drive is switched off on the practice copy');
   const { google } = await import('googleapis');
   const json = process.env.GOOGLE_SERVICE_ACCOUNT_JSON;
   if (!json) throw new Error('GOOGLE_SERVICE_ACCOUNT_JSON is not set');
@@ -675,6 +677,8 @@ export default async function handler(req, res) {
     }
     return res.status(200).json({
       ok: true,
+      practice: PRACTICE,
+      firebaseProject: process.env.VITE_FIREBASE_PROJECT_ID || '(not set)',
       hasServiceAccount: !!saJson,
       serviceAccountValid,
       clientEmail,
@@ -700,7 +704,8 @@ export default async function handler(req, res) {
   if (body.transcribe) return transcribe(req, res, body.transcribe);
   if (body.planRead) return planRead(req, res, body.planRead);
   if (body.searchAi) return searchAi(req, res, body.searchAi);
-  if (body.push) return push(req, res, body.push);
+  // Practice copy: a phone is never rung from here.
+  if (body.push) return refuseOnPractice(res, 'Phone notifications') ? undefined : push(req, res, body.push);
   const raw = String(body.address || '').trim();
   if (!raw) return res.status(400).json({ error: 'Missing address' });
 

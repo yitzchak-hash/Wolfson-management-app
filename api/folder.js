@@ -1,4 +1,5 @@
 import { google } from 'googleapis';
+import { refuseOnPractice } from '../lib/practice.js';
 
 function getDrive() {
   const json = process.env.GOOGLE_SERVICE_ACCOUNT_JSON;
@@ -16,6 +17,7 @@ export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, x-api-key');
 
   if (req.method === 'OPTIONS') return res.status(200).end();
+  if (refuseOnPractice(res)) return;
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
   // Fail closed: if no server key is configured, reject everything.
   if (!process.env.API_KEY || req.headers['x-api-key'] !== process.env.API_KEY) {

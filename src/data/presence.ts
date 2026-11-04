@@ -14,6 +14,7 @@
  * is ~40KB of bundle nobody without the feature should pay for.
  */
 import { firebaseApp } from './firebase';
+import { practiceAllows } from './practice';
 
 export interface PresencePeer {
   key: string;
@@ -28,7 +29,9 @@ export interface PresencePeer {
   at: number;
 }
 
-const DB_URL = (import.meta.env.VITE_FIREBASE_DATABASE_URL as string | undefined) || '';
+// The practice copy only ever opens its own project's database (practice.ts).
+const DB_URL_SET = (import.meta.env.VITE_FIREBASE_DATABASE_URL as string | undefined) || '';
+const DB_URL = practiceAllows(DB_URL_SET) ? DB_URL_SET : '';
 
 export function presenceReady(): boolean {
   return !!DB_URL && !!firebaseApp();

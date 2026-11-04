@@ -1,0 +1,11 @@
+rules_version = '2';
+// Storage rules for the PRACTICE project (README, Firebase Storage): workers
+// upload photos and voice notes without a Firebase sign-in. To be published
+// once the practice project's Storage has been switched on (Get started).
+service firebase.storage {
+  match /b/{bucket}/o {
+    match /{allPaths=**} {
+      allow read, write: if true;
+    }
+  }
+}

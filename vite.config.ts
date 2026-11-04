@@ -35,6 +35,12 @@ function routerUrgentNav(): Plugin {
 
 export default defineConfig({
   plugins: [routerUrgentNav(), react()],
+  // The practice branch is a practice build even before (or without) its
+  // own variables: src/data/practice.ts then refuses any Firebase project but
+  // the practice one. Empty on every other branch.
+  define: {
+    'import.meta.env.VITE_PRACTICE_BRANCH': JSON.stringify(process.env.VERCEL_GIT_COMMIT_REF === 'claude/practice' ? '1' : ''),
+  },
   // Harnesses that run several dev servers over one shared node_modules give
   // each its own prebundle cache; unset, Vite's default applies.
   cacheDir: process.env.VITE_CACHE_DIR || undefined,

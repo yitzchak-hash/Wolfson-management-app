@@ -13,6 +13,7 @@
 import { initializeApp, FirebaseApp } from 'firebase/app';
 import { stripUndefinedDeep } from './deepClean';
 import { PREVIEW_ID, TEST_MODE } from './previewMode';
+import { PRACTICE, PRACTICE_PROJECT } from './practice';
 import { diffRecord, mergeIdList, getAtPath } from './fieldDiff';
 import type { DiffOp } from './fieldDiff';
 import {
@@ -67,7 +68,9 @@ const firebaseConfig = {
 
 // A backup PREVIEW tab never connects to the cloud (previewMode.ts): every
 // read and write below is off, exactly as on a machine without Firebase.
-export const isFirebaseConfigured = !PREVIEW_ID && Boolean(
+// The practice copy connects to the practice project or to nothing at all,
+// never to the office's real database (practice.ts).
+export const isFirebaseConfigured = !PREVIEW_ID && (!PRACTICE || firebaseConfig.projectId === PRACTICE_PROJECT) && Boolean(
   firebaseConfig.apiKey &&
   firebaseConfig.authDomain &&
   firebaseConfig.projectId &&

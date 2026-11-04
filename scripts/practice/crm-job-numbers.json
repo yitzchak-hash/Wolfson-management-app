@@ -1,0 +1,4 @@
+{
+  "note": "The 50 job numbers in the CRM's import (crm.imported_records, entity = opportunity), numbers only. The practice seed gives them made-up customers so the CRM can match them later. Refreshed read-only from Supabase when SUPABASE_ACCESS_TOKEN is set.",
+  "jobNumbers": ["3460", "3786", "3893", "3944", "3956", "4174", "4267", "4281", "4293", "4307", "4370", "4438", "4493", "4536", "4587", "4611", "4629", "4643", "4702", "4706", "4836", "4848", "4872", "4874", "4888", "4906", "4910", "4922", "4955", "4967", "4992", "5018", "5033", "5052", "5080", "5092", "5094", "5095", "5102", "5122", "5136", "5138", "5159", "5163", "5177", "5187", "5253", "5260", "5302", "5321"]
+}

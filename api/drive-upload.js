@@ -6,6 +6,7 @@ import { google } from 'googleapis';
 import { Readable } from 'stream';
 import { runFullBackup, listFullBackups } from '../lib/fullBackup.js';
 import { runRestore } from '../lib/fullRestore.js';
+import { refuseOnPractice } from '../lib/practice.js';
 import { sortPhotos as sortPhotosLib, claudeAsker } from '../lib/sortPhotos.js';
 import Anthropic from '@anthropic-ai/sdk';
 
@@ -33,6 +34,8 @@ export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, x-api-key');
 
   if (req.method === 'OPTIONS') return res.status(200).end();
+  // Practice copy: no Drive uploads, no backups, no restores, no nightly run.
+  if (refuseOnPractice(res, 'Google Drive (uploads, backups and restores)')) return;
 
   /**
    * THE FULL BACKUP (lib/fullBackup.js) rides on this function — the plan

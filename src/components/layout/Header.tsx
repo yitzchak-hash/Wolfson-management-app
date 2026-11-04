@@ -15,6 +15,7 @@ import { TutorialButton } from '../ui/Tutorial';
 import { GlobalSearch } from '../ui/GlobalSearch';
 import { subscribeCloudSync, isFirebaseConfigured, SyncStatus } from '../../data/firebase';
 import { clearReturnTicket } from '../../data/unitTravel';
+import { PRACTICE } from '../../data/practice';
 import { OfficeAlertsAsk } from './OfficeAlerts';
 import { UndoButtons } from '../board/UndoLayer';
 
@@ -546,6 +547,11 @@ export function Header() {
           where only the ticker (min-w-0, truncating) actually gives. */}
       <div className="flex items-center gap-2 md:gap-4 min-w-0 lg:flex-shrink-0">
         <TzviAirLogo />
+        {/* The practice copy wears one small tag, so it is never mistaken for the real board. */}
+        {PRACTICE && (
+          <span data-practice-tag className="flex-shrink-0 px-1.5 py-0.5 rounded text-[10px] font-bold tracking-wide"
+            style={{ backgroundColor: '#f59e0b', color: '#1e293b' }}>PRACTICE</span>
+        )}
         <div className="hidden md:block w-px h-10" style={{ backgroundColor: lightTheme ? '#e5e7eb' : 'rgba(255,255,255,0.2)' }} />
         <div className="flex items-center gap-1 md:gap-2 min-w-0">
           <WorkspacePicker light={lightTheme} />
