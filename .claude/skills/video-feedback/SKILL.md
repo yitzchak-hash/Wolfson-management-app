@@ -29,6 +29,19 @@ and give each a number: S1, S2, S3…. Label each one:
 - **CONTEXT** — explaining or showing, no change
 - **NONE** — explicitly no change ("that's just how the plan is")
 
+## 3b. When was it recorded? (owner, 2026-11-04)
+A video can be older than the work. Read the date and time at the bottom of his
+screen (the Windows clock) at the start and end of the video, and write them at
+the top of the feedback doc.
+- Compare each ASK with what was done since that time: the git log, HANDOFF.md,
+  supabase/APPLIED.md, the work list. If he says "there are no 50 jobs inside"
+  and the 50 jobs went in after the recording, that ask is **DONE AFTER THE
+  VIDEO**: do not build it again.
+- Then check what was done against what he asked in the video, word by word.
+  Every difference (built another way, half built, a detail he named that is
+  missing) becomes its own row with **DIFFERENT FROM YOUR ASK** and the fix.
+- No clock on screen: use the file's own created time and say so.
+
 ## 4. Look at the screen where it matters
 For every sentence that says **this, that, here, these, bigger, smaller, this
 one, over there**, take the frame at that second and write what the mouse is
