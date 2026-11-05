@@ -21,5 +21,7 @@ change after that commit belongs in this list.
 | 2026-11-05 | The top bar never overlaps on a 344–420 wide phone (the name gives way; What's New steps aside under 400) | `Header.tsx` | ″ |
 | 2026-11-05 | Building view: the two cards never overlap on a phone; the floor is drawn big on an upright tablet | `buildingView.css` | ″ |
 
+| 2026-11-05 | The phone's bottom bar has no List tab (the address /list still opens, nothing links to it) | `Sidebar.tsx` (MobileNav) | ″ |
+
 ## Already brought across
 (nothing yet)

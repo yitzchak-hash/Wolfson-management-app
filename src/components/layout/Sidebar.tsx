@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import {
   Building2, LayoutDashboard, FileText, Settings, Activity, Tv,
-  TrendingUp, ClipboardList, Briefcase, CalendarDays, MoreHorizontal, TextSearch,
+  TrendingUp, ClipboardList, Briefcase, CalendarDays, MoreHorizontal,
 } from 'lucide-react';
 import { useStore } from '../../data/store';
 import { projectColor } from '../../types';
@@ -110,21 +110,10 @@ export function MobileNav() {
   const [moreOpen, setMoreOpen] = useState(false);
   const { pathname } = useLocation();
   const navItems = useNavItems();
-  /**
-   * The job LIST is a phone destination, spliced in here rather than added to
-   * useNavItems: on a desktop the board and the diagram ARE the list, so the
-   * sidebar deliberately never shows it. Second slot — right next to the
-   * board/diagram it is the other reading of.
-   */
-  const withList = [
-    navItems[0],
-    { to: '/list', icon: TextSearch, label: 'List' },
-    ...navItems.slice(1),
-  ];
-  // Five plus More, not four: the List tab must not cost Tasks its place on
-  // the bar. Six slots at 390px is 65px each — snug, still tappable.
-  const primary = withList.slice(0, 5);
-  const overflow = withList.slice(5);
+  // The phone's List tab is GONE (owner, 2026-11-05: "get rid of the lists tab on phones, I never asked for that").
+  // The bar is the sidebar's own destinations: five, then More.
+  const primary = navItems.slice(0, 5);
+  const overflow = navItems.slice(5);
   const overflowActive = overflow.some(i => pathname.startsWith(i.to));
 
   return (

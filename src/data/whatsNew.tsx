@@ -40,6 +40,11 @@ export const WHATS_NEW: WhatsNewEntry[] = [
         demo: 'tap',
       },
       {
+        title: 'No List tab on phones',
+        body: 'The List tab is gone from the bar at the bottom of the phone.',
+        demo: 'tap',
+      },
+      {
         title: 'Tap the plan for full screen',
         body: 'On a phone, tap the plan in the Plan tab and it opens full screen, with Share in the bar at the bottom.',
         demo: 'zoom',
