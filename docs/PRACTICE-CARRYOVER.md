@@ -4,6 +4,9 @@
 NEVER touched from the regular work chat (owner, 2026-11-04). That chat keeps doing the normal updates on the preview
 branch and lists each one here, so they can all be brought across to Practice in one go when the day's round goes live.
 
+**This chat has NO access to Practice** (owner, 2026-11-05): it never reads or changes the Practice branch, its
+database or its preview. This list is only a note of what changed here, for whoever works on Practice.
+
 Practice was cut at production `4ff0b5d` (2026-11-03, "the apartment labels lie above the plan's lines"), so every
 change after that commit belongs in this list.
 

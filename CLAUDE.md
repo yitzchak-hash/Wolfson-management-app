@@ -12,6 +12,14 @@ Vercel serverless functions in `/api`.
 - `npx tsc --noEmit -p .` and `npx vite build` before pushing.
 
 ## Facts worth knowing
+- **THIS CHAT WORKS ONLY ON THE LIVE APP AND THE LIVE DATABASE — NOTHING TO DO WITH PRACTICE** (owner, 2026-11-05: "We
+  have two databases … a practice database on a preview, and … the live database on the live production link. You're
+  working only on the live database, only on the live production link, because that's what our workers are still
+  using on site. You do not have access … to anything related to the practice, only to live … make sure not to touch
+  our live data base and mix up data with the practice one."). So: never read, write, seed, fetch or open anything
+  of Practice (the `claude/practice` branch, the `wolfson-practice` Firebase project, its preview address, its
+  scripts); never bring Practice code into this branch; never write to the live database except through the app's
+  normal saving, and never without his say-so. He checks the work on the LIVE link, so a finished round goes live.
 - **Build on the PREVIEW branch first, push live only on his word** (owner, 2026-11-03: "only build in this preview branch
   before you push live"). The preview branch is `claude/magical-darwin-6py813`; Vercel builds it at its own preview address.
   He looks there, and when the day's round is done it is merged into production (`claude/blissful-cray-spTFY`) in ONE push.
