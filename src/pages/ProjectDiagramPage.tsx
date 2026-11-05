@@ -73,7 +73,9 @@ export function ProjectDiagramPage() {
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [selectedBuilding, setSelectedBuilding] = useState<BuildingId | 'all'>('all');
   /** Board or the see-through building (owner, recording 2026-11-02), for one Wolfson building. */
-  const [view, setView] = useState<'board' | 'building'>('board');
+  // The Building view is what opens first, on every device (owner, 2026-11-05: "everywhere it should be the building
+  // view as the default. Also on the computer"). A workspace with no Building view shows its board as before.
+  const [view, setView] = useState<'board' | 'building'>('building');
   /** On All, the floor whose row is open big in its own window. */
   const [floorWin, setFloorWin] = useState<{ b: BuildingId; key: string; label: string } | null>(null);
   const [activeStageIds, setActiveStageIds] = useState<string[]>([]);
@@ -162,6 +164,7 @@ export function ProjectDiagramPage() {
       setTipusFilter('');
       setSearchQuery('');
       setRevealId(apt.id);
+      setView('board');   // the cell is shown on the board, which no longer opens first
       return;
     }
     setSelectedApt(apt);
@@ -185,6 +188,8 @@ export function ProjectDiagramPage() {
 
   // Bulk update state
   const [bulkMode, setBulkMode] = useState(false);
+  // Bulk Update picks tiles on the board — it brings the board up (the Building view opens first now).
+  useEffect(() => { if (bulkMode) setView('board'); }, [bulkMode]);
   const [bulkSelected, setBulkSelected] = useState<Set<string>>(new Set());
   const [bulkStageId, setBulkStageId] = useState('');
   /** The stage dropdown was TOUCHED — only then does Apply write a stage (a tipus-only update must not reset stages to Not started). */

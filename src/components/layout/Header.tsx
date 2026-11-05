@@ -401,7 +401,9 @@ function WorkspacePicker({ light }: { light: boolean }) {
     // `shrink-[0.05]` against the company mark's 20: both can give way, so the
     // header can never overflow, but the name only starts losing letters once
     // the mark has nothing left to give.
-    <div ref={wrapRef} className="relative min-w-0 flex shrink-[0.05] md:shrink">
+    // Under 420px (a 360-wide Galaxy S, a 402-wide iPhone 17 Pro) the name gives way like everything else, or the bar
+    // ran out of room and Calendar slid under the buttons beside it (the device gallery, 2026-11-05).
+    <div ref={wrapRef} className="relative min-w-0 flex shrink-[0.05] max-[420px]:shrink md:shrink">
       <button
         onClick={() => {
           const r = wrapRef.current?.getBoundingClientRect();
@@ -573,7 +575,9 @@ export function Header() {
       <div className="flex items-center gap-0.5 md:gap-2 flex-shrink-0 lg:flex-shrink lg:min-w-0">
         {/* What the APP learned to do — left of what the office just did. */}
         {currentUser && <HeaderUndo light={lightTheme} />}
-        {currentUser && <WhatsNewButton />}
+        {/* Under 400px (a Galaxy S24/S25/S26 is 360) the bar has no room for it: it sat ON the Calendar button
+            (the device gallery, 2026-11-05). */}
+        {currentUser && <span className="hidden min-[400px]:contents"><WhatsNewButton /></span>}
         {/* The training session — a practice board that teaches every gesture.
             Not on a phone: the phone board only navigates, and in a 390px
             header the "?" sat on top of the Calendar button. */}

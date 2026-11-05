@@ -31,6 +31,22 @@ export interface WhatsNewEntry {
 
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    date: '2027-02-26',
+    title: 'The Building view first, and the plan full screen',
+    items: [
+      {
+        title: 'Building view opens first',
+        body: 'On every phone, tablet and computer, the project now opens on the Building view. Board is one tap away, next to it.',
+        demo: 'tap',
+      },
+      {
+        title: 'Tap the plan for full screen',
+        body: 'On a phone, tap the plan in the Plan tab and it opens full screen, with Share in the bar at the bottom.',
+        demo: 'zoom',
+      },
+    ],
+  },
+  {
     date: '2027-02-25',
     title: 'Share from the phone, and Building held upright',
     items: [

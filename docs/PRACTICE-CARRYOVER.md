@@ -15,5 +15,11 @@ change after that commit belongs in this list.
 | 2026-11-04 | The page count "1 / 2" stays on one line in a narrow plan panel | `PlanAnnotator.tsx` (zoom bar) | ″ |
 | 2026-11-04 | Board · Building on a phone held upright (the stage filter bar steps aside in Building) | `ProjectDiagramPage.tsx` | ″ |
 
+| 2026-11-05 | The Building view opens first, on every device (Bulk Update and a search's "show me where" bring the board up) | `ProjectDiagramPage.tsx` | (this round) |
+| 2026-11-05 | A still tap on the plan in the phone's Plan tab opens it full screen | `ApartmentDetailDrawer.tsx` (`data-plan-tap-full`) | ″ |
+| 2026-11-05 | The worker's Share has its PDF ready before the tap (iPhone / Samsung) | `ContractorPortal.tsx` | ″ |
+| 2026-11-05 | The top bar never overlaps on a 344–420 wide phone (the name gives way; What's New steps aside under 400) | `Header.tsx` | ″ |
+| 2026-11-05 | Building view: the two cards never overlap on a phone; the floor is drawn big on an upright tablet | `buildingView.css` | ″ |
+
 ## Already brought across
 (nothing yet)

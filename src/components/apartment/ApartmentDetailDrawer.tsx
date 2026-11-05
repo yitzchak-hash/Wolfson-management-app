@@ -699,6 +699,8 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
   useEffect(() => { ensureDriveShared(latestStampedFileId); }, [latestStampedFileId]);
 
   const [sharing, setSharing] = useState(false);
+  /** Where a press on the phone's plan began — a still tap opens the plan full screen. */
+  const tapFrom = useRef<{ x: number; y: number; t: number } | null>(null);
   // The plan on screen is made ready to share before the press (a phone browser refuses a late share sheet).
   const shareWarmId = browsePreview?.file.id ?? shownPlanId ?? availablePdfs[selectedPdfIdx]?.id ?? null;
   useEffect(() => { warmPlanShare(shareWarmId, undefined); }, [shareWarmId]);
@@ -1413,8 +1415,22 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
   function planPane(variant: 'side' | 'tab') {
     const asTab = variant === 'tab';
     const fileId = paneFileId;
+    // In the phone's Plan tab a still TAP on the sheet opens the plan full screen (owner, 2026-11-05: "clicking on a
+    // plan on a portrait view in the iPhone didn't open the full screen of the plan"). A drag or a pinch is not a tap,
+    // and a press on a button, a pin or the pin layer keeps its own meaning.
+    const tapToFull = asTab ? {
+      'data-plan-tap-full': '',
+      onPointerDown: (e: React.PointerEvent) => { tapFrom.current = { x: e.clientX, y: e.clientY, t: Date.now() }; },
+      onClick: (e: React.MouseEvent) => {
+        const from = tapFrom.current; tapFrom.current = null;
+        const el = e.target as HTMLElement;
+        if (!from || Date.now() - from.t > 500 || Math.hypot(e.clientX - from.x, e.clientY - from.y) > 8) return;
+        if (!el.closest('[data-plan-stage]') || el.closest('button, a, input, [role="button"]')) return;
+        setAnnotating('view');
+      },
+    } : {};
     const frame = (body: React.ReactNode) => (
-      <div
+      <div {...tapToFull}
         className={`relative flex flex-col min-h-0 ${asTab ? 'h-full' : 'border-l border-gray-200'}`}
         style={asTab
           ? { backgroundColor: '#f8fafc' }

@@ -41,9 +41,12 @@ const p = await ctx.newPage();
 const errs = []; p.on('pageerror', e => errs.push(e.message));
 await p.goto('http://localhost:5173/project'); await p.waitForTimeout(2500);
 
-// 1. Board · Building on the upright phone
+// 1. Board · Building on the upright phone — Building is what opens (owner, 2026-11-05)
 const sw = p.locator('[data-view-switch-narrow]');
 T(await sw.isVisible(), 'upright: the Board · Building switch is there');
+T(await p.locator('.bv-plate').count() > 0 && (await sw.locator('[data-view="building"]').getAttribute('aria-pressed')) === 'true', 'upright: the Building view opens first');
+T(await p.locator('[data-building-trio]').count() === 0, 'upright: one building, never All');
+await sw.locator('[data-view="board"]').click(); await p.waitForTimeout(1200);
 await p.screenshot({ path: `${OUT}/fold-board.png` });
 await sw.locator('[data-view="building"]').click(); await p.waitForTimeout(1500);
 T(await p.locator('.bv-plate').count() > 0, 'upright: Building shows the building');
@@ -71,6 +74,13 @@ await sb.click(); await p.waitForTimeout(1200);
 const st = await p.evaluate(() => ({ s: window.__shared, r: window.__refused }));
 T(st.s.length === 1 && st.r === 0, `the FIRST press opens the share menu (shared ${st.s.length}, refused ${st.r})`);
 T(st.s[0]?.type === 'application/pdf' && st.s[0]?.head === '%PDF-', 'it carries the real PDF');
+// 3. a still tap on the plan opens it full screen (owner, 2026-11-05, the iPhone held upright)
+const before = await p.locator('[data-plan-zoombar]').count();
+const stage = p.locator('[data-plan-tap-full] [data-plan-stage]').first();
+const sbb = await stage.boundingBox();
+await p.touchscreen.tap(sbb.x + sbb.width / 2, sbb.y + sbb.height * 0.4); await p.waitForTimeout(2500);
+T((await p.locator('[data-plan-zoombar]').count()) > before, 'a tap on the plan opens it full screen');
+await p.screenshot({ path: `${OUT}/fold-plan-full.png` });
 T(errs.length === 0, `no page errors (${errs.join(' | ')})`);
 console.log(`\n${ok} ok · ${bad} bad`);
 await browser.close();

@@ -7,7 +7,7 @@ import { ContractorAssignment, ContractorPhoto, Contractor, Apartment, Project, 
 import { transcribeMemo } from '../data/transcribe';
 import { setActiveSpeaker } from '../data/speakLang';
 import { daysOf, futureDaysOf, dayIso, parseDay } from '../data/taskDays';
-import { sharePlanFile } from '../data/sharePlan';
+import { sharePlanFile, warmPlanShare } from '../data/sharePlan';
 import { notFinishedPlan, notFinishedLine, morningAskDay, needsNewDay, daysBetween, comeBackDay } from '../data/notFinished';
 import { NotFinishedSheet, unfinishedWords } from '../components/tasks/NotFinishedSheet';
 import { PlanPinOverlay } from '../components/apartment/PlanPinOverlay';
@@ -2423,6 +2423,9 @@ plansPdfFileId && (
                           </button>
                           {/* Share the plan's PDF itself (owner, 2026-11-03) — the phone's own share menu. */}
                           <button data-plan-share
+                            // The PDF is made ready as soon as Share is on screen: an iPhone or a Samsung opens the
+                            // share menu only straight from the tap, never after a download (owner, 2026-11-05).
+                            ref={el => { if (el) warmPlanShare(plansPdfFileId, undefined); }}
                             onClick={async () => {
                               setPlanDlBusy(true);
                               const out = await sharePlanFile(plansPdfFileId, `${safeFileName(`${aptLabel(apt)} — ${s.engineeringPlans}`)}.pdf`);

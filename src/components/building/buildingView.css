@@ -98,9 +98,15 @@
 .bv-rail-btn:hover { background: #f1f5f9; color: #1e3a5f; }
 .bv-rail-btn[data-on='1'] { background: #1e3a5f; color: #fff; }
 
+/* A tall screen (an upright iPad, the opened Fold) has the room: the floor is drawn big, not as a small plate in a
+   sea of grey (the device gallery, 2026-11-05). */
+@media (orientation: portrait) and (min-width: 761px) {
+  .bv-root:not(.bv-compact) .bv-world { width: 80%; top: 46%; }
+}
 @media (max-width: 760px) {
   .bv-world { width: 92%; top: 46%; }
-  .bv-card { width: 46%; padding: 8px 10px; }
+  /* two cards side by side beside the floor rail never overlap (iPhone 17 Pro Max, the gallery) */
+  .bv-card { width: calc(50% - 24px); padding: 8px 10px; }
   .bv-card-no { font-size: 20px; }
   .bv-card-name { font-size: 13px; }
 }

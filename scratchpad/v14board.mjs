@@ -20,6 +20,9 @@ const p = await ctx.newPage();
 const errs = []; p.on('pageerror', e => errs.push(e.message));
 let ok = 0, bad = 0; const T = (c, m) => { c ? ok++ : bad++; console.log((c ? 'ok  ' : 'BAD ') + m); };
 await p.goto('http://localhost:5173/project'); await p.waitForTimeout(2500);
+// The Building view opens first now (owner, 2026-11-05) — the trio on All; the board is one press away.
+T(await p.locator('[data-building-trio]').count() === 1, 'the Building view opens first (All: the three side by side)');
+await p.locator('[data-view-switch] [data-view="board"]').first().click(); await p.waitForTimeout(1200);
 // 1. the floor window on All
 const lab = p.locator('[data-floor-open]').first();
 T(await lab.count() > 0, 'floor numbers are presses on All');
