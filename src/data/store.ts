@@ -68,6 +68,7 @@ import { planStageSplit, splitApartment, splitTask, splitStageNote, splitStageId
 import { notifyWorker } from './pushNotify';
 import { plainSummary } from './activityWords';
 import { aptLabel } from '../types';
+import { withoutCrmOwned } from './crmLink';
 import { planTaskMove, planTaskUndo, placeLabel } from './taskMove';
 import type { TaskMovePlan } from './taskMove';
 
@@ -1064,7 +1065,12 @@ interface AppState {
    * here" is ONE line, "started work here — Registers", not that plus
    * "started Registers").
    */
-  updateApartment: (id: string, changes: Partial<Apartment>, user: User, opts?: { quiet?: boolean }) => void;
+  /**
+   * `fromCrm`: the write comes from the CRM's side (its keys, customer,
+   * address, phone). Without it, those fields are taken out of the write
+   * (crmLink.ts withoutCrmOwned): the CRM owns them (ecosystem S12).
+   */
+  updateApartment: (id: string, changes: Partial<Apartment>, user: User, opts?: { quiet?: boolean; fromCrm?: boolean }) => void;
   bulkUpdateApartments: (ids: string[], changes: Partial<Apartment>, user: User) => void;
   /**
    * The set model (2026-09-22): write an apartment's stage marks through the
@@ -1885,6 +1891,12 @@ export const useStore = create<AppState>((set, get) => ({
     const now = new Date().toISOString();
     // What the CALLER asked for, before the headline is translated into marks:
     // a write naming a headline and no marks is somebody setting it by hand.
+    // The CRM's fields are not edited from Wolfson (S12): a write that would
+    // touch them on a CRM-linked record leaves them as they are.
+    if (!opts?.fromCrm) {
+      changes = withoutCrmOwned(existing, changes);
+      if (!Object.keys(changes).length) return;
+    }
     const asked = changes;
     changes = normaliseStageWrite(existing, changes, get().stages, get().boardSettings, get().currentProjectId);
 
@@ -3174,6 +3186,12 @@ export const useStore = create<AppState>((set, get) => ({
 
   updateContractor: (id, changes) => {
     const was = get().contractors.find(x => x.id === id);
+    // The person key is Admin's (S12): never written from Wolfson.
+    if ('corePersonId' in changes) {
+      changes = { ...changes };
+      delete changes.corePersonId;
+      if (!Object.keys(changes).length) return;
+    }
     set(state => ({ contractors: state.contractors.map(c => c.id === id ? { ...c, ...changes } : c) }));
     persist(get);
     const updated = get().contractors.find(c => c.id === id);
@@ -3702,6 +3720,8 @@ export const useStore = create<AppState>((set, get) => ({
       version: DATA_VERSION,
       users: state.users,
       stages: state.stages,
+      // The CRM keys ride inside these two (lib/fullBackup.js RECORD_KEYS):
+      // jobNo and crmCustomerId on apartments, corePersonId on contractors.
       apartments: state.apartments,
       stageNotes: state.stageNotes,
       stageNoteVersions: state.stageNoteVersions,

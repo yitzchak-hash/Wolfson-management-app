@@ -968,6 +968,16 @@ export interface Apartment {
    */
   pinsDriveFileId?: string;
   zohoLink?: string;   // General Jobs: Zoho CRM / work order link
+  /**
+   * The CRM's job number (`core.jobs.job_no`), on a job tile or a flat
+   * (ecosystem slice S12). Written by the CRM, never edited here: while it or
+   * `crmCustomerId` is set, the customer, address and phone are the CRM's too
+   * (src/data/crmLink.ts). Rides in `apartments`, so persist / export /
+   * import / sync / the full backup need no new key.
+   */
+  jobNo?: string;
+  /** The CRM's customer id (`core.customers.id`). Same rules as `jobNo`. */
+  crmCustomerId?: string;
   address?: string;    // General Jobs: job site address
   /**
    * The client's phone number, shown beside the address with a tap-to-call
@@ -1415,6 +1425,12 @@ export interface Contractor {
   notifyScope?: 'all' | 'near' | 'today' | 'off';
   /** Their colour on the rota. Falls back to one derived from the name. */
   color?: string;
+  /**
+   * The same worker's person id in Admin (`core.people.id`), ecosystem slice
+   * S12. Written by the CRM / Admin side, never edited here. Rides in
+   * `contractors`, so persist / export / import / sync / backup need no new key.
+   */
+  corePersonId?: string;
   token: string; // 24-char random alphanumeric — used in shareable /c/:token URL
   active: boolean;
   createdAt: string;
@@ -3543,6 +3559,10 @@ export interface MainUiStrings {
   deleteApartmentLabel: string;
   jobLabel: string;
   openZohoBtn: string;
+  /** The CRM keys (S12): the job number field, the open-in button and the small mark's name. */
+  jobNoLabel: string;
+  openInCrm: string;
+  fromCrm: string;
   /**
    * The flood round (owner, 2026-10-08 — a worker doing a small task in
    * twenty apartments a day). `nbBundle…` = the notebook's bundle bar and
@@ -4561,6 +4581,9 @@ export const DEFAULT_MAIN_UI_STRINGS: MainUiStrings = {
   deleteApartmentLabel: 'Delete Apartment',
   jobLabel: 'Job',
   openZohoBtn: 'Open in Zoho',
+  jobNoLabel: 'Job number',
+  openInCrm: 'Open in CRM',
+  fromCrm: 'From CRM',
   nbBundleTasks: '{n} tasks',
   nbBundleDone: '{n} done',
   nbBundleOpen: '{n} open',
@@ -5570,6 +5593,9 @@ export const HEBREW_MAIN_UI_STRINGS: MainUiStrings = {
   deleteApartmentLabel: 'מחק דירה',
   jobLabel: 'עבודה',
   openZohoBtn: 'פתח ב-Zoho',
+  jobNoLabel: 'מספר עבודה',
+  openInCrm: 'פתח ב-CRM',
+  fromCrm: 'מה-CRM',
   nbBundleTasks: '{n} משימות',
   nbBundleDone: '{n} בוצעו',
   nbBundleOpen: '{n} פתוחות',

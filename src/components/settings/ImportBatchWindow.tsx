@@ -100,8 +100,8 @@ export function ImportBatchWindow({ stamp, label, onClose }: {
   }, [canvasElements]);
 
   const tileLabels = useMemo(
-    () => ({ job: s.jobLabel, folder: s.openFolderTooltip, plans: s.engineeringPlans }),
-    [s.jobLabel, s.openFolderTooltip, s.engineeringPlans],
+    () => ({ job: s.jobLabel, folder: s.openFolderTooltip, plans: s.engineeringPlans, crm: s.openInCrm }),
+    [s.jobLabel, s.openFolderTooltip, s.engineeringPlans, s.openInCrm],
   );
 
   // ── The grid, measured, and the band of rows on screen ──────────────────

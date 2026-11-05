@@ -28,6 +28,8 @@ import { Settings2, Mic, Crosshair } from 'lucide-react';
 import { DriveIcon, ZohoIcon, PlanIcon, TvIcon } from '../ui/BrandIcons';
 import { emWidth } from '../diagram/BuildingDiagram';
 import { extractFileId, driveDownloadUrl } from '../../data/driveApi';
+import { crmJobUrl } from '../../data/crmLink';
+import { CrmMark } from '../ui/CrmMark';
 
 /** A Drive file link turned into a direct download, when we can read its id. */
 function planDownloadUrl(link: string): string {
@@ -158,7 +160,7 @@ export interface JobTileProps {
   searchLit: boolean;
   fallbackBorder: string;
   lastEdited: string;
-  labels: { job: string; folder: string; plans: string };
+  labels: { job: string; folder: string; plans: string; crm: string };
   H: BoardHandlers;
   /** A live PROBLEM on the job: red border + '!' while open, rose while waiting (problems.ts). */
   problem?: 'open' | 'waiting' | null;
@@ -433,9 +435,27 @@ export const JobTile = React.memo(function JobTile({
         </span>
       )}
 
-      {lastEdited && (
-        <span className="absolute top-1.5 left-3 text-[9px] text-gray-400 pointer-events-none">
-          {lastEdited}
+      {(lastEdited || job.jobNo?.trim()) && (
+        <span className="absolute top-1 left-3 h-[17px] flex items-center gap-1.5 pointer-events-none">
+          {/* Open in CRM (S12, his idea 9): the job number, pressed, opens
+              the CRM's page for it. Only on a job the CRM knows. It sits in
+              the top strip so it never covers the address; the date beside
+              it steps aside while the tile's hover buttons are showing
+              (always, on a touch screen, where index.css shows them). */}
+          {job.jobNo?.trim() && (
+            <a data-no-drag data-crm-open={job.jobNo} title={labels.crm}
+              href={crmJobUrl(job.jobNo)}
+              target="_blank" rel="noopener noreferrer"
+              onClick={e => e.stopPropagation()}
+              className="pointer-events-auto h-[17px] px-1 rounded bg-indigo-50 border border-indigo-200 flex items-center gap-0.5 hover:border-indigo-300 transition-colors text-indigo-700"
+            >
+              <CrmMark size={10} />
+              <span className="text-[10px] font-bold tabular-nums leading-none">{job.jobNo}</span>
+            </a>
+          )}
+          {lastEdited && (
+            <span className={`text-[9px] text-gray-400 ${job.jobNo?.trim() ? 'transition-opacity group-hover:opacity-0 [@media(any-hover:none)]:hidden' : ''}`}>{lastEdited}</span>
+          )}
         </span>
       )}
 

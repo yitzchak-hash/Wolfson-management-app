@@ -87,8 +87,8 @@ export function BinBoard({ bin, onClose, onOpenJob, highlightJobId, onRestored }
   // which is how English survives into a Hebrew screen.
   const s = useStore(st => st.mainUiStrings);
   const tileLabels = useMemo(
-    () => ({ job: s.jobLabel, folder: s.openFolderTooltip, plans: s.engineeringPlans }),
-    [s.jobLabel, s.openFolderTooltip, s.engineeringPlans],
+    () => ({ job: s.jobLabel, folder: s.openFolderTooltip, plans: s.engineeringPlans, crm: s.openInCrm }),
+    [s.jobLabel, s.openFolderTooltip, s.engineeringPlans, s.openInCrm],
   );
   const theme = getBoardTheme(boardSettings[currentProjectId]?.themeId);
   const accent = bin.color || (bin.binKind ? BIN_META[bin.binKind].color : '#1e3a5f');

@@ -37,7 +37,9 @@ async function crmJobNumbers() {
       body: JSON.stringify({ query: "select job_no from crm.imported_records where entity='opportunity' order by job_no" }),
     });
     const rows = await r.json();
-    if (Array.isArray(rows) && rows.length) return rows.map(x => String(x.job_no)).filter(Boolean);
+    // Rows without a number are skipped: String(null) once made 10 jobs all called "null".
+    const nums = Array.isArray(rows) ? [...new Set(rows.map(x => (x.job_no == null ? '' : String(x.job_no).trim())).filter(Boolean))] : [];
+    if (nums.length) return nums;
   } catch { /* the saved list stands in */ }
   return saved;
 }
@@ -52,7 +54,7 @@ async function loadBuilder() {
   return import(pathToFileURL(tmp).href);
 }
 
-export async function seed({ worldOut, dry } = {}) {
+export async function seed({ worldOut, dry, quiet } = {}) {
   const jobNumbers = await crmJobNumbers();
   const { buildWorld } = await loadBuilder();
   const { world, docs } = buildWorld({ crmJobNumbers: jobNumbers });
@@ -62,6 +64,7 @@ export async function seed({ worldOut, dry } = {}) {
     console.log(`world written: ${worldOut}`);
   }
   const counts = Object.fromEntries(Object.entries(docs).map(([c, l]) => [c, l.length]).sort());
+  if (quiet && dry) return { world, counts };
   console.log(`target project: ${PRACTICE_PROJECT}`);
   console.log(JSON.stringify(counts, null, 1));
   if (dry) { console.log('dry run, nothing sent'); return { world, counts }; }

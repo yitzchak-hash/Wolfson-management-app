@@ -58,6 +58,8 @@ import { OffListQuestion } from '../tasks/OffListQuestion';
 import { MoveTaskDialog, officeMoveWords, fill } from '../tasks/MoveTaskDialog';
 import { DeleteTaskDialog } from '../tasks/DeleteTaskDialog';
 import { placeLabel } from '../../data/taskMove';
+import { isCrmLinked, crmUrlFor, crmJobUrl } from '../../data/crmLink';
+import { CrmMark, FromCrmTag, CrmValue } from '../ui/CrmMark';
 
 interface Props {
   apartment: Apartment | null;
@@ -117,6 +119,11 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
   const tipusim = useStore(st => st.boardSettings[st.currentProjectId]?.tipusim ?? EMPTY_TIPUSIM);
   const customButtons = useStore(st => st.boardSettings[st.currentProjectId]?.customButtons ?? EMPTY_BUTTONS);
   const users = useStore(st => st.users);
+  // The CRM's keys and fields, read LIVE: the CRM may write them while the
+  // window is open, and a stale copy must never be shown or written back.
+  const crmRec = useStore(st => st.apartments.find(a => a.id === apartment?.id)) ?? apartment;
+  const crmLinked = isCrmLinked(crmRec);
+  const crmJobNo = crmRec?.jobNo?.trim() ?? '';
   // Who approved the plan, read LIVE — the board hands the drawer the record
   // captured at open, so an approval pressed a moment ago would not show.
   const plansApprovedBy = useStore(st => st.apartments.find(a => a.id === apartment?.id)?.plansApprovedBy);
@@ -1212,7 +1219,8 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
     const folderName = await getFolderNameViaBackend(folderId);
     if (!folderName) return;
     const derived = familyNameFromFolderName(folderName);
-    if (!derived || derived === familyName) {
+    // A CRM job's customer is the CRM's (S12): only the folder title is kept.
+    if (!derived || derived === familyName || crmLinked) {
       if (apartment && apartment.driveFolderName !== folderName) updateApartment(apartment.id, { driveFolderName: folderName }, currentUser);
       return;
     }
@@ -1897,6 +1905,14 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                   </span>
                 </Tooltip>
               )}
+              {/* Open in CRM (S12): only on a job or flat the CRM knows. */}
+              {crmJobNo && (
+                <a href={crmJobUrl(crmJobNo)} target="_blank" rel="noopener noreferrer" data-title-chip="crm" title={ui.openInCrm}
+                  className="flex items-center gap-1.5 px-2.5 py-1 min-h-[32px] rounded-lg bg-white/10 hover:bg-white/20 transition-colors text-[11.5px] font-semibold">
+                  <CrmMark size={12} />
+                  <span dir={ui.isRtl ? 'rtl' : undefined}>{ui.openInCrm}</span>
+                </a>
+              )}
               <Tooltip text="Print a job sheet">
                 <button onClick={printJobSheet} data-title-chip="print"
                   /* min-h so a finger has something to hit: at py-1 this was
@@ -2067,9 +2083,26 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                 </div>
                 )}
 
+                {/* The CRM's job number (S12): shown, never typed here. */}
+                {crmJobNo && (
+                <div className="flex-shrink-0" data-detail-jobno>
+                  <label className="block text-[10px] font-medium text-gray-500 mb-1">
+                    {ui.jobNoLabel}<FromCrmTag href={crmJobUrl(crmJobNo)} title={ui.fromCrm} field="jobNo" />
+                  </label>
+                  <CrmValue href={crmJobUrl(crmJobNo)} title={ui.openInCrm} value={crmJobNo} field="jobNo" className="font-bold tabular-nums min-w-[5.5rem]" />
+                </div>
+                )}
+
                 {/* Family name / Job name */}
                 <div className="flex-1 min-w-[150px]">
-                  <label className="block text-[10px] font-medium text-gray-500 mb-1">{isGeneralProject ? ui.jobNameLabel : ui.familyName}</label>
+                  <label className="block text-[10px] font-medium text-gray-500 mb-1">
+                    {isGeneralProject ? ui.jobNameLabel : ui.familyName}
+                    {crmLinked && <FromCrmTag href={crmUrlFor(crmRec, 'displayName')!} title={ui.fromCrm} field="customer" />}
+                  </label>
+                  {crmLinked ? (
+                    <CrmValue href={crmUrlFor(crmRec, 'displayName')!} title={ui.openInCrm}
+                      value={crmRec?.displayName?.trim() || ''} field="customer" />
+                  ) : (
                   <input
                     value={familyName}
                     onChange={e => setFamilyName(e.target.value)}
@@ -2078,6 +2111,7 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                     data-family-name
                     className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30"
                   />
+                  )}
                 </div>
 
               </div>
@@ -2152,6 +2186,35 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
               {!isWolfsonProject && (<>
               {/* Address and phone — one row on desktop, stacked on a phone.
                   The same block for apartments and General jobs on purpose. */}
+              {crmLinked ? (
+              /* The CRM owns the address and phone of a linked job (S12):
+                 shown with the mark, a press opens the CRM. Same grid. */
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3" data-crm-contact>
+                <div className="min-w-0">
+                  <label className="block text-[10px] font-medium text-gray-500 mb-1">
+                    {ui.addressLabel}<FromCrmTag href={crmUrlFor(crmRec, 'address')!} title={ui.fromCrm} field="address" />
+                  </label>
+                  <CrmValue href={crmUrlFor(crmRec, 'address')!} title={ui.openInCrm} value={crmRec?.address?.trim() || ''} field="address" />
+                </div>
+                <div className="min-w-0">
+                  <label className="block text-[10px] font-medium text-gray-500 mb-1">
+                    Phone<FromCrmTag href={crmUrlFor(crmRec, 'phone')!} title={ui.fromCrm} field="phone" />
+                  </label>
+                  <div className="flex items-center gap-1.5">
+                    <CrmValue href={crmUrlFor(crmRec, 'phone')!} title={ui.openInCrm} value={crmRec?.phone?.trim() || ''} field="phone" />
+                    {crmRec?.phone?.trim() && (
+                      <a
+                        href={`tel:${crmRec.phone.replace(/[^\d+]/g, '')}`}
+                        title="Call"
+                        className="flex items-center justify-center w-9 h-9 rounded-lg border border-gray-200 text-[#1e3a5f] hover:bg-gray-50 flex-shrink-0"
+                      >
+                        <PhoneIcon size={14} />
+                      </a>
+                    )}
+                  </div>
+                </div>
+              </div>
+              ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="min-w-0">
                   <label className="block text-[10px] font-medium text-gray-500 mb-1">{ui.addressLabel}</label>
@@ -2212,6 +2275,7 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                   />
                 </div>
               </div>
+              )}
               </>)}
               {/* General notes — drawn the way the notes tab draws a stage
                   (owner, 2026-09-06): every note is a bullet with who wrote it

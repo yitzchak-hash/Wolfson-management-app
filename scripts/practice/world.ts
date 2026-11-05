@@ -141,6 +141,8 @@ function workers() {
     category, lang, levelId,
     doc: {
       id, name: `${first} ${last}`, email: fakeEmail(first, last), category, levelId,
+      // S12: the same person's made-up id in Admin (core.people.id).
+      corePersonId: `prac-person-${id.slice(3)}`,
       ...(lang !== 'en' ? { lang } : {}),
       color: colors[i], token: token(), active: true, createdAt: daysAgoIso(380 - i * 9),
       ...(i === 3 ? { notifyScope: 'near' } : {}),
@@ -314,6 +316,11 @@ export function buildWorld(opts: BuildOptions) {
   const plansOut: Rec[] = [];
 
   // ── building flats ─────────────────────────────────────────────────────────
+  // S12: every sold (named) flat carries its buyer's customer id and a job
+  // number of its own. These numbers are made up (9001 and up, far from the
+  // CRM's import); the job tiles below carry the CRM's 50 real-import numbers.
+  // No random draw here, so the rest of the world is exactly as before.
+  let flatJobSeq = 9000;
   function fillBuilding(pid: string, apts: Rec[], buildings: Rec[], tipusim: string[], customButtons: Rec[]) {
     const site = SITE[pid];
     for (const a of apts) {
@@ -348,9 +355,11 @@ export function buildWorld(opts: BuildOptions) {
       a.updatedAt = daysAgoIso(int(0, 60));
       a.contentUpdatedAt = a.updatedAt;
       a.updatedBy = pick(office).id; a.updatedByName = users.find(u => u.doc.id === a.updatedBy)!.doc.name;
+      if (a.displayName) { a.jobNo = String(++flatJobSeq); a.crmCustomerId = cust.id; }
       put(colOf(pid, 'apartments'), a);
       flatsOut.push({
         id: a.id, workspace: pid, collection: colOf(pid, 'apartments'), buildingId: a.buildingId,
+        jobNo: a.jobNo ?? null, crmCustomerId: a.crmCustomerId ?? null,
         number: a.apartmentNumber, floor: a.floor, tipus: a.tipus ?? null, customerId: cust.id,
         familyOnBoard: a.displayName, address: cust.addressLine, phone: a.phone ?? null,
         stage: a.currentStageId ? { id: a.currentStageId, name: sortedB.find(s => s.id === a.currentStageId)?.name } : null,
@@ -421,6 +430,8 @@ export function buildWorld(opts: BuildOptions) {
       phone: cust.phone,
       createdAt: created, updatedAt: created, contentUpdatedAt: created,
       updatedBy: pick(office).id, updatedByName: '',
+      // S12: the CRM's 50 jobs carry their number and customer; the rest are not the CRM's yet.
+      ...(isCrm ? { jobNo, crmCustomerId: cust.id } : {}),
     };
     a.updatedByName = users.find(u => u.doc.id === a.updatedBy)!.doc.name;
     setStage(a, stageId, sortedG);
@@ -451,7 +462,7 @@ export function buildWorld(opts: BuildOptions) {
     put('general_apartments', a);
     (cust as Rec).links = [{ kind: 'job', id, workspace: 'general', jobNo }];
     jobsOut.push({
-      id, jobNo, crmJob: isCrm, workspace: 'general', collection: 'general_apartments', customerId: cust.id,
+      id, jobNo, crmJob: isCrm, crmCustomerId: isCrm ? cust.id : null, workspace: 'general', collection: 'general_apartments', customerId: cust.id,
       title: cust.displayName, address: a.address, city, phone: cust.phone,
       stage: a.currentStageId ? { id: a.currentStageId, name: sortedG.find(s => s.id === a.currentStageId)?.name } : null,
       group: a.boardBin ? bins.find(b => binKey(b) === a.boardBin)?.text : null,
@@ -739,10 +750,11 @@ export function buildWorld(opts: BuildOptions) {
       seed: 20261104, builtAt: nowIso, firebaseProject: 'wolfson-practice',
       phones: 'all in 050-000-xxxx', emails: 'all @practice.invalid',
       linking: 'every id here is the Firestore document id in wolfson-practice (collection given beside it)',
+      keys: 'S12: jobNo and crmCustomerId (= customers[].id) on the 50 CRM job tiles and on every sold flat (flat numbers 9001 and up are made up); corePersonId on every worker',
     },
     people: {
       officeUsers: users.map(u => ({ ...u.person, role: u.doc.role, loginCode: u.doc.code, collection: 'users' })),
-      workers: crew.map(w => ({ ...w.person, trade: w.category, language: w.lang, level: w.levelId, portalPath: `/c/${w.doc.token}`, collection: 'contractors' })),
+      workers: crew.map(w => ({ ...w.person, corePersonId: w.doc.corePersonId, trade: w.category, language: w.lang, level: w.levelId, portalPath: `/c/${w.doc.token}`, collection: 'contractors' })),
       employees: employees.map(e => ({ ...e, collection: 'employees' })),
     },
     customers,

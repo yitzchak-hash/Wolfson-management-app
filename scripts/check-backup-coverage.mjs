@@ -13,7 +13,11 @@
 //     a person would expect on a new computer belongs in the cloud instead.
 import { readFileSync, readdirSync, statSync } from 'fs';
 import { join } from 'path';
-import { WORKSPACE_COLLECTIONS, GLOBAL_COLLECTIONS } from '../lib/fullBackup.js';
+//  3. Every key another app owns that rides INSIDE a record (lib/fullBackup.js
+//     RECORD_KEYS: the CRM's jobNo / crmCustomerId, Admin's corePersonId) is
+//     declared on its type, its collection is in the full backup, and the
+//     store's persist, export and import all carry that collection.
+import { WORKSPACE_COLLECTIONS, GLOBAL_COLLECTIONS, RECORD_KEYS } from '../lib/fullBackup.js';
 
 const root = new URL('..', import.meta.url).pathname;
 const files = [];
@@ -98,8 +102,29 @@ for (const { f, expr, consts } of keyUses) {
   problems.push(`Browser key "${key}" (${f}) is not in src/data/deviceOnly.ts — put it in the cloud, or register it there with the reason it must stay on one computer.`);
 }
 
+// ── 3 · keys other apps own, inside records ─────────────────────────────────
+const typesSrc = readFileSync(join(root, 'src/types/index.ts'), 'utf8');
+const storeSrc = readFileSync(join(root, 'src/data/store.ts'), 'utf8');
+const between = (src, from, to) => { const i = src.indexOf(from); const j = i < 0 ? -1 : src.indexOf(to, i + from.length); return i < 0 || j < 0 ? '' : src.slice(i, j); };
+const persistBody = between(storeSrc, 'function persistNow(', '\n}\n');
+const exportBody = between(storeSrc, 'exportData: () => {', 'importData: (json) => {');
+const importBody = between(storeSrc, 'importData: (json) => {', 'persist(get);');
+let keyCount = 0;
+for (const [col, { type, fields }] of Object.entries(RECORD_KEYS)) {
+  if (!backedUp.has(col)) problems.push(`Record keys ride in "${col}", which is not in the full backup lists.`);
+  const body = between(typesSrc, `export interface ${type} {`, '\n}\n');
+  if (!body) problems.push(`Record keys: type ${type} not found in src/types/index.ts.`);
+  for (const f of fields) {
+    keyCount++;
+    if (body && !new RegExp(`^\\s+${f}\\?:\\s*string;`, 'm').test(body)) problems.push(`Record key "${f}" is not declared on ${type} (src/types/index.ts).`);
+  }
+  if (!persistBody.includes(`${col}: state.${col}`)) problems.push(`persistNow (src/data/store.ts) does not carry "${col}", which holds record keys.`);
+  if (!exportBody.includes(`${col}: state.${col}`)) problems.push(`exportData (src/data/store.ts) does not carry "${col}", which holds record keys.`);
+  if (!new RegExp(`\\b${col}: data\\.${col}\\b`).test(importBody)) problems.push(`importData (src/data/store.ts) does not restore "${col}", which holds record keys.`);
+}
+
 if (problems.length) {
   console.error('\n✗ BACKUP RULE — something would not be backed up:\n  ' + problems.join('\n  ') + '\n');
   process.exit(1);
 }
-console.log(`✓ backup rule: ${used.size} cloud collections all in the full backup; ${keyUses.length} browser-storage uses all registered device-only.`);
+console.log(`✓ backup rule: ${used.size} cloud collections all in the full backup; ${keyUses.length} browser-storage uses all registered device-only; ${keyCount} record keys declared and carried.`);

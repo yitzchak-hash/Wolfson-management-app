@@ -31,6 +31,22 @@ export interface WhatsNewEntry {
 
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    date: '2027-02-25',
+    title: 'Open in CRM',
+    items: [
+      {
+        title: 'Open in CRM from the job number',
+        body: 'A job the CRM knows shows its job number at the bottom of its tile. Press it and the job opens in the CRM. The job window has an Open in CRM button at the top too, beside Drive and Zoho, on jobs and on apartments.',
+        demo: 'tap',
+      },
+      {
+        title: 'The CRM\'s fields carry a small CRM mark',
+        body: 'On a job or an apartment the CRM knows, the job number, the customer, the address and the phone have a small CRM mark. They are changed in the CRM, not here: press one and the CRM opens on that job or customer.',
+        demo: 'tap',
+      },
+    ],
+  },
+  {
     date: '2027-02-24',
     title: 'Send a plan as a PDF',
     items: [
