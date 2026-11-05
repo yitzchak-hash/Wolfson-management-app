@@ -54,6 +54,30 @@ After the rows are written, a SEPARATE agent (fresh, high effort) gets only the
 video, the transcripts and the row list, and its one job is to find what the
 rows missed. Every find becomes a row. Repeat until a pass finds nothing.
 
+## 2e. Look every second
+- Take a frame every second (1 fps) and find every screen change by pixel
+  difference. Make two-column contact sheets of the spoken moments and zoomed
+  crops where he points: the pointer or the grey dot is what he means.
+- What he shows in silence counts as much as what he says.
+
+## 2f. The bug round (his words: "if you see bugs you should also look for bugs in the videos ... make that like a round of itself")
+A separate pass over the whole video looking only for faults he did not mention:
+blank screens, jumps, contradictions between two places, slow waits, wrong
+numbers, cut-off words, a press that does nothing. Each is a row under "Bugs
+found by watching" and is fixed like his own asks.
+
+## 2g. The friction round (his words: "understand what's bothering me ... offer fixes for that")
+A pass for what BOTHERED him even when he did not name it: looking for something
+again, going back to find a door, a name that is not a link, hesitating, "I don't
+know", sighing, scrolling past. Each is a row under "What bothered him" with a fix,
+and is built like his own asks. Assume his intention: a half-said wish is built the
+way he would want it, not left as a question.
+
+## 2h. His questions get answered
+Every question he asks in a video ("why is it see-through?", "what is this?")
+is answered, with its time, his words and a plain answer, in the reply (or a
+page if there are many).
+
 ## 2d. The minute check
 For every minute of the video, count the rows that came from it. A minute where
 he talks and there are no rows, or fewer rows than ideas, is re-listened.
