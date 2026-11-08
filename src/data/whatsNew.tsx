@@ -65,6 +65,11 @@ export const WHATS_NEW: WhatsNewEntry[] = [
         demo: 'tap',
       },
       {
+        title: 'The building fits short screens',
+        body: 'On the opened Fold held sideways (and laptops), the building shrinks to the height it has, so all four apartments of a floor fit without scrolling. The unit counts sit next to Print.',
+        demo: 'zoom',
+      },
+      {
         title: 'Galaxy Fold, sideways',
         body: 'The plan side of an apartment now takes at least half the window and shows the whole sheet, so Download and Print fit on its bar.',
         demo: 'zoom',

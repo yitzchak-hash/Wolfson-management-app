@@ -38,3 +38,8 @@ Harness: `haptics.mjs` 9 (navigator.vibrate recorded; a real CDP touch hold).
 - Still dropped on an iPhone: the warning buzz after a failure that arrives later (a download that fails), and the apartment tick when opened from a search or a link (the drawer's own tick comes after the tap).
 
 Harness: `haptics-ios.mjs` 7 (iPhone device, no vibrate, each tick recorded with the event being handled) · `haptics.mjs` 9.
+
+## Round 6 — the building on a short screen (his marked-up Fold picture)
+- "make smaller so all 4 fit": the wrap's 560px floor is 380, `.bv-root` 360; the plate is capped by the stage's height (`container-type: size`, `100cqh`); under 470px of stage the corner cards shrink. The counts (his red box, arrow up) stack into two small lines under 1280px and stay on Print's row.
+
+Harness: `foldbuilding.mjs` 24 (his Fold ~938×620 and six other screens, floor 10).

@@ -669,7 +669,9 @@ export function ProjectDiagramPage() {
             )}
 
             {/* Quick stats */}
-            <div className="ml-auto flex items-center gap-3 text-xs text-gray-500">
+            {/* Under 1280px the two counts stack into two small lines, so they stay beside Print instead of
+                dropping to a line of their own (owner's picture, Fold, 2026-11-08). */}
+            <div data-quick-stats className="ml-auto flex flex-col xl:flex-row xl:items-center xl:gap-3 text-[11px] xl:text-xs leading-tight text-gray-500 whitespace-nowrap">
               {bulkMode ? (
                 <span className="text-[#1e3a5f] font-semibold">
                   {bulkSelected.size} {s.bulkSelected}
@@ -691,12 +693,12 @@ export function ProjectDiagramPage() {
         {/* Main diagram */}
         <div className="short-scroll-body flex-1 overflow-auto scrollbar-thin bg-gray-100 print:overflow-visible print:bg-white">
           {showTrio ? (
-            <div className="h-full p-4" style={{ minHeight: 560 }} data-building-view-wrap>
+            <div className="h-full p-4" style={{ minHeight: 380 }} data-building-view-wrap>
               <BuildingTrio buildings={trioBuildings} stages={stages} onOpen={handleAptClick} interiorSrc={WOLFSON_INTERIOR} lower={lowerLevels} customButtons={boardSet?.customButtons}
                 words={{ floor: s.floorWindowTitle, notSold: s.notSoldWord, notStarted: s.notStartedOption.replace(/[—–]/g, '').trim(), upgraded: s.upgradedWord, open: s.bvOpen, floorsHint: s.bvHint, joinedWith: s.bvJoined, yes: s.customYes, no: s.customNo, unknown: s.customUnknown }} />
             </div>
           ) : showBuilding ? (
-            <div className="h-full p-4" style={{ minHeight: 560 }} data-building-view-wrap>
+            <div className="h-full p-4" style={{ minHeight: 380 }} data-building-view-wrap>
               <BuildingView
                 apartments={apartments.filter(a => a.buildingId === bvBuilding)}
                 stages={stages}
