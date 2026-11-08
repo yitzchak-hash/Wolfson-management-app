@@ -86,9 +86,14 @@ const gevesTask = { id: 'T-geves', apartmentId: 'G-miller', buildingId: 'G', con
     tab?.click();
   });
   await page.waitForTimeout(700);
-  const mapLabel = await page.locator('[data-map-project]').textContent().catch(() => null);
-  check(!!mapLabel && /Wolfson/i.test(mapLabel) && /A1/.test(mapLabel),
-    `the map says whose building it is (${(mapLabel || 'none').trim()})`);
+  // The map's ONE bar (the approved page of 2026-09-03) names it now: the
+  // project button and the building buttons, where the old [data-map-project]
+  // label stood.
+  const mapLabel = await page.locator('[data-map-bar]').textContent().catch(() => null);
+  const projectBtn = await page.locator('[data-map-project-btn]').textContent().catch(() => null);
+  const hasA1 = await page.locator('[data-map-building="A1"]').count();
+  check(!!projectBtn && /Wolfson/i.test(projectBtn) && hasA1 > 0,
+    `the map says whose building it is (${(mapLabel || 'none').replace(/\s+/g, ' ').trim()})`);
   await page.evaluate(() => {
     const tab = [...document.querySelectorAll('button')].find(b => /My Tasks|המשימות/i.test(b.textContent || ''));
     tab?.click();
@@ -156,11 +161,10 @@ const gevesTask = { id: 'T-geves', apartmentId: 'G-miller', buildingId: 'G', con
   // The admin scope select writes the contractor record.
   await page.goto('http://localhost:5173/app-settings');
   await page.waitForTimeout(1500);
-  await page.evaluate(() => {
-    const t = [...document.querySelectorAll('button')].find(b => /^(Workers|Contractors)$/i.test((b.textContent || '').trim()));
-    t?.click();
-  });
-  await page.waitForTimeout(600);
+  // Settings are category tiles now (owner, 2026-10-29), each a link to
+  // ?cat=<id>; the workers' one is ?cat=workers.
+  await page.locator('a.tz-set-row[href="?cat=workers"]').first().click();
+  await page.waitForTimeout(800);
   const sel = page.locator('[data-notify-scope]').first();
   check(await sel.count() === 1, 'the workers row carries the bell-scope select');
   await sel.selectOption('off');

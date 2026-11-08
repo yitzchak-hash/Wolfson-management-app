@@ -43,8 +43,13 @@ function seed(ctx, extraTasks = []) {
       users: [user], currentUser: user, stages, contractors: [igor],
       buildings: [{ id: 'A1', name: 'Building A1' }, { id: 'A2', name: 'Building A2' }, { id: 'A3', name: 'Building A3' }],
       apartments: [
+        // Under the SET MODEL a stage is done when it is MARKED done — sitting
+        // before the current one no longer makes it so ("Ready to start" is a
+        // plain marker; the start stage is Sold). A3-1 — the flat whose notes
+        // tab the check reads — has its first stage marked done, so there is
+        // a passed stage to cross off.
         apt('A1-45', 'A1', 45, 13, 'Weinstein'), apt('A1-47', 'A1', 47, 13, 'Aharonov'),
-        apt('A2-1', 'A2', 1, 2, 'Levi'), apt('A3-1', 'A3', 1, 2, 'Katz', { tipus: 'B1' }),
+        apt('A2-1', 'A2', 1, 2, 'Levi'), apt('A3-1', 'A3', 1, 2, 'Katz', { tipus: 'B1', stageMarks: { 'st-ready': 'done' } }),
       ],
       boardSettings: { wolfson: { tipusim: ['A1', 'A2', 'B1'] } },
       contractorAssignments: [
@@ -284,6 +289,10 @@ const problemTask = (contractorId, aptId, bld, desc, extra = {}) => ({
   // settings: the Tipusim card
   await page.goto(`${APP}/settings`);
   await page.waitForTimeout(1800);
+  // Settings are category tiles now (owner, 2026-10-29); the Tipusim card
+  // lives under Stages (?cat=stages).
+  await page.locator('a.tz-set-row[href="?cat=stages"]').first().click();
+  await page.waitForTimeout(800);
   check(await page.locator('[data-tipusim-card]').count() === 1 && await page.locator('[data-tipus-chip="A2"]').count() === 1, 'project settings has the Tipusim list');
   await page.locator('[data-tipus-new]').fill('C3');
   await page.locator('[data-tipus-add]').click();
