@@ -52,9 +52,17 @@ export function crmUrlFor(a: Keyed, field: CrmOwnedField): string | null {
  * keys always (only the CRM sets them), and the customer, address and phone
  * when the record is linked to the CRM. Everything else passes untouched.
  */
+/**
+ * The money mirrors (D19): the CRM's upgrade orders and Finance's balance,
+ * written onto a flat by those apps only. Wolfson never writes them, linked
+ * or not, exactly like the two keys.
+ */
+export const MIRROR_ONLY_FIELDS = ['crmMoney', 'financeBalance'] as const;
+
 export function withoutCrmOwned<T extends Partial<Apartment>>(existing: Keyed, changes: T): T {
   const linked = isCrmLinked(existing);
-  const hit = CRM_OWNED_FIELDS.filter(f => f in changes && (linked || f === 'jobNo' || f === 'crmCustomerId'));
+  const hit: string[] = CRM_OWNED_FIELDS.filter(f => f in changes && (linked || f === 'jobNo' || f === 'crmCustomerId'));
+  for (const f of MIRROR_ONLY_FIELDS) if (f in changes) hit.push(f);
   if (!hit.length) return changes;
   const out = { ...changes };
   for (const f of hit) delete (out as Record<string, unknown>)[f];

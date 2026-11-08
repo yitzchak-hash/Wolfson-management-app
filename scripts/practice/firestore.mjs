@@ -112,6 +112,29 @@ export async function writeDocs(col, docs, onProgress) {
   }
 }
 
+/**
+ * Writes ONLY the named fields of documents that already exist (an
+ * updateMask, the REST twin of the app's fsPatch): nothing else on the
+ * document is touched, and a missing document is never created. A field set
+ * to `undefined` is removed. `items` = [{ id, fields: { name: value } }].
+ */
+export async function patchDocs(col, items) {
+  const stamp = new Date();
+  for (let i = 0; i < items.length; i += 400) {
+    const chunk = items.slice(i, i + 400);
+    await call(':commit', {
+      method: 'POST',
+      body: JSON.stringify({
+        writes: chunk.map(({ id, fields }) => ({
+          update: { name: docName(col, id), fields: toFields({ ...fields, _updatedAt: stamp }) },
+          updateMask: { fieldPaths: [...Object.keys(fields), '_updatedAt'] },
+          currentDocument: { exists: true },
+        })),
+      }),
+    });
+  }
+}
+
 /** Every collection at the top of the practice database. */
 export async function listCollections() {
   const ids = [];

@@ -31,6 +31,22 @@ export interface WhatsNewEntry {
 
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    date: '2027-02-26',
+    title: 'Each flat\'s money',
+    items: [
+      {
+        title: 'A Money part in the flat\'s window',
+        body: 'A flat the CRM knows shows its upgrade order from the CRM: the number, whether it is ordered, open or not taken, and its price with VAT, plus the project\'s upgrade prices. The balance line says "Not connected yet" until Finance sends balances; then it fills by itself. It is read only: money is booked in Finance and the CRM.',
+        demo: 'tap',
+      },
+      {
+        title: 'A small ₪ on the tile',
+        body: 'A flat with an upgrade order has a small ₪ in the corner of its tile: green once ordered, orange while still open.',
+        demo: 'tap',
+      },
+    ],
+  },
+  {
     date: '2027-02-25',
     title: 'Open in CRM',
     items: [

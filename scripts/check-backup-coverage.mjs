@@ -110,13 +110,18 @@ const persistBody = between(storeSrc, 'function persistNow(', '\n}\n');
 const exportBody = between(storeSrc, 'exportData: () => {', 'importData: (json) => {');
 const importBody = between(storeSrc, 'importData: (json) => {', 'persist(get);');
 let keyCount = 0;
-for (const [col, { type, fields }] of Object.entries(RECORD_KEYS)) {
+for (const [col, { type, fields, mirrors = [] }] of Object.entries(RECORD_KEYS)) {
   if (!backedUp.has(col)) problems.push(`Record keys ride in "${col}", which is not in the full backup lists.`);
   const body = between(typesSrc, `export interface ${type} {`, '\n}\n');
   if (!body) problems.push(`Record keys: type ${type} not found in src/types/index.ts.`);
   for (const f of fields) {
     keyCount++;
     if (body && !new RegExp(`^\\s+${f}\\?:\\s*string;`, 'm').test(body)) problems.push(`Record key "${f}" is not declared on ${type} (src/types/index.ts).`);
+  }
+  // D19: read-only mirrors other apps write onto the record (any type).
+  for (const f of mirrors) {
+    keyCount++;
+    if (body && !new RegExp(`^\\s+${f}\\?:\\s*[A-Za-z]`, 'm').test(body)) problems.push(`Record mirror "${f}" is not declared on ${type} (src/types/index.ts).`);
   }
   if (!persistBody.includes(`${col}: state.${col}`)) problems.push(`persistNow (src/data/store.ts) does not carry "${col}", which holds record keys.`);
   if (!exportBody.includes(`${col}: state.${col}`)) problems.push(`exportData (src/data/store.ts) does not carry "${col}", which holds record keys.`);

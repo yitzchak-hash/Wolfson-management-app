@@ -37,9 +37,11 @@ export default defineConfig({
   plugins: [routerUrgentNav(), react()],
   // The practice branch is a practice build even before (or without) its
   // own variables: src/data/practice.ts then refuses any Firebase project but
-  // the practice one. Empty on every other branch.
+  // the practice one. Empty on every other branch. A practice slice's own
+  // branch (claude/practice-d19 …) is a practice build too: its Vercel preview
+  // must never reach the office's real database with the preview variables.
   define: {
-    'import.meta.env.VITE_PRACTICE_BRANCH': JSON.stringify(process.env.VERCEL_GIT_COMMIT_REF === 'claude/practice' ? '1' : ''),
+    'import.meta.env.VITE_PRACTICE_BRANCH': JSON.stringify(/^claude\/practice($|-)/.test(process.env.VERCEL_GIT_COMMIT_REF ?? '') ? '1' : ''),
   },
   // Harnesses that run several dev servers over one shared node_modules give
   // each its own prebundle cache; unset, Vite's default applies.

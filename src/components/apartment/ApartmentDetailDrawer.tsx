@@ -60,6 +60,8 @@ import { DeleteTaskDialog } from '../tasks/DeleteTaskDialog';
 import { placeLabel } from '../../data/taskMove';
 import { isCrmLinked, crmUrlFor, crmJobUrl } from '../../data/crmLink';
 import { CrmMark, FromCrmTag, CrmValue } from '../ui/CrmMark';
+import { FlatMoney } from './FlatMoney';
+import { hasMoneyPart } from '../../data/flatMoney';
 
 interface Props {
   apartment: Apartment | null;
@@ -2181,6 +2183,12 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                     );
                   })}
                 </div>
+              )}
+
+              {/* The flat's money (D19): Finance's balance and the CRM's
+                  upgrade orders, read only. Building flats the CRM knows. */}
+              {!isGeneralProject && hasMoneyPart(crmRec) && (
+                <FlatMoney apartmentId={apartment.id} fallback={apartment} />
               )}
 
               {!isWolfsonProject && (<>

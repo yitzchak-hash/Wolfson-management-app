@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { Link2, Lock, LockOpen } from 'lucide-react';
 import { Apartment, BuildingId, Stage, relativeTime } from '../../types';
+import { tileOrder, orderStateWord } from '../../data/flatMoney';
 import { useStore } from '../../data/store';
 import { PROBLEM_FILL } from '../../data/problems';
 import { progressOf, StageProgress, isStartStage } from '../../data/stageMarks';
@@ -322,6 +323,8 @@ function AptCell({
 
   // Pending task indicator: orange dot when has tasks but NOT all done
   const hasPendingTask = !!taskInfo && !allTasksDone;
+  // The CRM's upgrade order for this flat (D19), a read-only mirror.
+  const moneyOrder = plain ? tileOrder(apt) : null;
 
   return (
     // Outer wrapper is not clipped, so the merge connector can sit in the gap
@@ -651,6 +654,29 @@ function AptCell({
         >
           <span style={{ fontSize: compact || phone ? '7.5px' : '11px', color: 'white', fontWeight: 800, lineHeight: 1 }}>{ui.upgradedBadge}</span>
         </div>
+      )}
+
+      {/* The CRM's upgrade order (D19), small: a "₪" in the bottom-right
+          corner, green once ordered, amber while open. Read only; the flat's
+          window has the detail. Not on the smallest (compact) tiles. */}
+      {moneyOrder && !compact && !isDimmed && displayLabel && !(phone && problem) && (
+        <span
+          data-money-mark={moneyOrder.state}
+          className={`absolute rounded-full flex items-center justify-center ${placed ? 'w-5 h-5' : phone ? 'w-3.5 h-3.5' : 'w-4 h-4'}`}
+          title={ui.moneyTileOrder.replace('{state}', orderStateWord(moneyOrder.state, ui))}
+          style={{
+            // A phone tile's lines fill its middle, so there the mark takes the
+            // free top-right corner (the "U" has the top-left; a problem's "!"
+            // would sit here, so the mark steps aside for it).
+            right: placed ? 4 : 2,
+            ...(phone && !placed ? { top: 2 } : { bottom: plain ? (placed ? 18 : 17) : 6 }),
+            zIndex: 5,
+            backgroundColor: moneyOrder.state === 'won' ? '#059669' : '#d97706',
+            border: '1.5px solid rgba(255,255,255,0.9)',
+          }}
+        >
+          <span style={{ fontSize: placed ? '11px' : phone ? '7.5px' : '9.5px', color: 'white', fontWeight: 800, lineHeight: 1 }}>₪</span>
+        </span>
       )}
 
       {/*

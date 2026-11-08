@@ -978,6 +978,19 @@ export interface Apartment {
   jobNo?: string;
   /** The CRM's customer id (`core.customers.id`). Same rules as `jobNo`. */
   crmCustomerId?: string;
+  /**
+   * The CRM's upgrade orders for this flat and its project's upgrade price
+   * list (ecosystem D19 / S37), a READ-ONLY mirror the CRM side writes onto
+   * the flat. Never edited here (updateApartment strips it unless the write is
+   * `fromCrm`). Rides in `apartments`, so the full backup carries it.
+   */
+  crmMoney?: CrmMoneyMirror;
+  /**
+   * Finance's balance for this flat's job (D19), written by Finance once it
+   * publishes balances per job (S05 + S07). Absent = "Not connected yet".
+   * Never edited here; rides in `apartments`.
+   */
+  financeBalance?: FinanceBalanceMirror;
   address?: string;    // General Jobs: job site address
   /**
    * The client's phone number, shown beside the address with a tap-to-call
@@ -1365,6 +1378,47 @@ export interface WorkerLevel {
   /** The three that ship. Editable; not deletable. */
   builtIn?: boolean;
   perms: Partial<Record<WorkerPermission, boolean>>;
+}
+
+/** One upgrade order in the CRM (an `upgrade` opportunity on the flat's unit). Money in agorot. */
+export interface CrmUpgradeOrder {
+  /** The CRM's number for it (opens the CRM job page). */
+  number: string;
+  /** 'open' | 'won' | 'lost' (the CRM's words for it). */
+  state: string;
+  valueBeforeVatAgorot?: number | null;
+  vatAgorot?: number | null;
+  valueAgorot?: number | null;
+  wonAt?: string | null;
+}
+/** One line of the project's upgrade price list in the CRM (`crm.upgrade_prices`). */
+export interface CrmUpgradePrice {
+  id: string;
+  /** The name in each language it was written in: { en, he, ru, uk }. */
+  names: Record<string, string>;
+  priceAgorot: number;
+  vatPercent?: number | null;
+  priceWithVatAgorot?: number | null;
+}
+/** What the CRM side writes onto a flat (D19). */
+export interface CrmMoneyMirror {
+  orders: CrmUpgradeOrder[];
+  prices: CrmUpgradePrice[];
+  /** The CRM's unit status: 'standard' | 'sold' | 'upgraded'. */
+  unitStatus?: string | null;
+  /** When the CRM side last wrote it (ISO). */
+  mirroredAt: string;
+}
+/** What Finance writes onto a flat (D19), once its money view exists. Money in agorot. */
+export interface FinanceBalanceMirror {
+  /** Still owed by the customer: above 0 owes, 0 settled, below 0 in credit. */
+  balanceAgorot: number;
+  billedAgorot?: number | null;
+  paidAgorot?: number | null;
+  /** The Finance job number it belongs to (the flat's jobNo). */
+  jobNo?: string | null;
+  /** When Finance last wrote it (ISO). */
+  asOf: string;
 }
 
 export interface Contractor {
@@ -3564,6 +3618,30 @@ export interface MainUiStrings {
   openInCrm: string;
   fromCrm: string;
   /**
+   * The flat's money (D19): a read-only mirror of the CRM's upgrade orders and
+   * Finance's balance. `{n}` = a count, `{amount}` = money, `{when}` = a time.
+   */
+  moneyTitle: string;
+  moneyReadOnly: string;
+  moneyBalance: string;
+  moneyNotConnected: string;
+  moneyNotConnectedTip: string;
+  moneyOwes: string;
+  moneySettled: string;
+  moneyCredit: string;
+  moneyBilledPaid: string;
+  moneyUpgradeOrders: string;
+  moneyNoOrders: string;
+  moneyOrderOpen: string;
+  moneyOrderWon: string;
+  moneyOrderLost: string;
+  moneyNoValue: string;
+  moneyInclVat: string;
+  moneyPriceList: string;
+  moneyAsOf: string;
+  moneyNotMirrored: string;
+  moneyTileOrder: string;
+  /**
    * The flood round (owner, 2026-10-08 — a worker doing a small task in
    * twenty apartments a day). `nbBundle…` = the notebook's bundle bar and
    * its window; `cal…` = the office calendars' folded done chips and day
@@ -4584,6 +4662,26 @@ export const DEFAULT_MAIN_UI_STRINGS: MainUiStrings = {
   jobNoLabel: 'Job number',
   openInCrm: 'Open in CRM',
   fromCrm: 'From CRM',
+  moneyTitle: 'Money',
+  moneyReadOnly: 'Read only. Money is booked in Finance and the CRM, not here.',
+  moneyBalance: 'Balance',
+  moneyNotConnected: 'Not connected yet',
+  moneyNotConnectedTip: 'Shows here by itself once Finance publishes a balance for this job.',
+  moneyOwes: '{amount} still owed',
+  moneySettled: 'Paid in full',
+  moneyCredit: '{amount} in credit',
+  moneyBilledPaid: 'Billed {billed} · paid {paid}',
+  moneyUpgradeOrders: 'Upgrade orders',
+  moneyNoOrders: 'No upgrade order in the CRM',
+  moneyOrderOpen: 'Open',
+  moneyOrderWon: 'Ordered',
+  moneyOrderLost: 'Not taken',
+  moneyNoValue: 'No price yet',
+  moneyInclVat: 'incl. VAT',
+  moneyPriceList: 'Upgrade prices for this project',
+  moneyAsOf: 'as of {when}',
+  moneyNotMirrored: 'The CRM has not sent this flat\'s upgrades yet',
+  moneyTileOrder: 'Upgrade order: {state}',
   nbBundleTasks: '{n} tasks',
   nbBundleDone: '{n} done',
   nbBundleOpen: '{n} open',
@@ -5596,6 +5694,26 @@ export const HEBREW_MAIN_UI_STRINGS: MainUiStrings = {
   jobNoLabel: 'מספר עבודה',
   openInCrm: 'פתח ב-CRM',
   fromCrm: 'מה-CRM',
+  moneyTitle: 'כספים',
+  moneyReadOnly: 'לקריאה בלבד. כסף נרשם בכספים וב-CRM, לא כאן.',
+  moneyBalance: 'יתרה',
+  moneyNotConnected: 'עדיין לא מחובר',
+  moneyNotConnectedTip: 'יופיע כאן מעצמו ברגע שמחלקת הכספים תפרסם יתרה לעבודה הזו.',
+  moneyOwes: 'נותרו לתשלום {amount}',
+  moneySettled: 'שולם במלואו',
+  moneyCredit: 'זיכוי של {amount}',
+  moneyBilledPaid: 'חויב {billed} · שולם {paid}',
+  moneyUpgradeOrders: 'הזמנות שדרוג',
+  moneyNoOrders: 'אין הזמנת שדרוג ב-CRM',
+  moneyOrderOpen: 'פתוחה',
+  moneyOrderWon: 'הוזמן',
+  moneyOrderLost: 'לא נלקח',
+  moneyNoValue: 'עדיין אין מחיר',
+  moneyInclVat: 'כולל מע״מ',
+  moneyPriceList: 'מחירי שדרוג בפרויקט',
+  moneyAsOf: 'נכון ל-{when}',
+  moneyNotMirrored: 'ה-CRM עדיין לא שלח את השדרוגים של הדירה',
+  moneyTileOrder: 'הזמנת שדרוג: {state}',
   nbBundleTasks: '{n} משימות',
   nbBundleDone: '{n} בוצעו',
   nbBundleOpen: '{n} פתוחות',
