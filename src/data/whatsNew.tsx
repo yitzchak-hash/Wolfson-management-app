@@ -31,6 +31,22 @@ export interface WhatsNewEntry {
 
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    date: '2027-02-27',
+    title: 'Talk into any box, and see your uploads',
+    items: [
+      {
+        title: 'The microphone listens properly',
+        body: 'Press the small mic in any box: a line moves with your voice, it keeps listening when you pause, and your words are added after what you already typed. Press the square to stop, or the arrow to send.',
+        demo: 'tap',
+      },
+      {
+        title: 'Uploads show their progress',
+        body: 'The moment you pick a picture or video, "Uploading…" appears with a bar until it lands.',
+        demo: 'list',
+      },
+    ],
+  },
+  {
     date: '2027-02-26',
     title: 'The Building view first, and the plan full screen',
     items: [

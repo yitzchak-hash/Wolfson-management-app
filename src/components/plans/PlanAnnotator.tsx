@@ -4663,9 +4663,10 @@ function PlanEditor({
                 <span className="mx-1 w-px self-stretch bg-white/20" />
                 <button data-plan-share data-plan-share-bar onClick={onShare} disabled={shareBusy}
                   title={shareLabel || 'Share'}
-                  className="flex items-center gap-1 px-2.5 py-1 rounded-full text-[12px] font-semibold hover:bg-white/10 disabled:opacity-50">
+                  className="flex items-center gap-1 px-2.5 max-[420px]:px-2 py-1 rounded-full text-[12px] font-semibold hover:bg-white/10 disabled:opacity-50">
                   {shareBusy ? <Loader2 size={13} className="animate-spin" /> : <Share2 size={13} />}
-                  {shareLabel || 'Share'}
+                  {/* On a phone under 420 wide (a Galaxy S, the Fold's cover) the word would push the bar off the screen. */}
+                  <span className="max-[420px]:hidden">{shareLabel || 'Share'}</span>
                 </button>
               </>)}
             </div>

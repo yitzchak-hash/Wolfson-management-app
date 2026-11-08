@@ -9,6 +9,7 @@ import { isFirebaseConfigured } from '../../data/firebase';
 import { PlannerAskModal } from '../board/PlannerAskModal';
 import { UndoLayer } from '../board/UndoLayer';
 import { OfficeAlerts } from './OfficeAlerts';
+import { UploadToasts } from './UploadToasts';
 import { NewVersionNote } from './NewVersionNote';
 import { setActiveSpeaker } from '../../data/speakLang';
 
@@ -252,6 +253,8 @@ export function AppLayout() {
       <PlannerAskModal />
       {/* A worker's message or a closed job rings the office — every page. */}
       <OfficeAlerts />
+      {/* Every file going up, seen while it goes (2026-11-08). */}
+      <UploadToasts />
       <NewVersionNote />
       {/* Ctrl+Z / Ctrl+Shift+Z / Ctrl+Y, and the question that guards anything
           putting real content back. Here rather than on the board so the keys

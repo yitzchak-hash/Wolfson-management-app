@@ -1,7 +1,9 @@
 import React, { useLayoutEffect, useRef, useState } from 'react';
-import { Mic, Paperclip, Send, Loader2 } from 'lucide-react';
+import { Mic, Paperclip, Send, Loader2, Square } from 'lucide-react';
 import { VoiceRecorderButton } from './VoiceMemo';
-import { useSpeechToText } from '../../data/voiceSearch';
+import { useDictation } from '../../data/dictation';
+import { LiveWave } from './LiveWave';
+import { useUploads, boxShowing } from '../../data/uploadTracker';
 import { transcribeMemo } from '../../data/transcribe';
 import { useSpeakLang, setSpeakLang, noteTyped, typedTail, nextSpeakLang, SPEAK_CHIP } from '../../data/speakLang';
 import type { RecordedMemo } from '../../data/voiceMemo';
@@ -47,10 +49,10 @@ export type MessageLang = 'en' | 'he' | 'ru';
  * transcriber hears the language itself.
  */
 
-const WORDS: Record<MessageLang, { placeholder: string; dictate: string; dictateLang: string; attach: string; record: string; send: string; sending: string; pending: string }> = {
-  en: { placeholder: 'Your message', dictate: 'Dictate', dictateLang: 'The language you speak — press to change', attach: 'Attach a file', record: 'Record a voice memo', send: 'Send', sending: 'Sending the recording…', pending: 'Not sent yet — press Send' },
-  he: { placeholder: 'ההודעה שלך', dictate: 'הקלדה קולית', dictateLang: 'השפה שבה אתם מדברים — לחצו להחלפה', attach: 'צירוף קובץ', record: 'הקלטת הודעה קולית', send: 'שליחה', sending: 'שולח את ההקלטה…', pending: 'עוד לא נשלח — לחצו על שליחה' },
-  ru: { placeholder: 'Ваше сообщение', dictate: 'Голосовой ввод', dictateLang: 'Язык, на котором вы говорите — нажмите, чтобы сменить', attach: 'Прикрепить файл', record: 'Записать голосовое', send: 'Отправить', sending: 'Отправляю запись…', pending: 'Ещё не отправлено — нажмите Отправить' },
+const WORDS: Record<MessageLang, { placeholder: string; dictate: string; dictateLang: string; attach: string; record: string; send: string; sending: string; pending: string; stop: string; uploading: string }> = {
+  en: { placeholder: 'Your message', dictate: 'Dictate', dictateLang: 'The language you speak — press to change', attach: 'Attach a file', record: 'Record a voice memo', send: 'Send', sending: 'Sending the recording…', pending: 'Not sent yet — press Send', stop: 'Stop', uploading: 'Uploading {n}…' },
+  he: { placeholder: 'ההודעה שלך', dictate: 'הקלדה קולית', dictateLang: 'השפה שבה אתם מדברים — לחצו להחלפה', attach: 'צירוף קובץ', record: 'הקלטת הודעה קולית', send: 'שליחה', sending: 'שולח את ההקלטה…', pending: 'עוד לא נשלח — לחצו על שליחה', stop: 'עצירה', uploading: 'מעלה {n}…' },
+  ru: { placeholder: 'Ваше сообщение', dictate: 'Голосовой ввод', dictateLang: 'Язык, на котором вы говорите — нажмите, чтобы сменить', attach: 'Прикрепить файл', record: 'Записать голосовое', send: 'Отправить', sending: 'Отправляю запись…', pending: 'Ещё не отправлено — нажмите Отправить', stop: 'Стоп', uploading: 'Загружаю {n}…' },
 };
 
 export const dictationLocale = (lang: MessageLang | null | undefined) =>
@@ -98,13 +100,21 @@ export function MessageBox({
   const fileRef = useRef<HTMLInputElement>(null);
   const areaRef = useRef<HTMLTextAreaElement>(null);
   const speak = useSpeakLang(lang);
-  const dictate = useSpeechToText(dictationLocale(speak), text => onChange(text));
+  // The mic keeps listening until Stop or Send, adds to what is already typed, and drives the live line
+  // (dictation.ts; owner, 2026-11-08).
+  const valueRef = useRef(value); valueRef.current = value;
+  const onSendRef = useRef(onSend); onSendRef.current = onSend;
+  const dictate = useDictation(dictationLocale(speak), () => valueRef.current, text => onChange(text));
   // The last run of letters TYPED (never a value the host set) — what
   // teaches the box which language this person writes in.
   const typedRun = useRef('');
   const sendMode = !!onSend;
   const canSend = sendMode && (value.trim().length > 0 || !!hasPending);
   const [sending, setSending] = useState(false);
+  /** Files picked with the paperclip that are still going up (owner, 2026-11-08: "we don't see … the progress"). */
+  const [attaching, setAttaching] = useState(0);
+  const ups = useUploads();
+  const upPct = ups.length ? Math.round(ups.reduce((n, u) => n + u.pct, 0) / ups.length) : 0;
 
   // Grow with the words — measured, never guessed, so a pasted paragraph and a
   // one-word reply both sit right; capped at six lines, after which it scrolls.
@@ -150,6 +160,17 @@ export function MessageBox({
           {L.sending}
         </div>
       )}
+      {attaching > 0 && (
+        <div data-attach-uploading className="mb-2 flex items-center gap-2 rounded-2xl px-3 py-2 text-[12.5px] font-semibold"
+          style={{ backgroundColor: '#f3f6fa', border: '1px solid #e2e8f0', color: '#475569' }}>
+          <Loader2 size={14} className="animate-spin flex-shrink-0" style={{ color: '#1e3a5f' }} />
+          <span className="flex-shrink-0">{L.uploading.replace('{n}', String(attaching))}</span>
+          <div className="flex-1 min-w-[40px] h-1.5 rounded-full bg-gray-200 overflow-hidden">
+            <div className="h-full bg-[#4aa8d8] transition-all" style={{ width: `${Math.max(4, upPct)}%` }} />
+          </div>
+          <span className="tabular-nums flex-shrink-0" data-attach-pct>{upPct}%</span>
+        </div>
+      )}
       {/* A recording or a file waiting in the box is NOT sent yet — and a
           player sitting there read as "done" (the owner's report: after
           recording into a task nobody could tell they still had to send).
@@ -182,20 +203,31 @@ export function MessageBox({
                 // value empties it (the File Tray's paid-for trap).
                 const files = [...(e.target.files ?? [])];
                 e.target.value = '';
-                if (files.length) void onAttach(files);
+                if (!files.length) return;
+                // Seen from the moment of the press — the folder lookups before the first byte included.
+                setAttaching(files.length);
+                boxShowing(1);
+                void Promise.resolve(onAttach(files)).finally(() => { setAttaching(0); boxShowing(-1); });
               }}
             />
           </>
         )}
         <div
-          className={`flex-1 min-w-0 flex items-end gap-1 bg-white border ps-1 pe-3 ${multiLook ? 'rounded-2xl' : 'rounded-[22px]'}`}
+          className={`flex-1 min-w-0 flex flex-wrap items-end gap-1 bg-white border ps-1 pe-3 ${multiLook || dictate.listening ? 'rounded-2xl' : 'rounded-[22px]'}`}
           style={{ borderColor: dictate.listening ? '#4aa8d8' : '#dbe3ec', minHeight: 44, paddingTop: 3, paddingBottom: 3 }}
         >
+          {/* Listening: the live line across the top of the box, moving with the voice; the words land under it. */}
+          {dictate.listening && (
+            <div data-dictate-live className="basis-full flex items-center gap-2 ps-2 pt-1.5">
+              <span className="w-2 h-2 rounded-full flex-shrink-0 animate-pulse" style={{ backgroundColor: '#dc2626' }} />
+              <div className="flex-1 min-w-0"><LiveWave level={dictate.level} color="#4aa8d8" height={24} /></div>
+            </div>
+          )}
           {dictate.supported && (
             <button
               type="button"
               data-composer-dictate
-              onClick={dictate.toggle}
+              onClick={() => (dictate.listening ? dictate.stop() : dictate.start())}
               disabled={disabled}
               title={L.dictate}
               className={`w-9 h-9 mb-[0.5px] rounded-full flex items-center justify-center flex-shrink-0 ${
@@ -247,7 +279,23 @@ export function MessageBox({
             style={{ fontSize: fontSize ?? 14, lineHeight: `${LINE}px` }}
           />
         </div>
-        {canSend ? (
+        {dictate.listening ? (
+          /* Listening: Stop keeps the words in the box; Send stops and sends them — ChatGPT's two buttons. */
+          <div className="flex items-end gap-1.5 flex-shrink-0">
+            <button type="button" data-dictate-stop onClick={dictate.stop} title={L.stop} aria-label={L.stop}
+              className="w-11 h-11 flex items-center justify-center rounded-full bg-white border border-gray-300 text-[#1e3a5f] active:scale-95">
+              <Square size={15} fill="currentColor" />
+            </button>
+            {sendMode && (
+              <button type="button" data-dictate-send title={L.send} aria-label={L.send}
+                onClick={() => dictate.finish(() => onSendRef.current?.())}
+                className="w-11 h-11 flex items-center justify-center rounded-full text-white active:scale-95"
+                style={{ backgroundColor: '#4aa8d8', boxShadow: '0 6px 14px -6px rgba(74,168,216,.7)' }}>
+                <Send size={18} />
+              </button>
+            )}
+          </div>
+        ) : canSend ? (
           <button
             type="button"
             data-composer-send

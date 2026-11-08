@@ -261,7 +261,7 @@ export function ProblemForm({ apartments, currentUser, onClose, onSaved }: {
                     onChange={setText}
                     onSend={sendLine}
                     lang={lang}
-                    onAttach={files => { files.forEach(f => void attach(f)); }}
+                    onAttach={files => Promise.all(files.map(f => attach(f))).then(() => {})}
                     onMemo={memo => attach(memoFile(memo), true)}
                     placeholder={ui.problemWhatWrong}
                   />

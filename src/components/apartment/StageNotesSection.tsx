@@ -387,7 +387,7 @@ export function StageNotesSection({ apartmentId, stages, currentUser, onSaved }:
                     onChange={v => setDrafts(d => ({ ...d, [stage.id]: v }))}
                     onSend={() => send(stage.id)}
                     hasPending={pendingList.length > 0}
-                    onAttach={files => { files.forEach(f => void attach(stage.id, f)); }}
+                    onAttach={files => Promise.all(files.map(f => attach(stage.id, f))).then(() => {})}
                     onMemo={memo => attach(stage.id, memoFile(memo), true)}
                     busy={Object.keys(uploading).length > 0}
                     lang={lang}

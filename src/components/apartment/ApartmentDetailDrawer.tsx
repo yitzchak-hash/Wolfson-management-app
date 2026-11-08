@@ -3222,7 +3222,7 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                               onChange={v => setOfficeNoteDrafts(d => ({ ...d, [a.id]: v }))}
                               onSend={() => sendOfficeNote(a)}
                               hasPending={(officeNoteAtts[a.id] ?? []).length > 0}
-                              onAttach={files => { files.forEach(f => void officeThreadAttach(a, f)); }}
+                              onAttach={files => Promise.all(files.map(f => officeThreadAttach(a, f))).then(() => {})}
                               onMemo={memo => officeThreadAttach(a, memoFile(memo), true)}
                               lang={ui.isRtl ? 'he' : 'en'}
                               placeholder={ui.threadWriteToWorker}
