@@ -83,13 +83,16 @@ asks for it. ☑ done · ☐ next · ✎ awaiting Yitzchak's word. (Standing ord
 - ✎ Search ranking by Drive activity (decided not to build until asked).
 
 ## Standing pre-existing reds in the harnesses (not features)
-`planphone.mjs` stale locator · `round39-probe` asserts the deleted "I did
-work here" filter · `boardsize.mjs` left-edge auto-pan · `gapboard.mjs` ·
-`round22.mjs` (Goals fixture intercepts the week plus) · `notebookflip.mjs`
-(2: it asserts an August month label and a 12px eye) · `round27.mjs` search-to-notebook drag · `round23.mjs` unit-card
-timeout · `round33.mjs` (a `data-map-project` hook removed 09-03) ·
-`round40-probe` "a passed stage is crossed off" (Ready to start is a marker
-under the set model). `round28.mjs` is green again (10-08).
+None (2026-11-08, practice branch). All ten are green: `planphone.mjs`,
+`round39-probe`, `boardsize.mjs`, `gapboard.mjs`, `round22.mjs`,
+`notebookflip.mjs`, `round27.mjs`, `round23.mjs`, `round33-probe`,
+`round40-probe`. Each followed a screen the owner changed on purpose (or its
+own scenery: the Goals widget seeded at the view's centre); no claim was
+dropped. One real bug they found was fixed: "Yes, part of it" (a general job)
+when starting work was silently dropped since the task opens at once. How to
+run them: `npx vite --port 5173` (no Firebase) and a KEYED server
+`VITE_DRIVE_API_KEY=test-key npx vite --port 5174` for `round39-probe`.
+`round28.mjs` is green again (10-08).
 - ☑ "This Week First" BUILT (2026-10-18): week chips on every notebook (this week first, the next under it, Sunday turn, three weeks ahead, per-copy memory), drag-hold over a chip turns the week, TV chips, Dashboard This week card. The folded last-week bar was struck by the owner.
 - ☑ Worker's phone (2026-10-18): one picture or video closes a job (setting 1–5); Take photo / Record video / Choose files; uploads three at a time; translation follows the text, dictation in his typing language.
 - ☑ "The Done Line" (2026-10-18, his answers: look C, stars 2–5): "Latest ▾" button + fold arrow on the worker's Done line.
