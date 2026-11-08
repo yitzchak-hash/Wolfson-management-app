@@ -13,7 +13,7 @@
  *   3–8  four flats round the core, numbered clockwise from the top left (8 9 10 11 · 12 13 14 15 · …)
  *   9  32 (top left) · 33 (top right) · 34 the whole bottom with its open roof terrace
  *   10 35 · 36 — NO PLAN YET: drawn as the top two flats (estimated)
- * Building 1 has no sheets here: it is drawn with Building 2's plan (the app has always laid them out the same).
+ * Building 1 is the same building as Building 2 (owner, 2026-11-08: "Building one and two plans are exactly the same"), so one plan draws both.
  */
 import type { Apartment } from '../../types';
 import type { BuildingPlan, CardSpot, FloorSpec, Pt } from './buildingPlan';
