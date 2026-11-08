@@ -517,6 +517,7 @@ export function Header() {
   const { currentUser, logout, lightTheme, setLightTheme, firebaseSyncError, mainUiStrings: s } = useStore();
   const navigate = useNavigate();
   const [searchOpen, setSearchOpen] = useState(false);
+  const [signOutAsk, setSignOutAsk] = useState(false);
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -524,7 +525,7 @@ export function Header() {
         e.preventDefault();
         setSearchOpen(v => !v);
       }
-      if (e.key === 'Escape') setSearchOpen(false);
+      if (e.key === 'Escape') { setSearchOpen(false); setSignOutAsk(false); }
     }
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
@@ -642,13 +643,43 @@ export function Header() {
             </div>
             <Tooltip text={s.signOut}>
               <button
-                onClick={logout}
+                data-sign-out
+                onClick={() => setSignOutAsk(true)}
                 className="p-2 rounded-lg transition-colors"
                 style={{ color: lightTheme ? '#6b7280' : '#9ca3af' }}
               >
                 <LogOut size={18} />
               </button>
             </Tooltip>
+            {/* Sign out always asks first (owner, 2026-11-08: "Sign out should always say first, are you sure, all
+                over the place") — one tap on the icon used to sign out at once. */}
+            {signOutAsk && createPortal(
+              <div className="fixed inset-0 z-[200] flex items-center justify-center p-4" data-sign-out-ask
+                dir={s.isRtl ? 'rtl' : 'ltr'} onClick={() => setSignOutAsk(false)}
+                style={{ backgroundColor: 'rgba(15,23,42,.45)' }}>
+                <div role="alertdialog" aria-modal="true" onClick={e => e.stopPropagation()}
+                  className="w-full max-w-[340px] rounded-2xl bg-white shadow-2xl p-5">
+                  <div className="flex items-center gap-2.5 text-[16px] font-bold text-gray-900">
+                    <LogOut size={18} className="text-[#1e3a5f]" />
+                    {s.isRtl ? 'להתנתק?' : 'Sign out?'}
+                  </div>
+                  <p className="mt-2 text-[14px] text-gray-600">
+                    {s.isRtl ? `האם אתם בטוחים שאתם רוצים להתנתק, ${currentUser.name}?` : `Are you sure you want to sign out, ${currentUser.name}?`}
+                  </p>
+                  <div className="mt-5 flex justify-end gap-2">
+                    <button type="button" data-sign-out-cancel autoFocus onClick={() => setSignOutAsk(false)}
+                      className="px-4 py-2 rounded-lg text-[14px] font-medium text-gray-700 bg-gray-100 hover:bg-gray-200">
+                      {s.isRtl ? 'ביטול' : 'Cancel'}
+                    </button>
+                    <button type="button" data-sign-out-confirm onClick={() => { setSignOutAsk(false); logout(); }}
+                      className="px-4 py-2 rounded-lg text-[14px] font-medium text-white bg-[#dc2626] hover:bg-[#b91c1c]">
+                      {s.signOut}
+                    </button>
+                  </div>
+                </div>
+              </div>,
+              document.body,
+            )}
           </>
         )}
       </div>

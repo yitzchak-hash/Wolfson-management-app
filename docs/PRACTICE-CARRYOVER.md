@@ -30,5 +30,7 @@ change after that commit belongs in this list.
 | 2026-11-08 | Uploads are seen: "Uploading…" with a bar in the box, a corner card elsewhere; paperclip handlers wait for their uploads | `uploadTracker.ts`, `UploadToasts.tsx`, `driveApi.ts` (window event), ProblemForm, StageNotes, drawer, PlanPin, TasksPage | ″ |
 | 2026-11-08 | The plan's zoom bar fits a 360-wide phone (Share shows its icon only under 420) | `PlanAnnotator.tsx` | ″ |
 
+| 2026-11-08 | Sign out asks "Sign out?" first (the header's exit icon — the only sign-out in the app) | `Header.tsx` (`data-sign-out-ask`) | ″ |
+
 ## Already brought across
 (nothing yet)

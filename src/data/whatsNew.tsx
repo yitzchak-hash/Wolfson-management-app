@@ -44,6 +44,11 @@ export const WHATS_NEW: WhatsNewEntry[] = [
         body: 'The moment you pick a picture or video, "Uploading…" appears with a bar until it lands.',
         demo: 'list',
       },
+      {
+        title: 'Sign out asks first',
+        body: 'Pressing the exit icon now asks "Sign out?" before it signs you out, so a stray tap never does.',
+        demo: 'tap',
+      },
     ],
   },
   {
