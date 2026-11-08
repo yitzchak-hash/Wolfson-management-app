@@ -1,6 +1,11 @@
 import React, { useState, useEffect, useMemo, useRef, lazy, Suspense } from 'react';
 import { Mic, X, Save, Building2, MessageSquare, AlertTriangle, Link, Unlink, ExternalLink, BookOpen, Download, Eye, EyeOff, Activity, RefreshCw, Paperclip, Trash2, ChevronDown, ChevronRight, ClipboardList, CheckCircle2, CalendarDays, FileText, UserCheck, Plus, Camera, Play, ChevronLeft, FolderOpen, Clock, RotateCcw, Edit2, BarChart3, PenLine, Maximize2, Printer, Share2, Phone as PhoneIcon, Loader2, Folder, Star, ArrowRightLeft } from 'lucide-react';
-import { Apartment, User, getStageName, TaskAttachment, TaskPriority, aptLabel, ContractorAssignment, CustomButton } from '../../types';
+import { Apartment, User, getStageName, TaskAttachment, TaskPriority, aptLabel, ContractorAssignment, CustomButton, Inspection, InspectionFile } from '../../types';
+import { createPortal } from 'react-dom';
+import { Video, Image as ImageIcon } from 'lucide-react';
+
+/** Tzvi's own user — the one person who inspects (owner, 2026-11-08: "only for Tzvi, his user"). */
+const isTzvi = (name?: string | null) => { const n = (name ?? '').trim(); return /^(tzvi|zvi)\b/i.test(n) || /^צבי(\s|$)/.test(n); };
 import { TaskThread } from '../tasks/TaskThread';
 import { Translated } from '../ui/Translated';
 import { Send } from 'lucide-react';
@@ -699,6 +704,12 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
   useEffect(() => { ensureDriveShared(latestStampedFileId); }, [latestStampedFileId]);
 
   const [sharing, setSharing] = useState(false);
+  /** Tzvi's inspection: the choice sheet open (with the stage it will stand after), and an upload in progress. */
+  const [inspectAsk, setInspectAsk] = useState<{ after: string | null } | null>(null);
+  const [inspecting, setInspecting] = useState(false);
+  const inspectPhotoRef = useRef<HTMLInputElement>(null);
+  const inspectVideoRef = useRef<HTMLInputElement>(null);
+  const inspectPickRef = useRef<HTMLInputElement>(null);
   /** Where a press on the phone's plan began — a still tap opens the plan full screen. */
   const tapFrom = useRef<{ x: number; y: number; t: number } | null>(null);
   // The plan on screen is made ready to share before the press (a phone browser refuses a late share sheet).
@@ -1165,6 +1176,50 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
    * base64 otherwise. A memo (`transcript`) is sent for its words once it is
    * stored, and the words land on the record so every device reads them.
    */
+  /**
+   * Tzvi's inspection (owner, 2026-11-08, plan approved): the pictures or videos go to the apartment's Drive under
+   * Photos › Inspections, and one Inspection joins the record — standing after the stage that was last finished.
+   * Without Drive a picture is kept small in the record; a video needs Drive and is refused in words.
+   */
+  async function saveInspection(files: File[], after: string | null) {
+    if (!apartment || !currentUser || !files.length) return;
+    setInspecting(true);
+    const mainFolderId = apartment.driveLink ? extractFolderId(apartment.driveLink) : null;
+    const saved: InspectionFile[] = [];
+    try {
+      let folderId: string | null = null;
+      if (backendConfigured && mainFolderId) {
+        const photosFolderId = await findOrCreateFolderViaBackend(mainFolderId, 'Photos');
+        ensureDriveShared(photosFolderId);
+        folderId = await findOrCreateFolderViaBackend(photosFolderId, 'Inspections');
+      }
+      for (const file of files) {
+        if (folderId) {
+          const { fileId, webViewLink } = await uploadFileViaResumableSession(folderId, file);
+          void shareFileToDrive(fileId);
+          saved.push({ filename: file.name, mimeType: file.type || 'application/octet-stream', driveFileId: fileId, driveUrl: webViewLink });
+        } else if (file.type.startsWith('image/')) {
+          const dataUrl = await new Promise<string>((res, rej) => { const r = new FileReader(); r.onload = e => res(e.target?.result as string); r.onerror = rej; r.readAsDataURL(file); });
+          saved.push({ filename: file.name, mimeType: file.type, dataUrl });
+        }
+      }
+    } catch {
+      onToast(ui.isRtl ? 'ההעלאה נכשלה — נסו שוב' : 'The upload failed — try again', 'error');
+    }
+    setInspecting(false);
+    if (!saved.length) {
+      if (files.some(f => f.type.startsWith('video/')) && !backendConfigured) onToast(ui.isRtl ? 'סרטון צריך את Drive' : 'A video needs Drive', 'error');
+      return;
+    }
+    const ins: Inspection = {
+      id: `ins-${Date.now().toString(36)}`, at: new Date().toISOString(),
+      byId: currentUser.id, byName: currentUser.name, afterStageId: after, files: saved,
+    };
+    const prior = apartments.find(a => a.id === apartment.id)?.inspections ?? [];
+    updateApartment(apartment.id, { inspections: [...prior, ins] }, currentUser);
+    onToast(ui.isRtl ? 'הבדיקה נשמרה' : 'Inspection saved');
+  }
+
   async function attachOfficeFile(file: File, transcript?: boolean) {
     if (!apartment || !currentUser) return;
     const mainFolderId = apartment.driveLink ? extractFolderId(apartment.driveLink) : null;
@@ -2482,7 +2537,43 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                 ui={ui}
                 onReportProblem={isGeneralProject ? undefined : () => setProblemFormOpen(true)}
                 onOpenPhotos={(items, index) => setLightbox({ items, index })}
+                // Only Tzvi's own user inspects (owner, 2026-11-08).
+                onInspect={isTzvi(currentUser?.name) ? after => setInspectAsk({ after }) : undefined}
+                inspecting={inspecting}
               />
+              {/* The three ways in: the camera for a picture, the camera for a video, or what is already on the phone. */}
+              {(['photo', 'video', 'pick'] as const).map(k => (
+                <input key={k} type="file" className="hidden" data-inspect-input={k}
+                  ref={k === 'photo' ? inspectPhotoRef : k === 'video' ? inspectVideoRef : inspectPickRef}
+                  accept={k === 'photo' ? 'image/*' : k === 'video' ? 'video/*' : 'image/*,video/*'}
+                  {...(k === 'pick' ? { multiple: true } : { capture: 'environment' as const })}
+                  onChange={e => {
+                    const files = [...(e.target.files ?? [])]; e.target.value = '';
+                    const after = inspectAsk?.after ?? null; setInspectAsk(null);
+                    void saveInspection(files, after);
+                  }} />
+              ))}
+              {inspectAsk && createPortal(
+                <div className="fixed inset-0 z-[200] flex items-end sm:items-center justify-center p-4" data-inspect-ask
+                  dir={ui.isRtl ? 'rtl' : 'ltr'} onClick={() => setInspectAsk(null)} style={{ backgroundColor: 'rgba(15,23,42,.45)' }}>
+                  <div role="dialog" aria-modal="true" onClick={e => e.stopPropagation()} className="w-full max-w-[360px] rounded-2xl bg-white shadow-2xl p-4 space-y-2">
+                    <div className="text-[16px] font-bold text-gray-900 px-1 pb-1">{ui.isRtl ? 'בדיקה' : 'Inspection'}</div>
+                    {([
+                      ['photo', inspectPhotoRef, Camera, ui.isRtl ? 'צילום תמונה' : 'Take a photo'],
+                      ['video', inspectVideoRef, Video, ui.isRtl ? 'צילום סרטון' : 'Take a video'],
+                      ['pick', inspectPickRef, ImageIcon, ui.isRtl ? 'מהגלריה' : 'From the gallery'],
+                    ] as const).map(([k, ref, Icon, label]) => (
+                      <button key={k} type="button" data-inspect-choice={k} onClick={() => ref.current?.click()}
+                        className="w-full flex items-center gap-3 rounded-xl border border-gray-200 px-4 py-3 text-[15px] font-semibold text-gray-800 hover:bg-gray-50">
+                        <Icon size={18} className="text-[#1e3a5f]" /> {label}
+                      </button>
+                    ))}
+                    <button type="button" data-inspect-cancel onClick={() => setInspectAsk(null)}
+                      className="w-full rounded-xl px-4 py-2.5 text-[14px] font-medium text-gray-600 hover:bg-gray-100">{ui.cancel}</button>
+                  </div>
+                </div>,
+                document.body,
+              )}
 
               {/* Elsewhere they stay below the stages. */}
               {!isWolfsonProject && customButtons.length > 0 && (

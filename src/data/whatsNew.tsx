@@ -31,6 +31,17 @@ export interface WhatsNewEntry {
 
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    date: '2027-02-28',
+    title: 'Inspections by Tzvi',
+    items: [
+      {
+        title: 'Inspection, right in the stages',
+        body: 'Tzvi presses Inspection on an apartment\'s Stages, takes a photo or a video (or picks one), and a green "Inspected by Tzvi ✓" row appears after the stage that was finished last. Tap it to see what he took. He can add as many as he likes.',
+        demo: 'tap',
+      },
+    ],
+  },
+  {
     date: '2027-02-27',
     title: 'Talk into any box, and see your uploads',
     items: [

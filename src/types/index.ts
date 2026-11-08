@@ -782,10 +782,28 @@ export interface StageNote {
   attachments?: StageNoteAttachment[];
 }
 
+/**
+ * AN INSPECTION BY TZVI (owner, 2026-11-08, plan approved): he presses Inspection, takes a picture or a video, and a
+ * row "Inspected by Tzvi ✓" joins the stages right after the stage that was last finished — expandable to show what he
+ * took. As many as he does. Stored on the apartment record itself, so it is in the cloud and the full backup with it.
+ */
+export interface InspectionFile { filename: string; mimeType: string; driveFileId?: string; driveUrl?: string; dataUrl?: string }
+export interface Inspection {
+  id: string;
+  at: string;
+  byId: string;
+  byName: string;
+  /** The stage it stands after — the last finished one when it was taken (null: before every stage). */
+  afterStageId: string | null;
+  files: InspectionFile[];
+}
+
 export interface Apartment {
   id: string;
   buildingId: BuildingId;
   apartmentNumber: string;
+  /** Tzvi's inspections, oldest first (see Inspection). */
+  inspections?: Inspection[];
   /**
    * TIPUS (טיפוס) — the apartment's TYPE from the project's own list ("A2",
    * "C3"…), owner's ask 2026-09-06. Optional; printed right after the number

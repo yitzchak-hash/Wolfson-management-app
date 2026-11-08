@@ -32,5 +32,7 @@ change after that commit belongs in this list.
 
 | 2026-11-08 | Sign out asks "Sign out?" first (the header's exit icon — the only sign-out in the app) | `Header.tsx` (`data-sign-out-ask`) | ″ |
 
+| 2026-11-08 | Tzvi's inspections: an Inspection button on the Stages (his user only), photo / video / gallery to Drive › Photos › Inspections, a green "Inspected by Tzvi ✓" row after the last finished stage, expandable | `types` (`Inspection`, `Apartment.inspections`), `StageSection.tsx`, `ApartmentDetailDrawer.tsx` | ″ |
+
 ## Already brought across
 (nothing yet)
