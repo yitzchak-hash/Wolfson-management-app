@@ -31,6 +31,22 @@ export interface WhatsNewEntry {
 
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    date: '2027-03-02',
+    title: 'Netiv in 3D',
+    items: [
+      {
+        title: 'The building view for Netiv',
+        body: 'Netiv now has the Building view, like Wolfson: every floor of B1 and B2 drawn from the real plans, the flats in their true shapes, a card for each flat, and both buildings side by side on All. The duplexes show on the ground and the floor above.',
+        demo: 'zoom',
+      },
+      {
+        title: 'Netiv\'s board looks like Wolfson\'s',
+        body: 'The same tiles: the number at the top, the family in the middle, how many stages are done and the stage strip, on taller floors.',
+        demo: 'list',
+      },
+    ],
+  },
+  {
     date: '2027-03-01',
     title: 'A camera inside the app',
     items: [

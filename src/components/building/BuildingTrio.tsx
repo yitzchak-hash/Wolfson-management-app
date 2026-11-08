@@ -7,14 +7,17 @@
  */
 import { useMemo, useEffect, useRef, useState } from 'react';
 import type { Apartment, Stage } from '../../types';
-import BuildingView, { makeFloorBus, slotName, slotsOn, SlotChip, type BuildingViewWords, type FloorBus } from './BuildingView';
+import BuildingView, { makeFloorBus, shortFloor, slotName, slotsOn, SlotChip, type BuildingViewWords, type FloorBus } from './BuildingView';
 import { STRIP, CORES_X, zoneFor, type LowerLevel } from './wolfsonPlan';
+import type { BuildingPlan } from './buildingPlan';
 
 export interface TrioBuilding { id: string; title: string; apartments: Apartment[]; floorLabels?: Record<number, string> }
 
-export default function BuildingTrio({ buildings, stages, onOpen, words, interiorSrc, lower = [], customButtons }: {
+export default function BuildingTrio({ buildings, stages, onOpen, words, interiorSrc, lower = [], customButtons, plan }: {
   buildings: TrioBuilding[]; stages: Stage[]; onOpen: (apt: Apartment) => void;
   words?: Partial<BuildingViewWords>; interiorSrc?: string; lower?: LowerLevel[]; customButtons?: import('../../types').CustomButton[];
+  /** The project's plan (Wolfson's when absent). */
+  plan?: BuildingPlan;
 }) {
   // The floors every building has, bottom first — the rail and the bus count them.
   const floors = useMemo(() => {
@@ -51,18 +54,18 @@ export default function BuildingTrio({ buildings, stages, onOpen, words, interio
   const rail = [...lower.map((l, i) => ({ key: l.key, label: l.label, i })), ...floors.map((f, j) => ({ key: String(f), label: lab(f), i: lower.length + j }))];
   return (
     <div className="bv-trio" data-building-trio data-low={low ? '1' : '0'} ref={rootRef}>
-      <div className="bv-trio-row">
+      <div className="bv-trio-row" data-cols={buildings.length}>
         {lower.length > 0 && <LowerWide lower={lower} bus={bus} buildings={buildings} onOpen={onOpen} />}
         {buildings.map((b, i) => (
           <BuildingView key={b.id} compact title={b.title} bus={bus} apartments={b.apartments} stages={stages}
             onOpen={onOpen} words={words} floorLabels={b.floorLabels} interiorSrc={interiorSrc}
-            lower={lower} tower={i} hideLower customButtons={customButtons} />
+            lower={lower} tower={i} hideLower customButtons={customButtons} plan={plan} />
         ))}
       </div>
       <nav className="bv-rail" aria-label={words?.floor ?? 'Floor'}>
         {[...rail].reverse().map(r => (
           <button key={r.key} type="button" data-rail-floor={r.label} className="bv-rail-btn" data-on={r.i === at ? '1' : '0'}
-            onClick={() => bus.set(r.i)}>{r.label}</button>
+            onClick={() => bus.set(r.i)} title={r.label}>{shortFloor(r.label)}</button>
         ))}
       </nav>
     </div>

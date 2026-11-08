@@ -209,3 +209,11 @@
   .bv-card-name { font-size: 14px; }
   .bv-tl, .bv-tr { top: 12px; } .bv-bl, .bv-br { bottom: 12px; }
 }
+
+/* Netiv (2026-11-08): a floor of five or six flats (the ground and the duplexes' upper storey) also uses the middle
+   of each side. `translate`, not transform, so the lit card's lift still works. */
+.bv-ml { left: 18px; top: 50%; translate: 0 -50%; } .bv-mr { right: 18px; top: 50%; translate: 0 -50%; }
+/* A floor drawn from the floors round it because its plan has not been handed in yet: a dashed slab. */
+.bv-plate[data-estimated='1'] .bv-slab { stroke-dasharray: 16 12; }
+/* Two buildings side by side (Netiv) instead of three. */
+.bv-trio-row[data-cols="2"] { grid-template-columns: repeat(2, minmax(0, 1fr)); }

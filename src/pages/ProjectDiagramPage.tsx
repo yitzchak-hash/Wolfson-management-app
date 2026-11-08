@@ -1,4 +1,6 @@
 import React, { useState, useCallback, useMemo, useEffect } from 'react';
+import { WOLFSON_PLAN, type BuildingPlan } from '../components/building/buildingPlan';
+import { NETIV_PLAN } from '../components/building/netivPlan';
 import { haptic } from '../data/haptics';
 import { Search, X, CheckSquare, Printer, ChevronDown, SlidersHorizontal } from 'lucide-react';
 import { Navigate, useNavigate } from 'react-router-dom';
@@ -14,6 +16,15 @@ import BuildingTrio from '../components/building/BuildingTrio';
 import { WOLFSON_LOWER } from '../components/building/wolfsonPlan';
 /** The typical floor's walls, doors, windows and furniture, off the architects' plan (owner liked it, 2026-11-03). */
 const WOLFSON_INTERIOR = '/building/wolfson-typical.png';
+/**
+ * Which buildings have a building view, and with whose plan (owner, 2026-11-08: Netiv "works exactly the same way"):
+ * Wolfson's towers A1–A3, Netiv's B1 and B2. Any other building keeps the board alone.
+ */
+function planFor(projectId: string, buildingId: string): BuildingPlan | null {
+  if (/^A\d/.test(buildingId)) return WOLFSON_PLAN;
+  if (projectId === 'netiv' && /^B[12]$/.test(buildingId)) return NETIV_PLAN;
+  return null;
+}
 import { buildFloorRows, rowLabelText } from '../data/floorRows';
 import { StageLegend, StageFilterMenu } from '../components/diagram/StageLegend';
 import { buildingShort } from '../data/aptSale';
@@ -260,10 +271,13 @@ export function ProjectDiagramPage() {
   const bvBuilding = isNarrow ? phoneBuilding : selectedBuilding;
   // A phone held upright has the Building view too (owner, video 2026-11-04 on the Fold: "only on landscape view we
   // have the building button").
-  const canBuildingView = bvBuilding !== 'all' && /^A\d/.test(bvBuilding);
+  const canBuildingView = bvBuilding !== 'all' && !!planFor(currentProjectId, bvBuilding);
   const showBuilding = canBuildingView && view === 'building';
   /** The switch shows on All too (owner, 2026-11-03: he looked for it there twice); Building on All opens the first building. */
-  const firstWolfson = buildings.find(b => /^A\d/.test(b.id))?.id;
+  const firstWolfson = buildings.find(b => !!planFor(currentProjectId, b.id))?.id;
+  /** The plan the building view draws with — Wolfson's or Netiv's. */
+  const bvPlan = (firstWolfson ? planFor(currentProjectId, firstWolfson) : null) ?? WOLFSON_PLAN;
+  const isWolfsonPlan = bvPlan.id === 'wolfson';
   const showSwitch = !isNarrow && !!firstWolfson;
   const showNarrowSwitch = isNarrow && canBuildingView;
   /** On All, Building shows the three side by side, moving together. */
@@ -278,7 +292,7 @@ export function ProjectDiagramPage() {
   const buildingFloorLabels = useMemo(() => (showBuilding ? floorLabelsOf(bvBuilding as BuildingId) : undefined),
     [showBuilding, bvBuilding, floorLabelsOf]);
   const trioBuildings = useMemo(() => (showTrio
-    ? buildings.filter(b => /^A\d/.test(b.id)).map(b => ({ id: b.id, title: buildingShort(b.id), apartments: apartments.filter(a => a.buildingId === b.id), floorLabels: floorLabelsOf(b.id) }))
+    ? buildings.filter(b => !!planFor(currentProjectId, b.id)).map(b => ({ id: b.id, title: buildingShort(b.id), apartments: apartments.filter(a => a.buildingId === b.id), floorLabels: floorLabelsOf(b.id) }))
     : []), [showTrio, buildings, apartments, floorLabelsOf]);
   const lookValue = useMemo(() => ({
     big: !isNarrow && selectedBuilding !== 'all',
@@ -669,9 +683,9 @@ export function ProjectDiagramPage() {
             )}
 
             {/* Quick stats */}
-            {/* Under 1280px the two counts stack into two small lines, so they stay beside Print instead of
+            {/* Under 1536px the two counts stack into two small lines, so they stay beside Print instead of
                 dropping to a line of their own (owner's picture, Fold, 2026-11-08). */}
-            <div data-quick-stats className="ml-auto flex flex-col xl:flex-row xl:items-center xl:gap-3 text-[11px] xl:text-xs leading-tight text-gray-500 whitespace-nowrap">
+            <div data-quick-stats className="ml-auto flex flex-col 2xl:flex-row 2xl:items-center 2xl:gap-3 text-[11px] 2xl:text-xs leading-tight text-gray-500 whitespace-nowrap">
               {bulkMode ? (
                 <span className="text-[#1e3a5f] font-semibold">
                   {bulkSelected.size} {s.bulkSelected}
@@ -694,7 +708,7 @@ export function ProjectDiagramPage() {
         <div className="short-scroll-body flex-1 overflow-auto scrollbar-thin bg-gray-100 print:overflow-visible print:bg-white">
           {showTrio ? (
             <div className="h-full p-4" style={{ minHeight: 380 }} data-building-view-wrap>
-              <BuildingTrio buildings={trioBuildings} stages={stages} onOpen={handleAptClick} interiorSrc={WOLFSON_INTERIOR} lower={lowerLevels} customButtons={boardSet?.customButtons}
+              <BuildingTrio buildings={trioBuildings} stages={stages} onOpen={handleAptClick} plan={bvPlan} interiorSrc={isWolfsonPlan ? WOLFSON_INTERIOR : undefined} lower={isWolfsonPlan ? lowerLevels : []} customButtons={boardSet?.customButtons}
                 words={{ floor: s.floorWindowTitle, notSold: s.notSoldWord, notStarted: s.notStartedOption.replace(/[—–]/g, '').trim(), upgraded: s.upgradedWord, open: s.bvOpen, floorsHint: s.bvHint, joinedWith: s.bvJoined, yes: s.customYes, no: s.customNo, unknown: s.customUnknown }} />
             </div>
           ) : showBuilding ? (
@@ -704,9 +718,10 @@ export function ProjectDiagramPage() {
                 stages={stages}
                 onOpen={handleAptClick}
                 floorLabels={buildingFloorLabels}
-                interiorSrc={WOLFSON_INTERIOR}
-                lower={lowerLevels} customButtons={boardSet?.customButtons}
-                tower={Math.max(0, buildings.filter(b => /^A\d/.test(b.id)).findIndex(b => b.id === bvBuilding))}
+                interiorSrc={isWolfsonPlan ? WOLFSON_INTERIOR : undefined}
+                plan={bvPlan}
+                lower={isWolfsonPlan ? lowerLevels : undefined} customButtons={boardSet?.customButtons}
+                tower={Math.max(0, buildings.filter(b => !!planFor(currentProjectId, b.id)).findIndex(b => b.id === bvBuilding))}
                 words={{ floor: s.floorWindowTitle, notSold: s.notSoldWord, notStarted: s.notStartedOption.replace(/[—–]/g, '').trim(), upgraded: s.upgradedWord, open: s.bvOpen, floorsHint: s.bvHint, joinedWith: s.bvJoined, yes: s.customYes, no: s.customNo, unknown: s.customUnknown }}
               />
             </div>
