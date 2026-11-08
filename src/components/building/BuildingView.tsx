@@ -16,7 +16,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Apartment, Stage, CustomButton } from '../../types';
 import { realName } from '../../data/aptSale';
-import { haptic } from '../../data/haptics';
+import { haptic, hapticOnLift } from '../../data/haptics';
 import {
   CARD_CORNER, CORE, CORE_PH14, CORE_PH15, PH_BOX, PH_TERRACES, FLOOR_NO_AT, PH_DRAWING, isPenthouseShape, LABEL_AT, LEVEL_FLOORS, STRIP, zoneFor, PLAN_BOX, SHAPES, pathOf, shapesOf, stripFor, type ShapeKey, type LowerLevel,
 } from './wolfsonPlan';
@@ -189,7 +189,11 @@ export default function BuildingView({ apartments, stages, onOpen, words, initia
       const h = hold.current;
       if (h && !h.fired && Math.hypot(e.clientX - h.x, e.clientY - h.y) > 10) { window.clearTimeout(h.timer); hold.current = null; }
     },
-    onPointerUp: () => { if (hold.current && !hold.current.fired) { window.clearTimeout(hold.current.timer); hold.current = null; } },
+    onPointerUp: () => {
+      if (hold.current && !hold.current.fired) { window.clearTimeout(hold.current.timer); hold.current = null; }
+      // The hold's buzz came from a timer, which an iPhone ignores: its tick comes at the lift instead.
+      else if (hold.current?.fired) hapticOnLift('tap');
+    },
     onPointerCancel: () => { if (hold.current) window.clearTimeout(hold.current.timer); hold.current = null; },
     onContextMenu: (e: React.MouseEvent) => { if (hold.current?.fired) e.preventDefault(); },
   });
@@ -250,15 +254,21 @@ export default function BuildingView({ apartments, stages, onOpen, words, initia
   // A small tick in the hand each time a new floor lands (owner, 2026-11-08: "vibrations … when moving the floors").
   // Only the first view of the trio ticks — three buzzes for one floor would be one too many.
   const firstLanded = useRef(true);
+  // When the tick was already given INSIDE the press (a rail button, a key — the only moment an iPhone allows one),
+  // the landing a moment later does not tick again.
+  const handTicked = useRef(0);
   useEffect(() => {
     if (firstLanded.current) { firstLanded.current = false; return; }
+    if (Date.now() - handTicked.current < 1200) return;
     if (!compact || tower === 0) haptic('tick');
   }, [landed]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const go = useCallback((idx: number) => {
     setHover(null);
-    bus.set(Math.max(0, Math.min(topIdx, Math.round(idx))));
-  }, [bus, topIdx]);
+    const to = Math.max(0, Math.min(topIdx, Math.round(idx)));
+    if (to !== Math.round(bus.get()) && (!compact || tower === 0)) { haptic('tick'); handTicked.current = Date.now(); }
+    bus.set(to);
+  }, [bus, topIdx, compact, tower]);
 
   /**
    * The wheel GLIDES (owner, 2026-11-03: "how do we make it work a bit less
@@ -298,7 +308,17 @@ export default function BuildingView({ apartments, stages, onOpen, words, initia
     if (!t2) return;
     bus.set(Math.max(0, Math.min(topIdx, t2.from + (e.clientY - t2.y) / 80)));
   };
-  const onPointerUp = () => { if (touch.current) bus.set(Math.round(bus.get())); touch.current = null; };
+  const onPointerUp = () => {
+    const t2 = touch.current;
+    if (t2) {
+      const to = Math.round(bus.get());
+      // The floors that passed under the finger ticked on Android as they landed; an iPhone allows a tick only at
+      // the lift, so it gets one there when the swipe changed the floor.
+      if (to !== Math.round(t2.from) && (!compact || tower === 0)) hapticOnLift('tick');
+      bus.set(to);
+    }
+    touch.current = null;
+  };
 
   // Keys: ↑ ↓, Page Up/Down, Home/End.
   const onKeyDown = (e: React.KeyboardEvent) => {

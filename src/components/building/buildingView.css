@@ -194,3 +194,7 @@
 .bv-card-ans[data-card-answer='no'] { background: #fef2f2; color: #b91c1c; }
 .bv-card-ans[data-card-answer='unknown'] { background: #f1f5f9; color: #475569; }
 .bv-card-top { flex-wrap: wrap; }
+
+/* Press and hold a flat is a peek (owner, 2026-11-08): no iPhone copy / look-up bubble, no text selection, which
+   would cancel the finger before its lift (and its tick). */
+.bv-root { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }

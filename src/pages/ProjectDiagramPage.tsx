@@ -1,4 +1,5 @@
 import React, { useState, useCallback, useMemo, useEffect } from 'react';
+import { haptic } from '../data/haptics';
 import { Search, X, CheckSquare, Printer, ChevronDown, SlidersHorizontal } from 'lucide-react';
 import { Navigate, useNavigate } from 'react-router-dom';
 import { redeemReturn } from '../data/unitTravel';
@@ -322,6 +323,8 @@ export function ProjectDiagramPage() {
         return next;
       });
     } else {
+      // The tick inside the tap itself — an iPhone drops the drawer's own tick, which comes a moment later.
+      haptic('tick');
       setAddTaskApt(null);
       setSelectedApt(apt);
     }

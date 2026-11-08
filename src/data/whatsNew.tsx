@@ -45,6 +45,11 @@ export const WHATS_NEW: WhatsNewEntry[] = [
         demo: 'list',
       },
       {
+        title: 'iPhones tick too',
+        body: 'An iPhone only allows a light tick right at the moment of your tap, so every tick now happens there: opening an apartment, changing floors (at the lift of the swipe), holding a flat (at the lift), a stage done, a task closed, a message sent.',
+        demo: 'tap',
+      },
+      {
         title: 'The phone answers your finger',
         body: 'A small buzz when you change floors, open an apartment, mark a stage done, close a task, send a message or take a picture — and a warning buzz when something is refused. Press and hold a flat on the building to light it up without opening it.',
         demo: 'sparkle',

@@ -32,3 +32,9 @@ Harness: `photosdelete.mjs` 10.
 - Apartment opens: tick · stage marked done: success · task closed (any screen — in the store): success · message sent (any send box, typed or dictated): tap · an error toast: warning · hold a flat on the building (450 ms, a finger): tap, the flat lights up with its partner, and it does NOT open (the lift's click is swallowed).
 
 Harness: `haptics.mjs` 9 (navigator.vibrate recorded; a real CDP touch hold).
+
+## Round 5 — iPhone ticks (his "a")
+- iOS ticks only inside the finger's own event. Every buzz now also fires in the tap itself: board/building apartment open (`handleAptClick`), the floor rail (`go`), the lift of a floor swipe and of a hold (`hapticOnLift`, iPhone-only). `haptic()` skips the same kind within 150 ms so Android buzzes once. The building has no iPhone copy/look-up bubble (`-webkit-touch-callout: none`).
+- Still dropped on an iPhone: the warning buzz after a failure that arrives later (a download that fails), and the apartment tick when opened from a search or a link (the drawer's own tick comes after the tap).
+
+Harness: `haptics-ios.mjs` 7 (iPhone device, no vibrate, each tick recorded with the event being handled) · `haptics.mjs` 9.
