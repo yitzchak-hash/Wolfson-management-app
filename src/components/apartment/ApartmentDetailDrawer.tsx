@@ -2143,6 +2143,13 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                         <AlertTriangle size={10} /> {ui.upgradedWord}
                       </button>
                     </Tooltip>
+                    {/* The CRM's order set it (owner, 2026-11-08); Standard still fixes a mistake. */}
+                    {classification === 'shinui' && crmRec?.crmMoney?.upgradeSetFor && (
+                      <span className="self-center" data-upgraded-by-crm>
+                        <FromCrmTag href={crmJobUrl(crmRec.crmMoney.upgradeSetFor)}
+                          title={ui.upgradedByCrm.replace('{number}', crmRec.crmMoney.upgradeSetFor)} field="upgraded" />
+                      </span>
+                    )}
                   </div>
                 </div>
                 </div>

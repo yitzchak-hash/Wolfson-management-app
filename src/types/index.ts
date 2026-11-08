@@ -1391,19 +1391,19 @@ export interface CrmUpgradeOrder {
   valueAgorot?: number | null;
   wonAt?: string | null;
 }
-/** One line of the project's upgrade price list in the CRM (`crm.upgrade_prices`). */
-export interface CrmUpgradePrice {
-  id: string;
-  /** The name in each language it was written in: { en, he, ru, uk }. */
-  names: Record<string, string>;
-  priceAgorot: number;
-  vatPercent?: number | null;
-  priceWithVatAgorot?: number | null;
-}
-/** What the CRM side writes onto a flat (D19). */
+/**
+ * What the CRM side writes onto a flat (D19). Only the flat's own upgrade
+ * orders (owner, 2026-11-08: no project price list inside a flat).
+ */
 export interface CrmMoneyMirror {
   orders: CrmUpgradeOrder[];
-  prices: CrmUpgradePrice[];
+  /**
+   * The ordered upgrade the CRM has already marked this flat "Upgraded" for
+   * (owner, 2026-11-08: the CRM's order sets Upgraded by itself; the hand
+   * buttons stay to fix a mistake). Set ONCE per order, so a hand fix is
+   * never undone by the next copy or the nightly check.
+   */
+  upgradeSetFor?: string | null;
   /** The CRM's unit status: 'standard' | 'sold' | 'upgraded'. */
   unitStatus?: string | null;
   /** When the CRM side last wrote it (ISO). */
@@ -3637,10 +3637,11 @@ export interface MainUiStrings {
   moneyOrderLost: string;
   moneyNoValue: string;
   moneyInclVat: string;
-  moneyPriceList: string;
   moneyAsOf: string;
   moneyNotMirrored: string;
   moneyTileOrder: string;
+  /** Beside the Upgraded button when the CRM's order set it. `{number}` = the order. */
+  upgradedByCrm: string;
   /**
    * The flood round (owner, 2026-10-08 — a worker doing a small task in
    * twenty apartments a day). `nbBundle…` = the notebook's bundle bar and
@@ -4678,10 +4679,10 @@ export const DEFAULT_MAIN_UI_STRINGS: MainUiStrings = {
   moneyOrderLost: 'Not taken',
   moneyNoValue: 'No price yet',
   moneyInclVat: 'incl. VAT',
-  moneyPriceList: 'Upgrade prices for this project',
   moneyAsOf: 'as of {when}',
   moneyNotMirrored: 'The CRM has not sent this flat\'s upgrades yet',
   moneyTileOrder: 'Upgrade order: {state}',
+  upgradedByCrm: 'Set by the CRM\'s upgrade order {number}. Press Standard to fix a mistake.',
   nbBundleTasks: '{n} tasks',
   nbBundleDone: '{n} done',
   nbBundleOpen: '{n} open',
@@ -5710,10 +5711,10 @@ export const HEBREW_MAIN_UI_STRINGS: MainUiStrings = {
   moneyOrderLost: 'לא נלקח',
   moneyNoValue: 'עדיין אין מחיר',
   moneyInclVat: 'כולל מע״מ',
-  moneyPriceList: 'מחירי שדרוג בפרויקט',
   moneyAsOf: 'נכון ל-{when}',
   moneyNotMirrored: 'ה-CRM עדיין לא שלח את השדרוגים של הדירה',
   moneyTileOrder: 'הזמנת שדרוג: {state}',
+  upgradedByCrm: 'סומן לפי הזמנת השדרוג {number} ב-CRM. לחצו סטנדרטי כדי לתקן טעות.',
   nbBundleTasks: '{n} משימות',
   nbBundleDone: '{n} בוצעו',
   nbBundleOpen: '{n} פתוחות',

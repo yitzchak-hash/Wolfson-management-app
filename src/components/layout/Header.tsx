@@ -66,10 +66,13 @@ function CloudSyncBadge({ light }: { light: boolean }) {
     );
   }
   return (
-    <div className={`flex items-center gap-1.5 text-xs font-medium transition-all ${status === 'saved' ? 'text-green-400' : light ? 'text-gray-400' : 'text-gray-300'}`}>
+    // On a phone only the icon: the word took the workspace menu's room in a
+    // 390px header (2026-11-08). The word is still the icon's title there.
+    <div title={status === 'saving' ? s.syncSaving : s.syncSaved}
+      className={`flex items-center gap-1.5 text-xs font-medium transition-all ${status === 'saved' ? 'text-green-400' : light ? 'text-gray-400' : 'text-gray-300'}`}>
       {status === 'saving'
-        ? <><Loader2 size={13} className="animate-spin" /> {s.syncSaving}</>
-        : <><CheckCircle2 size={13} /> {s.syncSaved}</>}
+        ? <><Loader2 size={13} className="animate-spin" /> <span className="hidden sm:inline">{s.syncSaving}</span></>
+        : <><CheckCircle2 size={13} /> <span className="hidden sm:inline">{s.syncSaved}</span></>}
     </div>
   );
 }
@@ -546,10 +549,20 @@ export function Header() {
           the left side holds its width there and the right side may shrink,
           where only the ticker (min-w-0, truncating) actually gives. */}
       <div className="flex items-center gap-2 md:gap-4 min-w-0 lg:flex-shrink-0">
-        <TzviAirLogo />
-        {/* The practice copy wears one small tag, so it is never mistaken for the real board. */}
+        {/* The practice copy wears one small tag, so it is never mistaken for
+            the real board. On a phone it sits ON the logo's foot instead of
+            beside it: beside it, the 390px header had no room and the
+            workspace menu ran under the language buttons (found 2026-11-08). */}
+        <span className="relative flex items-center min-w-[56px] flex-shrink-[20] md:flex-shrink-0">
+          <TzviAirLogo />
+          {PRACTICE && (
+            <span data-practice-tag
+              className="absolute md:hidden left-1/2 -translate-x-1/2 -bottom-1.5 px-1 rounded text-[8px] leading-[11px] font-bold tracking-wide whitespace-nowrap pointer-events-none"
+              style={{ backgroundColor: '#f59e0b', color: '#1e293b' }}>PRACTICE</span>
+          )}
+        </span>
         {PRACTICE && (
-          <span data-practice-tag className="flex-shrink-0 px-1.5 py-0.5 rounded text-[10px] font-bold tracking-wide"
+          <span data-practice-tag className="hidden md:inline flex-shrink-0 px-1.5 py-0.5 rounded text-[10px] font-bold tracking-wide"
             style={{ backgroundColor: '#f59e0b', color: '#1e293b' }}>PRACTICE</span>
         )}
         <div className="hidden md:block w-px h-10" style={{ backgroundColor: lightTheme ? '#e5e7eb' : 'rgba(255,255,255,0.2)' }} />
@@ -559,9 +572,11 @@ export function Header() {
             <>
               <div className="hidden md:block w-px h-8 mx-1" style={{ backgroundColor: lightTheme ? '#e5e7eb' : 'rgba(255,255,255,0.2)' }} />
               <Tooltip text={s.globalCalendarTitle}>
+                {/* Not in a phone's header: the bottom bar has Calendar, and
+                    here it took the room the workspace menu needs. */}
                 <button
                   onClick={() => navigate('/calendar')}
-                  className="flex items-center gap-1.5 px-2 md:px-3 py-1.5 rounded-lg transition-colors text-xs font-bold flex-shrink-0"
+                  className="hidden md:flex items-center gap-1.5 px-2 md:px-3 py-1.5 rounded-lg transition-colors text-xs font-bold flex-shrink-0"
                   style={{
                     color: lightTheme ? '#1e3a5f' : '#ffffff',
                     backgroundColor: lightTheme ? 'rgba(74,168,216,0.14)' : 'rgba(74,168,216,0.24)',
@@ -601,7 +616,7 @@ export function Header() {
           <Tooltip text={s.appSettingsTitle}>
             <button
               onClick={() => navigate('/app-settings')}
-              className="p-2 rounded-lg transition-colors"
+              className="p-1.5 md:p-2 rounded-lg transition-colors"
               style={{ color: lightTheme ? '#6b7280' : '#9ca3af' }}
             >
               <Settings size={18} />
@@ -613,7 +628,7 @@ export function Header() {
           <Tooltip text={s.searchTooltip}>
             <button
               onClick={() => setSearchOpen(true)}
-              className="p-2 rounded-lg transition-colors"
+              className="p-1.5 md:p-2 rounded-lg transition-colors"
               style={{ color: lightTheme ? '#6b7280' : '#9ca3af' }}
             >
               <Search size={17} />
@@ -645,7 +660,7 @@ export function Header() {
             <Tooltip text={s.signOut}>
               <button
                 onClick={logout}
-                className="p-2 rounded-lg transition-colors"
+                className="p-1.5 md:p-2 rounded-lg transition-colors"
                 style={{ color: lightTheme ? '#6b7280' : '#9ca3af' }}
               >
                 <LogOut size={18} />

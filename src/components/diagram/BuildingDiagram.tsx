@@ -325,6 +325,22 @@ function AptCell({
   const hasPendingTask = !!taskInfo && !allTasksDone;
   // The CRM's upgrade order for this flat (D19), a read-only mirror.
   const moneyOrder = plain ? tileOrder(apt) : null;
+  /**
+   * The ₪ (D19): green once ordered, amber while open. Read only; the flat's
+   * window has the detail. In the TOP corner beside the flat number (owner,
+   * 2026-11-08: "so it never covers the worker's name"). Not on the
+   * smallest (compact) tiles.
+   */
+  const moneyMark = moneyOrder && !compact && !isDimmed && displayLabel ? (
+    <span
+      data-money-mark={moneyOrder.state}
+      className={`rounded-full inline-flex items-center justify-center flex-shrink-0 ${placed ? 'w-4 h-4' : phone ? 'w-3.5 h-3.5' : 'w-4 h-4'}`}
+      title={ui.moneyTileOrder.replace('{state}', orderStateWord(moneyOrder.state, ui))}
+      style={{ backgroundColor: moneyOrder.state === 'won' ? '#059669' : '#d97706', border: '1.5px solid rgba(255,255,255,0.9)' }}
+    >
+      <span style={{ fontSize: phone ? '7.5px' : '9.5px', color: 'white', fontWeight: 800, lineHeight: 1 }}>₪</span>
+    </span>
+  ) : null;
 
   return (
     // Outer wrapper is not clipped, so the merge connector can sit in the gap
@@ -429,9 +445,10 @@ function AptCell({
       ))}
       {placed && displayLabel && (
         <>
-          <span data-cell-number className="absolute font-bold leading-none whitespace-nowrap"
-            style={{ left: 6, top: 6, fontSize: '13px' }}>
+          <span data-cell-number className="absolute font-bold leading-none whitespace-nowrap inline-flex items-center gap-1"
+            style={{ left: 6, top: moneyMark ? 4 : 6, fontSize: '13px' }}>
             {numberLabel}
+            {moneyMark}
           </span>
           {tipusLine && (
             <span data-tipus-line className="absolute font-bold leading-none whitespace-nowrap rounded"
@@ -656,26 +673,13 @@ function AptCell({
         </div>
       )}
 
-      {/* The CRM's upgrade order (D19), small: a "₪" in the bottom-right
-          corner, green once ordered, amber while open. Read only; the flat's
-          window has the detail. Not on the smallest (compact) tiles. */}
-      {moneyOrder && !compact && !isDimmed && displayLabel && !(phone && problem) && (
-        <span
-          data-money-mark={moneyOrder.state}
-          className={`absolute rounded-full flex items-center justify-center ${placed ? 'w-5 h-5' : phone ? 'w-3.5 h-3.5' : 'w-4 h-4'}`}
-          title={ui.moneyTileOrder.replace('{state}', orderStateWord(moneyOrder.state, ui))}
-          style={{
-            // A phone tile's lines fill its middle, so there the mark takes the
-            // free top-right corner (the "U" has the top-left; a problem's "!"
-            // would sit here, so the mark steps aside for it).
-            right: placed ? 4 : 2,
-            ...(phone && !placed ? { top: 2 } : { bottom: plain ? (placed ? 18 : 17) : 6 }),
-            zIndex: 5,
-            backgroundColor: moneyOrder.state === 'won' ? '#059669' : '#d97706',
-            border: '1.5px solid rgba(255,255,255,0.9)',
-          }}
-        >
-          <span style={{ fontSize: placed ? '11px' : phone ? '7.5px' : '9.5px', color: 'white', fontWeight: 800, lineHeight: 1 }}>₪</span>
+      {/* The ₪ on the other tiles: their top corner (a computer tile's
+          top-right has the "+", so it goes top-left, after the "U"; a phone
+          tile's top-right is free unless a problem's "!" is there). */}
+      {moneyMark && !placed && !(phone && problem) && (
+        <span className="absolute" style={{ top: phone ? 2 : 3, zIndex: 5,
+          ...(phone ? { right: 2 } : { left: showShinuiBadge && apt?.classification === 'shinui' ? 26 : 4 }) }}>
+          {moneyMark}
         </span>
       )}
 

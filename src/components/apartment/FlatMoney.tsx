@@ -1,9 +1,8 @@
-import React from 'react';
-import { Wallet, ChevronDown } from 'lucide-react';
+import { Wallet } from 'lucide-react';
 import { useStore } from '../../data/store';
 import type { Apartment } from '../../types';
 import { crmJobUrl } from '../../data/crmLink';
-import { shekels, orderStateWord, sortedOrders, priceName, balanceWords } from '../../data/flatMoney';
+import { shekels, orderStateWord, sortedOrders, balanceWords } from '../../data/flatMoney';
 import { CrmMark, FromCrmTag } from '../ui/CrmMark';
 
 /**
@@ -33,11 +32,9 @@ export function FlatMoney({ apartmentId, fallback }: { apartmentId: string; fall
   // Read LIVE: the CRM or Finance may write while the window is open, and the
   // balance line must fill itself the moment Finance's field arrives.
   const apt = useStore(st => st.apartments.find(a => a.id === apartmentId)) ?? fallback;
-  const [pricesOpen, setPricesOpen] = React.useState(false);
   const isRtl = ui.isRtl;
   const money = apt.crmMoney;
   const orders = sortedOrders(money?.orders);
-  const prices = money?.prices ?? [];
   const bal = balanceWords(apt, ui);
   const fb = apt.financeBalance;
   const jobNo = apt.jobNo?.trim() ?? '';
@@ -107,26 +104,6 @@ export function FlatMoney({ apartmentId, fallback }: { apartmentId: string; fall
           </ul>
         )}
 
-        {/* The project's price list, folded: what an upgrade costs here. */}
-        {prices.length > 0 && (
-          <div className="mt-2 border-t border-gray-100 pt-1.5">
-            <button type="button" onClick={() => setPricesOpen(v => !v)} aria-expanded={pricesOpen} data-money-prices-toggle
-              className="flex items-center gap-1 text-xs font-medium text-gray-500 hover:text-gray-800 min-h-[28px]">
-              <ChevronDown size={12} className={`transition-transform ${pricesOpen ? '' : '-rotate-90'}`} aria-hidden="true" />
-              <span dir={dirAuto}>{ui.moneyPriceList}</span>
-            </button>
-            {pricesOpen && (
-              <ul className="space-y-1 mt-1" data-money-prices>
-                {prices.map(p => (
-                  <li key={p.id} className="flex items-center gap-2 text-[12.5px] text-gray-700">
-                    <span className="truncate min-w-0" dir={dirAuto}>{priceName(p, isRtl)}</span>
-                    <bdi className="ms-auto tabular-nums font-semibold flex-shrink-0">{shekels(p.priceWithVatAgorot ?? p.priceAgorot)}</bdi>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-        )}
         {money?.mirroredAt && (
           <div className="mt-1.5 text-[10.5px] text-gray-400" dir={dirAuto}>{ui.moneyAsOf.replace('{when}', when(money.mirroredAt, isRtl))}</div>
         )}

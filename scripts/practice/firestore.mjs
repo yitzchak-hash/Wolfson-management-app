@@ -135,6 +135,39 @@ export async function patchDocs(col, items) {
   }
 }
 
+// ── Firestore's typed values → plain values ─────────────────────────────────
+export function fromValue(v) {
+  if (!v || 'nullValue' in v) return null;
+  if ('stringValue' in v) return v.stringValue;
+  if ('booleanValue' in v) return v.booleanValue;
+  if ('integerValue' in v) return Number(v.integerValue);
+  if ('doubleValue' in v) return v.doubleValue;
+  if ('timestampValue' in v) return v.timestampValue;
+  if ('arrayValue' in v) return (v.arrayValue.values ?? []).map(fromValue);
+  if ('mapValue' in v) return Object.fromEntries(Object.entries(v.mapValue.fields ?? {}).map(([k, x]) => [k, fromValue(x)]));
+  return null;
+}
+
+/**
+ * Reads ONLY the named fields of the given documents (a field mask): a
+ * Map id → { field: value } for the ones that exist.
+ */
+export async function getFields(col, ids, fields) {
+  const out = new Map();
+  for (let i = 0; i < ids.length; i += 300) {
+    const j = await call(':batchGet', {
+      method: 'POST',
+      body: JSON.stringify({ documents: ids.slice(i, i + 300).map(id => docName(col, id)), mask: { fieldPaths: fields } }),
+    });
+    for (const r of j) {
+      if (!r.found) continue;
+      const id = decodeURIComponent(r.found.name.split('/').pop());
+      out.set(id, Object.fromEntries(Object.entries(r.found.fields ?? {}).map(([k, v]) => [k, fromValue(v)])));
+    }
+  }
+  return out;
+}
+
 /** Every collection at the top of the practice database. */
 export async function listCollections() {
   const ids = [];

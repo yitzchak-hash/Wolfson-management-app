@@ -2,9 +2,10 @@
  * THE FLAT'S MONEY (owner's D19, connection map 5.5 / 5.6 / 5.7, slice S37).
  *
  * A READ-ONLY mirror on a building flat of two things other apps own:
- *  - the CRM's upgrade orders for the flat's unit, and its project's upgrade
- *    price list (`crmMoney`, written onto the flat by the CRM side, the way
- *    S12 put the CRM's keys there: scripts/practice-crm-money.mjs);
+ *  - the CRM's upgrade orders for the flat's own unit (`crmMoney`, written
+ *    onto the flat by the CRM side, the way S12 put the CRM's keys there:
+ *    scripts/practice-crm-money.mjs). An ordered upgrade also marks the flat
+ *    "Upgraded", once per order (owner, 2026-11-08);
  *  - Finance's balance for the flat's job (`financeBalance`, written by
  *    Finance once it publishes balances per job: S05 job numbers + S07 view).
  *    Until then the window says "Not connected yet", and the line fills
@@ -14,7 +15,7 @@
  * made here (crmLink.ts MIRROR_ONLY_FIELDS). They ride inside `apartments`,
  * so the full backup carries them (lib/fullBackup.js RECORD_KEYS).
  */
-import type { Apartment, CrmUpgradeOrder, CrmUpgradePrice, MainUiStrings } from '../types';
+import type { Apartment, CrmUpgradeOrder, MainUiStrings } from '../types';
 
 /** Agorot to shekels, whole when whole: 495600 → "₪4,956", 76750 → "₪767.50". */
 export function shekels(agorot: number | null | undefined): string {
@@ -39,12 +40,6 @@ export function orderStateWord(state: string, ui: MainUiStrings): string {
 export function sortedOrders(orders: CrmUpgradeOrder[] | undefined): CrmUpgradeOrder[] {
   const rank = (s: string) => (s === 'won' ? 0 : s === 'lost' ? 2 : 1);
   return [...(orders ?? [])].sort((a, b) => rank(a.state) - rank(b.state));
-}
-
-/** A price-list line's name in the screen's language, else English, else any. */
-export function priceName(p: CrmUpgradePrice, isRtl: boolean): string {
-  const n = p.names ?? {};
-  return (isRtl ? n.he : n.en) || n.en || n.he || Object.values(n)[0] || '';
 }
 
 /** What the tile shows: the order that counts (won over open; a lost one shows nothing). */

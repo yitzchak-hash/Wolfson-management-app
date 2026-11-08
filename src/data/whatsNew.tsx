@@ -36,12 +36,17 @@ export const WHATS_NEW: WhatsNewEntry[] = [
     items: [
       {
         title: 'A Money part in the flat\'s window',
-        body: 'A flat the CRM knows shows its upgrade order from the CRM: the number, whether it is ordered, open or not taken, and its price with VAT, plus the project\'s upgrade prices. The balance line says "Not connected yet" until Finance sends balances; then it fills by itself. It is read only: money is booked in Finance and the CRM.',
+        body: 'A flat the CRM knows shows its own upgrade order from the CRM: the number, whether it is ordered, open or not taken, and its price with VAT. The balance line says "Not connected yet" until Finance sends balances; then it fills by itself. It is read only: money is booked in Finance and the CRM.',
+        demo: 'tap',
+      },
+      {
+        title: 'An ordered upgrade marks the flat Upgraded',
+        body: 'When the CRM\'s upgrade order is ordered, the flat turns Upgraded by itself, with a small CRM mark beside the button. If it is a mistake, press Standard: the CRM will not change it back.',
         demo: 'tap',
       },
       {
         title: 'A small ₪ on the tile',
-        body: 'A flat with an upgrade order has a small ₪ in the corner of its tile: green once ordered, orange while still open.',
+        body: 'A flat with an upgrade order has a small ₪ beside its number at the top of the tile: green once ordered, orange while still open.',
         demo: 'tap',
       },
     ],

@@ -58,14 +58,14 @@ for (const lang of ['en', 'he']) {
     await part.waitFor({ timeout: 20000 });
     await p.waitForTimeout(1200);
     await part.scrollIntoViewIfNeeded();
-    const tg = part.locator('[data-money-prices-toggle]');
-    for (let i = 0; i < 3 && await tg.getAttribute('aria-expanded') !== 'true'; i++) { await tg.click(); await p.waitForTimeout(500); }
-    await part.scrollIntoViewIfNeeded();
     await p.waitForTimeout(400);
     await p.screenshot({ path: `${OUT}/flat-${tag}.png` });
     await part.screenshot({ path: `${OUT}/money-${tag}.png` });
     const marks = await p.locator('[data-money-mark]').count();
-    console.log(tag, 'money part:', await part.getAttribute('data-flat-money') !== null, 'orders:', await part.locator('[data-money-order]').count(), 'tile marks on board:', marks);
+    console.log(tag, 'orders:', await part.locator('[data-money-order]').count(),
+      'price list:', await part.locator('[data-money-prices], [data-money-prices-toggle]').count(),
+      'upgraded by CRM:', await p.locator('[data-upgraded-by-crm]').count(),
+      'tile marks on board:', marks);
     await ctx.close();
   }
 }
