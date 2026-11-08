@@ -92,11 +92,13 @@ export interface ProjectTaskData {
   apartments: Apartment[];
   stages: Stage[];
 }
-export function loadAllProjectsTaskData(): ProjectTaskData[] {
-  return DEFAULT_PROJECTS.map(p => {
-    const data = loadFromStorage(getProjectStorageKey(p.id), null) as Record<string, unknown> | null;
+export function loadAllProjectsTaskData(projectIds: readonly string[] = DEFAULT_PROJECTS.map(p => p.id)): ProjectTaskData[] {
+  // The built-in three unless the caller passes its own list — the calendar
+  // passes every workspace, settings' custom ones included (map C19).
+  return projectIds.map(id => {
+    const data = loadFromStorage(getProjectStorageKey(id), null) as Record<string, unknown> | null;
     return {
-      projectId: p.id,
+      projectId: id,
       assignments: (data?.contractorAssignments as ContractorAssignment[] | null) ?? [],
       apartments: (data?.apartments as Apartment[] | null) ?? [],
       // Stages travel too, so the global calendar can colour a day by the

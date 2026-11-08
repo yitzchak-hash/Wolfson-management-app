@@ -140,8 +140,9 @@ export function CalendarPage() {
     };
     add(currentProjectId, contractorAssignments, apartments);
     if (scope === 'all') {
-      for (const w of loadAllProjectsTaskData()) {
-        if (w.projectId === currentProjectId) continue;
+      // Every workspace, the ones made in settings included (map C19) — the
+      // foreign sync keeps each one's snapshot current.
+      for (const w of loadAllProjectsTaskData(projects.filter(p => p.id !== currentProjectId).map(p => p.id))) {
         add(w.projectId, w.assignments, w.apartments);
       }
     }

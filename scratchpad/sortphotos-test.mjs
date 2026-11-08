@@ -56,5 +56,16 @@ const STAGES = [{ id: 's1-piping', name: 'Piping', order: 3 }, { id: 's1-conceal
   const r = await sortPhotos({ col: 'users', stages: STAGES, photos: [{ id: 'PHOTO-A', driveFileId: 'FILE-F1' }] }, { drive: w.drive, env, fetchImpl: w.fetchImpl });
   check(!r.ok && !Object.keys(w.cloud).length, 'any other collection is refused, nothing written');
 }
+{ // a workspace made in settings has a dashed id (map C20)
+  const w = world();
+  const r = await sortPhotos({ col: 'my-new-site_contractorPhotos', stages: [STAGES[1]], photos: [{ id: 'PHOTO-A', driveFileId: 'FILE-F1' }] },
+    { drive: w.drive, env, fetchImpl: w.fetchImpl });
+  check(r.ok && w.cloud['my-new-site_contractorPhotos/PHOTO-A'] === 's1-concealed', 'a dashed workspace id (my-new-site) is sorted like any other', J(w.cloud));
+  for (const col of ['-site_contractorPhotos', 'site-_contractorPhotos', 'a--b_contractorPhotos', 'My-Site_contractorPhotos', 'a_b_contractorPhotos', 'my-site_users', 'my-site_contractorPhotos/x']) {
+    const w2 = world();
+    const r2 = await sortPhotos({ col, stages: STAGES, photos: [{ id: 'PHOTO-A', driveFileId: 'FILE-F1' }] }, { drive: w2.drive, env, fetchImpl: w2.fetchImpl });
+    check(!r2.ok && !Object.keys(w2.cloud).length, `still refused: ${col}`);
+  }
+}
 console.log(fails ? `\n${fails} FAILED` : '\nALL PASS');
 process.exit(fails ? 1 : 0);

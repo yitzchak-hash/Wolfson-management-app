@@ -15,6 +15,10 @@ import { setActiveSpeaker } from '../../data/speakLang';
 export function AppLayout() {
   const { startFirebaseSync, firebaseListening, mainUiStrings } = useStore();
   const currentProjectId = useStore(st => st.currentProjectId);
+  // Which workspaces exist. A new computer learns the settings-made ones from
+  // the cloud AFTER first paint, so the snapshot pull and the foreign sync
+  // below re-run when this changes (map C19: the calendar missed them).
+  const projectIdsKey = useStore(st => st.projects.map(p => p.id).join(','));
   const speakerId = useStore(st => st.currentUser?.id ?? null);
   // The signed-in person's speaking language (speakLang.ts) — the mic and the
   // translator read it, never the screen's language.
@@ -152,8 +156,8 @@ export function AppLayout() {
   useEffect(() => {
     const { projects, currentProjectId } = useStore.getState();
     projects.filter(p => p.id !== currentProjectId)
-      .forEach(p => void ensureProjectSnapshot(p.id));
-  }, []);
+      .forEach(p => void ensureProjectSnapshot(p.id));  // once per workspace per session
+  }, [projectIdsKey]);
 
   /**
    * The OTHER workspaces stay live too (owner, 2026-09-16): a task made in
@@ -164,7 +168,7 @@ export function AppLayout() {
   useEffect(() => {
     startForeignSync(currentProjectId);
     return () => stopForeignSync();
-  }, [currentProjectId]);
+  }, [currentProjectId, projectIdsKey]);
 
   /**
    * THE SET MODEL's one-time migration (2026-09-22): once the workspace has
