@@ -55,6 +55,11 @@ export const WHATS_NEW: WhatsNewEntry[] = [
         demo: 'tap',
       },
       {
+        title: 'Select and delete photos (Tzvi)',
+        body: 'Tzvi has a Select button in the Photos tab: tap the pictures, press Delete, confirm. They go to Drive\'s trash, where they can be restored for 30 days.',
+        demo: 'tap',
+      },
+      {
         title: 'Galaxy Fold, sideways',
         body: 'The plan side of an apartment now takes at least half the window and shows the whole sheet, so Download and Print fit on its bar.',
         demo: 'zoom',

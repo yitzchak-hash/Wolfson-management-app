@@ -8,7 +8,8 @@ import { InspectionCamera } from './InspectionCamera';
 const isTzvi = (name?: string | null) => { const n = (name ?? '').trim(); return /^(tzvi|zvi)\b/i.test(n) || /^צבי(\s|$)/.test(n); };
 import { TaskThread } from '../tasks/TaskThread';
 import { Translated } from '../ui/Translated';
-import { Send } from 'lucide-react';
+import { Send, CheckSquare, Square as SquareIcon } from 'lucide-react';
+import { trashDriveFiles } from '../../data/driveTrash';
 import { useStore, trackUndo, cloudReady } from '../../data/store';
 import { peekTaskFocus, takeTaskFocus } from '../../data/taskFocus';
 import { TaskDaysPicker, daysFields } from '../tasks/TaskDaysPicker';
@@ -115,7 +116,7 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
     appendApartmentNote, removeApartmentNote,
     contractorAssignments, contractors, updateContractorAssignment,
     deleteApartment, getGeneralNoteVersions, currentProjectId,
-    contractorPhotos, updateContractorPhoto, planAnnotations, stageNotes, planPins,
+    contractorPhotos, updateContractorPhoto, deleteContractorPhoto, planAnnotations, stageNotes, planPins,
     contractorNotes, addContractorNote } = useStore();
   const isGeneralProject = currentProjectId === 'general';
   const isWolfsonProject = currentProjectId === 'wolfson';
@@ -576,6 +577,7 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
       setShowSettings(false);
       setActiveTab('details');
       setDrivePhotos([]);
+      setPhotoSelect(false); setPhotoPicked(new Set()); setPhotoAskDelete(false);
       setPhotosLoaded(false);
       setLightbox(null);
       const existingFileId = apartment.plansPdfLink ? extractFileId(apartment.plansPdfLink) : null;
@@ -715,6 +717,11 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
   const inspectPickRef = useRef<HTMLInputElement>(null);
   /** The Photos tab shows pictures and videos only until this is switched on. */
   const [showAllFiles, setShowAllFiles] = useState(false);
+  /** Tzvi's Select in the Photos tab: the tiles picked to delete (owner, 2026-11-08). */
+  const [photoSelect, setPhotoSelect] = useState(false);
+  const [photoPicked, setPhotoPicked] = useState<Set<string>>(() => new Set());
+  const [photoAskDelete, setPhotoAskDelete] = useState(false);
+  const [photoDeleting, setPhotoDeleting] = useState(false);
   /** Where a press on the phone's plan began — a still tap opens the plan full screen. */
   const tapFrom = useRef<{ x: number; y: number; t: number } | null>(null);
   // The plan on screen is made ready to share before the press (a phone browser refuses a late share sheet).
@@ -3451,10 +3458,103 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
               if (t.fresh) markReviewed([t.fresh.id]);
             };
 
+            /**
+             * Tzvi's Select → Delete (owner, 2026-11-08: "a select button … select photos in the photos tab and delete,
+             * and that should only work for Tzvi's account"). A Drive file goes to Drive's TRASH (30 days to take it
+             * back); its site record goes with it. A site photo kept only in the app (no Drive copy) loses its record.
+             * A file Drive refused stays on screen, counted in the message.
+             */
+            const canSelect = isTzvi(currentUser?.name);
+            const pickedTiles = allTiles.filter(t => photoPicked.has(t.key));
+            const togglePick = (t: Tile) => setPhotoPicked(prev => {
+              const n = new Set(prev); if (n.has(t.key)) n.delete(t.key); else n.add(t.key); return n;
+            });
+            const endSelect = () => { setPhotoSelect(false); setPhotoPicked(new Set()); setPhotoAskDelete(false); };
+            const deletePicked = async () => {
+              const picked = pickedTiles;
+              if (!picked.length) return;
+              setPhotoDeleting(true);
+              let gone = new Set<string>();
+              const driveIds = picked.map(t => t.fileId).filter(Boolean);
+              if (driveIds.length) { try { gone = await trashDriveFiles(driveIds); } catch { /* counted below */ } }
+              const failed = picked.filter(t => t.fileId && !gone.has(t.fileId)).length;
+              for (const p of contractorPhotos) {
+                if (!jobTasks.has(p.assignmentId)) continue;
+                const own = picked.find(t => !t.onDrive && t.key === p.id && !t.fileId);
+                if ((p.driveFileId && gone.has(p.driveFileId)) || own) deleteContractorPhoto(p.id);
+              }
+              if (gone.size) {
+                setDrivePhotos(prev => prev.filter(d => !gone.has(d.fileId)));
+                const ins = apartment.inspections ?? [];
+                if (ins.some(i => i.files.some(f => f.driveFileId && gone.has(f.driveFileId)))) {
+                  const left = ins.map(i => ({ ...i, files: i.files.filter(f => !(f.driveFileId && gone.has(f.driveFileId))) }))
+                    .filter(i => i.files.length > 0);
+                  updateApartment(apartment.id, { inspections: left }, currentUser);
+                }
+              }
+              setPhotoDeleting(false);
+              const done = picked.length - failed;
+              endSelect();
+              onToast(failed
+                ? (ui.isRtl ? `נמחקו ${done} · ${failed} לא נמחקו (Drive סירב)` : `Deleted ${done} · ${failed} not deleted (Drive refused)`)
+                : (ui.isRtl ? `נמחקו ${done} — בפח של Drive ל-30 יום` : `Deleted ${done} — in Drive's trash for 30 days`));
+            };
+
             return (
             <div>
               {/* The tab's header row: the Drive folder's status on the left,
                   the one review link on the right. */}
+              {canSelect && allTiles.length > 0 && (photoSelect ? (
+                <div data-photos-select-bar className="sticky top-0 z-10 mb-2 -mx-1 px-2 py-1.5 rounded-xl bg-[#1e3a5f] text-white flex items-center gap-2 flex-wrap shadow">
+                  <span className="text-[13px] font-semibold" data-photos-picked={pickedTiles.length}>
+                    {ui.isRtl ? `${pickedTiles.length} נבחרו` : `${pickedTiles.length} selected`}
+                  </span>
+                  <button type="button" data-photos-select-all
+                    onClick={() => setPhotoPicked(pickedTiles.length === allTiles.length ? new Set() : new Set(allTiles.map(t => t.key)))}
+                    className="text-[12.5px] font-medium underline-offset-2 hover:underline">
+                    {pickedTiles.length === allTiles.length ? (ui.isRtl ? 'ביטול הבחירה' : 'Select none') : (ui.isRtl ? 'בחירת הכל' : 'Select all')}
+                  </button>
+                  <span className="ms-auto flex items-center gap-1.5">
+                    <button type="button" data-photos-delete disabled={!pickedTiles.length || photoDeleting}
+                      onClick={() => setPhotoAskDelete(true)}
+                      className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-red-600 hover:bg-red-700 text-[13px] font-medium disabled:opacity-40">
+                      {photoDeleting ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
+                      {ui.isRtl ? 'מחיקה' : 'Delete'}
+                    </button>
+                    <button type="button" data-photos-select-cancel onClick={endSelect} disabled={photoDeleting}
+                      className="px-3 py-1.5 rounded-lg bg-white/15 hover:bg-white/25 text-[13px] font-medium">
+                      {ui.isRtl ? 'ביטול' : 'Cancel'}
+                    </button>
+                  </span>
+                </div>
+              ) : (
+                <div className="mb-2 flex justify-end">
+                  <button type="button" data-photos-select onClick={() => setPhotoSelect(true)}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-200 text-[13px] font-medium text-gray-700 hover:bg-gray-50">
+                    <CheckSquare size={14} /> {ui.isRtl ? 'בחירה' : 'Select'}
+                  </button>
+                </div>
+              ))}
+              {photoAskDelete && createPortal(
+                <div data-photos-delete-ask className="fixed inset-0 z-[300] bg-black/50 flex items-center justify-center p-6"
+                  onClick={() => !photoDeleting && setPhotoAskDelete(false)}>
+                  <div className="w-full max-w-[340px] rounded-2xl bg-white p-5" dir={ui.isRtl ? 'rtl' : 'ltr'} onClick={e => e.stopPropagation()}>
+                    <div className="text-[16px] font-bold text-gray-900">
+                      {ui.isRtl ? `למחוק ${pickedTiles.length} קבצים?` : `Delete ${pickedTiles.length} file${pickedTiles.length === 1 ? '' : 's'}?`}
+                    </div>
+                    <div className="mt-1.5 text-[13px] text-gray-600">
+                      {ui.isRtl ? 'הם יעברו לפח של Drive, ואפשר להחזיר אותם משם תוך 30 יום.' : "They go to Drive's trash, where they can be restored for 30 days."}
+                    </div>
+                    <div className="mt-4 flex justify-end gap-2">
+                      <button type="button" data-photos-delete-no onClick={() => setPhotoAskDelete(false)} disabled={photoDeleting}
+                        className="px-4 py-2 rounded-lg bg-gray-100 font-medium">{ui.isRtl ? 'ביטול' : 'Cancel'}</button>
+                      <button type="button" data-photos-delete-yes onClick={() => { setPhotoAskDelete(false); void deletePicked(); }}
+                        className="px-4 py-2 rounded-lg bg-red-600 text-white font-medium">{ui.isRtl ? 'מחיקה' : 'Delete'}</button>
+                    </div>
+                  </div>
+                </div>,
+                document.body,
+              )}
               {(otherFiles > 0 || showAllFiles) && (
                 <label data-photos-all-files className="mb-2 inline-flex items-center gap-2 cursor-pointer select-none text-[12.5px] font-semibold text-gray-700">
                   <span role="switch" aria-checked={showAllFiles}
@@ -3541,9 +3641,11 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                               data-photo-tile={t.key}
                               data-photo-fresh={t.fresh ? '1' : undefined}
                               title={t.fresh ? `${t.fresh.who} · ${t.filename} — ${ui.photoNewTitle}` : t.filename}
+                              data-photo-picked={photoSelect ? (photoPicked.has(t.key) ? '1' : '0') : undefined}
                               className={`aspect-square rounded-lg overflow-hidden bg-gray-100 cursor-pointer relative ${
-                                t.fresh ? 'ring-2 ring-amber-400 ring-offset-1' : ''}`}
-                              onClick={() => openTile(t)}
+                                photoSelect && photoPicked.has(t.key) ? 'ring-[3px] ring-[#1e3a5f] ring-offset-1'
+                                  : t.fresh ? 'ring-2 ring-amber-400 ring-offset-1' : ''}`}
+                              onClick={() => (photoSelect ? togglePick(t) : openTile(t))}
                             >
                               {isImg ? (
                                 <DriveImg src={t.thumb} alt={t.filename} className="w-full h-full object-cover" />
@@ -3573,6 +3675,14 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                                   <FileText size={18} className="text-blue-400" />
                                   <span className="text-[9px] text-gray-500 text-center break-all leading-tight line-clamp-2 mt-1">{t.filename}</span>
                                 </div>
+                              )}
+                              {photoSelect && (
+                                <span className={`absolute inset-0 pointer-events-none ${photoPicked.has(t.key) ? 'bg-[#1e3a5f]/25' : ''}`}>
+                                  <span className="absolute top-1 end-1 w-6 h-6 rounded-md flex items-center justify-center shadow"
+                                    style={{ backgroundColor: photoPicked.has(t.key) ? '#1e3a5f' : 'rgba(255,255,255,.9)', color: photoPicked.has(t.key) ? '#fff' : '#94a3b8' }}>
+                                    {photoPicked.has(t.key) ? <CheckSquare size={15} /> : <SquareIcon size={15} />}
+                                  </span>
+                                </span>
                               )}
                               {t.fresh && (
                                 <span data-photo-new

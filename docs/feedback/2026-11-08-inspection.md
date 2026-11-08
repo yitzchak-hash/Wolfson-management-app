@@ -21,3 +21,9 @@ Harness: `scratchpad/inspection.mjs` 9 (dev server with VITE_DRIVE_API_KEY set) 
 - **Photos tab**: pictures and videos only; "Show all files (N)" brings the rest.
 
 Harnesses: `inspection.mjs` 13 · `photosall.mjs` 4 · `overlaps.mjs` fold-side 0 · v22fold 14 · shareplan 13 · dictate 10 · signout 8 · v14board 44.
+
+## Round 3 — Select and delete (Tzvi only)
+- A **Select** button in the Photos tab, only for Tzvi's user. Tap tiles to pick (a tap no longer opens the viewer), Select all, **Delete** asks first.
+- Drive files go to **Drive's trash** (30 days to restore) through `api/drive-upload.js` mode `trash-files` (a folder id is refused); their site records go with them; a site photo kept only in the app loses its record. A file Drive refuses stays and is counted in the message. Inspection rows drop the deleted files.
+
+Harness: `photosdelete.mjs` 10.

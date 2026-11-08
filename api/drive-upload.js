@@ -172,6 +172,29 @@ export default async function handler(req, res) {
   }
 
   /**
+   * TRASH FILES (owner, 2026-11-08: "select photos in the photos tab and delete") —
+   * { mode: 'trash-files', fileIds: [...] }, at most 200. Each goes to Drive's
+   * TRASH, never deleted for good: 30 days to take it back from Drive.
+   * Only files are trashed here — a folder id is refused, checked right before.
+   */
+  if (req.body?.mode === 'trash-files') {
+    const ID = /^[A-Za-z0-9_-]{10,100}$/;
+    const ids = (Array.isArray(req.body.fileIds) ? req.body.fileIds : []).filter(x => ID.test(String(x))).slice(0, 200);
+    if (!ids.length) return res.status(400).json({ error: 'fileIds: [...]' });
+    const drive = getDrive();
+    const results = [];
+    for (const id of ids) {
+      try {
+        const cur = await drive.files.get({ fileId: id, fields: 'mimeType', supportsAllDrives: true });
+        if (cur.data.mimeType === 'application/vnd.google-apps.folder') { results.push({ id, trashed: false, why: 'a folder' }); continue; }
+        await drive.files.update({ fileId: id, requestBody: { trashed: true }, supportsAllDrives: true });
+        results.push({ id, trashed: true });
+      } catch (err) { results.push({ id, trashed: false, why: err.message }); }
+    }
+    return res.json({ ok: results.every(r => r.trashed), results });
+  }
+
+  /**
    * TRASH EMPTY FOLDERS (owner, 2026-11-01: "clean up that mess") —
    * { mode: 'trash-empty', folderIds: [...] }, at most 200. A folder is moved
    * to Drive's trash (30 days to take it back) ONLY when it holds nothing,
