@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useRef, lazy, Suspense } from 'rea
 import { Mic, X, Save, Building2, MessageSquare, AlertTriangle, Link, Unlink, ExternalLink, BookOpen, Download, Eye, EyeOff, Activity, RefreshCw, Paperclip, Trash2, ChevronDown, ChevronRight, ClipboardList, CheckCircle2, CalendarDays, FileText, UserCheck, Plus, Camera, Play, ChevronLeft, FolderOpen, Clock, RotateCcw, Edit2, BarChart3, PenLine, Maximize2, Printer, Share2, Phone as PhoneIcon, Loader2, Folder, Star, ArrowRightLeft } from 'lucide-react';
 import { Apartment, User, getStageName, TaskAttachment, TaskPriority, aptLabel, ContractorAssignment, CustomButton, Inspection, InspectionFile } from '../../types';
 import { createPortal } from 'react-dom';
-import { Video, Image as ImageIcon } from 'lucide-react';
+import { InspectionCamera } from './InspectionCamera';
 
 /** Tzvi's own user — the one person who inspects (owner, 2026-11-08: "only for Tzvi, his user"). */
 const isTzvi = (name?: string | null) => { const n = (name ?? '').trim(); return /^(tzvi|zvi)\b/i.test(n) || /^צבי(\s|$)/.test(n); };
@@ -417,7 +417,10 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
    * 400px so the plan keeps real room, exactly as the approved picture drew
    * it; at ~940px and up nothing changes.
    */
-  const fieldsW = Math.max(400, Math.min(560, Math.round(window.innerWidth * 0.96) - 340));
+  // The plan gets at least HALF the window (owner, 2026-11-08, the Fold on its side: "make the details side smaller
+  // and the plan side bigger … at least half"): the fields never take more than half, nor more than 560.
+  const availW = Math.round(window.innerWidth * 0.96);
+  const fieldsW = Math.max(340, Math.min(560, availW - 340, Math.round(availW / 2)));
   const fitW = Math.max(280, Math.round(window.innerWidth * 0.96) - fieldsW);
   const planW = Math.min(Math.round((maxModalH - 56) * sheetRatio), fitW);
   /**
@@ -710,6 +713,8 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
   const inspectPhotoRef = useRef<HTMLInputElement>(null);
   const inspectVideoRef = useRef<HTMLInputElement>(null);
   const inspectPickRef = useRef<HTMLInputElement>(null);
+  /** The Photos tab shows pictures and videos only until this is switched on. */
+  const [showAllFiles, setShowAllFiles] = useState(false);
   /** Where a press on the phone's plan began — a still tap opens the plan full screen. */
   const tapFrom = useRef<{ x: number; y: number; t: number } | null>(null);
   // The plan on screen is made ready to share before the press (a phone browser refuses a late share sheet).
@@ -1211,11 +1216,22 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
       if (files.some(f => f.type.startsWith('video/')) && !backendConfigured) onToast(ui.isRtl ? 'סרטון צריך את Drive' : 'A video needs Drive', 'error');
       return;
     }
+    const now = new Date().toISOString();
+    const prior = apartments.find(a => a.id === apartment.id)?.inspections ?? [];
+    // Within half an hour of his last addition he is still there: the pictures join THAT inspection
+    // (owner, 2026-11-08: "they should all fold into the same inspection … because it means I'm still there").
+    const last = prior[prior.length - 1];
+    const lastTouch = last ? Date.parse(last.lastAt ?? last.at) : 0;
+    if (last && last.byId === currentUser.id && Date.now() - lastTouch < 30 * 60 * 1000) {
+      const merged: Inspection = { ...last, files: [...last.files, ...saved], lastAt: now };
+      updateApartment(apartment.id, { inspections: [...prior.slice(0, -1), merged] }, currentUser);
+      onToast(ui.isRtl ? 'נוסף לבדיקה' : 'Added to the inspection');
+      return;
+    }
     const ins: Inspection = {
-      id: `ins-${Date.now().toString(36)}`, at: new Date().toISOString(),
+      id: `ins-${Date.now().toString(36)}`, at: now, lastAt: now,
       byId: currentUser.id, byName: currentUser.name, afterStageId: after, files: saved,
     };
-    const prior = apartments.find(a => a.id === apartment.id)?.inspections ?? [];
     updateApartment(apartment.id, { inspections: [...prior, ins] }, currentUser);
     onToast(ui.isRtl ? 'הבדיקה נשמרה' : 'Inspection saved');
   }
@@ -2553,27 +2569,12 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                     void saveInspection(files, after);
                   }} />
               ))}
-              {inspectAsk && createPortal(
-                <div className="fixed inset-0 z-[200] flex items-end sm:items-center justify-center p-4" data-inspect-ask
-                  dir={ui.isRtl ? 'rtl' : 'ltr'} onClick={() => setInspectAsk(null)} style={{ backgroundColor: 'rgba(15,23,42,.45)' }}>
-                  <div role="dialog" aria-modal="true" onClick={e => e.stopPropagation()} className="w-full max-w-[360px] rounded-2xl bg-white shadow-2xl p-4 space-y-2">
-                    <div className="text-[16px] font-bold text-gray-900 px-1 pb-1">{ui.isRtl ? 'בדיקה' : 'Inspection'}</div>
-                    {([
-                      ['photo', inspectPhotoRef, Camera, ui.isRtl ? 'צילום תמונה' : 'Take a photo'],
-                      ['video', inspectVideoRef, Video, ui.isRtl ? 'צילום סרטון' : 'Take a video'],
-                      ['pick', inspectPickRef, ImageIcon, ui.isRtl ? 'מהגלריה' : 'From the gallery'],
-                    ] as const).map(([k, ref, Icon, label]) => (
-                      <button key={k} type="button" data-inspect-choice={k} onClick={() => ref.current?.click()}
-                        className="w-full flex items-center gap-3 rounded-xl border border-gray-200 px-4 py-3 text-[15px] font-semibold text-gray-800 hover:bg-gray-50">
-                        <Icon size={18} className="text-[#1e3a5f]" /> {label}
-                      </button>
-                    ))}
-                    <button type="button" data-inspect-cancel onClick={() => setInspectAsk(null)}
-                      className="w-full rounded-xl px-4 py-2.5 text-[14px] font-medium text-gray-600 hover:bg-gray-100">{ui.cancel}</button>
-                  </div>
-                </div>,
-                document.body,
-              )}
+              {/* Inspection opens the camera INSIDE the app: as many pictures and videos as he likes, then Done
+                  (owner, 2026-11-08). Where the browser refuses the camera, the phone's own camera or gallery opens. */}
+              <InspectionCamera open={!!inspectAsk} isRtl={!!ui.isRtl}
+                onClose={() => setInspectAsk(null)}
+                onDone={files => { const after = inspectAsk?.after ?? null; setInspectAsk(null); void saveInspection(files, after); }}
+                onFallback={k => (k === 'camera' ? inspectPhotoRef : inspectPickRef).current?.click()} />
 
               {/* Elsewhere they stay below the stages. */}
               {!isWolfsonProject && customButtons.length > 0 && (
@@ -3431,7 +3432,13 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                 else { const ng = { name, tiles: [tile] }; byName.set(k, ng); looseGroups.unshift(ng); }
               }
             }
-            const groups = [...looseGroups, ...driveGroups];
+            // Pictures and videos only, unless "Show all files" is on (owner, 2026-11-08: "it started showing all the
+            // files … a little toggle on top saying show all files. But the default should be off").
+            const isMedia = (t: Tile) => /^(image|video)\//.test(t.mimeType) || /\.(jpe?g|png|gif|webp|heic|heif|mp4|mov|webm|m4v|3gp)$/i.test(t.filename);
+            const everyGroup = [...looseGroups, ...driveGroups];
+            const otherFiles = everyGroup.reduce((n, g) => n + g.tiles.filter(t => !isMedia(t)).length, 0);
+            const groups = showAllFiles ? everyGroup
+              : everyGroup.map(g => ({ ...g, tiles: g.tiles.filter(isMedia) })).filter(g => g.tiles.length > 0);
             const allTiles = groups.flatMap(g => g.tiles);
             const openTile = (t: Tile) => {
               setLightbox({
@@ -3448,6 +3455,16 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
             <div>
               {/* The tab's header row: the Drive folder's status on the left,
                   the one review link on the right. */}
+              {(otherFiles > 0 || showAllFiles) && (
+                <label data-photos-all-files className="mb-2 inline-flex items-center gap-2 cursor-pointer select-none text-[12.5px] font-semibold text-gray-700">
+                  <span role="switch" aria-checked={showAllFiles}
+                    className={`relative w-9 h-5 rounded-full transition-colors ${showAllFiles ? 'bg-[#1e3a5f]' : 'bg-gray-300'}`}>
+                    <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all ${showAllFiles ? 'start-[18px]' : 'start-0.5'}`} />
+                  </span>
+                  <input type="checkbox" className="sr-only" checked={showAllFiles} onChange={e => setShowAllFiles(e.target.checked)} />
+                  {ui.isRtl ? 'הצגת כל הקבצים' : 'Show all files'}{!showAllFiles && otherFiles > 0 ? ` (${otherFiles})` : ''}
+                </label>
+              )}
               {((apartment.driveLink && backendConfigured) || queue.length > 0) && (
                 <div className="mb-3 flex items-center gap-2 text-[11px] flex-wrap" data-photos-header>
                   {apartment.driveLink && backendConfigured && (

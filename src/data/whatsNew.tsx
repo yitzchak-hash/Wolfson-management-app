@@ -31,6 +31,37 @@ export interface WhatsNewEntry {
 
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    date: '2027-03-01',
+    title: 'A camera inside the app',
+    items: [
+      {
+        title: 'Take many pictures, then press Done',
+        body: 'Inspection now opens the camera inside the app. Take as many photos as you like (or record a video, or add from the gallery); each one waits in a strip at the bottom, and nothing is sent until you press Done.',
+        demo: 'tap',
+      },
+      {
+        title: 'One inspection, not five',
+        body: 'Pictures added within half an hour of the last ones fold into the same inspection instead of starting a new row.',
+        demo: 'list',
+      },
+      {
+        title: 'The phone answers your finger',
+        body: 'A small buzz when you change floors on the building, and when the camera takes a picture.',
+        demo: 'sparkle',
+      },
+      {
+        title: 'Photos shows pictures and videos',
+        body: 'Other files in the Photos folder are hidden by default. "Show all files" at the top brings them back.',
+        demo: 'tap',
+      },
+      {
+        title: 'Galaxy Fold, sideways',
+        body: 'The plan side of an apartment now takes at least half the window and shows the whole sheet, so Download and Print fit on its bar.',
+        demo: 'zoom',
+      },
+    ],
+  },
+  {
     date: '2027-02-28',
     title: 'Inspections by Tzvi',
     items: [

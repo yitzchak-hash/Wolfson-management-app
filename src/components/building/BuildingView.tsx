@@ -16,6 +16,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Apartment, Stage, CustomButton } from '../../types';
 import { realName } from '../../data/aptSale';
+import { haptic } from '../../data/haptics';
 import {
   CARD_CORNER, CORE, CORE_PH14, CORE_PH15, PH_BOX, PH_TERRACES, FLOOR_NO_AT, PH_DRAWING, isPenthouseShape, LABEL_AT, LEVEL_FLOORS, STRIP, zoneFor, PLAN_BOX, SHAPES, pathOf, shapesOf, stripFor, type ShapeKey, type LowerLevel,
 } from './wolfsonPlan';
@@ -222,6 +223,13 @@ export default function BuildingView({ apartments, stages, onOpen, words, initia
     if (!raf.current) raf.current = requestAnimationFrame(step);
   }), [bus, step, topIdx]);
   useEffect(() => { const v = bus.get(); target.current = pos.current = Math.max(0, Math.min(topIdx, v)); setLanded(Math.round(target.current)); paint(); }, [bus, topIdx, paint]);
+  // A small tick in the hand each time a new floor lands (owner, 2026-11-08: "vibrations … when moving the floors").
+  // Only the first view of the trio ticks — three buzzes for one floor would be one too many.
+  const firstLanded = useRef(true);
+  useEffect(() => {
+    if (firstLanded.current) { firstLanded.current = false; return; }
+    if (!compact || tower === 0) haptic('tick');
+  }, [landed]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const go = useCallback((idx: number) => {
     setHover(null);

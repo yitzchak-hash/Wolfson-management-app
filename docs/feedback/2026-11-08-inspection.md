@@ -12,3 +12,12 @@ The approved plan, as built:
 
 Harness: `scratchpad/inspection.mjs` 9 (dev server with VITE_DRIVE_API_KEY set) · `shareplan` 13 · `v14board` 44 ·
 `v22fold` 14.
+
+## Round 2 (the same day)
+- **Camera inside the app**: Inspection opens a full-screen camera (`InspectionCamera.tsx`): many photos, video, flip, gallery; a strip of shots with × each; nothing is sent until Done. Where the browser refuses the camera, the phone's own camera opens.
+- **Folding**: pictures added by the same person within 30 minutes of the last ones join that inspection (`Inspection.lastAt`).
+- **Vibration** (`src/data/haptics.ts`): a tick on a floor change, a tap on the shutter, a success buzz on Done. Android vibrates; an iPhone gives only a light tick (Safari has no vibration call).
+- **Sideways Fold**: the plan pane takes at least half the window; the side pane opens on the whole sheet (PlanAnnotator `embedded`).
+- **Photos tab**: pictures and videos only; "Show all files (N)" brings the rest.
+
+Harnesses: `inspection.mjs` 13 · `photosall.mjs` 4 · `overlaps.mjs` fold-side 0 · v22fold 14 · shareplan 13 · dictate 10 · signout 8 · v14board 44.

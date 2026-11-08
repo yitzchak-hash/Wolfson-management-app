@@ -793,6 +793,8 @@ export interface Inspection {
   at: string;
   byId: string;
   byName: string;
+  /** When the last pictures joined it — anything added within half an hour of this folds into the same inspection. */
+  lastAt?: string;
   /** The stage it stands after — the last finished one when it was taken (null: before every stage). */
   afterStageId: string | null;
   files: InspectionFile[];

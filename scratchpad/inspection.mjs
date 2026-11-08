@@ -5,13 +5,14 @@
 import { chromium } from '/opt/node22/lib/node_modules/playwright/index.mjs';
 import { realisticWolfson, applySeed } from './seed.mjs';
 const OUT = process.env.SHOTS || '/tmp';
-const browser = await chromium.launch();
+// Chromium's fake camera feeds the in-app viewfinder a test picture.
+const browser = await chromium.launch({ args: ['--use-fake-device-for-media-stream', '--use-fake-ui-for-media-stream'] });
 const blob = await realisticWolfson(browser);
 let ok = 0, bad = 0; const T = (c, m) => { c ? ok++ : bad++; console.log((c ? 'ok  ' : 'BAD ') + m); };
 const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64');
 const uploads = [];
 for (const who of ['Tzvi', 'Esther']) {
-  const ctx = await browser.newContext({ viewport: { width: 402, height: 874 }, isMobile: true, hasTouch: true });
+  const ctx = await browser.newContext({ viewport: { width: 402, height: 874 }, isMobile: true, hasTouch: true, permissions: ['camera', 'microphone'] });
   await applySeed(ctx, blob);
   await ctx.addInitScript((name) => {
     const raw = localStorage.getItem('wolfson_app_data'); if (!raw) return;
@@ -45,19 +46,29 @@ for (const who of ['Tzvi', 'Esther']) {
   }
   T((await firstBubble.getAttribute('data-stage-state')) === 'done', 'the first stage is finished');
   const lastDone = await p.evaluate(() => [...document.querySelectorAll('[data-stage-row][data-stage-state="done"]')].pop()?.getAttribute('data-stage-row') ?? null);
-  await btn.scrollIntoViewIfNeeded(); await btn.click(); await p.waitForTimeout(300);
-  T(await p.locator('[data-inspect-ask] [data-inspect-choice]').count() === 3, 'it offers Take a photo · Take a video · From the gallery');
-  await p.screenshot({ path: `${OUT}/inspect-ask.png` });
-  await p.locator('[data-inspect-input="photo"]').setInputFiles({ name: 'inspection.png', mimeType: 'image/png', buffer: png });
-  await p.waitForTimeout(1500);
+  await btn.scrollIntoViewIfNeeded(); await btn.click(); await p.waitForTimeout(1500);
+  // The camera INSIDE the app: three pictures, then Done.
+  const cam = p.locator('[data-inspect-camera]');
+  T(await cam.isVisible(), 'Inspection opens the camera inside the app');
+  T(!(await cam.locator('[data-camera-failed]').count()), 'the viewfinder shows the camera');
+  for (let i = 0; i < 3; i++) { await cam.locator('[data-camera-shutter]').click(); await p.waitForTimeout(350); }
+  T(await cam.locator('[data-camera-strip] img').count() === 3, 'three shots wait in the strip — nothing sent yet');
+  await p.screenshot({ path: `${OUT}/inspect-camera.png` });
+  await cam.locator('[data-camera-done]').click(); await p.waitForTimeout(2000);
   const row = p.locator('[data-inspection]');
-  T(await row.count() === 1, 'a row "Inspected by Tzvi" joined the stages');
+  T(await row.count() === 1, 'Done: one row "Inspected by Tzvi" joined the stages');
+  T((await row.textContent()).includes('3'), 'the inspection carries the three pictures');
   T((await row.textContent()).includes('Inspected by Tzvi'), 'it says "Inspected by Tzvi"');
   const place = await p.evaluate(() => { const r = document.querySelector('[data-inspection]'); const prev = r?.previousElementSibling; return prev?.getAttribute('data-stage-row') ?? (prev ? 'other' : 'first'); });
   T(place === (lastDone ?? 'first'), `it stands right after the last finished stage (${place} · expected ${lastDone ?? 'first'})`);
   T(uploads.includes('put') && uploads.some(u => u === 'folder:Inspections'), `the file went to Drive › Photos › Inspections (${uploads.join(', ')})`);
+  // Again within half an hour: the new pictures fold into the SAME inspection.
+  await btn.click(); await p.waitForTimeout(1500);
+  await cam.locator('[data-camera-shutter]').click(); await p.waitForTimeout(350);
+  await cam.locator('[data-camera-done]').click(); await p.waitForTimeout(2000);
+  T(await row.count() === 1, 'a second round within half an hour folds into the same inspection (still one row)');
   await row.locator('[data-inspection-toggle]').click(); await p.waitForTimeout(300);
-  T(await row.locator('[data-inspection-file]').count() === 1, 'pressing the row opens it to show the picture');
+  T(await row.locator('[data-inspection-file]').count() === 4, `pressing the row opens it to show all four pictures (${await row.locator('[data-inspection-file]').count()})`);
   await row.scrollIntoViewIfNeeded();
   await p.screenshot({ path: `${OUT}/inspect-row.png` });
   await ctx.close();

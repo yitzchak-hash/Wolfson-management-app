@@ -1587,8 +1587,11 @@ function PlanEditor({
        * fits to the width, the empty space says "turn the phone", and making
        * the sheet overflow sideways would undo that.
        */
+      // The flat window's side pane is a PREVIEW (a tap opens it full screen):
+      // there the whole sheet stays on screen — covering the pane cut a portrait
+      // plan off at its right edge on a sideways Galaxy Fold (2026-11-08).
       let open = whole;
-      if (!compact) {
+      if (!compact && !embedded) {
         const used = Math.min(natVp.width * whole / availW, natVp.height * whole / availH);
         if (used < FIT_USE) {
           const cover = Math.max(availW / natVp.width, availH / natVp.height);
