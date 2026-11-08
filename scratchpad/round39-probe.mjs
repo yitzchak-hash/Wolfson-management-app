@@ -24,7 +24,9 @@ function seed(ctx, { active = 'wolfson' } = {}) {
       photosOptional: true, createdAt: '2026-01-01', lang: 'en',
       perms: { seeDiagrams: true, seeAllApartments: true, seeSchedule: true } };
     const stages = [
-      { id: 'st-ready', name: 'Ready to start', color: '#94a3b8', order: 0, active: true },
+      // The start stage is "Sold" (id skhtatb) since the owner's recording of
+      // 2026-10-28 (stageMarks.ts isStartStage); "Ready to start" is no longer it.
+      { id: 'skhtatb', name: 'Sold', color: '#94a3b8', order: 0, active: true },
       { id: 'st-pipe', name: 'Piping', color: '#3b82f6', order: 1, active: true },
       { id: 'st-drain', name: 'Drainage', color: '#0ea5e9', order: 2, active: true },
       { id: 'st-reg', name: 'Registers', color: '#10b981', order: 3, active: true },
@@ -75,6 +77,10 @@ const stubs = async (ctx, calls) => {
   });
   await ctx.route('**/api/drive-files', r => r.fulfill({ json: { files: [] } }));
   await ctx.route('**/api/share', r => r.fulfill({ json: { ok: true } }));
+  // The close's picture step uploads; answered like Drive would, nothing leaves.
+  await ctx.route('**/api/drive-upload**', r => r.fulfill({ json: { ok: true, id: 'F-up', fileId: 'F-up', url: 'https://drive.google.com/file/d/F-up/view' } }));
+  await ctx.route('**/api/drive-session**', r => r.fulfill({ json: { ok: true, uploadUrl: 'http://localhost:5174/__up', id: 'F-up' } }));
+  await ctx.route('**/api/folder**', r => r.fulfill({ json: { ok: true, id: 'FOLDER', folderId: 'FOLDER' } }));
   await ctx.route('**://drive.google.com/**', r => r.abort());
 };
 
@@ -146,8 +152,12 @@ const stubs = async (ctx, calls) => {
   await page.keyboard.press('Escape'); await page.mouse.click(10, 400); await page.waitForTimeout(300);
 
   // list: Today first, every workspace, tagged, general card
-  check(await page.locator('button', { hasText: /^Today$/ }).first().evaluate(el => getComputedStyle(el).color === 'rgb(255, 255, 255)'),
-    'Today is the selected filter on arrival');
+  // ALL is the opening pill (owner, 2026-09-16 — Today hid tomorrow's work
+  // behind an empty list on every open); this used to assert Today.
+  check(await page.locator('button', { hasText: /^All$/ }).first().evaluate(el => getComputedStyle(el).color === 'rgb(255, 255, 255)'),
+    'All is the selected filter on arrival');
+  check(await page.locator('button', { hasText: /^Today$/ }).first().evaluate(el => getComputedStyle(el).color !== 'rgb(255, 255, 255)'),
+    'and Today is not');
   check(await page.locator('[data-task-card="T-47"]').count() === 1 && await page.locator('[data-task-card="T-B3"]').count() === 1,
     'tasks from BOTH workspaces are on one list');
   check((await page.locator('[data-task-card="T-B3"] [data-task-ws-chip]').innerText()).includes('Netiv'), 'each card wears its workspace');
@@ -194,16 +204,46 @@ const stubs = async (ctx, calls) => {
     'with a general job running, it asks "Is this part of…?" first');
   await page.locator('[data-work-part-yes="T-gen"]').click();
   await page.waitForTimeout(400);
-  const stageNames = await page.locator('[data-work-stages] button').allInnerTexts();
-  check(!stageNames.some(t => /Ready to start|Job completed/.test(t)) && stageNames.some(t => /Piping/.test(t)),
-    'the stage list skips the first and last stages', stageNames.join(' | '));
-  await page.locator('[data-work-stages] button', { hasText: 'Registers' }).click();
-  await page.waitForTimeout(300);
-  await page.locator('[data-finished-no]').click();
-  await page.waitForTimeout(300);
-  await page.fill('[data-work-note] textarea', 'two registers left');
-  await page.locator('[data-work-send]').click();
-  await page.waitForTimeout(900);
+  // "I started working here" (owner, 2026-11-01): the task opens AT ONCE —
+  // nothing is asked; what he did is asked when he CLOSES it. (This used to
+  // pick the stages up front, from a list that is no longer shown there.)
+  for (let i = 0; i < 30 && !(await page.locator('[data-close-job]').count()); i++) await page.waitForTimeout(150);
+  check(await page.locator('[data-work-pick]').count() === 0 && await page.locator('[data-close-job]').count() >= 1,
+    'the task opens at once — no stage question at the start');
+  await page.locator('[data-close-job]').first().click();
+  await page.waitForTimeout(700);
+  // The close's stage list: never the start stage (owner, 2026-10-07: "he
+  // shouldn't have the ability to select Sold/Start"); the work stages are there.
+  const stageIds = await page.locator('[data-close-pick-stage]').evaluateAll(bs => bs.map(x => x.getAttribute('data-close-pick-stage')));
+  const stageNames = await page.locator('[data-close-pick-stage]').allInnerTexts();
+  check(!stageIds.includes('skhtatb') && !stageNames.some(t => /^Sold\b/.test(t)) && stageIds.includes('st-reg') && stageNames.some(t => /Piping/.test(t)),
+    'closing asks what he did: the work stages, never the start stage', stageNames.map(t => t.split('\n')[0]).join(' | '));
+  // Registers, NOT finished: it stays half done.
+  await page.locator('[data-close-pick-stage="st-reg"]').click();
+  await page.locator('[data-close-next="pick"]').click(); await page.waitForTimeout(300);
+  await page.locator('[data-close-finished-pick="no"]').click(); await page.waitForTimeout(200);
+  // With several stages picked, "No" asks which ones he finished; with one it does not.
+  if (await page.locator('[data-close-next="which"]').count()) { await page.locator('[data-close-next="which"]').click(); await page.waitForTimeout(300); }
+  if (await page.locator('[data-close-back="unknown"]').count()) await page.locator('[data-close-back="unknown"]').click();
+  if (await page.locator('[data-close-left] textarea').count()) await page.fill('[data-close-left] textarea', 'two registers left');
+  if (await page.locator('[data-close-next="left"]').count()) { await page.locator('[data-close-next="left"]').click(); await page.waitForTimeout(300); }
+  // The picture step, when the settings ask for one.
+  const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64');
+  for (let step = 0; step < 4 && await page.locator('[data-close-photo-step]').count(); step++) {
+    const input = page.locator('input[type="file"]').first();
+    if (await input.count()) await input.setInputFiles([{ name: 'a.png', mimeType: 'image/png', buffer: PNG }]);
+    const pn = page.locator('[data-close-next^="photo:"]');
+    for (let i = 0; i < 40 && await pn.count() && await pn.isDisabled(); i++) await page.waitForTimeout(250);
+    if (!(await pn.count())) break;
+    await pn.click(); await page.waitForTimeout(300);
+  }
+  await page.locator('[data-close-now]').click();
+  await page.waitForTimeout(1500);
+  // The finished-task celebration (with the message to paste to the office)
+  // covers the page until it is tapped away, as on his phone.
+  if (await page.locator('.celebrate-pop').count()) { await page.mouse.click(8, 8); await page.waitForTimeout(400); }
+  // …and the apartment's sheet behind it closes with a tap on its shade.
+  for (let i = 0; i < 3 && await page.locator('div.fixed.inset-0.z-40').count(); i++) { await page.mouse.click(8, 8); await page.waitForTimeout(400); }
   const after = await page.evaluate(() => JSON.parse(localStorage.getItem('wolfson_app_data')));
   const gen = after.contractorAssignments.find(a => a.id === 'T-gen');
   const a45 = after.apartments.find(a => a.id === 'A1-45');
@@ -216,6 +256,12 @@ const stubs = async (ctx, calls) => {
   await page.locator('[data-task-card="T-47"]').click();
   await page.waitForTimeout(1800);
   check((await page.locator('text=TASK MESSAGES').count()) >= 1, 'the heading reads TASK MESSAGES');
+  // The box opens on a plain button now (owner, 2026-10-07: "instead of
+  // having this collapsible it should be a button — Send note or message to
+  // office"); then it sits inside the thread's panel as before.
+  check(await page.locator('[data-send-office]').count() === 1, 'a "Send a note or message to the office" button opens the box');
+  await page.locator('[data-send-office]').click();
+  await page.waitForTimeout(400);
   check(await page.locator('[data-thread] [data-thread-composer] [data-composer]').count() === 1, 'the composer sits INSIDE the grey panel');
   const comp = await page.evaluate(() => {
     const clip = document.querySelector('[data-composer-clip]')?.getBoundingClientRect();

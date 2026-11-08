@@ -5004,13 +5004,17 @@ plansPdfFileId && (
         /** His open general jobs here — the "is this part of…?" question. */
         const generalJobs = assignments.filter(x => x.general && !x.completedAt);
         /** File the visit under the general job he named. */
-        const recordVisit = (rid: string, st: typeof allWsStages[0], partOf: string | null) => {
+        // The stage may be unknown: since "I started working here" opens the
+        // task at once (owner, 2026-11-01) nothing is picked at the start, and
+        // the visit must still be filed on the general job he said it was
+        // part of (it was silently dropped while this needed a stage).
+        const recordVisit = (rid: string, st: typeof allWsStages[0] | null, partOf: string | null) => {
           const gid = partOf;
           if (!gid) return;
           const g = useStore.getState().contractorAssignments.find(x => x.id === gid);
           if (!g) return;
           updateContractorAssignment(gid, {
-            visits: [...(g.visits ?? []), { apartmentId: apt.id, at: new Date().toISOString(), stageId: st.id, reportTaskId: rid }],
+            visits: [...(g.visits ?? []), { apartmentId: apt.id, at: new Date().toISOString(), stageId: st?.id ?? null, reportTaskId: rid }],
           });
         };
         const aptTasks = assignments.filter(a => a.apartmentId === apt.id);
@@ -5131,7 +5135,7 @@ plansPdfFileId && (
             marksBefore,
             marksBeforeAt,
           } as never);
-          if (st) recordVisit(rid, st, partOf);
+          recordVisit(rid, st, partOf);
           const rec = useStore.getState().contractorAssignments.find(a => a.id === rid);
           closeSheet();
           if (rec) setSelectedAssignment(rec);

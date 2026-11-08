@@ -52,6 +52,9 @@ await ctx.addInitScript(planId => {
   // apartment tested the office and quietly skipped the worker.
   const wanted = new Set(['A1-53', ...(d.contractorAssignments ?? []).map(a => a.apartmentId)]);
   for (const a of d.apartments ?? []) if (wanted.has(a.id)) a.plansPdfLink = link;
+  // The worker's studio is behind "Mark up a plan" (off for a standard worker):
+  // switched on for this worker the way the office does it, on their own perms.
+  for (const c of d.contractors ?? []) c.perms = { ...(c.perms ?? {}), markUpPlans: true };
   localStorage.setItem('wolfson_app_data', JSON.stringify(d));
 }, PLAN_ID);
 
@@ -116,9 +119,30 @@ if (await planTab.count()) {
   console.log('     (no Plan tab found in the drawer)');
 }
 
-// ── the markup studio ─────────────────────────────────────────────────────
-const markup = page.locator('button').filter({ hasText: /Mark up/i });
-if (await markup.count()) {
+// ── the office's way to mark up: OPEN IN SKETCHER ─────────────────────────
+// The markup studio left the office app on purpose (owner, 2026-10-28: "I
+// don't want the markup studio to be in the Wolfson management app … it
+// should say Open in Sketcher … open a new tab … into that job"). So the
+// office proves the button opens THIS plan in the Sketcher, in a new tab,
+// with the job attached (src/data/sketcherLink.ts). The finger-draws-ink
+// proof moved to the worker's studio below, which is still this app's.
+await page.evaluate(() => { window.__opened = []; window.open = (u, t) => { window.__opened.push([String(u), t]); return null; }; });
+const sketch = page.locator('[data-open-sketcher]');
+if (await sketch.count()) {
+  await sketch.first().tap();
+  await page.waitForTimeout(300);
+  const opened = await page.evaluate(() => window.__opened);
+  const [url, target] = opened[0] ?? [];
+  const ok = !!url && /\/sketch\/HARNESSPLAN1(\?|$)/.test(url) && /[?&]job=A1-53\b/.test(url) && target === '_blank';
+  console.log(`${ok ? 'OK  ' : 'FAIL'} Open in Sketcher opens this plan in a new tab, inside this job — ${url ?? 'nothing opened'}`);
+} else {
+  console.log('FAIL no Open in Sketcher button on the phone plan view');
+}
+
+// ── the markup studio (the worker's) ──────────────────────────────────────
+async function studioInk(openStudio) {
+  const markup = openStudio;
+  if (!(await markup.count())) { console.log('FAIL no Mark up button on the worker\'s plan'); return; }
   await markup.first().tap();
   await page.waitForTimeout(3500);          // pdf.js + first render
   await report('studio');
@@ -179,8 +203,6 @@ if (await markup.count()) {
   console.log(inkAfter > inkBefore + 200
     ? 'OK   a finger stroke committed ink'
     : 'FAIL finger drawing left no ink');
-} else {
-  console.log('     (no Mark up button found)');
 }
 
 // ── the pins, driven with a finger ────────────────────────────────────────
@@ -245,6 +267,10 @@ if (await card.count()) {
       }).length);
     console.log(`       round pin markers drawn for the worker: ${pins}`);
   }
+  // The worker's own studio: a finger stroke must leave ink.
+  await studioInk(page.locator('[data-portal-markup]'));
+} else {
+  console.log('FAIL no job card on the worker\'s phone');
 }
 
 await browser.close();
