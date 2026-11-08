@@ -185,7 +185,21 @@ check(!mics.box, 'a section box does NOT offer the mic');
 // node's floating action strip, which renders before the widget's content.
 // OWNER REVERSAL (2026-08-26): the peek is gone — one click on a foreign
 // unit card travels to its workspace and opens the FULL drawer there.
-await page.locator('[data-node-id="CE-unit"] button.w-full').first().evaluate(el => el.click());
+// The card is a plain surface now, opened like a job tile — a DOUBLE-click
+// (BoardItems: "A UNIT CARD opens like a job tile"); the old whole-card button
+// swallowed every drag.
+{
+  // The view left by the reload step has the card under the left rail, so
+  // Fit first (the board frames its work below the floating chrome) and make
+  // sure the press really lands on the card.
+  await page.locator('button[title="Zoom to fit"], button', { hasText: /^Fit$/ }).first().click().catch(() => {});
+  await page.waitForTimeout(700);
+  const ub = await page.locator('[data-node-id="CE-unit"]').boundingBox();
+  const px = ub.x + ub.width / 2, py = ub.y + ub.height * 0.6;
+  const onCard = await page.evaluate(([x, y]) => !!document.elementFromPoint(x, y)?.closest('[data-node-id="CE-unit"]'), [px, py]);
+  check(onCard, 'the unit card is on screen, not under the board\'s chrome');
+  await page.mouse.dblclick(px, py);
+}
 await page.waitForTimeout(2800);
 const travelled = await page.evaluate(() => ({
   path: location.pathname, pid: localStorage.getItem('active_project'),
@@ -205,7 +219,9 @@ const p2 = await ctx2.newPage();
 p2.on('pageerror', e => { console.log('PAGE ERROR', e.message); fails++; });
 await p2.goto(`${APP}/app-settings`);
 await p2.waitForTimeout(2000);
-await p2.locator('button', { hasText: /^TV$/ }).first().click();
+// Settings are coloured category tiles now (owner, 2026-10-29), each a link
+// to ?cat=<id> (SettingsShell); the TV one is ?cat=tv.
+await p2.locator('a.tz-set-row[href="?cat=tv"]').first().click();
 await p2.waitForTimeout(800);
 
 const shapes = await p2.evaluate(() =>

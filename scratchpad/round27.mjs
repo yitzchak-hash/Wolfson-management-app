@@ -131,11 +131,25 @@ const flush = (page) => page.waitForTimeout(700);   // persist is debounced 250m
 
   // 1 · drag a searched job onto a notebook square
   const cell = await page.evaluate(() => {
-    // Second row (Dovid), second day — any empty square inside the notebook.
+    // Second row (Dovid), second day — an empty square inside the notebook.
+    // Found by the squares' own hooks (data-cell-person / data-cell-day): a
+    // fixed spot at 55% of the widget's height stopped meaning a square once
+    // the week chips took the notebook's top row (owner, "This Week First").
     const book = document.querySelector('[data-node-id="CE-book"]');
-    const r = book.getBoundingClientRect();
-    return { x: r.left + r.width * 0.45, y: r.top + r.height * 0.55 };
+    const scroller = book.querySelector('.planner-scroll') ?? book;
+    const sb = scroller.getBoundingClientRect();
+    const sq = [...book.querySelectorAll('[data-cell-person][data-cell-day]')].filter(c => {
+      const r = c.getBoundingClientRect();
+      return r.width > 8 && r.height > 8 && r.top >= sb.top && r.bottom <= sb.bottom;
+    });
+    const people = [...new Set(sq.map(c => c.getAttribute('data-cell-person')))];
+    const row = sq.filter(c => c.getAttribute('data-cell-person') === (people[1] ?? people[0]));
+    const target = row[1] ?? row[0];
+    if (!target) return null;
+    const r = target.getBoundingClientRect();
+    return { x: r.left + r.width / 2, y: r.top + r.height / 2, person: target.getAttribute('data-cell-person'), day: target.getAttribute('data-cell-day') };
   });
+  ok(!!cell, 'the notebook shows a square to drop on', JSON.stringify(cell));
   await page.keyboard.press('Control+k');
   await page.waitForTimeout(300);
   await page.keyboard.type('Perlstein');

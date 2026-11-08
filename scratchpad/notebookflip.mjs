@@ -41,16 +41,29 @@ await page.waitForTimeout(3500);
 const main = page.locator('[data-node-id="CE-main"]');
 
 // ── The month is big and bold in the label cell ─────────────────────────────
+// The month SHRINKS to fit its column now (owner: "the name of the month is
+// getting cut off" — PlannerWidget, the week label's `fit`), down to a floor
+// of 8 at zoom 1; on this sheet of short names it sits near the floor. So:
+// bold, never below the floor, and never cut — "AUG 9" is whole, and ends
+// before the week's scroll arrows begin.
 const label = await page.evaluate(() => {
   const el = document.querySelector('[data-node-id="CE-main"]');
   const aug = [...el.querySelectorAll('span')]
     .find(s => (s.textContent || '').trim() === 'AUG' && !s.children.length);
   if (!aug) return null;
   const cs = getComputedStyle(aug);
-  return { size: parseFloat(cs.fontSize), weight: Number(cs.fontWeight) };
+  const wrap = aug.closest('[data-week-label]');
+  const row = wrap?.parentElement;
+  const arrow = row?.querySelector('[data-week-up], [data-week-down]');
+  const wr = wrap?.getBoundingClientRect();
+  return {
+    size: parseFloat(cs.fontSize), weight: Number(cs.fontWeight),
+    whole: !!wrap && wrap.scrollWidth <= wrap.clientWidth + 1,
+    clear: !arrow || (wr.right <= arrow.getBoundingClientRect().left + 1),
+  };
 });
-check(!!label && label.size >= 12 && label.weight >= 800,
-  'the month reads AUG — big and bold in the label cell', JSON.stringify(label));
+check(!!label && label.size >= 8 && label.weight >= 800 && label.whole && label.clear,
+  'the month reads AUG — bold, whole, and clear of the arrows in the label cell', JSON.stringify(label));
 
 // ── The ‹ Today › cluster is gone from the header ───────────────────────────
 const headerBits = await page.evaluate(() => {
@@ -113,7 +126,9 @@ await page.waitForTimeout(300);
 const eye = await page.evaluate(() => {
   const el = document.querySelector('[data-node-id="CE-main"]');
   const btn = el.querySelector('button[title^="Put this week away"] svg');
-  return btn ? btn.getBoundingClientRect().width : 0;
+  // The icon's OWN size: on screen it is scaled by the board's zoom (0.96 here
+  // made a 13px eye read 12.4), which is not the eye's size.
+  return btn ? Number(btn.getAttribute('width')) : 0;
 });
 check(eye >= 13, 'the put-away eye is finger-sized now', `${eye}px`);
 
