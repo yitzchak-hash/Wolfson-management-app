@@ -78,6 +78,23 @@ await page.locator('button[title="Zoom in"]').click();
 await page.waitForTimeout(300);
 const vpb = await page.locator('[data-board-viewport]').boundingBox();
 const note = page.locator('[data-node-id="CE-b1"]');
+// The board only MOUNTS what is in (or near) the view — viewport culling, the
+// thousand-job board's speed (GeneralJobsPage.tsx "VIEWPORT CULLING"). Zooming
+// in can carry the note out of view, so pan (middle-button drag, the board's
+// own pan) until it is on screen in the left half, with room to move right.
+for (let i = 0; i < 12; i++) {
+  const bb = await note.count() ? await note.boundingBox() : null;
+  if (bb && bb.x > vpb.x + 40 && bb.x + bb.width < vpb.x + vpb.width * 0.5 && bb.y > vpb.y + 40 && bb.y + bb.height < vpb.y + vpb.height - 40) break;
+  // Which way: toward the note's world position (top-left of the board).
+  const dx = !bb ? 280 : bb.x < vpb.x + 40 ? 220 : bb.x + bb.width > vpb.x + vpb.width * 0.5 ? -220 : 0;
+  const dy = !bb ? 200 : bb.y < vpb.y + 40 ? 160 : bb.y + bb.height > vpb.y + vpb.height - 40 ? -160 : 0;
+  const cx = vpb.x + vpb.width * 0.6, cy = vpb.y + vpb.height * 0.75;
+  await page.mouse.move(cx, cy);
+  await page.mouse.down({ button: 'middle' });
+  await page.mouse.move(cx + dx, cy + dy, { steps: 8 });
+  await page.mouse.up({ button: 'middle' });
+  await page.waitForTimeout(250);
+}
 let nb = await note.boundingBox();
 // First push right so there is somewhere to come back from.
 await page.mouse.move(nb.x + nb.width / 2, nb.y + nb.height / 2);

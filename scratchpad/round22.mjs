@@ -67,11 +67,24 @@ await ctx.addInitScript(() => {
         data: { weekView: 'all',
           people: ['c:C-jo'],
           firstWeek: '2026-08-16', weekCount: 2, span: 5,
-          cells: { 'c:C-jo|2026-08-18': [{ id: 'e-h', jobId: 'G-w1', taskId: 'T-dup' }] },
+          // e-h is a TASK's card: "the fold" turns it into the task's own
+          // days (PlannerWidget "THE FOLD"), so it leaves the squares by
+          // design. e-p is a job parked on a day with no task — the kind the
+          // fold leaves alone — so it is what the handover must carry.
+          cells: {
+            'c:C-jo|2026-08-18': [{ id: 'e-h', jobId: 'G-w1', taskId: 'T-dup' }],
+            'c:C-jo|2026-08-19': [{ id: 'e-p', jobId: 'G-w0' }],
+          },
         } },
       { id: 'CE-proj', type: 'widget', widget: 'rota',
         x: 560, y: 580, w: 760, h: 300, text: '', color: '#ffffff',
         data: { weekView: 'all', role: 'projection' } },
+      // The board seeds its Goals widget once, at the centre of the view
+      // (GeneralJobsPage "The Goals widget appears on the board once") —
+      // right over the notebook, where it caught the week's "+". Placed out
+      // of the way, so the board does not add one in the middle.
+      { id: 'CE-goals-board', type: 'widget', widget: 'goals',
+        x: 2400, y: 1600, w: 340, h: 320, text: '', color: '#ffffff', data: {} },
     ],
   }));
 });
@@ -122,18 +135,20 @@ check(dd.weekCount === 4 && dd.firstWeek === '2026-08-09',
   'the BOTTOM plus adds the week AFTER — newer, at the bottom', JSON.stringify({ firstWeek: dd.firstWeek, weekCount: dd.weekCount }));
 
 // ── 3 · assigned tasks show themselves in the worker's square ───────────────
+// A worker's tasks draw as TASK BARS across their days now ([data-task-bar],
+// carrying the task's id), not the old "From the task list" chips.
 const chips = await page.evaluate(() => {
   const el = document.querySelector('[data-node-id="CE-main"]');
-  return [...el.querySelectorAll('button[title*="From the task list"]')]
-    .map(c => (c.textContent || '').trim().slice(0, 60));
+  return [...el.querySelectorAll('[data-task-bar]')]
+    .map(c => ({ id: c.getAttribute('data-task-bar'), text: (c.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 80) }));
 });
-console.log('       task chips:', JSON.stringify(chips));
-check(chips.some(c => /Genjob/.test(c) && /Hang the unit/.test(c)),
+console.log('       task bars:', JSON.stringify(chips));
+check(chips.some(c => c.id === 'T-gen' && /Genjob/.test(c.text) && /Hang the unit/.test(c.text)),
   'a task in THIS workspace appears on its day');
-check(chips.some(c => /Katz/.test(c) && /Fix the VRF/.test(c) && /Wolfson/i.test(c)),
+check(chips.some(c => c.id === 'T-wolf' && /Katz/.test(c.text) && /Fix the VRF/.test(c.text) && /Wolfson/i.test(c.text)),
   'a task from ANOTHER workspace appears too, labeled with its workspace');
-check(!chips.some(c => /Duplicate check/.test(c)),
-  'a task already placed by hand gets no second chip');
+check(chips.filter(c => c.id === 'T-dup').length <= 1,
+  'a task already placed by hand gets no second copy', JSON.stringify(chips.filter(c => c.id === 'T-dup')));
 
 // ── 4 · removing the MAIN hands everything to the projection ────────────────
 await main.hover();
@@ -159,7 +174,7 @@ check(after.rotas.length === 1 && after.rotas[0].id === 'CE-proj',
   'the main is gone and the projection remains', JSON.stringify(after.rotas.map(r => r.id)));
 check(after.heir && after.heir.role === null && after.heir.weekCount === 4,
   'the projection inherited the crown AND every week', JSON.stringify(after.heir));
-check(after.rotas[0]?.cells.includes('c:C-jo|2026-08-18'),
+check(after.rotas[0]?.cells.includes('c:C-jo|2026-08-19'),
   'with the squares intact', JSON.stringify(after.rotas[0]?.cells));
 check(after.heldBy === 'CE-proj',
   'and the job filed in the notebook follows it', String(after.heldBy));
@@ -182,7 +197,7 @@ const filed = await page.evaluate(() => {
 });
 console.log('       after removing the last:', JSON.stringify(filed));
 check(filed.rotasLeft === 0, 'the last notebook is off the board');
-check(filed.archived >= 1 && filed.weekCount === 4 && filed.cells.includes('c:C-jo|2026-08-18'),
+check(filed.archived >= 1 && filed.weekCount === 4 && filed.cells.includes('c:C-jo|2026-08-19'),
   'and every week and card is filed in the archive, not deleted', JSON.stringify(filed));
 
 console.log(fails ? `\n${fails} FAILED` : '\nALL PASS');

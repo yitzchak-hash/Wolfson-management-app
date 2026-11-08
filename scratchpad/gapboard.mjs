@@ -50,6 +50,12 @@ await ctx.addInitScript(y => {
       { ...note('CE-gb', 260), y: 40, board: 'CE-bin-mine' },
       { ...note('CE-gc', 500), y: 40, board: 'CE-bin-mine' },
       { ...note('CE-gloose', 20), y: 400, board: 'CE-bin-mine' },
+      // The board seeds its Goals widget once, at the CENTRE of the view
+      // (GeneralJobsPage "The Goals widget appears on the board once"): 340
+      // wide there, its right edge fell on x 880 — exactly the spacing
+      // landing spot — so plain EDGE alignment held the note there even with
+      // spacing off. Placed far away instead, so the board does not add one.
+      { id: 'CE-goals-board', type: 'widget', widget: 'goals', x: 1900, y: 1500, w: 340, h: 320, text: '', color: '#ffffff', data: {} },
     ]),
   }));
 }, ROW_Y);
