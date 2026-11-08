@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { haptic } from '../../data/haptics';
 import { Check, AlertTriangle, X, Plus, Hammer, CalendarDays, Clock, Camera, Video, Play, ChevronDown, Loader2 } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { Stage, MainUiStrings, Apartment, ContractorAssignment, Contractor, ContractorPhoto, StageMark, getStageName, Inspection, InspectionFile } from '../../types';
@@ -235,8 +236,8 @@ export function StageSection({
               {isOff ? ring(st, state) : (
                 <button type="button" data-stage-bubble={st.id} data-stage-state={state}
                   title={ui.setTapHint}
-                  onClick={() => onMarks(cycleMark(marks, st.id, 'left', state))}
-                  onContextMenu={e => { e.preventDefault(); onMarks(cycleMark(marks, st.id, 'right', state)); }}
+                  onClick={() => { const nx = cycleMark(marks, st.id, 'left', state); if (nx?.[st.id] === 'done') haptic('success'); onMarks(nx); }}
+                  onContextMenu={e => { e.preventDefault(); const nx = cycleMark(marks, st.id, 'right', state); if (nx?.[st.id] === 'done') haptic('success'); onMarks(nx); }}
                   className="flex-shrink-0 rounded-full hover:scale-110 transition-transform">
                   {ring(st, state)}
                 </button>

@@ -1,4 +1,5 @@
 import React, { useLayoutEffect, useRef, useState } from 'react';
+import { haptic } from '../../data/haptics';
 import { Mic, Paperclip, Send, Loader2, Square } from 'lucide-react';
 import { VoiceRecorderButton } from './VoiceMemo';
 import { useDictation } from '../../data/dictation';
@@ -268,7 +269,7 @@ export function MessageBox({
             }}
             onBlur={onBlur}
             onKeyDown={e => {
-              if (sendMode && e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); if (canSend) onSend!(); }
+              if (sendMode && e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); if (canSend) { haptic('tap'); onSend!(); } }
             }}
             rows={1}
             autoFocus={autoFocus}
@@ -288,7 +289,7 @@ export function MessageBox({
             </button>
             {sendMode && (
               <button type="button" data-dictate-send title={L.send} aria-label={L.send}
-                onClick={() => dictate.finish(() => onSendRef.current?.())}
+                onClick={() => { haptic('tap'); dictate.finish(() => onSendRef.current?.()); }}
                 className="w-11 h-11 flex items-center justify-center rounded-full text-white active:scale-95"
                 style={{ backgroundColor: '#4aa8d8', boxShadow: '0 6px 14px -6px rgba(74,168,216,.7)' }}>
                 <Send size={18} />
@@ -299,7 +300,7 @@ export function MessageBox({
           <button
             type="button"
             data-composer-send
-            onClick={onSend}
+            onClick={() => { haptic('tap'); onSend?.(); }}
             disabled={disabled || busy}
             title={L.send}
             className={`w-11 h-11 flex items-center justify-center rounded-full text-white transition-all active:scale-95 flex-shrink-0 disabled:opacity-40 ${

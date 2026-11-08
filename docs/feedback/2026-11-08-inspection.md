@@ -27,3 +27,8 @@ Harnesses: `inspection.mjs` 13 · `photosall.mjs` 4 · `overlaps.mjs` fold-side 
 - Drive files go to **Drive's trash** (30 days to restore) through `api/drive-upload.js` mode `trash-files` (a folder id is refused); their site records go with them; a site photo kept only in the app loses its record. A file Drive refuses stays and is counted in the message. Inspection rows drop the deleted files.
 
 Harness: `photosdelete.mjs` 10.
+
+## Round 4 — vibration in all six places he chose ("all")
+- Apartment opens: tick · stage marked done: success · task closed (any screen — in the store): success · message sent (any send box, typed or dictated): tap · an error toast: warning · hold a flat on the building (450 ms, a finger): tap, the flat lights up with its partner, and it does NOT open (the lift's click is swallowed).
+
+Harness: `haptics.mjs` 9 (navigator.vibrate recorded; a real CDP touch hold).

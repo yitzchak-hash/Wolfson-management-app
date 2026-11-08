@@ -171,6 +171,30 @@ export default function BuildingView({ apartments, stages, onOpen, words, initia
   // The landed floor (an index into `floors`) — state, because the cards read it.
   const [landed, setLanded] = useState(startIdx);
   const [hover, setHover] = useState<string | null>(null);
+  /**
+   * Press and HOLD a flat with a finger (owner, 2026-11-08: "all" of the vibration places): after 450 ms the phone
+   * buzzes and the flat lights up (with its joined partner) without opening — a peek. The click that follows the
+   * hold is swallowed; a finger that moves (dragging the floors) is not a hold.
+   */
+  const hold = useRef<{ id: string; x: number; y: number; timer: number; fired: boolean } | null>(null);
+  const holdOf = (id: string) => ({
+    onPointerDown: (e: React.PointerEvent) => {
+      if (e.pointerType !== 'touch') return;
+      if (hold.current) window.clearTimeout(hold.current.timer);
+      const h = { id, x: e.clientX, y: e.clientY, fired: false, timer: 0 };
+      h.timer = window.setTimeout(() => { h.fired = true; setHover(id); haptic('tap'); }, 450);
+      hold.current = h;
+    },
+    onPointerMove: (e: React.PointerEvent) => {
+      const h = hold.current;
+      if (h && !h.fired && Math.hypot(e.clientX - h.x, e.clientY - h.y) > 10) { window.clearTimeout(h.timer); hold.current = null; }
+    },
+    onPointerUp: () => { if (hold.current && !hold.current.fired) { window.clearTimeout(hold.current.timer); hold.current = null; } },
+    onPointerCancel: () => { if (hold.current) window.clearTimeout(hold.current.timer); hold.current = null; },
+    onContextMenu: (e: React.MouseEvent) => { if (hold.current?.fired) e.preventDefault(); },
+  });
+  /** True (and forgotten) when this click is the lift of a hold on that flat. */
+  const heldClick = (id: string) => { const h = hold.current; if (h?.fired && h.id === id) { hold.current = null; return true; } return false; };
   const target = useRef(startIdx);
   const pos = useRef(startIdx);
   const vel = useRef(0);
@@ -356,7 +380,8 @@ export default function BuildingView({ apartments, stages, onOpen, words, initia
                       return (
                         <g key={a.id} className="bv-slot" data-slot={a.id} data-on={on ? '1' : '0'} data-zone={z ? '1' : '0'}
                           onPointerEnter={() => i === landed && setHover(a.id)} onPointerLeave={() => setHover(h => (h === a.id ? null : h))}
-                          onClick={() => i === landed && onOpen(a)}>
+                          {...holdOf(a.id)}
+                          onClick={() => !heldClick(a.id) && i === landed && onOpen(a)}>
                           {z && <rect className="bv-zone" x={z[0] + dx} y={z[1] + dy} width={z[2] - z[0]} height={z[3] - z[1]} rx={18} />}
                           <SlotChip x={cx} y={cy} name={slotName(a)} />
                         </g>
@@ -400,7 +425,8 @@ export default function BuildingView({ apartments, stages, onOpen, words, initia
                       style={{ ['--bv-c' as string]: f.tint }}
                       onPointerEnter={() => i === landed && setHover(apt.id)}
                       onPointerLeave={() => setHover(h => (h === apt.id ? null : h))}
-                      onClick={() => i === landed && onOpen(apt)}
+                      {...holdOf(apt.id)}
+                      onClick={() => !heldClick(apt.id) && i === landed && onOpen(apt)}
                     >
                       {shapes.flatMap(s => (PH_TERRACES[s] ?? []).map((t, j) => <path key={`${s}-t${j}`} className="bv-terrace" d={pathOf(t)} />))}
                       {shapes.map(s => <path key={s} d={pathOf(SHAPES[s])} />)}
@@ -498,7 +524,8 @@ export default function BuildingView({ apartments, stages, onOpen, words, initia
               onPointerLeave={() => setHover(h => (h === apt.id ? null : h))}
               onFocus={() => setHover(apt.id)}
               onBlur={() => setHover(h => (h === apt.id ? null : h))}
-              onClick={() => onOpen(apt)}
+              {...holdOf(apt.id)}
+              onClick={() => !heldClick(apt.id) && onOpen(apt)}
             >
               <span className="bv-card-top">
                 <span className="bv-card-no">{apt.apartmentNumber}</span>

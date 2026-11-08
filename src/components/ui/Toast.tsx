@@ -1,5 +1,6 @@
 import React, { useEffect } from 'react';
 import { CheckCircle, XCircle, X } from 'lucide-react';
+import { haptic } from '../../data/haptics';
 
 interface ToastProps {
   message: string;
@@ -8,6 +9,8 @@ interface ToastProps {
 }
 
 export function Toast({ message, type = 'success', onClose }: ToastProps) {
+  // Something failed or was refused: the phone gives a warning buzz (owner, 2026-11-08).
+  useEffect(() => { if (type === 'error') haptic('warn'); }, [type, message]);
   useEffect(() => {
     // 1.8s, not 3. A toast is a receipt — you read it in the corner of your
     // eye and carry on — and three seconds of it sitting over the board was

@@ -10,6 +10,7 @@ import { TaskThread } from '../tasks/TaskThread';
 import { Translated } from '../ui/Translated';
 import { Send, CheckSquare, Square as SquareIcon } from 'lucide-react';
 import { trashDriveFiles } from '../../data/driveTrash';
+import { haptic } from '../../data/haptics';
 import { useStore, trackUndo, cloudReady } from '../../data/store';
 import { peekTaskFocus, takeTaskFocus } from '../../data/taskFocus';
 import { TaskDaysPicker, daysFields } from '../tasks/TaskDaysPicker';
@@ -578,6 +579,7 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
       setActiveTab('details');
       setDrivePhotos([]);
       setPhotoSelect(false); setPhotoPicked(new Set()); setPhotoAskDelete(false);
+      haptic('tick'); // a small buzz as the apartment opens (owner, 2026-11-08)
       setPhotosLoaded(false);
       setLightbox(null);
       const existingFileId = apartment.plansPdfLink ? extractFileId(apartment.plansPdfLink) : null;

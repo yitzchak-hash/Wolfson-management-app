@@ -46,7 +46,7 @@ export const WHATS_NEW: WhatsNewEntry[] = [
       },
       {
         title: 'The phone answers your finger',
-        body: 'A small buzz when you change floors on the building, and when the camera takes a picture.',
+        body: 'A small buzz when you change floors, open an apartment, mark a stage done, close a task, send a message or take a picture — and a warning buzz when something is refused. Press and hold a flat on the building to light it up without opening it.',
         demo: 'sparkle',
       },
       {
