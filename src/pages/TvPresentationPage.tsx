@@ -989,7 +989,8 @@ export function TvPresentationPage() {
   const pending = (a: Apartment) =>
     contractorAssignments.filter(x => x.apartmentId === a.id && !x.completedAt).length;
 
-  const allProjects = useMemo(() => loadAllProjectsTaskData(), []);
+  // Every workspace, the ones made in settings included (as the calendar, map C19).
+  const allProjects = useMemo(() => loadAllProjectsTaskData(projects.map(p => p.id)), [projects]);
   const overdue = useMemo(() => {
     const today = new Date().toISOString().slice(0, 10);
     return allProjects.reduce((n, d) =>

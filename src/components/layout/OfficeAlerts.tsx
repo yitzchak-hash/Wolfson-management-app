@@ -61,7 +61,8 @@ export function OfficeAlerts() {
     const he = !!s.isRtl;
     const wsName = (pid: string) => projectShortName(projects.find(p => p.id === pid), he, pid);
     const whoOf = (id: string, fallback: string) => contractors.find(c => c.id === id)?.name || fallback || s.unknownUser;
-    for (const p of loadAllProjectsTaskData()) {
+    // Every workspace, the ones made in settings included (as the calendar, map C19).
+    for (const p of loadAllProjectsTaskData(projects.map(x => x.id))) {
       const live = p.projectId === currentProjectId;
       const tasks: ContractorAssignment[] = live ? liveTasks : p.assignments;
       const apts = live ? liveApts : p.apartments;

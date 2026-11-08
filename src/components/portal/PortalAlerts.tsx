@@ -96,7 +96,8 @@ export function ArrivalWatcher({ contractor, lang, onOpen }: {
   const current = useMemo(() => {
     const out = new Map<string, Arrival>();
     const wsName = (pid: string) => projectShortName(projects.find(p => p.id === pid), lang === 'he', pid);
-    for (const p of loadAllProjectsTaskData()) {
+    // Every workspace, the ones made in settings included (as the calendar, map C19).
+    for (const p of loadAllProjectsTaskData(projects.map(x => x.id))) {
       const live = p.projectId === currentProjectId;
       const tasks: ContractorAssignment[] = live ? liveTasks : p.assignments;
       const apts = live ? liveApts : p.apartments;

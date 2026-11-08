@@ -386,7 +386,8 @@ function PortalBell({ contractor, s, lang, currentProjectId, allAssignments, all
     const tomorrow = isoOf(d1);
     const weekAgo = Date.now() - 6 * 86400000;
     const out: BellItem[] = [];
-    for (const p of loadAllProjectsTaskData()) {
+    // Every workspace, the ones made in settings included (as the calendar, map C19).
+    for (const p of loadAllProjectsTaskData(projects.map(x => x.id))) {
       // The open workspace is LIVE; the snapshots stand in for the rest.
       const asg = p.projectId === currentProjectId ? allAssignments : p.assignments;
       const apts = p.projectId === currentProjectId ? allApartments : p.apartments;
@@ -991,7 +992,7 @@ export function ContractorPortal() {
    */
   const myProjects = useMemo(() => {
     if (!contractor) return [];
-    return loadAllProjectsTaskData()
+    return loadAllProjectsTaskData(projects.map(x => x.id))
       .map(p => ({
         id: p.projectId,
         name: projectName(projects.find(x => x.id === p.projectId), readLang === 'he', p.projectId),
@@ -1100,7 +1101,7 @@ export function ContractorPortal() {
    */
   const otherTasks = useMemo(() => {
     const out: { a: ContractorAssignment; apt?: Apartment; projectId: string; projectName: string }[] = [];
-    for (const p of loadAllProjectsTaskData()) {
+    for (const p of loadAllProjectsTaskData(projects.map(x => x.id))) {
       if (p.projectId === currentProjectId) continue;
       const name = projectName(projects.find(x => x.id === p.projectId), readLang === 'he', p.projectId);
       for (const a of p.assignments) {
@@ -1212,7 +1213,7 @@ export function ContractorPortal() {
     const id = new URLSearchParams(window.location.search).get('task');
     if (!id) { deepLinked.current = true; return; }
     const here = contractorAssignments.find(x => x.id === id);
-    const elsewhere = here ? null : loadAllProjectsTaskData().find(p => p.assignments.some(x => x.id === id));
+    const elsewhere = here ? null : loadAllProjectsTaskData(projects.map(x => x.id)).find(p => p.assignments.some(x => x.id === id));
     if (!here && !elsewhere) return;           // not landed yet — try again on the next sync
     deepLinked.current = true;
     const url = new URL(window.location.href); url.searchParams.delete('task');
@@ -1222,7 +1223,7 @@ export function ContractorPortal() {
     setActiveTab('tasks');
     openTask(elsewhere!.projectId, a);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [contractorAssignments, snapshotTick]);
+  }, [contractorAssignments, snapshotTick, projects]);
   const getMedia = (assignmentId: string) => contractorPhotos.filter(p => p.assignmentId === assignmentId);
   const getNotes = (assignmentId: string) => contractorNotes.filter(n => n.assignmentId === assignmentId);
 
@@ -2636,7 +2637,7 @@ plansPdfFileId && (
             lang={readLang}
             onOpen={(pid, taskId) => {
               const list = pid === currentProjectId ? contractorAssignments
-                : (loadAllProjectsTaskData().find(p => p.projectId === pid)?.assignments ?? []);
+                : (loadAllProjectsTaskData([pid])[0]?.assignments ?? []);
               const a = list.find(x => x.id === taskId);
               setActiveTab('tasks');
               if (a) openTask(pid, a);

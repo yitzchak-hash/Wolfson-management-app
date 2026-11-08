@@ -264,7 +264,9 @@ export function WorkspaceCard({ el, c }: { el: CanvasElement; c: WidgetCtx }) {
     () => (live ? { apartments: c.jobs, stages: c.stages } : loadProjectSnapshot(chosen)),
     [live, chosen, c.jobs, c.stages, snapTick],
   );
-  const cached = useMemo(() => loadAllProjectsTaskData().find(x => x.projectId === chosen), [chosen, snapTick]);
+  // Just the chosen workspace — a custom one (settings/app.customProjects) too,
+  // which the built-in-three default never read (map C19).
+  const cached = useMemo(() => loadAllProjectsTaskData([chosen])[0], [chosen, snapTick]);
 
   const units = snap.apartments.filter(isCountableApartment);
   const liveIds = new Set(units.map(u => u.id));
