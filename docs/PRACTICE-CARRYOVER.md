@@ -51,6 +51,7 @@ change after that commit belongs in this list.
 | 2026-11-09 | Scanned and photographed plans read their own title block by OCR (tesseract.js, lazy): address, phone, floor and scale, each with its box and cutout; a picture plan can be read too | `src/data/planOcr.ts` (new), `planAddress.ts`, `PlanAddressSuggest.tsx`, `package.json` | ″ |
 | 2026-11-09 | Job search: among equally good matches, the job whose Drive folder moved most recently comes first; "Drive · 2h ago" in the header search | `searchIndex.ts`, `driveActivity.ts`, `GlobalSearch.tsx`, `SearchTileWidget.tsx`, `ImportBatchWindow.tsx`, `types` | ″ |
 | 2026-11-09 | One upload card for a whole batch ("Uploading n of N", one bar over all the bytes); the Inspection button stays usable while a batch goes up (batches fold into one inspection, the save reads the record fresh); "Phone camera" in the inspection camera (the phone's own photo camera, one per trip, into the strip); the Photos tab shows inspection files off the record at once (no-Drive-folder jobs too) | `uploadTracker.ts`, `driveApi.ts`, `UploadToasts.tsx`, `ApartmentDetailDrawer.tsx`, `StageSection.tsx`, `InspectionCamera.tsx` | ″ |
+| 2026-11-09 | Stage colour picker: ten numbered colours on top (1 white = not sold … 10 maroon) | `SettingsPage.tsx` (`STAGE_LADDER`, `ColorPickerWithPresets ladder`) | ″ |
 
 ## Already brought across
 (nothing yet)

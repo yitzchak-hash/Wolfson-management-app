@@ -35,6 +35,11 @@ export const WHATS_NEW: WhatsNewEntry[] = [
     title: 'One upload bar, and inspections you can keep adding to',
     items: [
       {
+        title: 'Ten numbered stage colours',
+        body: 'Settings → Stages: the colour picker starts with ten numbered colours, from 1 white (not sold) through cream, yellows, amber and oranges to red and 10 maroon. Tap a number to give a stage that colour.',
+        demo: 'tap',
+      },
+      {
         title: 'One bar for everything going up',
         body: 'When several pictures or videos go up together, the corner card shows one bar for all of them: "Uploading 2 of 5" and the total percent.',
         demo: 'tap',

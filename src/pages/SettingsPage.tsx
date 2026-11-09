@@ -302,6 +302,23 @@ const PRESET_COLORS = [
   '#f43f5e', '#64748b', '#0f172a', '#b8860b', '#1e3a5f',
 ];
 
+/**
+ * THE TEN STAGE COLOURS, numbered (owner, 2026-11-09: "ten colors that are going to be the gradient … white being not
+ * sold, number one. And ten being maroon"). A ladder from white to maroon, so a stage's colour says how far along it is.
+ */
+const STAGE_LADDER: { c: string; en: string; he: string }[] = [
+  { c: '#ffffff', en: 'White — not sold', he: 'לבן — לא נמכר' },
+  { c: '#fdf4dc', en: 'Cream', he: 'קרם' },
+  { c: '#fef08a', en: 'Light yellow', he: 'צהוב בהיר' },
+  { c: '#fde047', en: 'Yellow', he: 'צהוב' },
+  { c: '#fbbf24', en: 'Amber', he: 'ענבר' },
+  { c: '#fb923c', en: 'Light orange', he: 'כתום בהיר' },
+  { c: '#f97316', en: 'Orange', he: 'כתום' },
+  { c: '#ea580c', en: 'Dark orange', he: 'כתום כהה' },
+  { c: '#dc2626', en: 'Red', he: 'אדום' },
+  { c: '#7f1d1d', en: 'Maroon', he: 'בורדו' },
+];
+
 /** Fit a shape into the room available, capped so a tall panel stays on screen. */
 function tvPreviewBox(ratio: { w: number; h: number }, avail: number): React.CSSProperties {
   const aspect = ratio.w / ratio.h;
@@ -416,11 +433,28 @@ export function SettingsPage({ scope = 'project' }: { scope?: SettingsScope }) {
 }
 
 // ─── Color picker with presets ────────────────────────────────────────────────
-interface ColorPickerProps { value: string; onChange: (color: string) => void; }
+interface ColorPickerProps { value: string; onChange: (color: string) => void; ladder?: boolean }
 
-function ColorPickerWithPresets({ value, onChange }: ColorPickerProps) {
+function ColorPickerWithPresets({ value, onChange, ladder }: ColorPickerProps) {
+  const he = useStore(st => st.mainUiStrings.isRtl);
+  const on = (c: string) => value.toLowerCase() === c;
   return (
     <div className="space-y-2">
+      {ladder && (
+        <div className="grid grid-cols-5 sm:grid-cols-10 gap-1" data-stage-ladder dir="ltr">
+          {STAGE_LADDER.map((s, i) => (
+            <button key={s.c} type="button" data-stage-ladder-n={i + 1} onClick={() => onChange(s.c)}
+              title={`${i + 1} · ${he ? s.he : s.en}`}
+              className="h-9 rounded-md flex items-center justify-center text-[13px] font-bold tabular-nums transition-transform hover:scale-110 focus:outline-none"
+              style={{
+                backgroundColor: s.c,
+                color: i >= 6 ? '#fff' : '#1f2937',
+                border: on(s.c) ? '2px solid #1e3a5f' : '1px solid rgba(0,0,0,0.15)',
+                boxShadow: on(s.c) ? '0 0 0 2px #fff inset' : 'none',
+              }}>{i + 1}</button>
+          ))}
+        </div>
+      )}
       <div className="flex items-center gap-2">
         <div className="relative w-9 h-9 flex-shrink-0">
           <input type="color" value={value} onChange={e => onChange(e.target.value)}
@@ -1140,7 +1174,7 @@ function StageSettings({ stages, updateStage, addStage, deleteStage, onToast, cu
               {isExpanded && (
                 <div className="px-4 pb-4 border-t border-gray-100 pt-3 bg-gray-50">
                   <p className="text-xs font-medium text-gray-500 mb-2">{s.pickColor}</p>
-                  <ColorPickerWithPresets value={color} onChange={c => pickColor(stage, c)} />
+                  <ColorPickerWithPresets ladder value={color} onChange={c => pickColor(stage, c)} />
                 </div>
               )}
             </div>
@@ -1212,7 +1246,7 @@ function StageSettings({ stages, updateStage, addStage, deleteStage, onToast, cu
       <div className="bg-gray-50 border border-dashed border-gray-300 rounded-xl p-4">
         <h3 className="text-sm font-semibold text-gray-700 mb-3">{s.addNewStage}</h3>
         <div className="flex gap-3 items-start">
-          <ColorPickerWithPresets value={newStageColor} onChange={setNewStageColor} />
+          <ColorPickerWithPresets ladder value={newStageColor} onChange={setNewStageColor} />
           <div className="flex-1 flex flex-col gap-2">
             <input value={newStageName} onChange={e => setNewStageName(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && handleAddStage()}
