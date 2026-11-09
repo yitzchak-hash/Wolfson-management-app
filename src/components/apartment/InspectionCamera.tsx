@@ -41,7 +41,10 @@ export function InspectionCamera({ open, isRtl, onDone, onClose, onFallback }: {
     if (!open) return;
     let dead = false;
     setFailed(false);
-    navigator.mediaDevices?.getUserMedia({ video: { facingMode: { ideal: facing }, width: { ideal: 1920 }, height: { ideal: 1080 } }, audio: mode === 'video' })
+    // A film at 720p (owner, 2026-11-09: a 2-minute clip at the phone's 1080p default was 173 MB and would not play);
+    // photos keep the full 1080p.
+    const big = mode === 'photo';
+    navigator.mediaDevices?.getUserMedia({ video: { facingMode: { ideal: facing }, width: { ideal: big ? 1920 : 1280 }, height: { ideal: big ? 1080 : 720 } }, audio: mode === 'video' })
       .then(s => {
         if (dead) { s.getTracks().forEach(t => t.stop()); return; }
         streamRef.current = s;
@@ -78,7 +81,8 @@ export function InspectionCamera({ open, isRtl, onDone, onClose, onFallback }: {
     if (recording) { recRef.current?.stop(); haptic('tap'); return; }
     const s = streamRef.current; if (!s || typeof MediaRecorder === 'undefined') return;
     const type = ['video/mp4', 'video/webm;codecs=vp9', 'video/webm'].find(t => MediaRecorder.isTypeSupported?.(t)) ?? '';
-    const rec = new MediaRecorder(s, type ? { mimeType: type } : undefined);
+    // ~3 Mbit/s: about 50 MB for two minutes instead of 170.
+    const rec = new MediaRecorder(s, { ...(type ? { mimeType: type } : {}), videoBitsPerSecond: 3_000_000, audioBitsPerSecond: 96_000 });
     chunks.current = [];
     rec.ondataavailable = e => { if (e.data.size) chunks.current.push(e.data); };
     rec.onstop = () => {

@@ -31,6 +31,17 @@ export interface WhatsNewEntry {
 
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    date: '2027-03-04',
+    title: 'Videos that play',
+    items: [
+      {
+        title: 'Inspection videos always play',
+        body: 'When a video will not start in the app (an iPhone recording can do that), it switches to Google Drive\'s own player by itself. Videos taken in the app are also smaller now, so they load faster.',
+        demo: 'tap',
+      },
+    ],
+  },
+  {
     date: '2027-03-03',
     title: 'The day buttons fit the phone',
     items: [

@@ -43,3 +43,10 @@ Harness: `haptics-ios.mjs` 7 (iPhone device, no vibrate, each tick recorded with
 - "make smaller so all 4 fit": the wrap's 560px floor is 380, `.bv-root` 360; the plate is capped by the stage's height (`container-type: size`, `100cqh`); under 470px of stage the corner cards shrink. The counts (his red box, arrow up) stack into two small lines under 1280px and stay on Print's row.
 
 Harness: `foldbuilding.mjs` 24 (his Fold ~938×620 and six other screens, floor 10).
+
+## 2026-11-09 — "tzvis inspection video is not playing"
+- The video (Netiv B2/21) is fine: 2:22, 1080p H.264 + AAC, every frame decodes. It was saved by the iPhone as a streaming-style MP4 whose header says "length unknown" (duration 0, size 0×0), 173 MB. The app's stream route served it fine (206, whole file in 9 s).
+- Fix: the viewer switches to Drive's own player when ours refuses the film or has not started within 8 s (Drive re-processes every video; the file is link-shared). The camera records video at 720p, ~3 Mbit/s (~50 MB for two minutes).
+- Found by looking: B2/23 has no Drive folder, so its inspection picture rode inside the record at full size. Such pictures are shrunk to 1280 px now.
+
+Harness: `inspectvideo.mjs` 6.

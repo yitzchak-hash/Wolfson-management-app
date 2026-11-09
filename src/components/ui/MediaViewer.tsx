@@ -71,6 +71,14 @@ export function MediaViewer({
   const [loadFailed, setLoadFailed] = React.useState(false);
   /** The stream refused (an old deployment, a network fault) — fall back to the bytes. */
   const [streamFailed, setStreamFailed] = React.useState(false);
+  /**
+   * DRIVE'S OWN PLAYER (owner, 2026-11-09: "tzvis inspection video is not playing"). A film recorded inside a web page
+   * on an iPhone is saved as a streaming-style MP4 whose header says "length unknown"; some players never start it.
+   * Drive re-processes every video into a form every device plays, so when ours has not started within a few seconds
+   * (or refuses the file), the viewer shows Drive's player instead.
+   */
+  const [drivePlayer, setDrivePlayer] = React.useState(false);
+  const started = React.useRef(false);
   const rootRef = React.useRef<HTMLDivElement>(null);
 
   const item = items[Math.min(idx, items.length - 1)];
@@ -87,7 +95,12 @@ export function MediaViewer({
   const next = React.useCallback(() => setIdx(i => Math.min(items.length - 1, i + 1)), [items.length]);
 
   // A new item is a fresh load: nothing carried over from the last one.
-  React.useEffect(() => { setBytesSrc(null); setLoadFailed(false); setStreamFailed(false); }, [idx]);
+  React.useEffect(() => { setBytesSrc(null); setLoadFailed(false); setStreamFailed(false); setDrivePlayer(false); started.current = false; }, [idx]);
+  React.useEffect(() => {
+    if (kind !== 'video' || !item?.fileId || drivePlayer) return;
+    const t = window.setTimeout(() => { if (!started.current) setDrivePlayer(true); }, 8000);
+    return () => window.clearTimeout(t);
+  }, [kind, item?.fileId, idx, drivePlayer]);
 
   /**
    * A Drive VIDEO (or sheet we mean to draw) has no address a <video> can
@@ -95,7 +108,7 @@ export function MediaViewer({
    * on mount of a tile, which would fetch every film in the folder.
    */
   React.useEffect(() => {
-    if (!item?.fileId || playable || kind !== 'video') return;
+    if (!item?.fileId || playable || kind !== 'video' || drivePlayer) return;
     // STREAM first: the film starts after its first chunk, and seeking asks
     // for just the part it needs. Only a refused stream downloads the whole
     // file into a blob, the old way.
@@ -112,7 +125,7 @@ export function MediaViewer({
       } catch { if (!dead) setLoadFailed(true); }
     })();
     return () => { dead = true; if (url) URL.revokeObjectURL(url); };
-  }, [item?.fileId, playable, kind, item?.mimeType, streamFailed]);
+  }, [item?.fileId, playable, kind, item?.mimeType, streamFailed, drivePlayer]);
 
   React.useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -207,6 +220,9 @@ export function MediaViewer({
             ? <img data-viewer-image src={shown} alt={item.filename} className="max-w-full max-h-full object-contain"
                 draggable={false} onError={() => setLoadFailed(true)} />
             : <div className="text-gray-500 text-sm">{imageUnavailable}</div>
+        ) : kind === 'video' && drivePlayer && item.fileId ? (
+          <iframe data-viewer-drive-player src={drivePreviewUrl(item.fileId)} title={item.filename}
+            allow="autoplay; fullscreen" allowFullScreen className="w-full h-full bg-black rounded" />
         ) : kind === 'video' ? (
           (playable || bytesSrc) && !loadFailed
             ? <video data-viewer-video src={playable || bytesSrc!} controls autoPlay playsInline className="max-w-full max-h-full"
@@ -214,7 +230,10 @@ export function MediaViewer({
                 // some browsers start an autoplaying film muted; opening the
                 // viewer was the person's own tap, so the sound goes on.
                 onLoadedMetadata={e => { const v = e.currentTarget; v.muted = false; v.defaultMuted = false; if (v.volume === 0) v.volume = 1; }}
-                onError={() => { if (!playable && isDriveStreamUrl(bytesSrc)) setStreamFailed(true); }} />
+                onPlaying={() => { started.current = true; }}
+                onCanPlay={() => { started.current = true; }}
+                // a Drive film our player refuses goes straight to Drive's player (never a whole-file download)
+                onError={() => { if (item.fileId) setDrivePlayer(true); else if (!playable && isDriveStreamUrl(bytesSrc)) setStreamFailed(true); }} />
             : loadFailed
               ? <div className="flex flex-col items-center gap-3">
                   <span className="text-gray-400 text-sm">{imageUnavailable}</span>

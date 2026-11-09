@@ -5,6 +5,17 @@ import { createPortal } from 'react-dom';
 import { InspectionCamera } from './InspectionCamera';
 
 /** Tzvi's own user — the one person who inspects (owner, 2026-11-08: "only for Tzvi, his user"). */
+/** A picture as a small JPEG data URL (longest side 1280 px). */
+async function shrinkToDataUrl(file: File, max = 1280, q = 0.72): Promise<string> {
+  const url = URL.createObjectURL(file);
+  try {
+    const img = await new Promise<HTMLImageElement>((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = url; });
+    const k = Math.min(1, max / Math.max(img.naturalWidth, img.naturalHeight));
+    const c = document.createElement('canvas'); c.width = Math.round(img.naturalWidth * k); c.height = Math.round(img.naturalHeight * k);
+    c.getContext('2d')?.drawImage(img, 0, 0, c.width, c.height);
+    return c.toDataURL('image/jpeg', q);
+  } finally { URL.revokeObjectURL(url); }
+}
 const isTzvi = (name?: string | null) => { const n = (name ?? '').trim(); return /^(tzvi|zvi)\b/i.test(n) || /^צבי(\s|$)/.test(n); };
 import { TaskThread } from '../tasks/TaskThread';
 import { Translated } from '../ui/Translated';
@@ -1213,8 +1224,10 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
           void shareFileToDrive(fileId);
           saved.push({ filename: file.name, mimeType: file.type || 'application/octet-stream', driveFileId: fileId, driveUrl: webViewLink });
         } else if (file.type.startsWith('image/')) {
-          const dataUrl = await new Promise<string>((res, rej) => { const r = new FileReader(); r.onload = e => res(e.target?.result as string); r.onerror = rej; r.readAsDataURL(file); });
-          saved.push({ filename: file.name, mimeType: file.type, dataUrl });
+          // No Drive folder: the picture rides inside the apartment's record, so it is shrunk first (1280 px JPEG,
+          // ~150 KB) — a full phone photo nearly fills a record's 1 MB and a second one would make the save fail.
+          const dataUrl = await shrinkToDataUrl(file);
+          saved.push({ filename: file.name.replace(/\.[^.]+$/, '') + '.jpg', mimeType: 'image/jpeg', dataUrl });
         }
       }
     } catch {
