@@ -229,7 +229,7 @@ export function MediaViewer({
             : <div className="text-gray-500 text-sm">{imageUnavailable}</div>
         ) : kind === 'video' && drivePlayer && item.fileId ? (
           <iframe data-viewer-drive-player src={drivePreviewUrl(item.fileId)} title={item.filename}
-            allow="autoplay; fullscreen" allowFullScreen className="w-full h-full bg-black rounded" />
+            allow="fullscreen" allowFullScreen className="w-full h-full bg-black rounded" />
         ) : kind === 'video' ? (
           (playable || bytesSrc) && !loadFailed
             ? <div className="relative max-w-full max-h-full flex items-center justify-center">

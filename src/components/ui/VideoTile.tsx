@@ -86,6 +86,10 @@ export function VideoTile({ src, driveFileId, filename, mimeType, className = ''
 
   async function play(e: React.MouseEvent) {
     e.stopPropagation();
+    // Where there is a viewer, the press opens it (sound audit, 2026-11-09): the play() below runs after an await and a
+    // frame, and an iPhone no longer counts that as the person's press — it refuses an unmuted start. The viewer plays
+    // straight from its own button, with the sound.
+    if (onOpen) { onOpen(); return; }
     const url = await ensureBytes();
     if (!url) return;
     setPlaying(true);

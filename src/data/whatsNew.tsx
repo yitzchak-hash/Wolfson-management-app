@@ -35,6 +35,11 @@ export const WHATS_NEW: WhatsNewEntry[] = [
     title: 'One upload bar, and inspections you can keep adding to',
     items: [
       {
+        title: 'Long videos play to the end',
+        body: 'A long video no longer stops after a minute. A video in a message opens in the full viewer, where play starts it with sound. When the app hands a video to Google Drive\'s player, it waits for your press instead of starting silent.',
+        demo: 'tap',
+      },
+      {
         title: 'Ten numbered stage colours',
         body: 'Settings → Stages: the colour picker starts with ten numbered colours, from 1 white (not sold) through cream, yellows, amber and oranges to red and 10 maroon. Tap a number to give a stage that colour.',
         demo: 'tap',

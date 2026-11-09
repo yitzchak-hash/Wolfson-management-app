@@ -15,7 +15,7 @@
       "maxDuration": 30
     },
     "api/drive-fetch.js": {
-      "maxDuration": 60
+      "maxDuration": 300
     },
     "api/geocode.js": {
       "maxDuration": 60
