@@ -19,6 +19,8 @@ async function shrinkToDataUrl(file: File, max = 1280, q = 0.72): Promise<string
   } finally { URL.revokeObjectURL(url); }
 }
 const isTzvi = (name?: string | null) => { const n = (name ?? '').trim(); return /^(tzvi|zvi)\b/i.test(n) || /^צבי(\s|$)/.test(n); };
+/** The three contractors a job can be given (owner, 2026-11-09: "Yaakov - Daniel - Igor"). */
+const CREW = ['Yaakov', 'Daniel', 'Igor'];
 import { TaskThread } from '../tasks/TaskThread';
 import { Translated } from '../ui/Translated';
 import { Send, CheckSquare, Square as SquareIcon } from 'lucide-react';
@@ -2159,6 +2161,22 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                 </div>
                 )}
 
+                {/* The contractor — one of three (owner, 2026-11-09). */}
+                {!isGeneralProject && (
+                <div className="flex-shrink-0">
+                  <label className="block text-[10px] font-medium text-gray-500 mb-1">{ui.isRtl ? 'קבלן' : 'Contractor'}</label>
+                  <select
+                    data-crew-select
+                    value={apartment.crew ?? ''}
+                    onChange={e => trackUndo(null, () => updateApartment(apartment.id, { crew: e.target.value || undefined }, currentUser))}
+                    className="border border-gray-200 rounded-lg px-2 py-2 text-sm font-bold bg-white focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30"
+                  >
+                    <option value="">—</option>
+                    {CREW.map(c => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                </div>
+                )}
+
                 {/* Apt number */}
                 {!isGeneralProject && (
                 <div className="flex-shrink-0">
@@ -2581,6 +2599,18 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                 workers={contractors}
                 photos={contractorPhotos}
                 onMarks={next => setApartmentMarks(apartment.id, next, currentUser)}
+                // Installation done in one tap closes the window (owner, 2026-11-09: "only installation should be that
+                // one click, closes it automatically. If it messes up the app, just put an error message"): it closes
+                // only once the record really says done; otherwise it stays open and says so.
+                onOneTapDone={stageId => {
+                  const now = useStore.getState().apartments.find(a => a.id === apartment.id);
+                  if (now?.stageMarks?.[stageId] === 'done') {
+                    onToast(ui.isRtl ? 'ההתקנה סומנה כבוצעה' : 'Installation marked done');
+                    onClose();
+                  } else {
+                    onToast(ui.isRtl ? 'ההתקנה לא נשמרה — נסו שוב' : 'Installation was not saved — try again', 'error');
+                  }
+                }}
                 onMarker={id => {
                   trackUndo(null, () => updateApartment(apartment.id, { currentStageId: id }, currentUser));
                   setCurrentStageId(id);

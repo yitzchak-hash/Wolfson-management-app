@@ -813,6 +813,11 @@ export interface Apartment {
    * `BoardSetting.tipusim`, per workspace.
    */
   tipus?: string;
+  /**
+   * The contractor on this job, one of three (owner, 2026-11-09: "a contractor simple selector that says Yaakov -
+   * Daniel - Igor … just a selector that lets us choose between the 3"). Information only.
+   */
+  crew?: string;
   displayName: string;
   floor: number;
   colPosition: number;  // 1-4 within the 4-col building grid

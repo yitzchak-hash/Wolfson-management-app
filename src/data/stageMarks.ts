@@ -426,6 +426,27 @@ export function pendingStages(apartments: Apartment[], stages: Stage[]): Pending
  * step in the cycle — a tap must not be able to take a stage out of the
  * fraction by accident.
  */
+/**
+ * INSTALLATION IS ONE TAP (owner, 2026-11-09: "one click does working and the other click does installation … only
+ * installation should be that one click, closes it automatically"). Every other stage still steps to do → working →
+ * done; the stage named Installation (התקנה) goes straight to done on a tap, and a tap on a done one takes it back.
+ */
+export function isOneTapStage(s: Pick<Stage, 'name' | 'nameHe'>): boolean {
+  return /^\s*installation\s*$/i.test(s.name ?? '') || (s.nameHe ?? '').trim() === 'התקנה';
+}
+
+/** The tap: the one-tap stage jumps to done; every other stage cycles as below. */
+export function tapMark(
+  marks: Record<string, StageMark> | undefined,
+  st: Stage,
+  current: StageState,
+): Record<string, StageMark> | undefined {
+  if (!isOneTapStage(st)) return cycleMark(marks, st.id, 'left', current);
+  const next: Record<string, StageMark> = { ...(marks ?? {}) };
+  next[st.id] = current === 'done' ? 'todo' : 'done';
+  return next;
+}
+
 export function cycleMark(
   marks: Record<string, StageMark> | undefined,
   stageId: string,

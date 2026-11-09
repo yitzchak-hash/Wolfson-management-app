@@ -35,6 +35,16 @@ export const WHATS_NEW: WhatsNewEntry[] = [
     title: 'One upload bar, and inspections you can keep adding to',
     items: [
       {
+        title: 'Installation in one tap',
+        body: 'In a job\'s stages, one tap on Installation marks it done and closes the job window. Every other stage still goes to do → working → done. If it could not be saved, the window stays open and says so.',
+        demo: 'tap',
+      },
+      {
+        title: 'Contractor on every job',
+        body: 'Wolfson and Netiv jobs have a Contractor box beside Tipus: Yaakov, Daniel or Igor.',
+        demo: 'tap',
+      },
+      {
         title: 'Long videos play to the end',
         body: 'A long video no longer stops after a minute. A video in a message opens in the full viewer, where play starts it with sound. When the app hands a video to Google Drive\'s player, it waits for your press instead of starting silent.',
         demo: 'tap',

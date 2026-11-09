@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { Check, Clock, ChevronDown, ChevronRight, AlertTriangle, X, Plus, Hammer, CalendarDays } from 'lucide-react';
 import { Stage, MainUiStrings, Apartment, ContractorAssignment, Contractor, ContractorPhoto, StageMark, getStageName } from '../../types';
 import {
-  stageSetOf, liveStateOf, cycleMark, setMark, progressOf, isWorkStage, taskStageIds, markerRole,
+  stageSetOf, liveStateOf, cycleMark, tapMark, isOneTapStage, setMark, progressOf, isWorkStage, taskStageIds, markerRole,
   StageState, SetContext,
 } from '../../data/stageMarks';
 import { format, parseISO } from 'date-fns';
@@ -153,6 +153,12 @@ export function StagePicker({
     return <span className="w-[15px] h-[15px] rounded-full flex-shrink-0" style={{ border: `2.5px solid ${c}` }} />;
   };
 
+  /** A tap: Installation is done in one and the panel closes by itself (isOneTapStage). */
+  const tap = (st: Stage, state: StageState) => {
+    onMarks(tapMark(marks, st, state));
+    if (isOneTapStage(st)) { setAdding(false); setCustom(null); setOpen(false); }
+  };
+
   const bubble = (st: Stage, state: StageState) => {
     const who = whoLine(st, state);
     const done = state === 'done';
@@ -164,9 +170,9 @@ export function StagePicker({
         role="button"
         tabIndex={0}
         title={ui.setTapHint}
-        onClick={() => onMarks(cycleMark(marks, st.id, 'left', state))}
+        onClick={() => tap(st, state)}
         onContextMenu={e => { e.preventDefault(); e.stopPropagation(); onMarks(cycleMark(marks, st.id, 'right', state)); }}
-        onKeyDown={e => { if (e.key === 'Enter') onMarks(cycleMark(marks, st.id, 'left', state)); }}
+        onKeyDown={e => { if (e.key === 'Enter') tap(st, state); }}
         className="group/bub inline-flex items-center gap-1.5 rounded-full border pl-1.5 pr-1 py-1 text-[11.5px] font-bold cursor-pointer select-none max-w-full"
         style={{
           borderColor: state === 'problem' ? '#dc2626' : done ? `${st.color}55` : st.color,

@@ -4,7 +4,7 @@ import { Check, AlertTriangle, X, Plus, Hammer, CalendarDays, Clock, Camera, Vid
 import { format, parseISO } from 'date-fns';
 import { Stage, MainUiStrings, Apartment, ContractorAssignment, Contractor, ContractorPhoto, StageMark, getStageName, Inspection, InspectionFile } from '../../types';
 import {
-  stageSetOf, liveStateOf, cycleMark, setMark, isWorkStage, taskStageIds, markerRole, isStartStage,
+  stageSetOf, liveStateOf, cycleMark, tapMark, isOneTapStage, setMark, isWorkStage, taskStageIds, markerRole, isStartStage,
   StageState, SetContext,
 } from '../../data/stageMarks';
 import { driveThumbUrl } from '../../data/driveApi';
@@ -94,7 +94,7 @@ function InspectionRow({ ins, rtl, day, onOpenPhotos }: {
 }
 
 export function StageSection({
-  apartment, stages, tasks, ctx, workers, photos, onMarks, onMarker, onAddCustom, ui, onReportProblem, onOpenPhotos, onInspect, inspecting,
+  apartment, stages, tasks, ctx, workers, photos, onMarks, onMarker, onAddCustom, ui, onReportProblem, onOpenPhotos, onInspect, inspecting, onOneTapDone,
 }: {
   apartment: Apartment;
   stages: Stage[];
@@ -111,6 +111,8 @@ export function StageSection({
   /** Tzvi's Inspection press — absent for everybody else. `afterStageId` is the last finished stage now. */
   onInspect?: (afterStageId: string | null) => void;
   inspecting?: boolean;
+  /** Installation was just marked done with its one tap — the window closes (owner, 2026-11-09). */
+  onOneTapDone?: (stageId: string) => void;
 }) {
   const [adding, setAdding] = useState(false);
   const [custom, setCustom] = useState<{ name: string; color: string; where: CustomWhere } | null>(null);
@@ -236,7 +238,7 @@ export function StageSection({
               {isOff ? ring(st, state) : (
                 <button type="button" data-stage-bubble={st.id} data-stage-state={state}
                   title={ui.setTapHint}
-                  onClick={() => { const nx = cycleMark(marks, st.id, 'left', state); if (nx?.[st.id] === 'done') haptic('success'); onMarks(nx); }}
+                  onClick={() => { const nx = tapMark(marks, st, state); if (nx?.[st.id] === 'done') haptic('success'); onMarks(nx); if (isOneTapStage(st) && nx?.[st.id] === 'done') onOneTapDone?.(st.id); }}
                   onContextMenu={e => { e.preventDefault(); const nx = cycleMark(marks, st.id, 'right', state); if (nx?.[st.id] === 'done') haptic('success'); onMarks(nx); }}
                   className="flex-shrink-0 rounded-full hover:scale-110 transition-transform">
                   {ring(st, state)}
