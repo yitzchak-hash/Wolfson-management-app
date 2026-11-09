@@ -11,6 +11,23 @@ Practice was cut at production `4ff0b5d` (2026-11-03, "the apartment labels lie 
 change after that commit belongs in this list.
 
 ## Waiting to be brought across
+(nothing — on the practice branch everything up to production `b80872b` is across; see below)
+
+Next time: compare `origin/claude/blissful-cray-spTFY` with `claude/practice`
+(`git log claude/practice..origin/claude/blissful-cray-spTFY`) — every production commit after `b80872b` is waiting,
+whether or not it is listed in production's copy of this file.
+
+## Already brought across
+**2026-11-09** — merged production at `b80872b` into practice (branch `claude/practice-carry`, merge commit `49bd456`):
+every row below, 5e8d7f9 through b80872b. Two clashes, both sides kept: the header's sign-out (production's
+"Sign out?" question, practice's smaller phone buttons) and What's New (production's entries on top, practice's
+"Each flat's money" and "Open in CRM" kept). The CLAUDE.md "regular chat only" rules came across with a line saying
+they are the regular chat's rules, not the Practice chat's.
+
+On Practice, Drive stays off (`refuseOnPractice` in `api/drive-upload.js`), so the inspection camera's upload to
+Drive › Photos › Inspections and the Photos tab's Select → Delete (`trash-files`) are refused there by design (not
+checked on the practice preview itself).
+
 | Date | What changed (plain words) | Where in the code | Commit |
 |------|----------------------------|-------------------|--------|
 | 2026-11-04 | Share opens the phone's share menu on the FIRST tap (the PDF is made ready while the plan is on screen) | `src/data/sharePlan.ts`, the drawer's warm-up | 5e8d7f9 (all four rows) |
@@ -43,6 +60,3 @@ change after that commit belongs in this list.
 | 2026-11-08 | Photos tab: Select → pick → Delete, Tzvi's user only; Drive files to Drive's trash (`api/drive-upload.js` mode `trash-files`, no new function), their site records removed | `ApartmentDetailDrawer.tsx` (`data-photos-select*`), `src/data/driveTrash.ts`, `api/drive-upload.js` | ″ |
 | 2026-11-08 | Photos tab: pictures and videos only; "Show all files" switch | `ApartmentDetailDrawer.tsx` (`data-photos-all-files`) | ″ |
 | 2026-11-08 | Sideways Fold: the plan pane takes at least half the window; the side pane opens on the whole sheet | `ApartmentDetailDrawer.tsx` (`fieldsW`), `PlanAnnotator.tsx` (embedded fit) | ″ |
-
-## Already brought across
-(nothing yet)
