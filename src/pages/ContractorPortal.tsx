@@ -50,6 +50,7 @@ import { TaskThread } from '../components/tasks/TaskThread';
 import { Translated, TrText } from '../components/ui/Translated';
 import { includeIn } from '../data/stageIncludes';
 import { StageInfoButton } from '../components/portal/StageInfo';
+import { DayFilterChips } from '../components/portal/DayFilterChips';
 import { sortClosePhotos } from '../data/closeSort';
 import { installPortalManifest } from '../data/portalManifest';
 import { findPlanSetViaBackend, findAllPlansPdfsViaBackend } from '../data/driveApi';
@@ -2741,20 +2742,8 @@ plansPdfFileId && (
         );
       })()}
       {activeTab === 'tasks' && (
-      <div className="bg-white border-b border-gray-100 px-3 py-2.5 flex gap-2 overflow-x-auto flex-shrink-0 edge-fade">
-        {filterOptions.map(({ key, label, color }) => (
-          <button
-            key={key}
-            onClick={() => setMapFilter(key)}
-            className={`flex-shrink-0 px-4 py-1.5 rounded-full text-sm font-semibold transition-all ${
-              mapFilter === key ? 'text-white shadow-sm' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
-            }`}
-            style={mapFilter === key ? { backgroundColor: color } : {}}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
+        // Wraps, never scrolls past the screen's edge — see DayFilterChips.
+        <DayFilterChips options={filterOptions} value={mapFilter} onPick={setMapFilter} />
       )}
 
       {/* Tasks tab */}
