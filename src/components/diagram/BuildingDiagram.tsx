@@ -236,6 +236,7 @@ function AptCell({
   mergeLink, extraStyle, isHoverGroup, onHover, problem, progress, onStripPiece,
 }: AptCellProps) {
   const ui = useStore(state => state.mainUiStrings);
+  const projectId = useStore(state => state.currentProjectId);
   const hasStage = !!stage;
   /**
    * PROJECT TILES (owner, 2026-11-01 — "Wolfson Diagram Preview", option A):
@@ -291,7 +292,13 @@ function AptCell({
    * Every piece has its own place, so nothing shares a line and nothing is
    * cut short. Other workspaces keep the one-line tile.
    */
-  const placed = !phone && !compact && !!apt && /^A\d/.test(apt.buildingId) && !rowFloorType;
+  // Netiv's two buildings wear the same tile (owner, 2026-11-08: "the regular view … look like the Wolfson
+  // buildings"); the Job Board and other workspaces keep the one-line tile.
+  // Netiv's apartment 1 lives on the ground row: a real flat there wears the full tile too (Wolfson's ground and
+  // basement rows hold named areas — the lobby, the spa — and keep their slot look).
+  const netivFlat = projectId === 'netiv' && !!apt && /^B[12]$/.test(apt.buildingId);
+  const placed = !phone && !compact && !!apt
+    && (/^A\d/.test(apt.buildingId) ? !rowFloorType : netivFlat && (!rowFloorType || (rowFloorType === 'ground' && !!apt.apartmentNumber && !apt.isUnnamed)));
   const bigCell = React.useContext(DiagramLook).big && placed;
   /** Desktop tiles elsewhere carry the number and the name on ONE line, the tipus under it. */
   const oneLine = !phone && !compact && !mergedLabel && !placed;
@@ -491,7 +498,7 @@ function AptCell({
           {/* One building on a computer: room for more (owner, recording
               2026-11-02 — "show much more information in each tile"). */}
           {bigCell && (progress?.total || apt?.updatedByName) ? (
-            <span data-cell-more className="absolute text-center" style={{ left: 8, right: 8, top: 146, lineHeight: 1.3, opacity: isDimmed ? 0.5 : 0.85 }}>
+            <span data-cell-more className="absolute text-center" style={{ left: 8, right: 8, bottom: 30, lineHeight: 1.3, opacity: isDimmed ? 0.5 : 0.85 }}>
               {progress && progress.total > 0 && (
                 <span className="block truncate" data-cell-progress>
                   <b>{progress.done}/{progress.total}</b> {ui.bigStagesDone}

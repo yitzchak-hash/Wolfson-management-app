@@ -1,4 +1,17 @@
 import { PREVIEW_ID, TEST_MODE } from './previewMode';
+
+/**
+ * Every upload ANNOUNCES itself on the window ('tz-upload': {id, name, pct, done}) so the page can show it going up
+ * (owner, 2026-11-08: "we don't see like uploading with the progress"). An event, not an import: this file is copied
+ * byte for byte into the Plan Sketcher, which has no tracker of its own; there the events simply fall on nobody.
+ */
+let uploadSeq = 0;
+function announce(detail: { id: number; name: string; pct: number; done?: boolean }) {
+  try { window.dispatchEvent(new CustomEvent('tz-upload', { detail })); } catch { /* no window */ }
+}
+const uploadStarted = (name: string) => { const id = ++uploadSeq; announce({ id, name, pct: 0 }); return { id, name }; };
+const uploadProgress = (t: { id: number; name: string }, pct: number) => announce({ ...t, pct });
+const uploadEnded = (t: { id: number; name: string }) => announce({ ...t, pct: 100, done: true });
 // Google Drive API helpers — client-side only, no backend required
 
 declare global {
@@ -599,6 +612,18 @@ export async function uploadFileViaResumableSession(
   file: File,
   onProgress?: (pct: number) => void,
 ): Promise<{ fileId: string; webViewLink: string }> {
+  // Every upload is seen while it goes up (uploadTracker.ts; owner, 2026-11-08).
+  const tid = uploadStarted(file.name);
+  try {
+    return await resumableUpload(folderId, file, pct => { uploadProgress(tid, pct); onProgress?.(pct); });
+  } finally { uploadEnded(tid); }
+}
+
+async function resumableUpload(
+  folderId: string,
+  file: File,
+  onProgress?: (pct: number) => void,
+): Promise<{ fileId: string; webViewLink: string }> {
   const sessionResp = await fetch('/api/drive-session', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'x-api-key': DRIVE_API_KEY },
@@ -663,6 +688,17 @@ export async function uploadFileViaResumableSession(
  * For larger files the function throws with a clear message.
  */
 export async function uploadFileViaBackend(
+  folderId: string,
+  file: File,
+  onProgress?: (pct: number) => void,
+): Promise<{ fileId: string; webViewLink: string }> {
+  const tid = uploadStarted(file.name);
+  try {
+    return await bodyUpload(folderId, file, pct => { uploadProgress(tid, pct); onProgress?.(pct); });
+  } finally { uploadEnded(tid); }
+}
+
+async function bodyUpload(
   folderId: string,
   file: File,
   onProgress?: (pct: number) => void,

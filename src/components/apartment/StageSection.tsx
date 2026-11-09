@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import { Check, AlertTriangle, X, Plus, Hammer, CalendarDays, Clock } from 'lucide-react';
+import { haptic } from '../../data/haptics';
+import { Check, AlertTriangle, X, Plus, Hammer, CalendarDays, Clock, Camera, Video, Play, ChevronDown, Loader2 } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
-import { Stage, MainUiStrings, Apartment, ContractorAssignment, Contractor, ContractorPhoto, StageMark, getStageName } from '../../types';
+import { Stage, MainUiStrings, Apartment, ContractorAssignment, Contractor, ContractorPhoto, StageMark, getStageName, Inspection, InspectionFile } from '../../types';
 import {
   stageSetOf, liveStateOf, cycleMark, setMark, isWorkStage, taskStageIds, markerRole, isStartStage,
   StageState, SetContext,
@@ -41,8 +42,59 @@ function photoSrc(p: ContractorPhoto, size: number): string {
   return p.storageUrl || p.dataUrl || '';
 }
 
+/** An inspection's file as a lightbox item: Drive's own thumbnail (a video's too), else the picture kept in the record. */
+function inspectionItem(f: InspectionFile): StagePhotoItem {
+  return {
+    fileId: f.driveFileId ?? '', filename: f.filename, mimeType: f.mimeType,
+    thumbSrc: f.driveFileId ? driveThumbUrl(f.driveFileId, 1600) : (f.dataUrl ?? ''),
+    downloadHref: f.driveFileId ? `https://drive.google.com/uc?export=download&id=${f.driveFileId}` : (f.dataUrl ?? ''),
+  };
+}
+
+/**
+ * "Inspected by Tzvi ✓" — one row among the stages, right after the stage that was last finished when he took it,
+ * opening to show the pictures and videos (owner, 2026-11-08, plan approved).
+ */
+function InspectionRow({ ins, rtl, day, onOpenPhotos }: {
+  ins: Inspection; rtl: boolean; day: (iso?: string | null) => string; onOpenPhotos: (items: StagePhotoItem[], index: number) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const items = ins.files.map(inspectionItem);
+  const first = (ins.byName || '').split(' ')[0] || ins.byName;
+  return (
+    <div data-inspection={ins.id} className="rounded-xl border px-3 py-2.5" style={{ borderColor: '#bbf7d0', backgroundColor: '#f0fdf4', borderInlineStartWidth: 4, borderInlineStartColor: '#16a34a' }}>
+      <button type="button" data-inspection-toggle aria-expanded={open} onClick={() => setOpen(o => !o)} className="w-full flex items-center gap-2.5 text-start">
+        <span className="w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0" style={{ backgroundColor: '#16a34a' }}>
+          <Check size={12} color="#fff" strokeWidth={3.5} />
+        </span>
+        <span className="text-[15px] font-bold text-gray-900 min-w-0 truncate">{rtl ? `נבדק ע״י ${first}` : `Inspected by ${first}`}</span>
+        <span className="text-[12px] text-gray-600 flex-shrink-0">{day(ins.at)}</span>
+        <span className="flex-1" />
+        <span className="text-[11px] font-semibold text-gray-500 flex-shrink-0 inline-flex items-center gap-1">
+          {ins.files.some(f => f.mimeType.startsWith('video/')) ? <Video size={12} /> : <Camera size={12} />}{ins.files.length}
+        </span>
+        <ChevronDown size={15} className={`text-gray-500 flex-shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} />
+      </button>
+      {open && (
+        <div data-inspection-files className="mt-2 flex gap-2 flex-wrap">
+          {items.map((it, i) => (
+            <button key={i} type="button" data-inspection-file onClick={() => onOpenPhotos(items, i)}
+              className="relative w-24 h-16 rounded-lg overflow-hidden border border-green-200 bg-white">
+              {it.thumbSrc ? <img src={ins.files[i].driveFileId ? driveThumbUrl(ins.files[i].driveFileId!, 400) : it.thumbSrc} alt={it.filename} loading="lazy" className="w-full h-full object-cover" />
+                : <span className="w-full h-full flex items-center justify-center text-gray-400"><Video size={18} /></span>}
+              {ins.files[i].mimeType.startsWith('video/') && (
+                <span className="absolute inset-0 flex items-center justify-center"><span className="w-7 h-7 rounded-full bg-black/55 flex items-center justify-center"><Play size={13} color="#fff" fill="#fff" /></span></span>
+              )}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function StageSection({
-  apartment, stages, tasks, ctx, workers, photos, onMarks, onMarker, onAddCustom, ui, onReportProblem, onOpenPhotos,
+  apartment, stages, tasks, ctx, workers, photos, onMarks, onMarker, onAddCustom, ui, onReportProblem, onOpenPhotos, onInspect, inspecting,
 }: {
   apartment: Apartment;
   stages: Stage[];
@@ -56,6 +108,9 @@ export function StageSection({
   ui: MainUiStrings;
   onReportProblem?: () => void;
   onOpenPhotos: (items: StagePhotoItem[], index: number) => void;
+  /** Tzvi's Inspection press — absent for everybody else. `afterStageId` is the last finished stage now. */
+  onInspect?: (afterStageId: string | null) => void;
+  inspecting?: boolean;
 }) {
   const [adding, setAdding] = useState(false);
   const [custom, setCustom] = useState<{ name: string; color: string; where: CustomWhere } | null>(null);
@@ -79,6 +134,13 @@ export function StageSection({
   const aptTaskIds = new Set(aptTasks.map(t => t.id));
   const nameOf = (id: string) => workers.find(w => w.id === id)?.name ?? '';
   const day = (iso?: string | null) => { try { return iso ? format(parseISO(iso), 'EEE d MMM') : ''; } catch { return ''; } };
+  // Inspections stand after the stage they were taken after; one whose stage is not in the list leads it.
+  const inspections = apartment.inspections ?? [];
+  const rowIds = new Set(rows.map(r => r.stage.id));
+  const lead = inspections.filter(i => !i.afterStageId || !rowIds.has(i.afterStageId));
+  const after = (stageId: string) => inspections.filter(i => i.afterStageId === stageId);
+  /** The last finished stage in the list — where a new inspection will stand. */
+  const lastDone = [...rows].reverse().find(r => r.state === 'done')?.stage.id ?? null;
 
   /** Who finished it and when — the newest closed task that did this stage. */
   function finishedLine(st: Stage): string {
@@ -144,9 +206,17 @@ export function StageSection({
               : ui.stageAllDone.replace('{done}', String(doneN)).replace('{total}', String(counted.length))}
           </span>
         )}
+        {onInspect && (
+          <button type="button" data-inspect disabled={inspecting} onClick={() => onInspect(lastDone)}
+            className="ms-auto inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold text-white disabled:opacity-60"
+            style={{ backgroundColor: '#1e3a5f' }}>
+            {inspecting ? <Loader2 size={13} className="animate-spin" /> : <Camera size={13} />} {rtl ? 'בדיקה' : 'Inspection'}
+          </button>
+        )}
       </div>
 
       <div data-stage-flow className="space-y-2">
+      {lead.map(ins => <InspectionRow key={ins.id} ins={ins} rtl={rtl} day={day} onOpenPhotos={onOpenPhotos} />)}
       {rows.map(({ stage: st, state }) => {
         const pics = photos.filter(p => p.apartmentId === apartment.id && p.stageId === st.id && aptTaskIds.has(p.assignmentId)
           && (p.fileType ?? 'image') === 'image');
@@ -158,15 +228,16 @@ export function StageSection({
         const part = state === 'pending' || state === 'done' ? partLine(st) : '';
         const isOff = state === 'off';
         return (
-          <div key={st.id} data-stage-row={st.id} data-stage-state={state}
+          <React.Fragment key={st.id}>
+          <div data-stage-row={st.id} data-stage-state={state}
             className={`group/st rounded-xl border px-3 py-2.5 ${isOff ? 'border-dashed border-gray-300 bg-gray-50' : 'border-gray-200 bg-white'}`}
             style={!isOff ? { borderInlineStartWidth: 4, borderInlineStartColor: st.color } : undefined}>
             <div className="flex items-center gap-2.5">
               {isOff ? ring(st, state) : (
                 <button type="button" data-stage-bubble={st.id} data-stage-state={state}
                   title={ui.setTapHint}
-                  onClick={() => onMarks(cycleMark(marks, st.id, 'left', state))}
-                  onContextMenu={e => { e.preventDefault(); onMarks(cycleMark(marks, st.id, 'right', state)); }}
+                  onClick={() => { const nx = cycleMark(marks, st.id, 'left', state); if (nx?.[st.id] === 'done') haptic('success'); onMarks(nx); }}
+                  onContextMenu={e => { e.preventDefault(); const nx = cycleMark(marks, st.id, 'right', state); if (nx?.[st.id] === 'done') haptic('success'); onMarks(nx); }}
                   className="flex-shrink-0 rounded-full hover:scale-110 transition-transform">
                   {ring(st, state)}
                 </button>
@@ -209,6 +280,8 @@ export function StageSection({
               </div>
             )}
           </div>
+          {after(st.id).map(ins => <InspectionRow key={ins.id} ins={ins} rtl={rtl} day={day} onOpenPhotos={onOpenPhotos} />)}
+          </React.Fragment>
         );
       })}
       </div>

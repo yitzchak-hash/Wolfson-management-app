@@ -16,9 +16,9 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Apartment, Stage, CustomButton } from '../../types';
 import { realName } from '../../data/aptSale';
-import {
-  CARD_CORNER, CORE, CORE_PH14, CORE_PH15, PH_BOX, PH_TERRACES, FLOOR_NO_AT, PH_DRAWING, isPenthouseShape, LABEL_AT, LEVEL_FLOORS, STRIP, zoneFor, PLAN_BOX, SHAPES, pathOf, shapesOf, stripFor, type ShapeKey, type LowerLevel,
-} from './wolfsonPlan';
+import { haptic, hapticOnLift } from '../../data/haptics';
+import { LEVEL_FLOORS, STRIP, zoneFor, PLAN_BOX, pathOf, stripFor, type LowerLevel } from './wolfsonPlan';
+import { WOLFSON_PLAN, type BuildingPlan, type FloorSpec } from './buildingPlan';
 import './buildingView.css';
 
 export interface BuildingViewWords {
@@ -79,6 +79,8 @@ export interface BuildingViewProps {
   tower?: number;
   /** In the trio the shared levels are drawn ONCE, wide, under the three — the tower leaves them out. */
   hideLower?: boolean;
+  /** The project's plan — Wolfson's when none is given (Netiv's for Netiv; buildingPlan.ts). */
+  plan?: BuildingPlan;
 }
 
 /** The floor in view, shared: a fractional index into the floors, bottom = 0. */
@@ -101,7 +103,7 @@ const K = 150, C = 19;
 const GAP = 92;                 // px between plates along the stack
 const ABOVE_SHOWN = 1, BELOW_SHOWN = 6;
 
-interface FloorRow { floor: number; flats: { apt: Apartment; shapes: ShapeKey[] }[]; lower?: LowerLevel; slots?: Apartment[] }
+interface FloorRow { floor: number; flats: { apt: Apartment; shapes: string[] }[]; lower?: LowerLevel; slots?: Apartment[] }
 
 /** A slot's name as the board shows it (the office's label, else its number). */
 export function slotName(a: Apartment): string { return (a.displayName || '').trim() || (a.apartmentNumber || '').trim(); }
@@ -112,31 +114,21 @@ export function slotsOn(apartments: Apartment[], level: string): Apartment[] {
     .sort((x, y) => (x.colPosition ?? 0) - (y.colPosition ?? 0));
 }
 
-/** A typical floor: four flats, none of them a penthouse half. */
-function isTypical(row: FloorRow): boolean {
-  return !row.lower && row.flats.every(f => f.shapes.every(k => k === 'A' || k === 'B' || k === 'C1' || k === 'C2'));
-}
-/** A penthouse floor's own drawing, when it is one. */
-function phDrawing(row: FloorRow): string | undefined {
-  for (const f of row.flats) for (const k of f.shapes) if (isPenthouseShape(k)) return PH_DRAWING[k];
-  return undefined;
-}
-function coreOf(row: FloorRow): [number, number][] {
-  const d = phDrawing(row);
-  return d ? (d.includes('ph15') ? CORE_PH15 : CORE_PH14) : CORE.outline;
+/** A floor the board names in words ("Ground / Commercial") by its first word, so the rail and the plate stay narrow. */
+export function shortFloor(full: string): string {
+  return full.length <= 4 ? full : (full.split(/\s*[/·,]\s*|\s+/)[0] || full);
 }
 
-/** The floor's own outline: a typical floor is all four flats; the set-back top floor only what its flats cover. */
-/** Every outline of the floor (rooms, then a penthouse's terraces) as one path. */
-function slabPath(row: FloorRow, core: [number, number][]): string {
-  return slabOf(row).flatMap(k => [SHAPES[k], ...(PH_TERRACES[k] ?? [])]).map(pathOf).join(' ') + ' ' + pathOf(core);
+/** A floor row as the plan reads it. */
+function planRow(row: FloorRow) {
+  return { floor: row.floor, keys: row.flats.flatMap(f => f.shapes), nums: row.flats.map(f => Number(f.apt.apartmentNumber)) };
 }
-function slabOf(row: FloorRow): ShapeKey[] {
-  const used = row.flats.flatMap(f => f.shapes);
-  return used.some(k => k === 'WL' || k === 'WR' || isPenthouseShape(k)) ? used : ['A', 'B', 'C1', 'C2'];
+/** Every outline of the floor (rooms, then their terraces) and its core, as one path. */
+function slabPath(plan: BuildingPlan, spec: FloorSpec): string {
+  return spec.slab.flatMap(k => [plan.shapes[k], ...(plan.terraces[k] ?? [])]).filter(Boolean).map(pathOf).join(' ') + ' ' + pathOf(spec.core);
 }
 
-export default function BuildingView({ apartments, stages, onOpen, words, initialFloor, floorLabels, interiorSrc, bus: sharedBus, compact, title, lower, tower = 0, hideLower, customButtons = [] }: BuildingViewProps) {
+export default function BuildingView({ apartments, stages, onOpen, words, initialFloor, floorLabels, interiorSrc, bus: sharedBus, compact, title, lower, tower = 0, hideLower, customButtons = [], plan = WOLFSON_PLAN }: BuildingViewProps) {
   /** A flat's answers as short words: "Wall ✓", "Wall ✗", "Wall ?". */
   const answersOf = (a: Apartment) => customButtons.flatMap(cb => {
     const v = a.customAnswers?.[cb.id];
@@ -152,14 +144,17 @@ export default function BuildingView({ apartments, stages, onOpen, words, initia
     const by = new Map<number, FloorRow>();
     for (const apt of apartments) {
       if (apt.isUnnamed || apt.coveredBy || !apt.apartmentNumber) continue;
-      const row = by.get(apt.floor) ?? { floor: apt.floor, flats: [] };
-      row.flats.push({ apt, shapes: shapesOf(apt) });
-      by.set(apt.floor, row);
+      // A duplex stands on two floors (Netiv's garden flats): drawn on each, as the plan says.
+      for (const fl of [apt.floor, ...(plan.alsoOn?.(apt) ?? [])]) {
+        const row = by.get(fl) ?? { floor: fl, flats: [] };
+        row.flats.push({ apt, shapes: plan.shapesOf(apt, fl) });
+        by.set(fl, row);
+      }
     }
     const towers = [...by.values()].sort((a, b) => a.floor - b.floor);
     const low = (lower ?? []).map((l, i) => ({ floor: -1000 + i, flats: [], lower: l, slots: slotsOn(apartments, l.key) } as FloorRow));
     return [...low, ...towers];
-  }, [apartments, lower]);
+  }, [apartments, lower, plan]);
 
   const topIdx = floors.length - 1;
   const startIdx = useMemo(() => {
@@ -170,6 +165,34 @@ export default function BuildingView({ apartments, stages, onOpen, words, initia
   // The landed floor (an index into `floors`) — state, because the cards read it.
   const [landed, setLanded] = useState(startIdx);
   const [hover, setHover] = useState<string | null>(null);
+  /**
+   * Press and HOLD a flat with a finger (owner, 2026-11-08: "all" of the vibration places): after 450 ms the phone
+   * buzzes and the flat lights up (with its joined partner) without opening — a peek. The click that follows the
+   * hold is swallowed; a finger that moves (dragging the floors) is not a hold.
+   */
+  const hold = useRef<{ id: string; x: number; y: number; timer: number; fired: boolean } | null>(null);
+  const holdOf = (id: string) => ({
+    onPointerDown: (e: React.PointerEvent) => {
+      if (e.pointerType !== 'touch') return;
+      if (hold.current) window.clearTimeout(hold.current.timer);
+      const h = { id, x: e.clientX, y: e.clientY, fired: false, timer: 0 };
+      h.timer = window.setTimeout(() => { h.fired = true; setHover(id); haptic('tap'); }, 450);
+      hold.current = h;
+    },
+    onPointerMove: (e: React.PointerEvent) => {
+      const h = hold.current;
+      if (h && !h.fired && Math.hypot(e.clientX - h.x, e.clientY - h.y) > 10) { window.clearTimeout(h.timer); hold.current = null; }
+    },
+    onPointerUp: () => {
+      if (hold.current && !hold.current.fired) { window.clearTimeout(hold.current.timer); hold.current = null; }
+      // The hold's buzz came from a timer, which an iPhone ignores: its tick comes at the lift instead.
+      else if (hold.current?.fired) hapticOnLift('tap');
+    },
+    onPointerCancel: () => { if (hold.current) window.clearTimeout(hold.current.timer); hold.current = null; },
+    onContextMenu: (e: React.MouseEvent) => { if (hold.current?.fired) e.preventDefault(); },
+  });
+  /** True (and forgotten) when this click is the lift of a hold on that flat. */
+  const heldClick = (id: string) => { const h = hold.current; if (h?.fired && h.id === id) { hold.current = null; return true; } return false; };
   const target = useRef(startIdx);
   const pos = useRef(startIdx);
   const vel = useRef(0);
@@ -222,11 +245,24 @@ export default function BuildingView({ apartments, stages, onOpen, words, initia
     if (!raf.current) raf.current = requestAnimationFrame(step);
   }), [bus, step, topIdx]);
   useEffect(() => { const v = bus.get(); target.current = pos.current = Math.max(0, Math.min(topIdx, v)); setLanded(Math.round(target.current)); paint(); }, [bus, topIdx, paint]);
+  // A small tick in the hand each time a new floor lands (owner, 2026-11-08: "vibrations … when moving the floors").
+  // Only the first view of the trio ticks — three buzzes for one floor would be one too many.
+  const firstLanded = useRef(true);
+  // When the tick was already given INSIDE the press (a rail button, a key — the only moment an iPhone allows one),
+  // the landing a moment later does not tick again.
+  const handTicked = useRef(0);
+  useEffect(() => {
+    if (firstLanded.current) { firstLanded.current = false; return; }
+    if (Date.now() - handTicked.current < 1200) return;
+    if (!compact || tower === 0) haptic('tick');
+  }, [landed]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const go = useCallback((idx: number) => {
     setHover(null);
-    bus.set(Math.max(0, Math.min(topIdx, Math.round(idx))));
-  }, [bus, topIdx]);
+    const to = Math.max(0, Math.min(topIdx, Math.round(idx)));
+    if (to !== Math.round(bus.get()) && (!compact || tower === 0)) { haptic('tick'); handTicked.current = Date.now(); }
+    bus.set(to);
+  }, [bus, topIdx, compact, tower]);
 
   /**
    * The wheel GLIDES (owner, 2026-11-03: "how do we make it work a bit less
@@ -266,7 +302,17 @@ export default function BuildingView({ apartments, stages, onOpen, words, initia
     if (!t2) return;
     bus.set(Math.max(0, Math.min(topIdx, t2.from + (e.clientY - t2.y) / 80)));
   };
-  const onPointerUp = () => { if (touch.current) bus.set(Math.round(bus.get())); touch.current = null; };
+  const onPointerUp = () => {
+    const t2 = touch.current;
+    if (t2) {
+      const to = Math.round(bus.get());
+      // The floors that passed under the finger ticked on Android as they landed; an iPhone allows a tick only at
+      // the lift, so it gets one there when the swipe changed the floor.
+      if (to !== Math.round(t2.from) && (!compact || tower === 0)) hapticOnLift('tick');
+      bus.set(to);
+    }
+    touch.current = null;
+  };
 
   // Keys: ↑ ↓, Page Up/Down, Home/End.
   const onKeyDown = (e: React.KeyboardEvent) => {
@@ -320,13 +366,14 @@ export default function BuildingView({ apartments, stages, onOpen, words, initia
         onPointerCancel={onPointerUp}
       >
         <div className="bv-world">
-          {floors.map((row, i) => (
+          {floors.map((row, i) => { const spec = row.lower ? null : plan.floorOf(planRow(row), interiorSrc); return (
             <div
               key={row.floor}
               ref={el => { plates.current[i] = el; }}
               className="bv-plate"
               data-floor={row.floor}
               data-current={i === landed ? '1' : '0'}
+              data-estimated={spec?.estimated ? '1' : undefined}
             >
               {row.lower ? (hideLower ? null : (() => {
                 const s = stripFor(tower);
@@ -348,7 +395,8 @@ export default function BuildingView({ apartments, stages, onOpen, words, initia
                       return (
                         <g key={a.id} className="bv-slot" data-slot={a.id} data-on={on ? '1' : '0'} data-zone={z ? '1' : '0'}
                           onPointerEnter={() => i === landed && setHover(a.id)} onPointerLeave={() => setHover(h => (h === a.id ? null : h))}
-                          onClick={() => i === landed && onOpen(a)}>
+                          {...holdOf(a.id)}
+                          onClick={() => !heldClick(a.id) && i === landed && onOpen(a)}>
                           {z && <rect className="bv-zone" x={z[0] + dx} y={z[1] + dy} width={z[2] - z[0]} height={z[3] - z[1]} rx={18} />}
                           <SlotChip x={cx} y={cy} name={slotName(a)} />
                         </g>
@@ -358,11 +406,11 @@ export default function BuildingView({ apartments, stages, onOpen, words, initia
                   </svg>
                 );
               })()) : (
-              <svg viewBox={`${PLAN_BOX.x} ${PLAN_BOX.y} ${PLAN_BOX.w} ${PLAN_BOX.h}`} className="bv-svg">
-                <path className="bv-slab" d={slabPath(row, coreOf(row))} />
-                <g className="bv-core" data-plain={(interiorSrc && isTypical(row)) || phDrawing(row) ? '0' : '1'}>
-                  <path d={pathOf(coreOf(row))} />
-                  {CORE.stairs.map(([x, y, sw, sh], j) => (
+              <svg viewBox={`${plan.box.x} ${plan.box.y} ${plan.box.w} ${plan.box.h}`} className="bv-svg">
+                <path className="bv-slab" d={slabPath(plan, spec!)} />
+                <g className="bv-core" data-plain={spec!.drawing ? '0' : '1'}>
+                  <path d={pathOf(spec!.core)} />
+                  {spec!.stairs.map(([x, y, sw, sh], j) => (
                     <g key={j}>
                       <rect x={x} y={y} width={sw} height={sh} className="bv-stair" />
                       {Array.from({ length: 9 }, (_, n) => (
@@ -370,7 +418,7 @@ export default function BuildingView({ apartments, stages, onOpen, words, initia
                       ))}
                     </g>
                   ))}
-                  {CORE.lifts.map(([x, y, lw, lh], j) => (
+                  {spec!.lifts.map(([x, y, lw, lh], j) => (
                     <g key={j} className="bv-lift">
                       <rect x={x} y={y} width={lw} height={lh} />
                       <path d={`M${x} ${y}L${x + lw} ${y + lh}M${x + lw} ${y}L${x} ${y + lh}`} />
@@ -392,30 +440,31 @@ export default function BuildingView({ apartments, stages, onOpen, words, initia
                       style={{ ['--bv-c' as string]: f.tint }}
                       onPointerEnter={() => i === landed && setHover(apt.id)}
                       onPointerLeave={() => setHover(h => (h === apt.id ? null : h))}
-                      onClick={() => i === landed && onOpen(apt)}
+                      {...holdOf(apt.id)}
+                      onClick={() => !heldClick(apt.id) && i === landed && onOpen(apt)}
                     >
-                      {shapes.flatMap(s => (PH_TERRACES[s] ?? []).map((t, j) => <path key={`${s}-t${j}`} className="bv-terrace" d={pathOf(t)} />))}
-                      {shapes.map(s => <path key={s} d={pathOf(SHAPES[s])} />)}
+                      {shapes.flatMap(s => (plan.terraces[s] ?? []).map((t, j) => <path key={`${s}-t${j}`} className="bv-terrace" d={pathOf(t)} />))}
+                      {shapes.map(s => <path key={s} d={pathOf(plan.shapes[s])} />)}
                     </g>
                   );
                 })}
-                {phDrawing(row) && (
+                {spec!.drawing && !spec!.drawing.clip && (
                   <g className="bv-interior" pointerEvents="none">
                     {/* Cut to the building and its terraces when it was drawn (the sheet also carries the floors below). */}
-                    <image href={phDrawing(row)} x={PH_BOX.x} y={PH_BOX.y} width={PH_BOX.w} height={PH_BOX.h} preserveAspectRatio="none" />
+                    <image href={spec!.drawing.src} x={spec!.drawing.box.x} y={spec!.drawing.box.y} width={spec!.drawing.box.w} height={spec!.drawing.box.h} preserveAspectRatio="none" />
                   </g>
                 )}
-                {interiorSrc && isTypical(row) && (
+                {spec!.drawing?.clip && (
                   <g className="bv-interior" pointerEvents="none">
-                    <clipPath id={`bv-clip-${row.floor}`}><path d={slabOf(row).map(k => pathOf(SHAPES[k])).join(' ') + ' ' + pathOf(CORE.outline)} /></clipPath>
-                    <image href={interiorSrc} x={PLAN_BOX.x} y={PLAN_BOX.y} width={PLAN_BOX.w} height={PLAN_BOX.h}
-                      clipPath={`url(#bv-clip-${row.floor})`} preserveAspectRatio="none" />
+                    <clipPath id={`bv-clip-${plan.id}-${row.floor}`}><path d={spec!.slab.map(k => pathOf(plan.shapes[k])).join(' ') + ' ' + pathOf(spec!.core)} /></clipPath>
+                    <image href={spec!.drawing.src} x={spec!.drawing.box.x} y={spec!.drawing.box.y} width={spec!.drawing.box.w} height={spec!.drawing.box.h}
+                      clipPath={`url(#bv-clip-${plan.id}-${row.floor})`} preserveAspectRatio="none" />
                   </g>
                 )}
                 {/* The labels lie ABOVE the plan's drawing, so its lines never cross them (owner, 2026-11-03:
                     "it's getting hidden behind the lines of the plan"). */}
                 {row.flats.map(({ apt, shapes }) => {
-                  const [lx, ly] = LABEL_AT[shapes[0]];
+                  const [lx, ly] = plan.labelAt[shapes[0]] ?? [plan.box.x + plan.box.w / 2, plan.box.y + plan.box.h / 2];
                   return (
                     <g key={`l-${apt.id}`} className="bv-flat-labels" data-apt-labels={apt.id} pointerEvents="none">
                       {/* The number, the tipus and the upgrade "U" on one line, the project's own answers ("Wall: Yes")
@@ -424,7 +473,7 @@ export default function BuildingView({ apartments, stages, onOpen, words, initia
                       {(() => {
                         const tip = (apt.tipus ?? '').trim();
                         const up = apt.classification === 'shinui';
-                        const xs = shapes.flatMap(s => SHAPES[s].map(p => p[0]));
+                        const xs = shapes.flatMap(s => (plan.shapes[s] ?? []).map(p => p[0]));
                         const minX = Math.min(...xs) + 18, maxX = Math.max(...xs) - 18;
                         const fit = (wd: number, want: number) => Math.max(minX, Math.min(want, maxX - wd));
                         const nW = String(apt.apartmentNumber).length * 27;
@@ -466,11 +515,18 @@ export default function BuildingView({ apartments, stages, onOpen, words, initia
                     </g>
                   );
                 })}
-                <text x={FLOOR_NO_AT[0]} y={FLOOR_NO_AT[1]} className="bv-floor-no">{lab(row.floor)}</text>
+                {/* A floor the board names in words ("Ground / Commercial") shows its first word, smaller, so it stays
+                    on the plate; a number keeps the big figure. */}
+                {(() => {
+                  const full = lab(row.floor);
+                  const t = shortFloor(full);
+                  return <text x={spec!.floorNoAt[0]} y={spec!.floorNoAt[1]} className="bv-floor-no"
+                    style={t.length > 3 ? { fontSize: Math.max(56, Math.round(380 / t.length)), letterSpacing: 0 } : undefined}>{t}</text>;
+                })()}
               </svg>
               )}
             </div>
-          ))}
+          ); })}
         </div>
 
         {/* His red boxes: one card per flat of the landed floor, in its corner. */}
@@ -482,7 +538,7 @@ export default function BuildingView({ apartments, stages, onOpen, words, initia
             <button
               key={`${here.floor}-${apt.id}`}
               type="button"
-              className={`bv-card bv-${compact ? 'tl' : CARD_CORNER[shapes[0]]}`}
+              className={`bv-card bv-${compact ? 'tl' : plan.cardSpot[shapes[0]] ?? 'tl'}`}
               data-card={apt.id}
               data-on={on ? '1' : '0'}
               style={{ ['--bv-c' as string]: st?.color ?? '#94a3b8' }}
@@ -490,7 +546,8 @@ export default function BuildingView({ apartments, stages, onOpen, words, initia
               onPointerLeave={() => setHover(h => (h === apt.id ? null : h))}
               onFocus={() => setHover(apt.id)}
               onBlur={() => setHover(h => (h === apt.id ? null : h))}
-              onClick={() => onOpen(apt)}
+              {...holdOf(apt.id)}
+              onClick={() => !heldClick(apt.id) && onOpen(apt)}
             >
               <span className="bv-card-top">
                 <span className="bv-card-no">{apt.apartmentNumber}</span>
@@ -518,8 +575,8 @@ export default function BuildingView({ apartments, stages, onOpen, words, initia
           const i = floors.indexOf(row);
           return (
             <button key={row.floor} type="button" data-rail-floor={lab(row.floor, row)}
-              className="bv-rail-btn" data-on={i === landed ? '1' : '0'} onClick={() => go(i)}>
-              {lab(row.floor, row)}
+              className="bv-rail-btn" data-on={i === landed ? '1' : '0'} onClick={() => go(i)} title={lab(row.floor, row)}>
+              {shortFloor(lab(row.floor, row))}
             </button>
           );
         })}

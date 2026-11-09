@@ -1,0 +1,35 @@
+// Photos tab: pictures and videos only by default, "Show all files" brings the rest (owner, 2026-11-08). SHOTS= dir.
+import { chromium } from '/opt/node22/lib/node_modules/playwright/index.mjs';
+import { realisticWolfson, applySeed } from './seed.mjs';
+const OUT = process.env.SHOTS || '/tmp';
+const browser = await chromium.launch();
+const blob = await realisticWolfson(browser);
+let ok = 0, bad = 0; const T = (c, m) => { c ? ok++ : bad++; console.log((c ? 'ok  ' : 'BAD ') + m); };
+const ctx = await browser.newContext({ viewport: { width: 1280, height: 860 } });
+await applySeed(ctx, blob);
+await ctx.addInitScript(() => {
+  const raw = localStorage.getItem('wolfson_app_data'); if (!raw) return;
+  const d = JSON.parse(raw); if (d.__pa) return; d.__pa = 1;
+  const at = new Date().toISOString();
+  d.contractorAssignments = [...(d.contractorAssignments ?? []), { id: 'T-PA', contractorId: d.contractors?.[0]?.id ?? 'C1', apartmentId: 'A1-53', taskDescription: 'Fit', dueDate: at.slice(0, 10), completed: false, priority: 'normal', createdAt: at, updatedAt: at }];
+  const ph = (id, filename, mimeType, fileType) => ({ id, assignmentId: 'T-PA', apartmentId: 'A1-53', contractorId: d.contractors?.[0]?.id ?? 'C1', dataUrl: '', filename, fileType, mimeType, uploadedAt: at, storageUrl: `${location.origin}/__stub/${filename}`, reviewedAt: at });
+  d.contractorPhotos = [...(d.contractorPhotos ?? []), ph('P-PA1', 'unit.jpg', 'image/jpeg', 'image'), ph('P-PA2', 'clip.mp4', 'video/mp4', 'video'), ph('P-PA3', 'quote.pdf', 'application/pdf', 'file')];
+  localStorage.setItem('wolfson_app_data', JSON.stringify(d));
+});
+const p = await ctx.newPage();
+await p.route('**/__stub/**', r => r.fulfill({ status: 200, contentType: 'image/png', body: Buffer.alloc(8) }));
+await p.goto('http://localhost:5173/project'); await p.waitForTimeout(2200);
+await p.locator('[data-view-switch] [data-view="board"]:visible').first().click().catch(() => {}); await p.waitForTimeout(800);
+await p.locator('[data-apt-id="A1-53"]').first().click(); await p.waitForTimeout(1500);
+await p.getByRole('button', { name: /^Photos/ }).first().click(); await p.waitForTimeout(1200);
+const tiles = () => p.locator('[data-photo-tile^="P-PA"]').count();
+T(await tiles() === 2, `by default only the picture and the video (${await tiles()})`);
+const sw = p.locator('[data-photos-all-files]');
+T(await sw.isVisible() && (await sw.textContent()).includes('(1)'), `the switch says one more file (${await sw.textContent()})`);
+await p.screenshot({ path: `${OUT}/photos-default.png` });
+await sw.click(); await p.waitForTimeout(400);
+T(await tiles() === 3, `Show all files brings the PDF (${await tiles()})`);
+await sw.click(); await p.waitForTimeout(400);
+T(await tiles() === 2, 'off again: pictures and videos only');
+console.log(`\n${ok} ok · ${bad} bad`);
+await browser.close();

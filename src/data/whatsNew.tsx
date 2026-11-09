@@ -31,6 +31,121 @@ export interface WhatsNewEntry {
 
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    date: '2027-03-02',
+    title: 'Netiv in 3D',
+    items: [
+      {
+        title: 'The building view for Netiv',
+        body: 'Netiv now has the Building view, like Wolfson: every floor of B1 and B2 drawn from the real plans, the flats in their true shapes, a card for each flat, and both buildings side by side on All. The duplexes show on the ground and the floor above.',
+        demo: 'zoom',
+      },
+      {
+        title: 'Netiv\'s board looks like Wolfson\'s',
+        body: 'The same tiles: the number at the top, the family in the middle, how many stages are done and the stage strip, on taller floors.',
+        demo: 'list',
+      },
+    ],
+  },
+  {
+    date: '2027-03-01',
+    title: 'A camera inside the app',
+    items: [
+      {
+        title: 'Take many pictures, then press Done',
+        body: 'Inspection now opens the camera inside the app. Take as many photos as you like (or record a video, or add from the gallery); each one waits in a strip at the bottom, and nothing is sent until you press Done.',
+        demo: 'tap',
+      },
+      {
+        title: 'One inspection, not five',
+        body: 'Pictures added within half an hour of the last ones fold into the same inspection instead of starting a new row.',
+        demo: 'list',
+      },
+      {
+        title: 'iPhones tick too',
+        body: 'An iPhone only allows a light tick right at the moment of your tap, so every tick now happens there: opening an apartment, changing floors (at the lift of the swipe), holding a flat (at the lift), a stage done, a task closed, a message sent.',
+        demo: 'tap',
+      },
+      {
+        title: 'The phone answers your finger',
+        body: 'A small buzz when you change floors, open an apartment, mark a stage done, close a task, send a message or take a picture — and a warning buzz when something is refused. Press and hold a flat on the building to light it up without opening it.',
+        demo: 'sparkle',
+      },
+      {
+        title: 'Photos shows pictures and videos',
+        body: 'Other files in the Photos folder are hidden by default. "Show all files" at the top brings them back.',
+        demo: 'tap',
+      },
+      {
+        title: 'Select and delete photos (Tzvi)',
+        body: 'Tzvi has a Select button in the Photos tab: tap the pictures, press Delete, confirm. They go to Drive\'s trash, where they can be restored for 30 days.',
+        demo: 'tap',
+      },
+      {
+        title: 'The building fits short screens',
+        body: 'On the opened Fold held sideways (and laptops), the building shrinks to the height it has, so all four apartments of a floor fit without scrolling. The unit counts sit next to Print.',
+        demo: 'zoom',
+      },
+      {
+        title: 'Galaxy Fold, sideways',
+        body: 'The plan side of an apartment now takes at least half the window and shows the whole sheet, so Download and Print fit on its bar.',
+        demo: 'zoom',
+      },
+    ],
+  },
+  {
+    date: '2027-02-28',
+    title: 'Inspections by Tzvi',
+    items: [
+      {
+        title: 'Inspection, right in the stages',
+        body: 'Tzvi presses Inspection on an apartment\'s Stages, takes a photo or a video (or picks one), and a green "Inspected by Tzvi ✓" row appears after the stage that was finished last. Tap it to see what he took. He can add as many as he likes.',
+        demo: 'tap',
+      },
+    ],
+  },
+  {
+    date: '2027-02-27',
+    title: 'Talk into any box, and see your uploads',
+    items: [
+      {
+        title: 'The microphone listens properly',
+        body: 'Press the small mic in any box: a line moves with your voice, it keeps listening when you pause, and your words are added after what you already typed. Press the square to stop, or the arrow to send.',
+        demo: 'tap',
+      },
+      {
+        title: 'Uploads show their progress',
+        body: 'The moment you pick a picture or video, "Uploading…" appears with a bar until it lands.',
+        demo: 'list',
+      },
+      {
+        title: 'Sign out asks first',
+        body: 'Pressing the exit icon now asks "Sign out?" before it signs you out, so a stray tap never does.',
+        demo: 'tap',
+      },
+    ],
+  },
+  {
+    date: '2027-02-26',
+    title: 'The Building view first, and the plan full screen',
+    items: [
+      {
+        title: 'Building view opens first',
+        body: 'On every phone, tablet and computer, the project now opens on the Building view. Board is one tap away, next to it.',
+        demo: 'tap',
+      },
+      {
+        title: 'No List tab on phones',
+        body: 'The List tab is gone from the bar at the bottom of the phone.',
+        demo: 'tap',
+      },
+      {
+        title: 'Tap the plan for full screen',
+        body: 'On a phone, tap the plan in the Plan tab and it opens full screen, with Share in the bar at the bottom.',
+        demo: 'zoom',
+      },
+    ],
+  },
+  {
     date: '2027-02-26',
     title: 'Each flat\'s money',
     items: [
@@ -47,6 +162,22 @@ export const WHATS_NEW: WhatsNewEntry[] = [
       {
         title: 'A small ₪ on the tile',
         body: 'A flat with an upgrade order has a small ₪ beside its number at the top of the tile: green once ordered, orange while still open.',
+        demo: 'tap',
+      },
+    ],
+  },
+  {
+    date: '2027-02-25',
+    title: 'Share from the phone, and Building held upright',
+    items: [
+      {
+        title: 'Share right beside the plan',
+        body: 'The plan\'s black zoom bar at the bottom now has Share. Look at the plan, then tap Share right there — on a phone the share menu opens on the first tap.',
+        demo: 'tap',
+      },
+      {
+        title: 'Building on a phone held upright',
+        body: 'Board · Building now sits next to the building tabs on a phone held upright too, not only on its side.',
         demo: 'tap',
       },
     ],

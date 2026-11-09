@@ -71,6 +71,7 @@ import { aptLabel } from '../types';
 import { withoutCrmOwned } from './crmLink';
 import { planTaskMove, planTaskUndo, placeLabel } from './taskMove';
 import type { TaskMovePlan } from './taskMove';
+import { haptic } from './haptics';
 
 /** How many AUTOMATIC layout snapshots rotate, separate from the 10 manual. */
 const LAYOUTS_AUTO_MAX = 8;
@@ -3312,6 +3313,8 @@ export const useStore = create<AppState>((set, get) => ({
       changes = { ...changes, days: undefined };
     }
     // Closed late → the closing day joins the task's days (closeDayFields).
+    // A small buzz on the phone when a task is closed (owner, 2026-11-08: "all" of the proposed places).
+    if (before && !before.completedAt && changes.completedAt) haptic('success');
     if (before && !before.completedAt && changes.completedAt && !('days' in changes)) {
       const late = closeDayFields(before, changes.completedAt);
       if (late) changes = { ...changes, ...late };

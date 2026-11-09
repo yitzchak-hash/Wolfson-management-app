@@ -987,7 +987,7 @@ export function TasksPage() {
               onChange={v => setAddForm(f => ({ ...f, task: v }))}
               lang={s.isRtl ? 'he' : 'en'}
               placeholder={s.taskDescriptionPlaceholder}
-              onAttach={files => files.forEach(f => handleAddFileChosen(f))}
+              onAttach={files => Promise.all(files.map(f => handleAddFileChosen(f))).then(() => {})}
               onMemo={(memo, dataUrl) => setAddAttachments(prev => [...prev, {
                 id: Math.random().toString(36).slice(2, 11),
                 filename: memoFile(memo).name,
@@ -1305,7 +1305,7 @@ export function TasksPage() {
                         onChange={v => setEditFields(f => ({ ...f, taskDescription: v }))}
                         lang={s.isRtl ? 'he' : 'en'}
                         placeholder={s.taskDescriptionPlaceholder}
-                        onAttach={files => files.forEach(f => handleEditFileChosen(f))}
+                        onAttach={files => Promise.all(files.map(f => handleEditFileChosen(f))).then(() => {})}
                         onMemo={(memo, dataUrl) => setEditAttachments(prev => [...prev, {
                           id: Math.random().toString(36).slice(2, 11),
                           filename: memoFile(memo).name,

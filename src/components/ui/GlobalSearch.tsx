@@ -18,6 +18,7 @@ import {
 import { readRecent, writeRecent, rememberQuery, notePick, clearPicks, pickKey } from '../../data/searchMemory';
 import { aiSearchAvailable, aiSearchTerms } from '../../data/searchAi';
 import { useNavigate } from 'react-router-dom';
+import { LiveWave } from './LiveWave';
 
 interface SearchResult {
   /** Unique across workspaces: `${projectId}:${docId}`. */
@@ -200,7 +201,7 @@ export function GlobalSearch({ open, onClose }: GlobalSearchProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const navigate = useNavigate();
   // Talking instead of typing — the same microphone the search tile carries.
-  const { listening, toggle: toggleVoice, supported: voiceOk } = useSpeechToText(
+  const { listening, toggle: toggleVoice, supported: voiceOk, level: voiceLevel } = useSpeechToText(
     s.isRtl ? 'he-IL' : 'en-US', text => setQuery(text));
 
   useEffect(() => {
@@ -603,6 +604,12 @@ export function GlobalSearch({ open, onClose }: GlobalSearchProps) {
             <X size={16} />
           </button>
         </div>
+        {/* Listening: the live line moves with the voice (owner, 2026-11-08). */}
+        {listening && (
+          <div data-search-live className="px-4 py-1.5 border-b border-gray-100">
+            <LiveWave level={voiceLevel} color="#dc2626" height={22} />
+          </div>
+        )}
 
         {/* The AI fallback: only once the box holds a real question, and only
             on a machine whose server has the key. One press; the answer is

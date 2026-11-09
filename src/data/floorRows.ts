@@ -206,7 +206,9 @@ export function rowBaseHeightPx(buildingId: string, mode: RowMode): number {
   // Wolfson's desktop floors are much taller (owner, recording 2026-10-28:
   // "make the floors significantly fatter") so a tile holds its number and
   // name on one line, the tipus, the stage and the task under it.
-  if (isWolfsonBuilding(buildingId)) return mode === 'phone' ? 78 : 112;
+  // Netiv's two buildings (B1, B2) take the same tall floors and tiles (owner, 2026-11-08: the regular view should
+  // "look like the Wolfson buildings").
+  if (isWolfsonBuilding(buildingId) || /^B[12]$/.test(buildingId)) return mode === 'phone' ? 78 : 112;
   return mode === 'phone' ? 74 : 64;
 }
 

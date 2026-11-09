@@ -1,4 +1,7 @@
 import React, { useState, useCallback, useMemo, useEffect } from 'react';
+import { WOLFSON_PLAN, type BuildingPlan } from '../components/building/buildingPlan';
+import { NETIV_PLAN } from '../components/building/netivPlan';
+import { haptic } from '../data/haptics';
 import { Search, X, CheckSquare, Printer, ChevronDown, SlidersHorizontal } from 'lucide-react';
 import { Navigate, useNavigate } from 'react-router-dom';
 import { redeemReturn } from '../data/unitTravel';
@@ -13,6 +16,15 @@ import BuildingTrio from '../components/building/BuildingTrio';
 import { WOLFSON_LOWER } from '../components/building/wolfsonPlan';
 /** The typical floor's walls, doors, windows and furniture, off the architects' plan (owner liked it, 2026-11-03). */
 const WOLFSON_INTERIOR = '/building/wolfson-typical.png';
+/**
+ * Which buildings have a building view, and with whose plan (owner, 2026-11-08: Netiv "works exactly the same way"):
+ * Wolfson's towers A1–A3, Netiv's B1 and B2. Any other building keeps the board alone.
+ */
+function planFor(projectId: string, buildingId: string): BuildingPlan | null {
+  if (/^A\d/.test(buildingId)) return WOLFSON_PLAN;
+  if (projectId === 'netiv' && /^B[12]$/.test(buildingId)) return NETIV_PLAN;
+  return null;
+}
 import { buildFloorRows, rowLabelText } from '../data/floorRows';
 import { StageLegend, StageFilterMenu } from '../components/diagram/StageLegend';
 import { buildingShort } from '../data/aptSale';
@@ -73,7 +85,9 @@ export function ProjectDiagramPage() {
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [selectedBuilding, setSelectedBuilding] = useState<BuildingId | 'all'>('all');
   /** Board or the see-through building (owner, recording 2026-11-02), for one Wolfson building. */
-  const [view, setView] = useState<'board' | 'building'>('board');
+  // The Building view is what opens first, on every device (owner, 2026-11-05: "everywhere it should be the building
+  // view as the default. Also on the computer"). A workspace with no Building view shows its board as before.
+  const [view, setView] = useState<'board' | 'building'>('building');
   /** On All, the floor whose row is open big in its own window. */
   const [floorWin, setFloorWin] = useState<{ b: BuildingId; key: string; label: string } | null>(null);
   const [activeStageIds, setActiveStageIds] = useState<string[]>([]);
@@ -162,6 +176,7 @@ export function ProjectDiagramPage() {
       setTipusFilter('');
       setSearchQuery('');
       setRevealId(apt.id);
+      setView('board');   // the cell is shown on the board, which no longer opens first
       return;
     }
     setSelectedApt(apt);
@@ -185,6 +200,8 @@ export function ProjectDiagramPage() {
 
   // Bulk update state
   const [bulkMode, setBulkMode] = useState(false);
+  // Bulk Update picks tiles on the board — it brings the board up (the Building view opens first now).
+  useEffect(() => { if (bulkMode) setView('board'); }, [bulkMode]);
   const [bulkSelected, setBulkSelected] = useState<Set<string>>(new Set());
   const [bulkStageId, setBulkStageId] = useState('');
   /** The stage dropdown was TOUCHED — only then does Apply write a stage (a tipus-only update must not reset stages to Not started). */
@@ -250,11 +267,19 @@ export function ProjectDiagramPage() {
   const phoneBuilding: BuildingId | 'all' =
     selectedBuilding === 'all' ? (buildings[0]?.id ?? 'all') : selectedBuilding;
   const effectiveBuilding = isNarrow ? phoneBuilding : selectedBuilding;
-  const canBuildingView = !isNarrow && selectedBuilding !== 'all' && /^A\d/.test(selectedBuilding);
+  /** The building the Building view draws: on a narrow screen, the tab that is chosen (All resolves to the first). */
+  const bvBuilding = isNarrow ? phoneBuilding : selectedBuilding;
+  // A phone held upright has the Building view too (owner, video 2026-11-04 on the Fold: "only on landscape view we
+  // have the building button").
+  const canBuildingView = bvBuilding !== 'all' && !!planFor(currentProjectId, bvBuilding);
   const showBuilding = canBuildingView && view === 'building';
   /** The switch shows on All too (owner, 2026-11-03: he looked for it there twice); Building on All opens the first building. */
-  const firstWolfson = buildings.find(b => /^A\d/.test(b.id))?.id;
+  const firstWolfson = buildings.find(b => !!planFor(currentProjectId, b.id))?.id;
+  /** The plan the building view draws with — Wolfson's or Netiv's. */
+  const bvPlan = (firstWolfson ? planFor(currentProjectId, firstWolfson) : null) ?? WOLFSON_PLAN;
+  const isWolfsonPlan = bvPlan.id === 'wolfson';
   const showSwitch = !isNarrow && !!firstWolfson;
+  const showNarrowSwitch = isNarrow && canBuildingView;
   /** On All, Building shows the three side by side, moving together. */
   const showTrio = !isNarrow && view === 'building' && selectedBuilding === 'all' && !!firstWolfson;
     const boardSet = useStore(st => st.boardSettings[st.currentProjectId]);
@@ -264,10 +289,10 @@ export function ProjectDiagramPage() {
     const rows = buildFloorRows(b, apartments.filter(a => a.buildingId === b), boardSet?.floorHeights?.[b], boardSet?.buildingLayout?.[b]);
     return Object.fromEntries(rows.map(r => [r.floor, rowLabelText(r, s.lobby, s.groundCommercial)])) as Record<number, string>;
   }, [apartments, boardSet, s.lobby, s.groundCommercial]);
-  const buildingFloorLabels = useMemo(() => (showBuilding ? floorLabelsOf(selectedBuilding as BuildingId) : undefined),
-    [showBuilding, selectedBuilding, floorLabelsOf]);
+  const buildingFloorLabels = useMemo(() => (showBuilding ? floorLabelsOf(bvBuilding as BuildingId) : undefined),
+    [showBuilding, bvBuilding, floorLabelsOf]);
   const trioBuildings = useMemo(() => (showTrio
-    ? buildings.filter(b => /^A\d/.test(b.id)).map(b => ({ id: b.id, title: buildingShort(b.id), apartments: apartments.filter(a => a.buildingId === b.id), floorLabels: floorLabelsOf(b.id) }))
+    ? buildings.filter(b => !!planFor(currentProjectId, b.id)).map(b => ({ id: b.id, title: buildingShort(b.id), apartments: apartments.filter(a => a.buildingId === b.id), floorLabels: floorLabelsOf(b.id) }))
     : []), [showTrio, buildings, apartments, floorLabelsOf]);
   const lookValue = useMemo(() => ({
     big: !isNarrow && selectedBuilding !== 'all',
@@ -312,6 +337,8 @@ export function ProjectDiagramPage() {
         return next;
       });
     } else {
+      // The tick inside the tap itself — an iPhone drops the drawer's own tick, which comes a moment later.
+      haptic('tick');
       setAddTaskApt(null);
       setSelectedApt(apt);
     }
@@ -488,6 +515,19 @@ export function ProjectDiagramPage() {
                 {buildingShort(b.id)}
               </button>
             ))}
+            {showNarrowSwitch && (
+              <div className="flex items-center gap-0.5 bg-gray-100 rounded-md p-0.5 flex-shrink-0" data-view-switch data-view-switch-narrow>
+                {(['board', 'building'] as const).map(v => {
+                  const on = (v === 'building') === showBuilding;
+                  return (
+                    <button key={v} type="button" data-view={v} aria-pressed={on} onClick={() => setView(v)}
+                      className={`px-2.5 py-1 rounded text-[12px] font-bold transition-all ${on ? 'bg-[#1e3a5f] text-white shadow-sm' : 'text-gray-600'}`}>
+                      {v === 'board' ? s.viewBoard : s.viewBuilding}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
             <span className="flex-shrink-0 pl-1 text-[11px] leading-tight text-gray-400 tabular-nums text-right">
               {bulkMode
                 ? `${bulkSelected.size} ${s.bulkSelected}`
@@ -499,7 +539,7 @@ export function ProjectDiagramPage() {
         {/* The stage bar — the narrow diagram's picture of the whole project,
             in place of the desktop toolbar's bubbles and the bare-number
             strip (decision 5). */}
-        <div className="diag:hidden print:hidden">
+        <div className={`diag:hidden print:hidden ${showBuilding ? 'hidden' : ''}`}>
           <StageBar
             stages={sortedStages}
             apartments={apartments}
@@ -643,7 +683,9 @@ export function ProjectDiagramPage() {
             )}
 
             {/* Quick stats */}
-            <div className="ml-auto flex items-center gap-3 text-xs text-gray-500">
+            {/* Under 1536px the two counts stack into two small lines, so they stay beside Print instead of
+                dropping to a line of their own (owner's picture, Fold, 2026-11-08). */}
+            <div data-quick-stats className="ml-auto flex flex-col 2xl:flex-row 2xl:items-center 2xl:gap-3 text-[11px] 2xl:text-xs leading-tight text-gray-500 whitespace-nowrap">
               {bulkMode ? (
                 <span className="text-[#1e3a5f] font-semibold">
                   {bulkSelected.size} {s.bulkSelected}
@@ -665,20 +707,21 @@ export function ProjectDiagramPage() {
         {/* Main diagram */}
         <div className="short-scroll-body flex-1 overflow-auto scrollbar-thin bg-gray-100 print:overflow-visible print:bg-white">
           {showTrio ? (
-            <div className="h-full p-4" style={{ minHeight: 560 }} data-building-view-wrap>
-              <BuildingTrio buildings={trioBuildings} stages={stages} onOpen={handleAptClick} interiorSrc={WOLFSON_INTERIOR} lower={lowerLevels} customButtons={boardSet?.customButtons}
+            <div className="h-full p-4" style={{ minHeight: 380 }} data-building-view-wrap>
+              <BuildingTrio buildings={trioBuildings} stages={stages} onOpen={handleAptClick} plan={bvPlan} interiorSrc={isWolfsonPlan ? WOLFSON_INTERIOR : undefined} lower={isWolfsonPlan ? lowerLevels : []} customButtons={boardSet?.customButtons}
                 words={{ floor: s.floorWindowTitle, notSold: s.notSoldWord, notStarted: s.notStartedOption.replace(/[—–]/g, '').trim(), upgraded: s.upgradedWord, open: s.bvOpen, floorsHint: s.bvHint, joinedWith: s.bvJoined, yes: s.customYes, no: s.customNo, unknown: s.customUnknown }} />
             </div>
           ) : showBuilding ? (
-            <div className="h-full p-4" style={{ minHeight: 560 }} data-building-view-wrap>
+            <div className="h-full p-4" style={{ minHeight: 380 }} data-building-view-wrap>
               <BuildingView
-                apartments={apartments.filter(a => a.buildingId === selectedBuilding)}
+                apartments={apartments.filter(a => a.buildingId === bvBuilding)}
                 stages={stages}
                 onOpen={handleAptClick}
                 floorLabels={buildingFloorLabels}
-                interiorSrc={WOLFSON_INTERIOR}
-                lower={lowerLevels} customButtons={boardSet?.customButtons}
-                tower={Math.max(0, buildings.filter(b => /^A\d/.test(b.id)).findIndex(b => b.id === selectedBuilding))}
+                interiorSrc={isWolfsonPlan ? WOLFSON_INTERIOR : undefined}
+                plan={bvPlan}
+                lower={isWolfsonPlan ? lowerLevels : undefined} customButtons={boardSet?.customButtons}
+                tower={Math.max(0, buildings.filter(b => !!planFor(currentProjectId, b.id)).findIndex(b => b.id === bvBuilding))}
                 words={{ floor: s.floorWindowTitle, notSold: s.notSoldWord, notStarted: s.notStartedOption.replace(/[—–]/g, '').trim(), upgraded: s.upgradedWord, open: s.bvOpen, floorsHint: s.bvHint, joinedWith: s.bvJoined, yes: s.customYes, no: s.customNo, unknown: s.customUnknown }}
               />
             </div>

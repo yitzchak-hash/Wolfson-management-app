@@ -1,9 +1,16 @@
 import React, { useState, useEffect, useMemo, useRef, lazy, Suspense } from 'react';
 import { Mic, X, Save, Building2, MessageSquare, AlertTriangle, Link, Unlink, ExternalLink, BookOpen, Download, Eye, EyeOff, Activity, RefreshCw, Paperclip, Trash2, ChevronDown, ChevronRight, ClipboardList, CheckCircle2, CalendarDays, FileText, UserCheck, Plus, Camera, Play, ChevronLeft, FolderOpen, Clock, RotateCcw, Edit2, BarChart3, PenLine, Maximize2, Printer, Share2, Phone as PhoneIcon, Loader2, Folder, Star, ArrowRightLeft } from 'lucide-react';
-import { Apartment, User, getStageName, TaskAttachment, TaskPriority, aptLabel, ContractorAssignment, CustomButton } from '../../types';
+import { Apartment, User, getStageName, TaskAttachment, TaskPriority, aptLabel, ContractorAssignment, CustomButton, Inspection, InspectionFile } from '../../types';
+import { createPortal } from 'react-dom';
+import { InspectionCamera } from './InspectionCamera';
+
+/** Tzvi's own user — the one person who inspects (owner, 2026-11-08: "only for Tzvi, his user"). */
+const isTzvi = (name?: string | null) => { const n = (name ?? '').trim(); return /^(tzvi|zvi)\b/i.test(n) || /^צבי(\s|$)/.test(n); };
 import { TaskThread } from '../tasks/TaskThread';
 import { Translated } from '../ui/Translated';
-import { Send } from 'lucide-react';
+import { Send, CheckSquare, Square as SquareIcon } from 'lucide-react';
+import { trashDriveFiles } from '../../data/driveTrash';
+import { haptic } from '../../data/haptics';
 import { useStore, trackUndo, cloudReady } from '../../data/store';
 import { peekTaskFocus, takeTaskFocus } from '../../data/taskFocus';
 import { TaskDaysPicker, daysFields } from '../tasks/TaskDaysPicker';
@@ -43,7 +50,7 @@ import { problemState } from '../../data/problems';
 import { PlanPinOverlay } from './PlanPinOverlay';
 import { PlanBrowser, Crumb, TileFile } from '../plans/PlanBrowser';
 import { prefetchPlans } from '../../data/planCache';
-import { sharePlanFile } from '../../data/sharePlan';
+import { sharePlanFile, warmPlanShare } from '../../data/sharePlan';
 import { cachedPlanAspect, measurePlanAspect } from '../../data/planAspect';
 // Lazy, deliberately. The markup studio carries pdf.js — about a megabyte of
 // PDF engine — and nobody should pay for that on the login screen. It arrives
@@ -114,7 +121,7 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
     appendApartmentNote, removeApartmentNote,
     contractorAssignments, contractors, updateContractorAssignment,
     deleteApartment, getGeneralNoteVersions, currentProjectId,
-    contractorPhotos, updateContractorPhoto, planAnnotations, stageNotes, planPins,
+    contractorPhotos, updateContractorPhoto, deleteContractorPhoto, planAnnotations, stageNotes, planPins,
     contractorNotes, addContractorNote } = useStore();
   const isGeneralProject = currentProjectId === 'general';
   const isWolfsonProject = currentProjectId === 'wolfson';
@@ -421,7 +428,10 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
    * 400px so the plan keeps real room, exactly as the approved picture drew
    * it; at ~940px and up nothing changes.
    */
-  const fieldsW = Math.max(400, Math.min(560, Math.round(window.innerWidth * 0.96) - 340));
+  // The plan gets at least HALF the window (owner, 2026-11-08, the Fold on its side: "make the details side smaller
+  // and the plan side bigger … at least half"): the fields never take more than half, nor more than 560.
+  const availW = Math.round(window.innerWidth * 0.96);
+  const fieldsW = Math.max(340, Math.min(560, availW - 340, Math.round(availW / 2)));
   const fitW = Math.max(280, Math.round(window.innerWidth * 0.96) - fieldsW);
   const planW = Math.min(Math.round((maxModalH - 56) * sheetRatio), fitW);
   /**
@@ -577,6 +587,8 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
       setShowSettings(false);
       setActiveTab('details');
       setDrivePhotos([]);
+      setPhotoSelect(false); setPhotoPicked(new Set()); setPhotoAskDelete(false);
+      haptic('tick'); // a small buzz as the apartment opens (owner, 2026-11-08)
       setPhotosLoaded(false);
       setLightbox(null);
       const existingFileId = apartment.plansPdfLink ? extractFileId(apartment.plansPdfLink) : null;
@@ -708,6 +720,24 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
   useEffect(() => { ensureDriveShared(latestStampedFileId); }, [latestStampedFileId]);
 
   const [sharing, setSharing] = useState(false);
+  /** Tzvi's inspection: the choice sheet open (with the stage it will stand after), and an upload in progress. */
+  const [inspectAsk, setInspectAsk] = useState<{ after: string | null } | null>(null);
+  const [inspecting, setInspecting] = useState(false);
+  const inspectPhotoRef = useRef<HTMLInputElement>(null);
+  const inspectVideoRef = useRef<HTMLInputElement>(null);
+  const inspectPickRef = useRef<HTMLInputElement>(null);
+  /** The Photos tab shows pictures and videos only until this is switched on. */
+  const [showAllFiles, setShowAllFiles] = useState(false);
+  /** Tzvi's Select in the Photos tab: the tiles picked to delete (owner, 2026-11-08). */
+  const [photoSelect, setPhotoSelect] = useState(false);
+  const [photoPicked, setPhotoPicked] = useState<Set<string>>(() => new Set());
+  const [photoAskDelete, setPhotoAskDelete] = useState(false);
+  const [photoDeleting, setPhotoDeleting] = useState(false);
+  /** Where a press on the phone's plan began — a still tap opens the plan full screen. */
+  const tapFrom = useRef<{ x: number; y: number; t: number } | null>(null);
+  // The plan on screen is made ready to share before the press (a phone browser refuses a late share sheet).
+  const shareWarmId = browsePreview?.file.id ?? shownPlanId ?? availablePdfs[selectedPdfIdx]?.id ?? null;
+  useEffect(() => { warmPlanShare(shareWarmId, undefined); }, [shareWarmId]);
   if (!apartment) return null;
 
   const detectedPdfId = availablePdfs[selectedPdfIdx]?.id ?? null;
@@ -1169,6 +1199,61 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
    * base64 otherwise. A memo (`transcript`) is sent for its words once it is
    * stored, and the words land on the record so every device reads them.
    */
+  /**
+   * Tzvi's inspection (owner, 2026-11-08, plan approved): the pictures or videos go to the apartment's Drive under
+   * Photos › Inspections, and one Inspection joins the record — standing after the stage that was last finished.
+   * Without Drive a picture is kept small in the record; a video needs Drive and is refused in words.
+   */
+  async function saveInspection(files: File[], after: string | null) {
+    if (!apartment || !currentUser || !files.length) return;
+    setInspecting(true);
+    const mainFolderId = apartment.driveLink ? extractFolderId(apartment.driveLink) : null;
+    const saved: InspectionFile[] = [];
+    try {
+      let folderId: string | null = null;
+      if (backendConfigured && mainFolderId) {
+        const photosFolderId = await findOrCreateFolderViaBackend(mainFolderId, 'Photos');
+        ensureDriveShared(photosFolderId);
+        folderId = await findOrCreateFolderViaBackend(photosFolderId, 'Inspections');
+      }
+      for (const file of files) {
+        if (folderId) {
+          const { fileId, webViewLink } = await uploadFileViaResumableSession(folderId, file);
+          void shareFileToDrive(fileId);
+          saved.push({ filename: file.name, mimeType: file.type || 'application/octet-stream', driveFileId: fileId, driveUrl: webViewLink });
+        } else if (file.type.startsWith('image/')) {
+          const dataUrl = await new Promise<string>((res, rej) => { const r = new FileReader(); r.onload = e => res(e.target?.result as string); r.onerror = rej; r.readAsDataURL(file); });
+          saved.push({ filename: file.name, mimeType: file.type, dataUrl });
+        }
+      }
+    } catch {
+      onToast(ui.isRtl ? 'ההעלאה נכשלה — נסו שוב' : 'The upload failed — try again', 'error');
+    }
+    setInspecting(false);
+    if (!saved.length) {
+      if (files.some(f => f.type.startsWith('video/')) && !backendConfigured) onToast(ui.isRtl ? 'סרטון צריך את Drive' : 'A video needs Drive', 'error');
+      return;
+    }
+    const now = new Date().toISOString();
+    const prior = apartments.find(a => a.id === apartment.id)?.inspections ?? [];
+    // Within half an hour of his last addition he is still there: the pictures join THAT inspection
+    // (owner, 2026-11-08: "they should all fold into the same inspection … because it means I'm still there").
+    const last = prior[prior.length - 1];
+    const lastTouch = last ? Date.parse(last.lastAt ?? last.at) : 0;
+    if (last && last.byId === currentUser.id && Date.now() - lastTouch < 30 * 60 * 1000) {
+      const merged: Inspection = { ...last, files: [...last.files, ...saved], lastAt: now };
+      updateApartment(apartment.id, { inspections: [...prior.slice(0, -1), merged] }, currentUser);
+      onToast(ui.isRtl ? 'נוסף לבדיקה' : 'Added to the inspection');
+      return;
+    }
+    const ins: Inspection = {
+      id: `ins-${Date.now().toString(36)}`, at: now, lastAt: now,
+      byId: currentUser.id, byName: currentUser.name, afterStageId: after, files: saved,
+    };
+    updateApartment(apartment.id, { inspections: [...prior, ins] }, currentUser);
+    onToast(ui.isRtl ? 'הבדיקה נשמרה' : 'Inspection saved');
+  }
+
   async function attachOfficeFile(file: File, transcript?: boolean) {
     if (!apartment || !currentUser) return;
     const mainFolderId = apartment.driveLink ? extractFolderId(apartment.driveLink) : null;
@@ -1420,8 +1505,22 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
   function planPane(variant: 'side' | 'tab') {
     const asTab = variant === 'tab';
     const fileId = paneFileId;
+    // In the phone's Plan tab a still TAP on the sheet opens the plan full screen (owner, 2026-11-05: "clicking on a
+    // plan on a portrait view in the iPhone didn't open the full screen of the plan"). A drag or a pinch is not a tap,
+    // and a press on a button, a pin or the pin layer keeps its own meaning.
+    const tapToFull = asTab ? {
+      'data-plan-tap-full': '',
+      onPointerDown: (e: React.PointerEvent) => { tapFrom.current = { x: e.clientX, y: e.clientY, t: Date.now() }; },
+      onClick: (e: React.MouseEvent) => {
+        const from = tapFrom.current; tapFrom.current = null;
+        const el = e.target as HTMLElement;
+        if (!from || Date.now() - from.t > 500 || Math.hypot(e.clientX - from.x, e.clientY - from.y) > 8) return;
+        if (!el.closest('[data-plan-stage]') || el.closest('button, a, input, [role="button"]')) return;
+        setAnnotating('view');
+      },
+    } : {};
     const frame = (body: React.ReactNode) => (
-      <div
+      <div {...tapToFull}
         className={`relative flex flex-col min-h-0 ${asTab ? 'h-full' : 'border-l border-gray-200'}`}
         style={asTab
           ? { backgroundColor: '#f8fafc' }
@@ -1588,6 +1687,9 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
               driveFolderUrl={apartment!.driveLink}
               authorName={currentUser?.name ?? ''}
               onClose={() => { /* part of the pane */ }}
+              onShare={sharePlan}
+              shareBusy={sharing}
+              shareLabel={ui.planShare}
               barExtrasRef={setPlanBarSlot}
               barInto={viewerBarSlot}
               barInto2={viewerBar2Slot}
@@ -2539,7 +2641,28 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                 ui={ui}
                 onReportProblem={isGeneralProject ? undefined : () => setProblemFormOpen(true)}
                 onOpenPhotos={(items, index) => setLightbox({ items, index })}
+                // Only Tzvi's own user inspects (owner, 2026-11-08).
+                onInspect={isTzvi(currentUser?.name) ? after => setInspectAsk({ after }) : undefined}
+                inspecting={inspecting}
               />
+              {/* The three ways in: the camera for a picture, the camera for a video, or what is already on the phone. */}
+              {(['photo', 'video', 'pick'] as const).map(k => (
+                <input key={k} type="file" className="hidden" data-inspect-input={k}
+                  ref={k === 'photo' ? inspectPhotoRef : k === 'video' ? inspectVideoRef : inspectPickRef}
+                  accept={k === 'photo' ? 'image/*' : k === 'video' ? 'video/*' : 'image/*,video/*'}
+                  {...(k === 'pick' ? { multiple: true } : { capture: 'environment' as const })}
+                  onChange={e => {
+                    const files = [...(e.target.files ?? [])]; e.target.value = '';
+                    const after = inspectAsk?.after ?? null; setInspectAsk(null);
+                    void saveInspection(files, after);
+                  }} />
+              ))}
+              {/* Inspection opens the camera INSIDE the app: as many pictures and videos as he likes, then Done
+                  (owner, 2026-11-08). Where the browser refuses the camera, the phone's own camera or gallery opens. */}
+              <InspectionCamera open={!!inspectAsk} isRtl={!!ui.isRtl}
+                onClose={() => setInspectAsk(null)}
+                onDone={files => { const after = inspectAsk?.after ?? null; setInspectAsk(null); void saveInspection(files, after); }}
+                onFallback={k => (k === 'camera' ? inspectPhotoRef : inspectPickRef).current?.click()} />
 
               {/* Elsewhere they stay below the stages. */}
               {!isWolfsonProject && customButtons.length > 0 && (
@@ -3279,7 +3402,7 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                               onChange={v => setOfficeNoteDrafts(d => ({ ...d, [a.id]: v }))}
                               onSend={() => sendOfficeNote(a)}
                               hasPending={(officeNoteAtts[a.id] ?? []).length > 0}
-                              onAttach={files => { files.forEach(f => void officeThreadAttach(a, f)); }}
+                              onAttach={files => Promise.all(files.map(f => officeThreadAttach(a, f))).then(() => {})}
                               onMemo={memo => officeThreadAttach(a, memoFile(memo), true)}
                               lang={ui.isRtl ? 'he' : 'en'}
                               placeholder={ui.threadWriteToWorker}
@@ -3397,7 +3520,13 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                 else { const ng = { name, tiles: [tile] }; byName.set(k, ng); looseGroups.unshift(ng); }
               }
             }
-            const groups = [...looseGroups, ...driveGroups];
+            // Pictures and videos only, unless "Show all files" is on (owner, 2026-11-08: "it started showing all the
+            // files … a little toggle on top saying show all files. But the default should be off").
+            const isMedia = (t: Tile) => /^(image|video)\//.test(t.mimeType) || /\.(jpe?g|png|gif|webp|heic|heif|mp4|mov|webm|m4v|3gp)$/i.test(t.filename);
+            const everyGroup = [...looseGroups, ...driveGroups];
+            const otherFiles = everyGroup.reduce((n, g) => n + g.tiles.filter(t => !isMedia(t)).length, 0);
+            const groups = showAllFiles ? everyGroup
+              : everyGroup.map(g => ({ ...g, tiles: g.tiles.filter(isMedia) })).filter(g => g.tiles.length > 0);
             const allTiles = groups.flatMap(g => g.tiles);
             const openTile = (t: Tile) => {
               setLightbox({
@@ -3410,10 +3539,113 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
               if (t.fresh) markReviewed([t.fresh.id]);
             };
 
+            /**
+             * Tzvi's Select → Delete (owner, 2026-11-08: "a select button … select photos in the photos tab and delete,
+             * and that should only work for Tzvi's account"). A Drive file goes to Drive's TRASH (30 days to take it
+             * back); its site record goes with it. A site photo kept only in the app (no Drive copy) loses its record.
+             * A file Drive refused stays on screen, counted in the message.
+             */
+            const canSelect = isTzvi(currentUser?.name);
+            const pickedTiles = allTiles.filter(t => photoPicked.has(t.key));
+            const togglePick = (t: Tile) => setPhotoPicked(prev => {
+              const n = new Set(prev); if (n.has(t.key)) n.delete(t.key); else n.add(t.key); return n;
+            });
+            const endSelect = () => { setPhotoSelect(false); setPhotoPicked(new Set()); setPhotoAskDelete(false); };
+            const deletePicked = async () => {
+              const picked = pickedTiles;
+              if (!picked.length) return;
+              setPhotoDeleting(true);
+              let gone = new Set<string>();
+              const driveIds = picked.map(t => t.fileId).filter(Boolean);
+              if (driveIds.length) { try { gone = await trashDriveFiles(driveIds); } catch { /* counted below */ } }
+              const failed = picked.filter(t => t.fileId && !gone.has(t.fileId)).length;
+              for (const p of contractorPhotos) {
+                if (!jobTasks.has(p.assignmentId)) continue;
+                const own = picked.find(t => !t.onDrive && t.key === p.id && !t.fileId);
+                if ((p.driveFileId && gone.has(p.driveFileId)) || own) deleteContractorPhoto(p.id);
+              }
+              if (gone.size) {
+                setDrivePhotos(prev => prev.filter(d => !gone.has(d.fileId)));
+                const ins = apartment.inspections ?? [];
+                if (ins.some(i => i.files.some(f => f.driveFileId && gone.has(f.driveFileId)))) {
+                  const left = ins.map(i => ({ ...i, files: i.files.filter(f => !(f.driveFileId && gone.has(f.driveFileId))) }))
+                    .filter(i => i.files.length > 0);
+                  updateApartment(apartment.id, { inspections: left }, currentUser);
+                }
+              }
+              setPhotoDeleting(false);
+              const done = picked.length - failed;
+              endSelect();
+              onToast(failed
+                ? (ui.isRtl ? `נמחקו ${done} · ${failed} לא נמחקו (Drive סירב)` : `Deleted ${done} · ${failed} not deleted (Drive refused)`)
+                : (ui.isRtl ? `נמחקו ${done} — בפח של Drive ל-30 יום` : `Deleted ${done} — in Drive's trash for 30 days`));
+            };
+
             return (
             <div>
               {/* The tab's header row: the Drive folder's status on the left,
                   the one review link on the right. */}
+              {canSelect && allTiles.length > 0 && (photoSelect ? (
+                <div data-photos-select-bar className="sticky top-0 z-10 mb-2 -mx-1 px-2 py-1.5 rounded-xl bg-[#1e3a5f] text-white flex items-center gap-2 flex-wrap shadow">
+                  <span className="text-[13px] font-semibold" data-photos-picked={pickedTiles.length}>
+                    {ui.isRtl ? `${pickedTiles.length} נבחרו` : `${pickedTiles.length} selected`}
+                  </span>
+                  <button type="button" data-photos-select-all
+                    onClick={() => setPhotoPicked(pickedTiles.length === allTiles.length ? new Set() : new Set(allTiles.map(t => t.key)))}
+                    className="text-[12.5px] font-medium underline-offset-2 hover:underline">
+                    {pickedTiles.length === allTiles.length ? (ui.isRtl ? 'ביטול הבחירה' : 'Select none') : (ui.isRtl ? 'בחירת הכל' : 'Select all')}
+                  </button>
+                  <span className="ms-auto flex items-center gap-1.5">
+                    <button type="button" data-photos-delete disabled={!pickedTiles.length || photoDeleting}
+                      onClick={() => setPhotoAskDelete(true)}
+                      className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-red-600 hover:bg-red-700 text-[13px] font-medium disabled:opacity-40">
+                      {photoDeleting ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
+                      {ui.isRtl ? 'מחיקה' : 'Delete'}
+                    </button>
+                    <button type="button" data-photos-select-cancel onClick={endSelect} disabled={photoDeleting}
+                      className="px-3 py-1.5 rounded-lg bg-white/15 hover:bg-white/25 text-[13px] font-medium">
+                      {ui.isRtl ? 'ביטול' : 'Cancel'}
+                    </button>
+                  </span>
+                </div>
+              ) : (
+                <div className="mb-2 flex justify-end">
+                  <button type="button" data-photos-select onClick={() => setPhotoSelect(true)}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-200 text-[13px] font-medium text-gray-700 hover:bg-gray-50">
+                    <CheckSquare size={14} /> {ui.isRtl ? 'בחירה' : 'Select'}
+                  </button>
+                </div>
+              ))}
+              {photoAskDelete && createPortal(
+                <div data-photos-delete-ask className="fixed inset-0 z-[300] bg-black/50 flex items-center justify-center p-6"
+                  onClick={() => !photoDeleting && setPhotoAskDelete(false)}>
+                  <div className="w-full max-w-[340px] rounded-2xl bg-white p-5" dir={ui.isRtl ? 'rtl' : 'ltr'} onClick={e => e.stopPropagation()}>
+                    <div className="text-[16px] font-bold text-gray-900">
+                      {ui.isRtl ? `למחוק ${pickedTiles.length} קבצים?` : `Delete ${pickedTiles.length} file${pickedTiles.length === 1 ? '' : 's'}?`}
+                    </div>
+                    <div className="mt-1.5 text-[13px] text-gray-600">
+                      {ui.isRtl ? 'הם יעברו לפח של Drive, ואפשר להחזיר אותם משם תוך 30 יום.' : "They go to Drive's trash, where they can be restored for 30 days."}
+                    </div>
+                    <div className="mt-4 flex justify-end gap-2">
+                      <button type="button" data-photos-delete-no onClick={() => setPhotoAskDelete(false)} disabled={photoDeleting}
+                        className="px-4 py-2 rounded-lg bg-gray-100 font-medium">{ui.isRtl ? 'ביטול' : 'Cancel'}</button>
+                      <button type="button" data-photos-delete-yes onClick={() => { setPhotoAskDelete(false); void deletePicked(); }}
+                        className="px-4 py-2 rounded-lg bg-red-600 text-white font-medium">{ui.isRtl ? 'מחיקה' : 'Delete'}</button>
+                    </div>
+                  </div>
+                </div>,
+                document.body,
+              )}
+              {(otherFiles > 0 || showAllFiles) && (
+                <label data-photos-all-files className="mb-2 inline-flex items-center gap-2 cursor-pointer select-none text-[12.5px] font-semibold text-gray-700">
+                  <span role="switch" aria-checked={showAllFiles}
+                    className={`relative w-9 h-5 rounded-full transition-colors ${showAllFiles ? 'bg-[#1e3a5f]' : 'bg-gray-300'}`}>
+                    <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all ${showAllFiles ? 'start-[18px]' : 'start-0.5'}`} />
+                  </span>
+                  <input type="checkbox" className="sr-only" checked={showAllFiles} onChange={e => setShowAllFiles(e.target.checked)} />
+                  {ui.isRtl ? 'הצגת כל הקבצים' : 'Show all files'}{!showAllFiles && otherFiles > 0 ? ` (${otherFiles})` : ''}
+                </label>
+              )}
               {((apartment.driveLink && backendConfigured) || queue.length > 0) && (
                 <div className="mb-3 flex items-center gap-2 text-[11px] flex-wrap" data-photos-header>
                   {apartment.driveLink && backendConfigured && (
@@ -3490,9 +3722,11 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                               data-photo-tile={t.key}
                               data-photo-fresh={t.fresh ? '1' : undefined}
                               title={t.fresh ? `${t.fresh.who} · ${t.filename} — ${ui.photoNewTitle}` : t.filename}
+                              data-photo-picked={photoSelect ? (photoPicked.has(t.key) ? '1' : '0') : undefined}
                               className={`aspect-square rounded-lg overflow-hidden bg-gray-100 cursor-pointer relative ${
-                                t.fresh ? 'ring-2 ring-amber-400 ring-offset-1' : ''}`}
-                              onClick={() => openTile(t)}
+                                photoSelect && photoPicked.has(t.key) ? 'ring-[3px] ring-[#1e3a5f] ring-offset-1'
+                                  : t.fresh ? 'ring-2 ring-amber-400 ring-offset-1' : ''}`}
+                              onClick={() => (photoSelect ? togglePick(t) : openTile(t))}
                             >
                               {isImg ? (
                                 <DriveImg src={t.thumb} alt={t.filename} className="w-full h-full object-cover" />
@@ -3522,6 +3756,14 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                                   <FileText size={18} className="text-blue-400" />
                                   <span className="text-[9px] text-gray-500 text-center break-all leading-tight line-clamp-2 mt-1">{t.filename}</span>
                                 </div>
+                              )}
+                              {photoSelect && (
+                                <span className={`absolute inset-0 pointer-events-none ${photoPicked.has(t.key) ? 'bg-[#1e3a5f]/25' : ''}`}>
+                                  <span className="absolute top-1 end-1 w-6 h-6 rounded-md flex items-center justify-center shadow"
+                                    style={{ backgroundColor: photoPicked.has(t.key) ? '#1e3a5f' : 'rgba(255,255,255,.9)', color: photoPicked.has(t.key) ? '#fff' : '#94a3b8' }}>
+                                    {photoPicked.has(t.key) ? <CheckSquare size={15} /> : <SquareIcon size={15} />}
+                                  </span>
+                                </span>
                               )}
                               {t.fresh && (
                                 <span data-photo-new
@@ -3637,14 +3879,17 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
           onStartMarkup={() => { setAnnotating(null); openPlanInSketcher(); }}
           onClose={() => setAnnotating(null)}
           onToast={onToast}
+          onShare={sharePlan}
+          shareBusy={sharing}
+          shareLabel={ui.planShare}
         />
-        {/* Share in full screen too (owner, video 2026-11-03). Floating in the
-            corner, so the plan studio itself stays the shared copy it is. */}
-        <button type="button" data-plan-share data-plan-share-full onClick={sharePlan} disabled={sharing}
+        {/* Share in full screen too (owner, video 2026-11-03). Viewing, it is in the zoom bar beside the plan
+            (video 2026-11-04); marking up, the bar is gone, so it floats in the corner. */}
+        {annotating !== 'view' && <button type="button" data-plan-share data-plan-share-full onClick={sharePlan} disabled={sharing}
           className="fixed z-[170] flex items-center gap-1.5 px-3.5 py-2 rounded-full text-[13px] font-bold text-white shadow-lg disabled:opacity-60"
           style={{ right: 16, bottom: 'calc(16px + env(safe-area-inset-bottom, 0px))', backgroundColor: '#1e3a5f' }}>
           {sharing ? <Loader2 size={14} className="animate-spin" /> : <Share2 size={14} />} {ui.planShare}
-        </button>
+        </button>}
         </Suspense>
       )}
 

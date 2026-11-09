@@ -6,6 +6,7 @@ import { d, WidgetCtx } from '../../data/widgets';
 import { useStore, loadProjectSnapshot } from '../../data/store';
 import { workspaceIndex, searchIndex } from '../../data/searchIndex';
 import { useSpeechToText } from '../../data/voiceSearch';
+import { LiveWave } from '../ui/LiveWave';
 
 /**
  * The big search button — the owner's ask, in his words: "just a big
@@ -169,7 +170,7 @@ function SearchWindow({ c, onClose }: { c: WidgetCtx; onClose: () => void }) {
   const currentProjectId = useStore(s => s.currentProjectId);
   const snapTick = useStore(s => s.snapshotTick);
 
-  const { listening, toggle, supported } = useSpeechToText(
+  const { listening, toggle, supported, level } = useSpeechToText(
     isRtl ? 'he-IL' : 'en-US', text => setQuery(text));
 
   useEffect(() => { inputRef.current?.focus(); }, []);
@@ -276,6 +277,9 @@ function SearchWindow({ c, onClose }: { c: WidgetCtx; onClose: () => void }) {
         </div>
 
         <div className="flex-1 min-h-0 overflow-y-auto">
+          {listening && (
+            <div data-search-live className="px-4 pt-2"><LiveWave level={level} color="#dc2626" height={22} /></div>
+          )}
           {listening && !query.trim() && (
             <div className="px-4 py-3 text-[13px] font-semibold" style={{ color: '#dc2626' }}>
               {t('Listening — say a name or an address…', 'מאזין — אמרו שם או כתובת…')}

@@ -365,7 +365,7 @@ export function PlanPinOverlay({
                   placeholder={L.placeholder}
                   lang={cs.isRtl ? 'he' : 'en'}
                   busy={busy !== ''}
-                  onAttach={files => { const f = files[0]; if (f) void attachFile(p.id, f, p.files ?? []); }}
+                  onAttach={files => { const f = files[0]; return f ? Promise.resolve(attachFile(p.id, f, p.files ?? [])).then(() => {}) : undefined; }}
                   onMemo={memo => saveMemo(p.id, memo)}
                 />
               )}

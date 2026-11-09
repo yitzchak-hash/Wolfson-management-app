@@ -405,7 +405,9 @@ function WorkspacePicker({ light }: { light: boolean }) {
     // `shrink-[0.05]` against the company mark's 20: both can give way, so the
     // header can never overflow, but the name only starts losing letters once
     // the mark has nothing left to give.
-    <div ref={wrapRef} className="relative min-w-0 flex shrink-[0.05] md:shrink">
+    // Under 420px (a 360-wide Galaxy S, a 402-wide iPhone 17 Pro) the name gives way like everything else, or the bar
+    // ran out of room and Calendar slid under the buttons beside it (the device gallery, 2026-11-05).
+    <div ref={wrapRef} className="relative min-w-0 flex shrink-[0.05] max-[420px]:shrink md:shrink">
       <button
         onClick={() => {
           const r = wrapRef.current?.getBoundingClientRect();
@@ -519,6 +521,7 @@ export function Header() {
   const { currentUser, logout, lightTheme, setLightTheme, firebaseSyncError, mainUiStrings: s } = useStore();
   const navigate = useNavigate();
   const [searchOpen, setSearchOpen] = useState(false);
+  const [signOutAsk, setSignOutAsk] = useState(false);
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -526,7 +529,7 @@ export function Header() {
         e.preventDefault();
         setSearchOpen(v => !v);
       }
-      if (e.key === 'Escape') setSearchOpen(false);
+      if (e.key === 'Escape') { setSearchOpen(false); setSignOutAsk(false); }
     }
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
@@ -594,7 +597,9 @@ export function Header() {
       <div className="flex items-center gap-0.5 md:gap-2 flex-shrink-0 lg:flex-shrink lg:min-w-0">
         {/* What the APP learned to do — left of what the office just did. */}
         {currentUser && <HeaderUndo light={lightTheme} />}
-        {currentUser && <WhatsNewButton />}
+        {/* Under 400px (a Galaxy S24/S25/S26 is 360) the bar has no room for it: it sat ON the Calendar button
+            (the device gallery, 2026-11-05). */}
+        {currentUser && <span className="hidden min-[400px]:contents"><WhatsNewButton /></span>}
         {/* The training session — a practice board that teaches every gesture.
             Not on a phone: the phone board only navigates, and in a 390px
             header the "?" sat on top of the Calendar button. */}
@@ -659,13 +664,43 @@ export function Header() {
             </div>
             <Tooltip text={s.signOut}>
               <button
-                onClick={logout}
+                data-sign-out
+                onClick={() => setSignOutAsk(true)}
                 className="p-1.5 md:p-2 rounded-lg transition-colors"
                 style={{ color: lightTheme ? '#6b7280' : '#9ca3af' }}
               >
                 <LogOut size={18} />
               </button>
             </Tooltip>
+            {/* Sign out always asks first (owner, 2026-11-08: "Sign out should always say first, are you sure, all
+                over the place") — one tap on the icon used to sign out at once. */}
+            {signOutAsk && createPortal(
+              <div className="fixed inset-0 z-[200] flex items-center justify-center p-4" data-sign-out-ask
+                dir={s.isRtl ? 'rtl' : 'ltr'} onClick={() => setSignOutAsk(false)}
+                style={{ backgroundColor: 'rgba(15,23,42,.45)' }}>
+                <div role="alertdialog" aria-modal="true" onClick={e => e.stopPropagation()}
+                  className="w-full max-w-[340px] rounded-2xl bg-white shadow-2xl p-5">
+                  <div className="flex items-center gap-2.5 text-[16px] font-bold text-gray-900">
+                    <LogOut size={18} className="text-[#1e3a5f]" />
+                    {s.isRtl ? 'להתנתק?' : 'Sign out?'}
+                  </div>
+                  <p className="mt-2 text-[14px] text-gray-600">
+                    {s.isRtl ? `האם אתם בטוחים שאתם רוצים להתנתק, ${currentUser.name}?` : `Are you sure you want to sign out, ${currentUser.name}?`}
+                  </p>
+                  <div className="mt-5 flex justify-end gap-2">
+                    <button type="button" data-sign-out-cancel autoFocus onClick={() => setSignOutAsk(false)}
+                      className="px-4 py-2 rounded-lg text-[14px] font-medium text-gray-700 bg-gray-100 hover:bg-gray-200">
+                      {s.isRtl ? 'ביטול' : 'Cancel'}
+                    </button>
+                    <button type="button" data-sign-out-confirm onClick={() => { setSignOutAsk(false); logout(); }}
+                      className="px-4 py-2 rounded-lg text-[14px] font-medium text-white bg-[#dc2626] hover:bg-[#b91c1c]">
+                      {s.signOut}
+                    </button>
+                  </div>
+                </div>
+              </div>,
+              document.body,
+            )}
           </>
         )}
       </div>

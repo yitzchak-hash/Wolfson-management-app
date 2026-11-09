@@ -29,6 +29,8 @@ for (const [tag, vp, mobile] of [['pc', { width: 1440, height: 900 }, false], ['
   await ctx.route('**://drive.google.com/**', r => r.abort());
   const p = await ctx.newPage();
   await p.goto('http://localhost:5173/project'); await p.waitForTimeout(2500);
+  // The Building view opens first now (2026-11-05); this test works from the board.
+  await p.locator('[data-view-switch] [data-view="board"]:visible').first().click().catch(() => {}); await p.waitForTimeout(1000);
   if (mobile) await p.locator('button:visible', { hasText: /^1$/ }).first().click().catch(() => {});
   await p.locator('[data-apt-id="A1-53"]').first().click(); await p.waitForTimeout(1500);
   if (mobile) { const tab = p.locator('.drawer-panel button', { hasText: /^Plan$/ }).first(); if (await tab.count()) { await tab.click(); await p.waitForTimeout(1200); } }
@@ -47,7 +49,8 @@ for (const [tag, vp, mobile] of [['pc', { width: 1440, height: 900 }, false], ['
     T(await p.locator('[data-custom-buttons]').count() <= 1 && await p.locator('.drawer-panel input[placeholder="Address"]').count() === 0, 'Wolfson: no address or phone in the details');
     const full = p.locator('.drawer-panel button:has(svg.lucide-maximize2), .drawer-panel [title="Full screen"]').first();
     await p.locator('button:has(svg.lucide-maximize-2)').first().click().catch(() => {}); await p.waitForTimeout(1500);
-    const fb = p.locator('[data-plan-share-full]');
+    // Viewing full screen, Share stands in the plan's zoom bar (video 2026-11-04); the floating one is for marking up.
+    const fb = p.locator('[data-plan-share-full]').or(p.locator('[data-plan-share-bar]').nth(1));
     T(await fb.count() === 1, 'Share is on the full-screen plan too');
     if (await fb.count()) { await fb.click(); await p.waitForTimeout(1000); T((await p.evaluate(() => window.__shared.length)) === 2, 'full screen: the share menu opened with the PDF'); }
     await p.screenshot({ path: `${OUT}/share-full.png` });
