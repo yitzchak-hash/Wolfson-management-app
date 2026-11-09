@@ -2,7 +2,8 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Eye, Loader2, Plus, SquareDashedMousePointer, X } from 'lucide-react';
 import {
   readPlanAddress, openRegionReader, PlanAddressResult, RegionReader, tidy,
-  isOfficeAddress, isOfficeNumber, isPlaceholderPhone,
+  isOfficeAddress, isOfficeNumber, isPlaceholderPhone, planReadStage, onPlanReadStage,
+  type PlanReadFrom,
 } from '../../data/planAddress';
 import { aiPlanReadingAvailable, aiReadPlanImage, type Frac } from '../../data/planAi';
 
@@ -123,7 +124,22 @@ function RegionPicker({ fileId, kind, onUse, onClose }: {
       // exactly what is inside the box — the text layer is the fallback, and
       // it is not shown while the model is still looking.
       const seq = ++readSeq.current;
-      if (aiPlanReadingAvailable()) {
+      if (!readerRef.current.hasText) {
+        // A SCAN: OCR of exactly this box, and the model beside it when the
+        // server has one — the model's reading wins, OCR is the fallback.
+        const r = readerRef.current;
+        setReadText('');
+        setAiBusy(true);
+        const ocrP = r.readScan(b).catch(() => '');
+        const aiP = aiPlanReadingAvailable() ? aiReadPlanImage(r.crop(b), kind, true).catch(() => null) : Promise.resolve(null);
+        void Promise.all([ocrP, aiP]).then(([ocr, ai]) => {
+          if (seq !== readSeq.current) return;
+          setAiBusy(false);
+          const v = ai ? keepAi(tidy(kind === 'address' ? ai.address : ai.phone)) : '';
+          const o = LABEL_ONLY.test(tidy(ocr)) ? '' : keepAi(tidy(ocr));
+          setReadText(v || o);
+        });
+      } else if (aiPlanReadingAvailable()) {
         setReadText('');
         setAiBusy(true);
         void aiReadPlanImage(readerRef.current.crop(b), kind, true).then(ai => {
@@ -164,7 +180,7 @@ function RegionPicker({ fileId, kind, onUse, onClose }: {
         <div className="flex-1 min-h-0 overflow-hidden bg-slate-100 p-2 flex items-center justify-center">
           {failed ? (
             <p className="text-[12px] text-gray-500 p-6 text-center">
-              This sheet has no readable text — it is a scan, a picture of a plan. Type the {kind} in by hand.
+              This sheet could not be opened for reading. Type the {kind} in by hand.
             </p>
           ) : !reader ? (
             <p className="flex items-center justify-center gap-2 text-[12px] text-gray-500 p-8">
@@ -250,19 +266,26 @@ export function PlanAddressSuggest({ fileId, kind, current, onUse }: {
 }) {
   const [status, setStatus] = useState<'idle' | 'reading' | 'done'>('idle');
   const [result, setResult] = useState<PlanAddressResult | null>(null);
-  const [peek, setPeek] = useState(false);
+  /** Which reading's cutout is open: the field's own value, or the floor / scale beside it. */
+  const [peekWhich, setPeekWhich] = useState<'main' | 'floor' | 'scale' | null>(null);
+  const peek = peekWhich !== null;
+  const setPeek = (on: boolean) => setPeekWhich(on ? 'main' : null);
   const [pick, setPick] = useState(false);
+  /** 'scan' while the sheet's title block is being read by OCR — a few seconds. */
+  const [stage, setStage] = useState<'scan' | null>(null);
 
   useEffect(() => {
-    setStatus('idle'); setResult(null); setPeek(false); setPick(false);
+    setStatus('idle'); setResult(null); setPeekWhich(null); setPick(false); setStage(null);
     if (!fileId) return;
     let dead = false;
     setStatus('reading');
+    const off = onPlanReadStage(() => { if (!dead) setStage(planReadStage(fileId)); });
+    setStage(planReadStage(fileId));
     readPlanAddress(fileId).then(r => {
       if (dead) return;
       setResult(r); setStatus('done');
     });
-    return () => { dead = true; };
+    return () => { dead = true; off(); };
   }, [fileId]);
 
   // Escape backs out of the popup alone — never the job window behind it.
@@ -278,29 +301,59 @@ export function PlanAddressSuggest({ fileId, kind, current, onUse }: {
 
   if (!fileId) return null;
 
-  const found = kind === 'address' ? result?.address : result?.phone;
-  const cutout = kind === 'address' ? result?.cutout : result?.phoneCutout;
-  const cutBox = kind === 'address' ? result?.cutoutBox : result?.phoneCutoutBox;
-  const pageBox = kind === 'address' ? result?.addressBox : result?.phoneBox;
+  const mainFound = kind === 'address' ? result?.address : result?.phone;
+  const mainFrom: PlanReadFrom | undefined = kind === 'address' ? result?.addressFrom : result?.phoneFrom;
+  const mainCutout = kind === 'address' ? result?.cutout : result?.phoneCutout;
   const sheet = result?.sheet;
-  const isNew = !!found && found.trim() !== current.trim();
+  const isNew = !!mainFound && mainFound.trim() !== current.trim();
+
+  // The floor and the scale ride on the ADDRESS row only — one plan, said once.
+  // Read-only: there is no field for them here, so no plus — the eye shows where.
+  const extras = kind !== 'address' || !result ? [] : ([
+    result.floor && result.floorCutout ? { key: 'floor' as const, label: 'Floor', value: result.floor, from: result.floorFrom } : null,
+    result.scale && result.scaleCutout ? { key: 'scale' as const, label: 'Scale', value: result.scale, from: result.scaleFrom } : null,
+  ].filter(Boolean) as { key: 'floor' | 'scale'; label: string; value: string; from?: PlanReadFrom }[]);
+
+  // What the open popup shows — the field's own value, or the floor / scale.
+  const shown = peekWhich === 'floor' ? {
+    value: result?.floor, cutout: result?.floorCutout, cutBox: result?.floorCutoutBox, pageBox: result?.floorBox, from: result?.floorFrom,
+  } : peekWhich === 'scale' ? {
+    value: result?.scale, cutout: result?.scaleCutout, cutBox: result?.scaleCutoutBox, pageBox: result?.scaleBox, from: result?.scaleFrom,
+  } : {
+    value: mainFound, cutout: mainCutout,
+    cutBox: kind === 'address' ? result?.cutoutBox : result?.phoneCutoutBox,
+    pageBox: kind === 'address' ? result?.addressBox : result?.phoneBox,
+    from: mainFrom,
+  };
+  const found = shown.value;
+  const cutout = shown.cutout;
+  const cutBox = shown.cutBox;
+  const pageBox = shown.pageBox;
+  const isMain = peekWhich === 'main' || peekWhich === null;
+  const mainShown = !!mainFound && !!mainCutout;
 
   // Nothing found — or nothing the reader can SHOW on the sheet — nothing said.
-  if (status === 'done' && (!found || !cutout)) return null;
+  if (status === 'done' && !mainShown && !extras.length) return null;
+
+  /** "read from the scan" — quiet, after a value OCR found on a scanned sheet. */
+  const scanNote = (from?: PlanReadFrom) => (from === 'ocr'
+    ? <span className="text-[10px] font-normal text-gray-400" data-plan-read-scan>· read from the scan</span>
+    : null);
 
   return (
     <div className="mt-1" data-plan-address data-plan-read={kind}>
       {status === 'reading' && (
-        <span className="flex items-center gap-1.5 text-[10.5px] text-gray-400">
-          <Loader2 size={11} className="animate-spin" /> Reading the plan…
+        <span className="flex items-center gap-1.5 text-[10.5px] text-gray-400" data-plan-reading={stage ?? 'plan'}>
+          <Loader2 size={11} className="animate-spin" /> {stage === 'scan' ? 'Reading the scan…' : 'Reading the plan…'}
         </span>
       )}
 
-      {status === 'done' && found && (
+      {status === 'done' && mainShown && (
         <span className="flex items-center gap-1.5 flex-wrap text-[11px]">
           <span className="font-semibold" style={{ color: '#15803d' }}>
-            On the plan: <span dir="auto">{found}</span>
+            On the plan: <span dir="auto">{mainFound}</span>
           </span>
+          {scanNote(mainFrom)}
           <button
             type="button"
             data-plan-address-eye
@@ -314,7 +367,7 @@ export function PlanAddressSuggest({ fileId, kind, current, onUse }: {
             <button
               type="button"
               data-plan-address-use
-              onClick={() => onUse(found)}
+              onClick={() => onUse(mainFound!)}
               title={kind === 'address' ? 'Use this address' : 'Use this phone number'}
               className="w-[18px] h-[18px] rounded-full flex items-center justify-center text-white"
               style={{ backgroundColor: '#4aa8d8' }}
@@ -324,6 +377,26 @@ export function PlanAddressSuggest({ fileId, kind, current, onUse }: {
           )}
         </span>
       )}
+
+      {/* The floor and the scale the title block names — the same quiet row,
+          the same eye; nothing to write them into, so no plus. */}
+      {status === 'done' && extras.map(x => (
+        <span key={x.key} className="flex items-center gap-1.5 flex-wrap text-[11px]" data-plan-fact={x.key}>
+          <span className="font-semibold text-slate-600">
+            {x.label} on the plan: <span dir="auto">{x.value}</span>
+          </span>
+          {scanNote(x.from)}
+          <button
+            type="button"
+            data-plan-fact-eye={x.key}
+            onClick={() => setPeekWhich(x.key)}
+            title="See where on the plan this was read"
+            className="p-0.5 rounded text-gray-400 hover:text-[#1e3a5f] hover:bg-gray-100"
+          >
+            <Eye size={13} />
+          </button>
+        </span>
+      ))}
 
       {/* The cutout, big, with the value boxed — and the whole sheet with the
           same spot boxed. Above the drawer (z-120), like everything it opens. */}
@@ -339,7 +412,7 @@ export function PlanAddressSuggest({ fileId, kind, current, onUse }: {
             }}>
             <div className="flex items-center gap-2 px-4 py-2.5 border-b border-gray-100">
               <span className="text-[13px] font-extrabold text-slate-800 flex-1">
-                From the plan — check it against this
+                {shown.from === 'ocr' ? 'Read from the scan — check it against this' : 'From the plan — check it against this'}
               </span>
               <button onClick={() => setPeek(false)} className="text-gray-400 hover:text-gray-600">
                 <X size={16} />
@@ -377,18 +450,19 @@ export function PlanAddressSuggest({ fileId, kind, current, onUse }: {
             <div className="flex items-center gap-2 px-4 py-2.5 border-t border-gray-100 flex-wrap">
               <span className="text-[11.5px] text-gray-500 flex-1 min-w-0 truncate" dir="auto">{found}</span>
               {/* The human override — when the reader guessed the WRONG spot,
-                  the fix is pointing at the right one, not a smarter guess. */}
-              <button
+                  the fix is pointing at the right one, not a smarter guess.
+                  Only for the field's own value: floor and scale only show. */}
+              {isMain && <button
                 data-addr-pick
                 onClick={() => { setPeek(false); setPick(true); }}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-semibold flex-shrink-0 hover:bg-gray-100"
                 style={{ color: '#1e3a5f', border: '1px solid #c7d4e0' }}
               >
                 <SquareDashedMousePointer size={13} /> Not right? Pick it on the plan
-              </button>
-              {isNew && (
+              </button>}
+              {isMain && isNew && (
                 <button
-                  onClick={() => { onUse(found!); setPeek(false); }}
+                  onClick={() => { onUse(mainFound!); setPeek(false); }}
                   className="px-3 py-1.5 rounded-lg text-[12px] font-bold text-white flex-shrink-0"
                   style={{ backgroundColor: '#4aa8d8' }}
                 >

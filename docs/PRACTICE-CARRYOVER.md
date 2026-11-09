@@ -45,6 +45,9 @@ change after that commit belongs in this list.
 | 2026-11-08 | Photos tab: pictures and videos only; "Show all files" switch | `ApartmentDetailDrawer.tsx` (`data-photos-all-files`) | ″ |
 | 2026-11-08 | Sideways Fold: the plan pane takes at least half the window; the side pane opens on the whole sheet | `ApartmentDetailDrawer.tsx` (`fieldsW`), `PlanAnnotator.tsx` (embedded fit) | ″ |
 | 2026-11-09 | Worker portal: the day chips (All … This Week) wrap inside the screen instead of scrolling past its edge — one line when they fit, else 3 + 2 | `src/components/portal/DayFilterChips.tsx` (new), `ContractorPortal.tsx`, `whatsNew.tsx` | branch `claude/portal-week-fit` |
+| 2026-11-09 | The tablet studio ("The Studio on the Tablet", every star): a touch screen ≥600px on both sides gets one 56px bar (‹ · name · v · undo/redo · Save · ⋯), 56px tiles, upright a docked ink tray under the sheet, sideways an ink pill + side tray, the pen tray docked (never over the plan), zoom/pager in the floating pill, Neat shapes behind ⋯, full bleed on a Pan tap, pen draws / finger moves once a pen is seen; Settings → This computer: Drawing hand, Finger draws too | `PlanAnnotator.tsx` (`tablet`), `src/data/tabletStudio.ts` (new), `deviceOnly.ts`, `SettingsPage.tsx` | (this round) |
+| 2026-11-09 | Scanned and photographed plans read their own title block by OCR (tesseract.js, lazy): address, phone, floor and scale, each with its box and cutout; a picture plan can be read too | `src/data/planOcr.ts` (new), `planAddress.ts`, `PlanAddressSuggest.tsx`, `package.json` | ″ |
+| 2026-11-09 | Job search: among equally good matches, the job whose Drive folder moved most recently comes first; "Drive · 2h ago" in the header search | `searchIndex.ts`, `driveActivity.ts`, `GlobalSearch.tsx`, `SearchTileWidget.tsx`, `ImportBatchWindow.tsx`, `types` | ″ |
 
 ## Already brought across
 (nothing yet)

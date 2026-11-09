@@ -77,10 +77,10 @@ asks for it. ☑ done · ☐ next · ✎ awaiting Yitzchak's word. (Standing ord
 - ☐ Watch on production: the plan reader on real office sheets — the chain is
   live (health lists `planModels`; a made-up title block read right by
   gpt-6.1-sol in 12s on 2026-10-08).
-- ✎ The tablet studio layout (the "Studio on the Tablet" plan page: one
-  bar, 56px rail, docked tray) — build on Yitzchak's numbers.
-- ✎ OCR for scanned plans (tesseract) when scans matter.
-- ✎ Search ranking by Drive activity (decided not to build until asked).
+- ☑ 2026-11-09 (owner: yes to all three): the tablet studio layout, every
+  star of "The Studio on the Tablet" (harness `scratchpad/tabletstudio.mjs`);
+  OCR for scanned/photographed plans (tesseract.js, lazy; address, phone,
+  floor, scale); search ranked by Drive activity within equal matches.
 
 ## Standing pre-existing reds in the harnesses (not features)
 `planphone.mjs` stale locator · `round39-probe` asserts the deleted "I did

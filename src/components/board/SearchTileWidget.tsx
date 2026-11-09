@@ -7,6 +7,7 @@ import { useStore, loadProjectSnapshot } from '../../data/store';
 import { workspaceIndex, searchIndex } from '../../data/searchIndex';
 import { useSpeechToText } from '../../data/voiceSearch';
 import { LiveWave } from '../ui/LiveWave';
+import { useDriveActivity } from '../../data/driveActivity';
 
 /**
  * The big search button — the owner's ask, in his words: "just a big
@@ -169,6 +170,7 @@ function SearchWindow({ c, onClose }: { c: WidgetCtx; onClose: () => void }) {
   const projects = useStore(s => s.projects);
   const currentProjectId = useStore(s => s.currentProjectId);
   const snapTick = useStore(s => s.snapshotTick);
+  const drive = useDriveActivity();
 
   const { listening, toggle, supported, level } = useSpeechToText(
     isRtl ? 'he-IL' : 'en-US', text => setQuery(text));
@@ -208,7 +210,7 @@ function SearchWindow({ c, onClose }: { c: WidgetCtx; onClose: () => void }) {
     const walk = (pid: string, ws: string | undefined, jobs: Apartment[], sts: typeof stages,
                   els: CanvasElement[], tasks: typeof c.assignments, bias: number) => {
       const index = workspaceIndex(`tile:${pid}`, { apartments: jobs, stages: sts, canvasElements: els, assignments: tasks });
-      for (const h of searchIndex(index, q, { kinds: ['job'], projectId: pid, bias, limit: 30, perKind: 30 })) {
+      for (const h of searchIndex(index, q, { kinds: ['job'], projectId: pid, bias, limit: 30, perKind: 30, driveRecent: true })) {
         const job = h.rec as Apartment;
         const st = sts.find(x => x.id === job.currentStageId);
         out.push({
@@ -225,7 +227,8 @@ function SearchWindow({ c, onClose }: { c: WidgetCtx; onClose: () => void }) {
         snap.canvasElements ?? [], snap.assignments ?? [], 2);
     }
     return out.sort((a, b) => a.score - b.score).slice(0, 30);
-  }, [query, apartments, stages, canvasElements, c.assignments, snaps, isRtl, currentProjectId]);
+    // drive: a fresh Drive check re-orders equal matches, busiest folder first.
+  }, [query, apartments, stages, canvasElements, c.assignments, snaps, isRtl, currentProjectId, drive]);
 
   const openHit = (h: Hit) => {
     onClose();

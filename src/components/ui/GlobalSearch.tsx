@@ -19,6 +19,7 @@ import { readRecent, writeRecent, rememberQuery, notePick, clearPicks, pickKey }
 import { aiSearchAvailable, aiSearchTerms } from '../../data/searchAi';
 import { useNavigate } from 'react-router-dom';
 import { LiveWave } from './LiveWave';
+import { useDriveActivity, driveTouchedAt } from '../../data/driveActivity';
 
 interface SearchResult {
   /** Unique across workspaces: `${projectId}:${docId}`. */
@@ -56,6 +57,24 @@ interface SearchResult {
   onBoard?: boolean;
   /** Lower is better; the index decided it (tier first, everything else inside the tier). */
   rank: number;
+  /** A job whose Drive folder moved lately: "Drive · 2h ago". */
+  drive?: string;
+}
+
+/** How long a folder's change still earns the quiet "Drive · 2h ago" under the row's label. */
+const DRIVE_HINT_MS = 3 * 86400000;
+
+/**
+ * "2h ago" / "לפני 2 שע׳", in the screen's own words. Hours run to two days, so
+ * days only ever say 2 or 3 — the plural every language here gets right.
+ */
+function agoText(at: number, now: number, s: MainUiStrings): string {
+  const min = Math.max(1, Math.round((now - at) / 60000));
+  const h = Math.round(min / 60);
+  const [tpl, n] = min < 60 ? [s.searchAgoMin ?? '{n}m ago', min]
+    : h < 48 ? [s.searchAgoHour ?? '{n}h ago', h]
+    : [s.searchAgoDay ?? '{n}d ago', Math.round(h / 24)];
+  return tpl.replace('{n}', String(n));
 }
 
 interface GlobalSearchProps {
@@ -142,7 +161,12 @@ function ResultRow({ result, icon, label, onSelect, onReveal, onHeld, onDropped 
           <Crosshair size={14} />
         </button>
       )}
-      <span className="text-[10px] text-gray-300 flex-shrink-0 pt-0.5">{label}</span>
+      {/* The type, and under it — in the room the two-line row already has —
+          when the job's Drive folder last moved, if lately. */}
+      <span className="flex flex-col items-end flex-shrink-0 pt-0.5 text-[10px] whitespace-nowrap">
+        <span className="text-gray-300">{label}</span>
+        {result.drive && <span data-search-drive className="text-gray-400">{result.drive}</span>}
+      </span>
     </div>
   );
 }
@@ -220,6 +244,8 @@ export function GlobalSearch({ open, onClose }: GlobalSearchProps) {
   // is folded in — its own effect, so refreshing the snaps can never clear
   // what somebody is mid-way through typing.
   const snapTick = useStore(state => state.snapshotTick);
+  // A fresh Drive check re-orders the open list (equal matches, busiest folder first).
+  const drive = useDriveActivity();
   useEffect(() => {
     if (!open) return;
     const got: Record<string, ReturnType<typeof loadProjectSnapshot>> = {};
@@ -242,6 +268,7 @@ export function GlobalSearch({ open, onClose }: GlobalSearchProps) {
     const timer = setTimeout(() => {
       const { filters } = parseQuery(query);
       const found: SearchResult[] = [];
+      const now = Date.now();
       const widgetNameOf = (id: string) => WIDGET_BY_ID.get(id)?.name;
 
       // `qq` is the query or one of the AI's other spellings; `shift` puts the
@@ -249,7 +276,8 @@ export function GlobalSearch({ open, onClose }: GlobalSearchProps) {
       let qq = query, shift = 0, aiTerm = '';
       const searchOne = (pid: string, workspace: string, W: WorkspaceSources, bias: number) => {
         const index = workspaceIndex(pid, W);
-        const hits = searchIndex(index, qq, { projectId: pid, bias, limit: 30, perKind: 6 });
+        // driveRecent: among equally good job matches, the busiest Drive folder first.
+        const hits = searchIndex(index, qq, { projectId: pid, bias, limit: 30, perKind: 6, driveRecent: true, now });
         const onBoard = pid === 'general';
         const aptsById = new Map(W.apartments.map(a => [a.id, a]));
         /**
@@ -280,12 +308,16 @@ export function GlobalSearch({ open, onClose }: GlobalSearchProps) {
               const extra = (a.generalNotes ?? '').trim()
                 ? a.generalNotes.split('\n')[0].slice(0, 60)
                 : (!onBoard && a.floor ? `Floor ${a.floor}` : '');
+              const moved = driveTouchedAt(a.driveLink);
               push(h, {
                 type: 'apartment',
                 title: aptLabel(a) || (onBoard ? 'Job' : 'Unit'),
                 subtitle: [whereIs(a, h.binLabel), extra].filter(Boolean).join(' · '),
                 focus: { kind: 'apartment', id: a.id },
                 onBoard: true,
+                drive: moved && now - moved < DRIVE_HINT_MS
+                  ? (s.searchDriveMoved ?? 'Drive · {ago}').replace('{ago}', agoText(moved, now, s))
+                  : undefined,
               });
               break;
             }
@@ -470,7 +502,7 @@ export function GlobalSearch({ open, onClose }: GlobalSearchProps) {
     }, DEBOUNCE_MS);
     return () => clearTimeout(timer);
   }, [query, apartments, contractorAssignments, stageNotes, contractorNotes, contractors, stages,
-      canvasElements, planAnnotations, planPins, officeNoteFiles, projects, currentProjectId, snaps, s, ai]);
+      canvasElements, planAnnotations, planPins, officeNoteFiles, projects, currentProjectId, snaps, s, ai, drive]);
 
   /** Remember what was looked for, newest first and never twice. */
   function remember(q: string) {

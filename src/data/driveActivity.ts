@@ -1,6 +1,8 @@
 import { useSyncExternalStore } from 'react';
 import { useStore, loadProjectSnapshot } from './store';
 import { isUploadBackendConfigured, extractFolderId } from './driveApi';
+import { isAppAccount } from './activityTouches';
+import { setSearchDriveClock } from './searchIndex';
 
 /**
  * WHAT MOVED IN DRIVE (owner, 2026-09-07: the Active-jobs widget "should
@@ -52,6 +54,29 @@ export function driveActivityFor(driveLink?: string | null): { at: string; name:
   const id = extractFolderId(driveLink);
   return id ? current.byFolder[id] ?? null : null;
 }
+
+/**
+ * When a PERSON last changed something in this job's folder (ms), or
+ * undefined. The app's own uploads (its service account) are skipped, the
+ * same rule the Active-jobs widget follows (`isAppAccount`).
+ */
+export function driveTouchedAt(driveLink?: string | null): number | undefined {
+  if (!current || !driveLink) return undefined;
+  const id = extractFolderId(driveLink);
+  const f = id ? current.byFolder[id] : undefined;
+  if (!f) return undefined;
+  let best = 0;
+  for (const t of f.touches?.length ? f.touches : [f]) {
+    if (isAppAccount(t.who)) continue;
+    const ms = Date.parse(t.at);
+    if (Number.isFinite(ms) && ms > best) best = ms;
+  }
+  return best || undefined;
+}
+
+// The job search puts equal matches busiest-Drive-folder first (searchIndex's
+// `driveBoost`); it reads the time through here, never the store.
+setSearchDriveClock(job => driveTouchedAt(job.driveLink));
 
 export function driveActivityDue(now = Date.now()): boolean {
   if (!API_KEY || !isUploadBackendConfigured()) return false;

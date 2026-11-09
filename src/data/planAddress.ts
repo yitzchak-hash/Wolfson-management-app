@@ -35,12 +35,28 @@
  *
  * pdf.js is imported lazily (the planAspect idiom): suggesting an address
  * must never add a megabyte of PDF engine to the main bundle.
+ *
+ * A SCAN (2026-11-09). A scanned or photographed plan — a PDF with no text
+ * layer, or a JPG/PNG — has its title block read by OCR first (planOcr.ts,
+ * Tesseract, loaded lazily): its words come back in the same item shape as a
+ * text layer, so everything below runs on them unchanged, honesty rule
+ * included, and the values are marked `'ocr'` so the drawer can say "read
+ * from the scan". Only when OCR finds nothing does the vision model (when the
+ * server has one) read the scan as before. Floor and scale are read off the
+ * title block the same way, on any sheet.
  */
 import { fetchPlanBytes } from './driveApi';
 import { aiPlanReadingAvailable, aiReadPlanImage, canvasToJpeg, type Frac } from './planAi';
 import { tokenize } from './hebrewNormalize';
+import {
+  isPdfBytes, imageAsPage, ocrTitleBlock, ocrBox, floorIn, scaleIn, FLOOR_LABEL, SCALE_LABEL,
+  type SheetPage, type OcrItem,
+} from './planOcr';
 
 export type { Frac } from './planAi';
+
+/** Who read a value: the sheet's own text layer, the vision model (verified), or OCR of a scan. */
+export type PlanReadFrom = 'text' | 'ai' | 'ocr';
 
 export interface PlanAddressResult {
   /** Best-effort text of the address line. The cutout is the ground truth. */
@@ -51,8 +67,8 @@ export interface PlanAddressResult {
   cutoutBox?: Frac;
   /** Where the address sits on the PAGE (fractions of the first page). */
   addressBox?: Frac;
-  /** Who read it: the sheet's own text, or the vision model (verified). */
-  addressFrom?: 'text' | 'ai';
+  /** Who read it: the sheet's own text, the vision model (verified), or OCR of a scan. */
+  addressFrom?: PlanReadFrom;
   /** Best-effort phone number found on the sheet. */
   phone?: string;
   /** PNG data URL of the region the phone was read from. */
@@ -61,7 +77,21 @@ export interface PlanAddressResult {
   phoneCutoutBox?: Frac;
   /** Where the phone sits on the PAGE. */
   phoneBox?: Frac;
-  phoneFrom?: 'text' | 'ai';
+  phoneFrom?: PlanReadFrom;
+  /** The floor the title block names, as printed ("קומה 3", "Ground floor") — same box-and-cutout rule. */
+  floor?: string;
+  floorCutout?: string;
+  floorCutoutBox?: Frac;
+  floorBox?: Frac;
+  floorFrom?: PlanReadFrom;
+  /** The drawing scale the title block names, as "1:50" — same box-and-cutout rule. */
+  scale?: string;
+  scaleCutout?: string;
+  scaleCutoutBox?: Frac;
+  scaleBox?: Frac;
+  scaleFrom?: PlanReadFrom;
+  /** True when the sheet had no text layer and its title block was read by OCR. */
+  scan?: boolean;
   /** The whole first page, small — the "where on the sheet" picture. */
   sheet?: string;
   problem?: 'no-text' | 'no-address' | 'unreachable';
@@ -270,7 +300,22 @@ function pickReading(vs: string[]): string {
 function columnLine(label: Line, band: Line): Line {
   const cx = (label.x1 + label.x2) / 2;
   const halfW = Math.max(160, (label.x2 - label.x1) * 3);
-  const parts = band.parts.filter(pt => Math.abs(pt.x - cx) < halfW);
+  const near = new Set(band.parts.filter(pt => Math.abs(pt.x - cx) < halfW));
+  // …and every part CONTINUING the label's phrase without a wide gap (the
+  // segment rule): OCR of a scan gives one item per WORD, so a long value
+  // ("רחוב הדוגמה 12, תל אביב") runs past the column width word by word.
+  const lineH = Math.max(4, band.y2 - band.y1);
+  const gapMax = Math.max(24, lineH * 2.2);
+  const asc = [...band.parts].sort((a, b) => a.x - b.x);
+  const wOf = (p: Part) => (p.w && p.w > 0 ? p.w : Math.max(4, p.str.length * lineH * 0.5));
+  let lo = asc.findIndex(p => p.x + wOf(p) >= label.x1 && p.x <= label.x2);
+  if (lo >= 0) {
+    let hi = lo;
+    while (lo > 0 && asc[lo].x - (asc[lo - 1].x + wOf(asc[lo - 1])) <= gapMax) lo--;
+    while (hi < asc.length - 1 && asc[hi + 1].x - (asc[hi].x + wOf(asc[hi])) <= gapMax) hi++;
+    for (let i = lo; i <= hi; i++) near.add(asc[i]);
+  }
+  const parts = band.parts.filter(pt => near.has(pt));
   if (parts.length === band.parts.length) return band;
   // NOTHING in the label's column is nothing — never the rest of the band.
   // Handing back the whole band read a garbled caption from the opposite
@@ -608,6 +653,95 @@ function locatePhone(digits: string, segs: Seg[], hint: { x: number; y: number }
   return best ? { rect: best.rect, lineH: best.lineH } : null;
 }
 
+/**
+ * A short title-block FACT (the floor, the scale) and where it is printed:
+ * the smallest run of a segment's items that, in some reading, `extract`
+ * finds a value in. `allowed` says which segments may carry it (the title
+ * block, or a labelled line); a labelled one wins over a bare one.
+ */
+function locateFact(
+  segs: Seg[], extract: (s: string) => string | null, label: RegExp,
+  allowed: (seg: Seg, labelled: boolean) => boolean,
+): { value: string; rect: Rect; lineH: number } | null {
+  let best: { value: string; rect: Rect; lineH: number; score: number } | null = null;
+  for (const seg of segs) {
+    const all = runReadings(seg.parts);
+    if (!all.some(r => extract(r))) continue;
+    const labelled = all.some(r => label.test(r));
+    if (!allowed(seg, labelled)) continue;
+    const ps = [...seg.parts].sort((a, b) => a.x - b.x);
+    let found: { value: string; parts: Part[] } | null = null;
+    for (let len = 1; len <= ps.length && !found; len++) {
+      for (let i = 0; i + len <= ps.length && !found; i++) {
+        const w = ps.slice(i, i + len);
+        for (const r of runReadings(w)) {
+          const v = extract(r);
+          if (v) { found = { value: v, parts: w }; break; }
+        }
+      }
+    }
+    if (!found) continue;
+    const score = labelled ? 2 : 1;
+    if (!best || score > best.score) {
+      best = { value: found.value, rect: unionRect(found.parts.map(p => partRect(p, seg.lineH, seg.y1))), lineH: seg.lineH, score };
+    }
+  }
+  return best ? { value: best.value, rect: best.rect, lineH: best.lineH } : null;
+}
+
+// ── Opening the sheet: a PDF, or a picture ──────────────────────────────────
+
+type TextItem = { str: string; transform: number[]; width: number; height: number };
+
+/**
+ * The first page of a plan file and its text layer. A PDF goes through
+ * pdf.js; a picture (a photographed plan, JPG/PNG — the file's own bytes say
+ * which) is decoded and wrapped as a one-page sheet with no text, so the scan
+ * path reads it. Null when the bytes are neither.
+ */
+async function openSheet(bytes: ArrayBuffer): Promise<{ page: SheetPage; items: TextItem[]; close: () => void } | null> {
+  if (!isPdfBytes(bytes)) {
+    try {
+      const bmp = await createImageBitmap(new Blob([bytes]));
+      return { page: imageAsPage(bmp), items: [], close: () => bmp.close() };
+    } catch {
+      return null;
+    }
+  }
+  await import('../components/plans/pdfCompat');   // shims must land before pdf.js
+  const pdfjs = await import('pdfjs-dist');
+  const workerUrl = (await import('pdfjs-dist/build/pdf.worker.min.mjs?url')).default;
+  pdfjs.GlobalWorkerOptions.workerSrc = workerUrl;
+  const doc = await pdfjs.getDocument({ data: bytes }).promise;
+  const close = () => { void doc.destroy().catch(() => {}); };
+  try {
+    const page = await doc.getPage(1);
+    const content = await page.getTextContent();
+    const items = (content.items as TextItem[]).filter(it => it.str && it.str.trim());
+    return { page: page as unknown as SheetPage, items, close };
+  } catch (e) {
+    close();
+    throw e;
+  }
+}
+
+// ── "Reading the scan…" — what a read in flight is doing ────────────────────
+
+const stages = new Map<string, 'scan'>();
+const stageListeners = new Set<() => void>();
+function setStage(fileId: string, s: 'scan' | null) {
+  if (s) stages.set(fileId, s); else stages.delete(fileId);
+  stageListeners.forEach(f => f());
+}
+/** 'scan' while a plan's title block is being read by OCR — it takes a few seconds. */
+export function planReadStage(fileId: string): 'scan' | null {
+  return stages.get(fileId) ?? null;
+}
+export function onPlanReadStage(f: () => void): () => void {
+  stageListeners.add(f);
+  return () => { stageListeners.delete(f); };
+}
+
 /** A model's box on a scan is a SPOT — small, inside the page, not a sliver. */
 function usableBox(b: Frac | null | undefined): Frac | null {
   if (!b) return null;
@@ -651,10 +785,12 @@ export interface RegionReader {
   image: string;
   /** That image's pixel size. */
   w: number; h: number;
-  /** False on a scan: `read` always answers '' and only the AI can read a box. */
+  /** False on a scan: `read` always answers '' — `readScan` (OCR) or the AI reads a box. */
   hasText: boolean;
   /** The text inside a box, corners as FRACTIONS of the image (x across, y down). */
   read(r: { x0: number; y0: number; x1: number; y1: number }): string;
+  /** On a scan: OCR of exactly that box ('' when nothing readable, or OCR could not load). */
+  readScan(r: { x0: number; y0: number; x1: number; y1: number }): Promise<string>;
   /** A JPEG of that box, enlarged — what the AI reader is shown. */
   crop(r: { x0: number; y0: number; x1: number; y1: number }): string;
   /** Free the pdf.js document. */
@@ -668,20 +804,18 @@ export async function openRegionReader(fileId: string): Promise<RegionReader | n
   } catch {
     return null;
   }
-  await import('../components/plans/pdfCompat');
-  const pdfjs = await import('pdfjs-dist');
-  const workerUrl = (await import('pdfjs-dist/build/pdf.worker.min.mjs?url')).default;
-  pdfjs.GlobalWorkerOptions.workerSrc = workerUrl;
-  const doc = await pdfjs.getDocument({ data: bytes }).promise;
+  let sheet: Awaited<ReturnType<typeof openSheet>>;
   try {
-    const page = await doc.getPage(1);
-    const content = await page.getTextContent();
-    const items = (content.items as {
-      str: string; transform: number[]; width: number; height: number;
-    }[]).filter(it => it.str && it.str.trim());
+    sheet = await openSheet(bytes);
+  } catch {
+    return null;
+  }
+  if (!sheet) return null;
+  const { page, items } = sheet;
+  const done = sheet.close;
+  try {
     const hasText = items.length >= 5;
-    // A scan is only worth a picker when a model can read the box.
-    if (!hasText && !aiPlanReadingAvailable()) { void doc.destroy().catch(() => {}); return null; }
+    // A scan is read by OCR of the drawn box (and by the model, when there is one).
     const lines = hasText ? buildLines(items).sort((a, b) => b.y1 - a.y1) : [];   // top of the sheet first
 
     // The whole sheet, as large as a canvas will take (area-capped — a
@@ -694,7 +828,7 @@ export async function openRegionReader(fileId: string): Promise<RegionReader | n
     canvas.width = Math.max(1, Math.round(vp.width));
     canvas.height = Math.max(1, Math.round(vp.height));
     const ctx = canvas.getContext('2d');
-    if (!ctx) { void doc.destroy().catch(() => {}); return null; }
+    if (!ctx) { done(); return null; }
     ctx.fillStyle = '#ffffff';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     await page.render({ canvasContext: ctx, viewport: vp } as never).promise;
@@ -704,6 +838,14 @@ export async function openRegionReader(fileId: string): Promise<RegionReader | n
     return {
       image, w, h, hasText,
       crop(r) { return canvasToJpeg(canvas, r); },
+      async readScan(r) {
+        // Only that box, rendered from the page itself (not the picker's
+        // picture) at OCR resolution; its words through the same line model.
+        const its = await ocrBox(page, r);
+        if (!its || !its.length) return '';
+        const ls = buildLines(its).sort((a, b) => b.y1 - a.y1);
+        return tidy(ls.map(l => pickReading(variantsOf(l))).filter(Boolean).join(' '));
+      },
       read(r) {
         if (!hasText) return '';
         // Image fractions -> PDF user space, through the render viewport (y
@@ -728,10 +870,10 @@ export async function openRegionReader(fileId: string): Promise<RegionReader | n
         }
         return tidy(picked.join(' '));
       },
-      close() { void doc.destroy().catch(() => {}); },
+      close() { done(); },
     };
   } catch {
-    void doc.destroy().catch(() => {});
+    done();
     return null;
   }
 }
@@ -759,7 +901,7 @@ export function readPlanAddress(fileId: string): Promise<PlanAddressResult> {
 }
 
 /** A value and where it is — page fractions, plus the text height there (page units). */
-interface Spot { value: string; box: Frac; lineH: number; from: 'text' | 'ai' }
+interface Spot { value: string; box: Frac; lineH: number; from: PlanReadFrom }
 
 async function readNow(fileId: string): Promise<PlanAddressResult> {
   let bytes: ArrayBuffer;
@@ -769,37 +911,49 @@ async function readNow(fileId: string): Promise<PlanAddressResult> {
     return { problem: 'unreachable' };
   }
 
-  await import('../components/plans/pdfCompat');   // shims must land before pdf.js
-  const pdfjs = await import('pdfjs-dist');
-  const workerUrl = (await import('pdfjs-dist/build/pdf.worker.min.mjs?url')).default;
-  pdfjs.GlobalWorkerOptions.workerSrc = workerUrl;
-
-  const doc = await pdfjs.getDocument({ data: bytes }).promise;
+  const sheet = await openSheet(bytes);
+  if (!sheet) return { problem: 'unreachable' };
   try {
-    const page = await doc.getPage(1);
-    const content = await page.getTextContent();
-    const items = (content.items as {
-      str: string; transform: number[]; width: number; height: number;
-    }[]).filter(it => it.str && it.str.trim());
-
-    // A scan has no text layer — a handful of stray marks is the same thing.
-    // Without a vision model there is nothing to read it with.
-    const hasText = items.length >= 5;
-    if (!hasText && !aiPlanReadingAvailable()) return { problem: 'no-text' };
+    const page = sheet.page;
+    let items: (TextItem | OcrItem)[] = sheet.items;
 
     /** The page at scale 1 — every box is a fraction of THIS (rotation included). */
     const vp1 = page.getViewport({ scale: 1 });
     const W1 = vp1.width, H1 = vp1.height;
+
+    // A scan has no text layer — a handful of stray marks is the same thing.
+    // Its title block is read by OCR first; ≥5 sure words are treated as its
+    // text layer (in DISPLAY space — see planOcr.ts), every value they give
+    // is marked 'ocr', and the honesty rule applies to them unchanged.
+    const realText = items.length >= 5;
+    let ocrUsed = false;
+    if (!realText) {
+      setStage(fileId, 'scan');
+      const ocr = await ocrTitleBlock(page).finally(() => setStage(fileId, null));
+      if (ocr && ocr.length >= 5) { items = ocr; ocrUsed = true; }
+    }
+    const hasText = items.length >= 5;
+    // Without words and without a vision model there is nothing to read it with.
+    if (!hasText && !aiPlanReadingAvailable()) return { problem: 'no-text' };
+    const localFrom: PlanReadFrom = ocrUsed ? 'ocr' : 'text';
+
+    const clamp01 = (v: number) => Math.min(1, Math.max(0, v));
     const toFrac = (r: Rect): Frac => {
+      if (ocrUsed) {
+        // Display space: x right, y UP, page units — only the y flips.
+        return { x0: clamp01(r.x1 / W1), y0: clamp01((H1 - r.y2) / H1), x1: clamp01(r.x2 / W1), y1: clamp01((H1 - r.y1) / H1) };
+      }
       const [ax, ay, bx, by] = vp1.convertToViewportRectangle([r.x1, r.y1, r.x2, r.y2]);
       return {
         x0: Math.max(0, Math.min(ax, bx) / W1), y0: Math.max(0, Math.min(ay, by) / H1),
         x1: Math.min(1, Math.max(ax, bx) / W1), y1: Math.min(1, Math.max(ay, by) / H1),
       };
     };
-    /** A page-fraction point back into PDF user space, for "nearest to" hints. */
+    /** A page-fraction point back into the items' space, for "nearest to" hints. */
     const toPdf = (f: Frac) => {
-      const [x, y] = vp1.convertToPdfPoint(((f.x0 + f.x1) / 2) * W1, ((f.y0 + f.y1) / 2) * H1);
+      const fx = ((f.x0 + f.x1) / 2) * W1, fy = ((f.y0 + f.y1) / 2) * H1;
+      if (ocrUsed) return { x: fx, y: H1 - fy };
+      const [x, y] = vp1.convertToPdfPoint(fx, fy);
       return { x, y };
     };
 
@@ -940,14 +1094,30 @@ async function readNow(fileId: string): Promise<PlanAddressResult> {
     const bp = bestPhone as { line: Line; text: string } | null;
     if (ba) {
       const at = locateWords(ba.text, segs, lineCentre(ba.line, ba.extra), 1);
-      if (at && at !== 'office') addr = { value: ba.text, box: toFrac(at.rect), lineH: at.lineH, from: 'text' };
+      if (at && at !== 'office') addr = { value: ba.text, box: toFrac(at.rect), lineH: at.lineH, from: localFrom };
     }
     if (bp) {
       const at = locatePhone(normalizePhoneDigits(bp.text), segs, lineCentre(bp.line));
-      if (at) phone = { value: bp.text, box: toFrac(at.rect), lineH: at.lineH, from: 'text' };
+      if (at) phone = { value: bp.text, box: toFrac(at.rect), lineH: at.lineH, from: localFrom };
     }
 
+    // ── The FLOOR and the SCALE ─────────────────────────────────────────────
+    // Short facts of the title block. The floor only from inside the title
+    // block (a sheet with two drawings captions each with its own floor); the
+    // scale from the title block, or anywhere it is labelled "קנ"מ / Scale".
+    const segInTitle = (sg: Seg) => inTitleFrac(toFrac(sg));
+    const floorAt = hasText ? locateFact(segs, floorIn, FLOOR_LABEL, sg => segInTitle(sg)) : null;
+    const scaleAt = hasText ? locateFact(segs, scaleIn, SCALE_LABEL, (sg, labelled) => labelled || segInTitle(sg)) : null;
+    const floorSpot: Spot | null = floorAt ? { value: floorAt.value, box: toFrac(floorAt.rect), lineH: floorAt.lineH, from: localFrom } : null;
+    const scaleSpot: Spot | null = scaleAt ? { value: scaleAt.value, box: toFrac(scaleAt.rect), lineH: scaleAt.lineH, from: localFrom } : null;
+
     const out: PlanAddressResult = {};
+    if (ocrUsed) out.scan = true;
+    /** On a scan the model must point at INK — a box over blank paper points at nothing. */
+    const scanSpot = (box: Frac | null | undefined, canvas: HTMLCanvasElement): Frac | null => {
+      const b = usableBox(box);
+      return b && inkShare(canvas, b) >= MIN_INK ? b : null;
+    };
 
     // THE AI READ (owner, 2026-09-07): when the server has a key, the whole
     // first page goes to a vision model, and a VERIFIED answer wins — a
@@ -985,7 +1155,7 @@ async function readNow(fileId: string): Promise<PlanAddressResult> {
             }
           } catch { /* the whole page alone */ }
           const ai = await aiReadPlanImage(canvasToJpeg(canvas, undefined, 1800), 'both', false,
-            { scan: !hasText, detail, detailWhere: landscape ? 'right' : 'bottom' });
+            { scan: !realText, detail, detailWhere: landscape ? 'right' : 'bottom' });
           if (ai) {
             out.ai = true;
             const aiAddr = tidy(ai.address);
@@ -994,12 +1164,14 @@ async function readNow(fileId: string): Promise<PlanAddressResult> {
                 const at = locateWords(aiAddr, segs, ai.addressBox ? toPdf(ai.addressBox) : null, 2);
                 if (at && at !== 'office') addr = { value: aiAddr, box: toFrac(at.rect), lineH: at.lineH, from: 'ai' };
                 else if (!at) {
-                  const b = outlinedSpot(ai.addressBox, canvas);
+                  // On a scan the OCR words can miss what the model read — the
+                  // scan rule then stands (its box must hold ink).
+                  const b = ocrUsed ? scanSpot(ai.addressBox, canvas) : outlinedSpot(ai.addressBox, canvas);
                   if (b) addr = { value: aiAddr, box: b, lineH: 0, from: 'ai' };
                 }
               } else {
-                const b = usableBox(ai.addressBox);
-                if (b && inkShare(canvas, b) >= MIN_INK) addr = { value: aiAddr, box: b, lineH: 0, from: 'ai' };
+                const b = scanSpot(ai.addressBox, canvas);
+                if (b) addr = { value: aiAddr, box: b, lineH: 0, from: 'ai' };
               }
             }
             const aiPhone = tidy(ai.phone);
@@ -1010,12 +1182,12 @@ async function readNow(fileId: string): Promise<PlanAddressResult> {
                 const at = locatePhone(digits, segs, ai.phoneBox ? toPdf(ai.phoneBox) : null);
                 if (at) phone = { value: aiPhone, box: toFrac(at.rect), lineH: at.lineH, from: 'ai' };
                 else {
-                  const b = outlinedSpot(ai.phoneBox, canvas);
+                  const b = ocrUsed ? scanSpot(ai.phoneBox, canvas) : outlinedSpot(ai.phoneBox, canvas);
                   if (b) phone = { value: aiPhone, box: b, lineH: 0, from: 'ai' };
                 }
               } else {
-                const b = usableBox(ai.phoneBox);
-                if (b && inkShare(canvas, b) >= MIN_INK) phone = { value: aiPhone, box: b, lineH: 0, from: 'ai' };
+                const b = scanSpot(ai.phoneBox, canvas);
+                if (b) phone = { value: aiPhone, box: b, lineH: 0, from: 'ai' };
               }
             }
             // The family name is checked the same way, or it is not kept.
@@ -1097,8 +1269,23 @@ async function readNow(fileId: string): Promise<PlanAddressResult> {
         out.phoneBox = phone.box; out.phoneFrom = phone.from;
       }
     }
+    if (floorSpot) {
+      const c = await cutoutOf(floorSpot).catch(() => null);
+      if (c) {
+        out.floor = floorSpot.value; out.floorCutout = c.image; out.floorCutoutBox = c.inner;
+        out.floorBox = floorSpot.box; out.floorFrom = floorSpot.from;
+      }
+    }
+    if (scaleSpot) {
+      const c = await cutoutOf(scaleSpot).catch(() => null);
+      if (c) {
+        out.scale = scaleSpot.value; out.scaleCutout = c.image; out.scaleCutoutBox = c.inner;
+        out.scaleBox = scaleSpot.box; out.scaleFrom = scaleSpot.from;
+      }
+    }
 
-    if (!out.address && !out.phone) return { ...out, problem: hasText ? 'no-address' : 'no-text' };
+    if (!out.address && !out.phone && !out.floor && !out.scale) return { ...out, problem: hasText ? 'no-address' : 'no-text' };
+    if (!out.address && !out.phone) out.problem = hasText ? 'no-address' : 'no-text';
 
     // The whole sheet, small — the eye frames WHERE on it the value was read.
     try {
@@ -1120,6 +1307,6 @@ async function readNow(fileId: string): Promise<PlanAddressResult> {
 
     return out;
   } finally {
-    void doc.destroy().catch(() => {});
+    sheet.close();
   }
 }

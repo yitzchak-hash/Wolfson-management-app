@@ -33,6 +33,7 @@ import { useMarkupScale } from '../../data/markupScale';
 import { paintStroke, bubbleTextBox, REF, LINE } from './paintStroke';
 import { PlanPicker } from './PlanPicker';
 import { usePhone } from '../../data/usePhone';
+import { useTabletStudioPrefs, notePenSeen } from '../../data/tabletStudio';
 import { DriveIcon } from '../ui/BrandIcons';
 
 import { prefGet, prefSet } from '../../data/prefs';
@@ -399,12 +400,18 @@ function trayWidths(tool: string): number[] {
   });
 }
 
-function PenTray({ at, up, current, color, width, opacity, onPick, onColor, onWidth, onOpacity, onClose, ts }: {
+function PenTray({ at, up, current, color, width, opacity, onPick, onColor, onWidth, onOpacity, onClose, ts, docked }: {
   at: { x: number; y: number }; up: boolean; current: string; color: string; width: number;
   opacity: number;
   onPick: (id: string) => void; onColor: (c: string) => void; onWidth: (w: number) => void;
   onOpacity: (o: number) => void;
   onClose: () => void; ts: number;
+  /**
+   * The tablet's tray: drawn IN the layout — under the sheet upright, beside
+   * it sideways — so it pushes the plan aside and never covers it. No
+   * backdrop, no float; the Pen tile (or Done) closes it.
+   */
+  docked?: boolean;
 }) {
   /** The custom colour picker, hung off the rainbow chip — in-app, never the OS dialog. */
   const [customAt, setCustomAt] = useState<{ x: number; y: number } | null>(null);
@@ -472,12 +479,13 @@ function PenTray({ at, up, current, color, width, opacity, onPick, onColor, onWi
     });
   }, [current, color, width, preset.opacity]);
 
-  return createPortal(
-    <>
-      <div className="fixed inset-0 z-[168]" onClick={onClose} />
-      <div data-pen-tray
-        className="fixed z-[169] rounded-3xl shadow-2xl"
-        style={{
+  const chip = docked ? 36 : 22;
+  const body = (
+      <div data-pen-tray data-pen-tray-docked={docked ? '' : undefined}
+        className={docked ? 'rounded-2xl w-full flex-shrink-0' : 'fixed z-[169] rounded-3xl shadow-2xl'}
+        style={docked ? {
+          padding: '10px 14px 14px', backgroundColor: '#f8fafc', overflowX: 'auto',
+        } : {
           left, top, width: W, padding: `${Math.round(10 * k)}px ${Math.round(14 * k)}px ${Math.round(12 * k)}px`,
           backgroundColor: 'rgba(255,255,255,.72)',
           WebkitBackdropFilter: 'blur(16px) saturate(1.25)',
@@ -486,6 +494,15 @@ function PenTray({ at, up, current, color, width, opacity, onPick, onColor, onWi
           boxShadow: '0 22px 60px rgba(15,23,42,.30), 0 2px 8px rgba(15,23,42,.10)',
           overflowX: W >= window.innerWidth - 16 ? 'auto' : 'visible',
         }}>
+        {docked && (
+          <div className="flex justify-end" style={{ marginBottom: -6 }}>
+            <button data-pen-tray-done onClick={onClose}
+              className="rounded-xl font-bold text-[13px] px-4"
+              style={{ minHeight: 48, color: NAVY, backgroundColor: 'rgba(30,58,95,.08)' }}>
+              Done
+            </button>
+          </div>
+        )}
         {/* the scribble stage — keyed so the wipe replays on every switch */}
         <div key={current} className="tray-reveal" style={{ height: Math.round(44 * k), margin: '0 4px' }}>
           <canvas ref={scribRef} data-tray-scribble className="w-full h-full block" />
@@ -562,12 +579,12 @@ function PenTray({ at, up, current, color, width, opacity, onPick, onColor, onWi
         </div>
         {/* the app's own colours — highlighters take the highlight shades —
             plus the rainbow chip that opens the full in-app picker */}
-        <div data-tray-colors className="flex justify-center items-center" style={{ gap: 7, marginTop: 8, flexWrap: 'wrap' }}>
+        <div data-tray-colors className="flex justify-center items-center" style={{ gap: docked ? 12 : 7, marginTop: 8, flexWrap: 'wrap' }}>
           {palette.map(c => (
             <button key={c} data-tray-color={c} onClick={() => onColor(c)}
               aria-label="colour"
               style={{
-                width: 22, height: 22, borderRadius: 999, border: 0, cursor: 'pointer',
+                width: chip, height: chip, borderRadius: 999, border: 0, cursor: 'pointer',
                 backgroundColor: c,
                 boxShadow: color === c
                   ? `0 0 0 2px #fff, 0 0 0 4px ${NAVY}`
@@ -583,7 +600,7 @@ function PenTray({ at, up, current, color, width, opacity, onPick, onColor, onWi
             }}
             title="Custom colour" aria-label="Custom colour"
             style={{
-              width: 22, height: 22, borderRadius: 999, border: 0, cursor: 'pointer',
+              width: chip, height: chip, borderRadius: 999, border: 0, cursor: 'pointer',
               background: 'conic-gradient(#f43f5e,#f59e0b,#facc15,#22c55e,#06b6d4,#3b82f6,#8b5cf6,#f43f5e)',
               boxShadow: !palette.includes(color)
                 ? `0 0 0 2px #fff, 0 0 0 4px ${NAVY}`
@@ -593,13 +610,20 @@ function PenTray({ at, up, current, color, width, opacity, onPick, onColor, onWi
             }} />
         </div>
       </div>
-      {/* The full picker, LIFTED above the tray — its usual z sits under the
-          tray's backdrop, which would leave it visible but unpressable. */}
-      {customAt && (
-        <InkPicker value={color} palette={palette} anchor={customAt} lift
-          onChange={c => { onColor(c); rememberColor(c); }}
-          onClose={() => setCustomAt(null)} />
-      )}
+  );
+  /* The full picker, LIFTED above the tray — its usual z sits under the
+     tray's backdrop, which would leave it visible but unpressable. */
+  const picker = customAt && (
+    <InkPicker value={color} palette={palette} anchor={customAt} lift
+      onChange={c => { onColor(c); rememberColor(c); }}
+      onClose={() => setCustomAt(null)} />
+  );
+  if (docked) return (<>{body}{picker}</>);
+  return createPortal(
+    <>
+      <div className="fixed inset-0 z-[168]" onClick={onClose} />
+      {body}
+      {picker}
     </>,
     document.body,
   );
@@ -970,7 +994,27 @@ function PlanEditor({
    */
   const shortScreen = useMedia('(max-height: 540px) and (max-width: 1024px)');
   const landscape = useMedia('(orientation: landscape)');
-  const compact = phone || shortScreen;
+  /**
+   * THE TABLET LAYOUT (owner, 2026-11-09: "build it" on "The Studio on the
+   * Tablet"). Keyed on what the device can DO, never on its name: a screen
+   * with no hovering pointer (`any-hover: none`) whose shorter side is at
+   * least 600px — the Tab S10 FE, every iPad, the Fold opened. Upright it
+   * used to get the phone layout in twice a phone's height; sideways, the
+   * PC's mouse-sized controls. The rule underneath: the sheet is the screen,
+   * the tools are furniture round its edge, every target is 48px. The
+   * drawer's embedded pane keeps its own layout (it is a pane, not the studio).
+   */
+  const touchOnly = useMedia('(any-hover: none)');
+  const tabletShape = useMedia('(min-width: 600px) and (min-height: 600px)');
+  const tablet = touchOnly && tabletShape && !embedded && !barInto;
+  const tabletPrefs = useTabletStudioPrefs();
+  /** Left-handed: the rail moves to the RIGHT, out from under the drawing hand. */
+  const railRight = tablet && landscape && tabletPrefs.hand === 'left';
+  /** Landscape tablet: the ink controls live in a side tray, opened from the ink pill. */
+  const [inkSide, setInkSide] = useState(false);
+  /** Full bleed — a tap on the sheet with the Pan tool hides the bar and the rail. */
+  const [chromeHidden, setChromeHidden] = useState(false);
+  const compact = phone || shortScreen || tablet;
   /** The rail runs across the bottom only when the screen is taller than it is wide. */
   const railRow = compact && !landscape;
 
@@ -1307,17 +1351,19 @@ function PlanEditor({
   const ts = Math.max(1, Math.min(2.2, (touchScale || 1) * markupPref));
   const ui = useMemo(() => ({
     on: ts > 1.02,
-    rail: Math.round(62 * ts),
-    btn: Math.round(50 * ts),
-    padY: Math.round(6 * ts),
-    icon: Math.round(16 * ts),
-    smallIcon: Math.round(14 * ts),
-    label: +(8.5 * ts).toFixed(1),
+    // The tablet's floor: 56px tiles on a 72px rail, labels a finger can read
+    // (the plan page's numbers). The machine's own scaling still grows them.
+    rail: Math.round((tablet ? 72 : 62) * ts),
+    btn: Math.round((tablet ? 56 : 50) * ts),
+    padY: Math.round((tablet ? 8 : 6) * ts),
+    icon: Math.round((tablet ? 20 : 16) * ts),
+    smallIcon: Math.round((tablet ? 18 : 14) * ts),
+    label: +((tablet ? 10 : 8.5) * ts).toFixed(1),
     text: +(12 * ts).toFixed(1),
     gap: Math.round(4 * ts),
     /** Padding for the top-bar buttons, which are shaped by class not size. */
     barPad: `${Math.round(6 * ts)}px ${Math.round(9 * ts)}px`,
-  }), [ts]);
+  }), [ts, tablet]);
 
   /**
    * An icon button a finger can actually hit.
@@ -1328,7 +1374,13 @@ function PlanEditor({
    * looks the same and only the box around it grows. The desk keeps its own
    * size to the pixel.
    */
-  const iconBtn = compact
+  // Full bleed belongs to the Pan tool on a tablet — any other tool, or the
+  // screen stopping being one, brings the bar and the rail straight back.
+  useEffect(() => { if (!tablet || tool !== 'pan') setChromeHidden(false); }, [tablet, tool]);
+
+  const iconBtn = tablet
+    ?'rounded-xl flex items-center justify-center flex-shrink-0 min-w-[48px] min-h-[48px]'
+    : compact
     ? 'rounded-lg flex items-center justify-center flex-shrink-0 min-w-[38px] min-h-[38px]'
     : 'p-1.5 rounded-lg';
 
@@ -2549,6 +2601,26 @@ function PlanEditor({
 
     const { nx: dnx, ny: dny } = norm(e);
 
+    /**
+     * PEN DRAWS, FINGER MOVES (tablet; the plan page's answer 5). Once a pen
+     * has touched this tablet, a finger on a drawing tool pans the sheet (two
+     * fingers still pinch — that handler is the stage's) and never draws, so
+     * a resting palm can no longer scribble. Settings → "Finger draws too"
+     * turns drawing back on. Text and Move are placing and picking, not ink —
+     * a finger keeps those.
+     */
+    if (tablet && e.pointerType === 'pen') notePenSeen();
+    if (tablet && e.pointerType === 'touch' && tabletPrefs.penSeen && !tabletPrefs.fingerDraws
+        && tool !== 'move' && tool !== 'text' && stageRef.current) {
+      (e.target as HTMLCanvasElement).setPointerCapture(e.pointerId);
+      e.preventDefault();
+      stagePan.current = {
+        x: e.clientX, y: e.clientY,
+        sl: stageRef.current.scrollLeft, st: stageRef.current.scrollTop,
+      };
+      return;
+    }
+
     // The move tool picks something up rather than laying something down.
     if (tool === 'move') {
       // A corner of whatever is already picked resizes it. Checked before the
@@ -2915,6 +2987,11 @@ function PlanEditor({
     // The drawer's pane (owner, 2026-09-06): a plain click on the sheet opens
     // the same full screen the corner button does. A drag is not a click.
     if (!cancelled && !mp.moved && mp.onSheet && locked && embedded && !isFull) toggleFull();
+    // Full bleed (tablet, the plan page's answer 8): a tap on the sheet with
+    // the Pan tool hides the bar and the rail for reading; a tap brings them back.
+    if (!cancelled && !mp.moved && mp.onSheet && tablet && !locked && tool === 'pan') {
+      setChromeHidden(h => !h);
+    }
   }
 
   function onUp(e: React.PointerEvent<HTMLCanvasElement>) {
@@ -3875,6 +3952,8 @@ function PlanEditor({
    */
   const railBtn: React.CSSProperties = {
     width: ui.btn, paddingTop: ui.padY, paddingBottom: ui.padY, gap: 2, flexShrink: 0,
+    // A tablet tile is a 56px SQUARE, not a strip as tall as its label.
+    ...(tablet ? { minHeight: ui.btn, justifyContent: 'center', gap: 4 } : {}),
   };
   const railDivider = railRow
     ? <div className="w-px h-8 mx-1 flex-shrink-0" style={{ backgroundColor: 'rgba(255,255,255,.16)' }} />
@@ -3898,6 +3977,9 @@ function PlanEditor({
             <button key="ink" data-ink-tile
               onClick={e => {
                 if (armed) {
+                  // The tablet's tray is DOCKED (beside the sheet or under it),
+                  // so the same press closes it again — there is no backdrop.
+                  if (tablet && penTray) { setPenTray(null); return; }
                   const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
                   setPenTray(railRow
                     ? { x: r.left + r.width / 2, y: r.top - 8, up: true }
@@ -3935,8 +4017,12 @@ function PlanEditor({
               onClick={e => {
                 if (armed) {
                   const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                  // A rail on the RIGHT (left-handed tablet) opens it leftwards.
+                  const trayW = SHAPE_TOOL_IDS.length * (Math.round(54 * Math.min(ts, 1.5)) + 6) + 24;
                   setShapeTray(railRow
                     ? { x: r.left + r.width / 2, y: r.top - 8, up: true }
+                    : railRight
+                    ? { x: r.left - 10 - trayW, y: r.top + r.height / 2, up: false }
                     : { x: r.right + 10, y: r.top + r.height / 2, up: false });
                 } else pick(shapeTool);
               }}
@@ -3980,6 +4066,9 @@ function PlanEditor({
         <Hand size={ui.icon} />
         <span className="font-semibold leading-none" style={{ fontSize: ui.label }}>Pan</span>
       </button>
+      {/* On the tablet Undo and Redo are on the one bar, where the hand is —
+          twice is a rail too long for a sideways screen. */}
+      {!tablet && (<>
       <button onClick={undo} disabled={!strokes.length} title="Undo (Ctrl+Z)"
         className="rounded-xl flex flex-col items-center text-white/60 disabled:opacity-25 hover:bg-white/10"
         style={railBtn}>
@@ -3992,6 +4081,7 @@ function PlanEditor({
         <Redo2 size={ui.smallIcon} />
         <span className="font-semibold leading-none" style={{ fontSize: ui.label }}>Redo</span>
       </button>
+      </>)}
       {/* Clear takes THIS PAGE. New starts a fresh sketch. They both used
           to call newSketch, so on a multi-page set there was no way to
           wipe one sheet, and two buttons did the same thing. */}
@@ -4063,7 +4153,7 @@ function PlanEditor({
       style={{ backgroundColor: embedded ? '#ffffff' : NAVY_DEEP }}
     >
       {/* The pen tray, over everything, sealed to itself. */}
-      {penTray && !locked && (
+      {penTray && !locked && !tablet && (
         <PenTray at={penTray} up={penTray.up} current={inkTool} color={color} width={width}
           opacity={opacity} ts={ts}
           onPick={id => pick(id)} onColor={c => setColor(c)} onWidth={w => setWidth(w)}
@@ -4141,11 +4231,26 @@ function PlanEditor({
           <span aria-hidden className="w-px self-stretch flex-shrink-0"
             style={{ backgroundColor: 'rgba(255,255,255,.24)', margin: '6px 5px' }} />
         );
+        const requestClose = () => {
+          const risky = !locked && strokes.length > 0
+            && (saveState === 'local' || saveState === 'failed');
+          if (risky) setConfirmClose(true); else onClose();
+        };
         const head = (<>
+          {/* The tablet's bar starts with the way back (the plan page's "‹"). */}
+          {tablet && (
+            <button data-close-studio data-tablet-back onClick={requestClose} title="Close"
+              className={`${iconBtn} text-white/85 hover:bg-white/10`}>
+              <ChevronLeft size={24} />
+            </button>
+          )}
           {!compact && <Layers size={16} className="text-[#4aa8d8] flex-shrink-0" />}
           <div className={compact ? 'min-w-0 flex-1' : 'min-w-0'}>
-            <div className="text-[13px] font-bold text-white truncate">{planName || 'Plan'}</div>
-            <div className="text-[10.5px] text-gray-400 truncate">
+            <div className={`${tablet ? 'text-[15px]' : 'text-[13px]'} font-bold text-white truncate`}>
+              {planName || 'Plan'}
+              {tablet && !locked && <span className="font-semibold text-white/60"> · v{shownVersion}</span>}
+            </div>
+            <div className={`${tablet ? 'text-[12px]' : 'text-[10.5px]'} text-gray-400 truncate`}>
               {apartmentLabel}
               {basedOn ? ` · carrying on from v${basedOn}` : ''}
               {dirty ? ' · unsaved' : ''}
@@ -4170,7 +4275,8 @@ function PlanEditor({
             when there is nothing to mark up — one set of controls, where Drive
             keeps them. Two pagers and two zooms in one window is a choice
             nobody should have to make. */}
-        {doc && doc.numPages > 1 && !locked && (
+        {/* The tablet's pager is in the zoom pill over the sheet. */}
+        {doc && doc.numPages > 1 && !locked && !tablet && (
           <div className="flex items-center gap-1 text-white/85 text-[12px] mr-1 flex-shrink-0">
             <button onClick={() => setPage(p => Math.max(0, p - 1))} disabled={page === 0}
               className={`${iconBtn} hover:bg-white/10 disabled:opacity-30`}><ChevronLeft size={15} /></button>
@@ -4324,13 +4430,14 @@ function PlanEditor({
               + `version ${shownVersion} stays in Drive (Annotated Plans) exactly as it stands, and `
               + `your next mark begins version ${shownVersion + 1} in a fresh file.`}
             className={`flex items-center gap-1.5 rounded-lg font-bold text-white disabled:opacity-40 flex-shrink-0 ${
-              compact ? 'px-2.5 min-h-[38px] text-[12px]' : 'px-3.5 py-2 text-[13px]'}`}
+              tablet ? 'px-4 min-h-[48px] text-[14px] rounded-xl'
+              : compact ? 'px-2.5 min-h-[38px] text-[12px]' : 'px-3.5 py-2 text-[13px]'}`}
             style={{ backgroundColor: ACCENT }}>
             {/* A PLUS, not a disk (owner, 26 Oct): the open version already
                 files itself — the chip beside this says so — so what this
                 button really does is close it off and start the next one. */}
             {saving ? <Loader2 size={15} className="animate-spin" /> : <Plus size={15} strokeWidth={2.75} />}
-            {saving ? (compact ? '' : 'Filing…') : compact ? `v${shownVersion + 1}`
+            {saving ? (compact ? '' : 'Filing…') : tablet ? `Save · v${shownVersion + 1}` : compact ? `v${shownVersion + 1}`
               : `Save v${shownVersion} & start v${shownVersion + 1}`}
             {!saving && <DriveIcon size={12} />}
           </button>
@@ -4378,13 +4485,9 @@ function PlanEditor({
             it to close, which is why pressing it appeared to do nothing. The
             drawer's own X closes the drawer, and the pane has a Hide button.
           */}
-          {!embedded && (
+          {!embedded && !tablet && (
             <button data-close-studio
-              onClick={() => {
-                const risky = !locked && strokes.length > 0
-                  && (saveState === 'local' || saveState === 'failed');
-                if (risky) setConfirmClose(true); else onClose();
-              }}
+              onClick={requestClose}
               title="Close" className={`${iconBtn} text-white/70 hover:bg-white/10`}>
               <X size={17} />
             </button>
@@ -4398,9 +4501,14 @@ function PlanEditor({
             {createPortal(rest, barInto2!)}
           </>);
         }
+        // Full bleed: the bar steps aside; a tap on the sheet brings it back.
+        if (chromeHidden) return null;
         const row = (
-          <div className={barInto
+          <div data-studio-bar={tablet ? 'tablet' : undefined}
+            className={barInto
             ? 'flex items-center gap-1.5 min-w-0 flex-wrap'
+            : tablet
+            ? 'flex items-center gap-2 px-2 flex-shrink-0 flex-nowrap overflow-x-auto h-[56px]'
             : `flex items-center gap-2 py-2 flex-shrink-0 ${
               compact ? 'px-2 flex-nowrap overflow-x-auto' : 'px-3 flex-wrap'}`}
             style={barInto ? undefined : { backgroundColor: NAVY, ...(ui.on ? { zoom: ts } : {}) }}>
@@ -4418,35 +4526,72 @@ function PlanEditor({
 
       {/* The strip's own slim row, where the bar has no middle for it — the
           phone, and the drawer pane whose bars are portalled slots. */}
-      {tabStrip && (compact || !!barInto) && (
+      {tabStrip && (compact || !!barInto) && !chromeHidden && (
         <div className="flex-shrink-0 flex items-center px-2"
           style={{ backgroundColor: NAVY, ...(ui.on ? { zoom: ts } : {}) }}>
           {tabStrip}
         </div>
       )}
 
-      <div className="flex-1 min-h-0 flex">
+      <div className={`flex-1 min-h-0 flex ${railRight ? 'flex-row-reverse' : ''}`}>
         {/* Tool rail, down the side — the desk, and a phone held sideways,
-            where height is the scarce dimension and width is not. */}
-        {!locked && !railRow && (
-          <div className="flex-shrink-0 flex flex-col items-center gap-1 py-2 overflow-y-auto board-rail"
+            where height is the scarce dimension and width is not. On a
+            tablet, on the side AWAY from the drawing hand (Settings). */}
+        {!locked && !railRow && !chromeHidden && (
+          <div data-studio-rail className="flex-shrink-0 flex flex-col items-center gap-1 py-2 overflow-y-auto board-rail"
             style={{ backgroundColor: NAVY, width: ui.rail }}>
             {railBody}
           </div>
         )}
 
-        {/* Stage */}
-        <div className="relative flex-1 min-w-0 flex flex-col">
-          {!locked && (
+        {/* Stage — on a sideways tablet a ROW: the ink tray beside the sheet. */}
+        <div className={`relative flex-1 min-w-0 min-h-0 flex ${tablet && !railRow ? 'flex-row' : 'flex-col'}`}>
+          {!locked && !chromeHidden && (!tablet || railRow || inkSide || !!penTray) && (
             // The TOOL row scrolls sideways on a phone; this one wraps.
             // Scrolling is right for eleven buttons whose order you learn, and
             // wrong for three controls of which the last is a SLIDER: See-through
             // was cut in half at the screen edge, and you cannot drag a handle
             // you cannot see. Two lines cost 34px of a screen that had 800
             // spare below the sheet.
-            <div className={`flex items-center gap-2 px-3 py-1.5 flex-shrink-0 gap-y-1.5 ${
-              compact ? 'flex-wrap' : 'flex-wrap'}`}
-              style={{ backgroundColor: 'rgba(255,255,255,.04)', ...(ui.on ? { zoom: ts } : {}) }}>
+            //
+            // THE TABLET: upright this is the DOCKED tray, always open, UNDER
+            // the sheet (order 2) — tools, colours, width, see-through, never
+            // over the drawing. Sideways it is a side tray opened from the ink
+            // pill, beside the rail, pushing the sheet aside.
+            <div data-ink-dock={tablet ? (railRow ? 'under' : 'side') : undefined}
+              className={tablet
+                ? railRow
+                  ? 'flex items-center gap-3 px-3 py-2 flex-shrink-0 flex-wrap'
+                  : 'flex flex-col items-stretch gap-3 p-3 flex-shrink-0 overflow-y-auto'
+                : `flex items-center gap-2 px-3 py-1.5 flex-shrink-0 gap-y-1.5 ${
+                  compact ? 'flex-wrap' : 'flex-wrap'}`}
+              style={tablet
+                ? { backgroundColor: NAVY, order: railRow || railRight ? 2 : 0,
+                    // Wide enough for all nine pens at this screen's size (the tray's own slot maths).
+                    ...(railRow ? {} : { width: penTray
+                      ? TRAY_PENS.length * (Math.round(44 * Math.min(ts, 1.5)) + 4) + 64 : 300 }),
+                    ...(railRow ? { borderTop: '1px solid rgba(255,255,255,.08)' }
+                      : railRight ? { borderLeft: '1px solid rgba(255,255,255,.08)' }
+                      : { borderRight: '1px solid rgba(255,255,255,.08)' }) }
+                : { backgroundColor: 'rgba(255,255,255,.04)', ...(ui.on ? { zoom: ts } : {}) }}>
+              {/* The pen tray, docked — under the sheet or beside it, never over it. */}
+              {tablet && penTray && (
+                <PenTray docked at={penTray} up={penTray.up} current={inkTool} color={color} width={width}
+                  opacity={opacity} ts={ts}
+                  onPick={id => pick(id)} onColor={c => setColor(c)} onWidth={w => setWidth(w)}
+                  onOpacity={o => setOpacity(o)}
+                  onClose={() => setPenTray(null)} />
+              )}
+              {tablet && !railRow && (
+                <div className="flex items-center justify-between">
+                  <span className="text-[12px] font-bold text-white/60 uppercase tracking-wide">Ink</span>
+                  <button data-ink-side-close onClick={() => { setInkSide(false); setPenTray(null); }}
+                    title="Close the ink tray"
+                    className={`${iconBtn} text-white/80 hover:bg-white/10`}>
+                    <X size={20} />
+                  </button>
+                </div>
+              )}
               {/* An eraser has no colour and no see-through: it is not ink.
                   Showing the controls implied it was, and setting one did
                   nothing. Width it does have — that is how much it takes. */}
@@ -4463,10 +4608,10 @@ function PlanEditor({
                   }}
                   title="Ink colour"
                   className={`flex items-center gap-1.5 pl-1 pr-2 rounded-full transition-colors flex-shrink-0 ${
-                    compact ? 'min-h-[34px]' : 'py-1'}`}
+                    tablet ? 'min-h-[48px] self-start' : compact ? 'min-h-[34px]' : 'py-1'}`}
                   style={{ backgroundColor: 'rgba(255,255,255,.08)' }}
                 >
-                  <span className={`rounded-full flex-shrink-0 ${compact ? 'w-[26px] h-[26px]' : 'w-[20px] h-[20px]'}`}
+                  <span className={`rounded-full flex-shrink-0 ${tablet ? 'w-[36px] h-[36px]' : compact ? 'w-[26px] h-[26px]' : 'w-[20px] h-[20px]'}`}
                     style={{ backgroundColor: color, border: '2px solid rgba(255,255,255,.55)' }} />
                   <span className="text-[10.5px] font-mono text-white/70">{color}</span>
                 </button>
@@ -4476,6 +4621,22 @@ function PlanEditor({
                     target a finger can be asked to hit, and seven of them are
                     a third of the row. The same seven are the first shelf
                     inside the picker, at 28px, one press away. */}
+                {/* The tablet gets them back, at 36px with 12px gaps — a size a
+                    finger can be asked to hit (the plan page's number 7). */}
+                {tablet && (
+                  <div data-ink-chips className="flex items-center flex-wrap" style={{ gap: 12 }}>
+                    {palette.slice(0, 7).map(c => (
+                      <button key={c} data-ink-chip={c} onClick={() => setColor(c)} title={c}
+                        className="rounded-full transition-transform flex-shrink-0"
+                        style={{
+                          width: 36, height: 36,
+                          backgroundColor: c,
+                          border: color === c ? '3px solid #fff' : '2px solid rgba(255,255,255,.22)',
+                          transform: color === c ? 'scale(1.1)' : undefined,
+                        }} />
+                    ))}
+                  </div>
+                )}
                 {!compact && (
                   <div className="flex items-center gap-1">
                     {palette.slice(0, 7).map(c => (
@@ -4490,10 +4651,11 @@ function PlanEditor({
                   </div>
                 )}
 
-                <span className="w-px h-5 bg-white/10 flex-shrink-0" />
+                {!tablet && <span className="w-px h-5 bg-white/10 flex-shrink-0" />}
               </>)}
 
-              <label className="flex items-center gap-1.5 text-[10.5px] text-white/70 flex-shrink-0">
+              <label className={`flex items-center gap-1.5 text-white/70 flex-shrink-0 ${
+                tablet ? 'text-[13px] min-h-[48px]' : 'text-[10.5px]'}`}>
                 {pickedMark?.tool === 'bubble' ? 'Text size' : 'Width'}
                 <input type="range" min={0.5} max={60} step={0.5}
                   value={pickedMark ? (pickedMark.tool === 'bubble'
@@ -4506,7 +4668,7 @@ function PlanEditor({
                       editPicked(pickedMark.tool === 'bubble' ? { fontSize: v } : { width: v });
                     } else setWidth(v);
                   }}
-                  className="ink-slider w-[92px]"
+                  className={`ink-slider ${tablet ? (railRow ? 'w-[160px]' : 'flex-1 min-w-0') : 'w-[92px]'}`}
                   style={{
                     ...fillPct(
                       pickedMark ? (pickedMark.tool === 'bubble'
@@ -4528,7 +4690,7 @@ function PlanEditor({
                   onClick={() => (pickedMark ? editPicked({ bold: !pickedMark.bold }) : setBold(b => !b))}
                   title="Bold"
                   className={`rounded-lg text-[13px] font-black transition-colors flex-shrink-0 ${
-                    compact ? 'w-[34px] h-[34px]' : 'w-[26px] h-[26px]'}`}
+                    tablet ? 'w-[48px] h-[48px] text-[16px]' : compact ? 'w-[34px] h-[34px]' : 'w-[26px] h-[26px]'}`}
                   style={{
                     backgroundColor: (pickedMark ? pickedMark.bold : bold)
                       ? ACCENT : 'rgba(255,255,255,.08)',
@@ -4538,7 +4700,8 @@ function PlanEditor({
               )}
 
               {!isEraser && (
-                <label className="flex items-center gap-1.5 text-[10.5px] text-white/70 flex-shrink-0">
+                <label className={`flex items-center gap-1.5 text-white/70 flex-shrink-0 ${
+                  tablet ? 'text-[13px] min-h-[48px]' : 'text-[10.5px]'}`}>
                   See-through
                   <input type="range" min={0.05} max={1} step={0.05}
                     value={pickedMark ? pickedMark.opacity : opacity}
@@ -4546,7 +4709,7 @@ function PlanEditor({
                       const v = Number(e.target.value);
                       if (pickedMark) editPicked({ opacity: v }); else setOpacity(v);
                     }}
-                    className="ink-slider w-[80px]"
+                    className={`ink-slider ${tablet ? (railRow ? 'w-[140px]' : 'flex-1 min-w-0') : 'w-[80px]'}`}
                     style={{
                       ...fillPct(pickedMark ? pickedMark.opacity : opacity, 0.05, 1),
                       ...touchSlider,
@@ -4561,7 +4724,8 @@ function PlanEditor({
                   a freehand stroke that plainly meant a line, box, circle,
                   triangle, star or heart lands as the clean version in the
                   same ink; off, every stroke stays exactly as drawn. */}
-              {!isEraser && (
+              {/* On the tablet Neat shapes is behind ⋯ (touched once a session). */}
+              {!isEraser && !tablet && (
                 <button data-shape-snap
                   onClick={toggleShapeSnap}
                   title={shapeSnap
@@ -4598,6 +4762,30 @@ function PlanEditor({
             </div>
           )}
 
+          {/* The sheet's own box: the pills below float over THIS, never over
+              the docked tray beside or under it. */}
+          <div className="relative flex-1 min-w-0 min-h-0 flex flex-col">
+          {/* The ink pill (tablet, sideways): the pen, colour, width and
+              see-through in one pill on the sheet's corner; a press opens the
+              side tray, which already has all four. */}
+          {tablet && !railRow && !locked && !chromeHidden && !inkSide && !penTray && (
+            <button data-ink-pill onClick={() => setInkSide(true)}
+              title="Ink — colour, width, see-through"
+              className={`absolute top-3 z-20 flex items-center gap-2.5 rounded-full pl-1.5 pr-4 shadow-lg ${
+                railRight ? 'right-3' : 'left-3'}`}
+              style={{ minHeight: 48, backgroundColor: '#fff', color: NAVY }}>
+              <span className="rounded-full flex-shrink-0" style={{
+                width: 36, height: 36, backgroundColor: isEraser ? '#e2e8f0' : color,
+                border: '2px solid rgba(15,23,42,.12)' }} />
+              <span className="text-[14px] font-black whitespace-nowrap">
+                {toolById(tool).label}
+                <span className="font-semibold text-slate-500">
+                  {' · '}{pickedMark ? pickedMark.width : width}
+                  {!isEraser && ` · ${Math.round((pickedMark ? pickedMark.opacity : opacity) * 100)}%`}
+                </span>
+              </span>
+            </button>
+          )}
           {/**
             * The viewer's controls, where Drive puts them.
             *
@@ -4624,9 +4812,12 @@ function PlanEditor({
               <ChevronRight size={22} />
             </button>
           </>)}
-          {locked && doc && (
-            <div data-plan-zoombar className="absolute bottom-4 left-1/2 -translate-x-1/2 z-20 flex items-center gap-0.5
-                            rounded-full px-1.5 py-1 shadow-lg backdrop-blur whitespace-nowrap max-w-[calc(100%-16px)]"
+          {/* The tablet keeps this pill while marking up too — its zoom and
+              pager live here instead of on the bar (the plan page). */}
+          {(locked || tablet) && doc && (
+            <div data-plan-zoombar className={`absolute bottom-4 left-1/2 -translate-x-1/2 z-20 flex items-center gap-0.5
+                            rounded-full px-1.5 py-1 shadow-lg backdrop-blur whitespace-nowrap max-w-[calc(100%-16px)] ${
+                            tablet ? '[&_button]:min-h-[48px] [&_button]:min-w-[48px] [&_button]:justify-center [&_button]:inline-flex [&_button]:items-center text-[15px]' : ''}`}
               style={{ backgroundColor: 'rgba(32,33,36,.92)', color: '#e8eaed' }}>
               {doc.numPages > 1 && (<>
                 <button onClick={() => setPage(p => Math.max(0, p - 1))} disabled={page === 0}
@@ -4741,7 +4932,7 @@ function PlanEditor({
                   same sheet then fills the screen. So the empty space says so
                   once, quietly, instead of being empty.
                 */}
-                {compact && sheetWide && screen.orientation === 'portrait' && (
+                {compact && !tablet && sheetWide && screen.orientation === 'portrait' && (
                   <div className="absolute left-0 right-0 top-full mt-3 flex justify-center pointer-events-none">
                     <span className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11.5px] font-semibold"
                       style={{ backgroundColor: 'rgba(255,255,255,.08)', color: '#93a3b5' }}>
@@ -4864,6 +5055,7 @@ function PlanEditor({
               </div>
             )}
           </div>
+          </div>
         </div>
 
         {/* The right-hand Versions panel is gone. It was a quarter of the
@@ -4876,8 +5068,8 @@ function PlanEditor({
           thumb already is. It scrolls sideways rather than wrapping; the
           `board-rail` fade is deliberately not used, since its mask runs top to
           bottom and would fade a row's whole height away. */}
-      {!locked && railRow && (
-        <div className="flex-shrink-0 flex flex-row items-center gap-1 px-2 pt-1.5 overflow-x-auto"
+      {!locked && railRow && !chromeHidden && (
+        <div data-studio-rail="row" className="flex-shrink-0 flex flex-row items-center gap-1 px-2 pt-1.5 overflow-x-auto"
           style={{
             backgroundColor: NAVY,
             paddingBottom: 'max(6px, env(safe-area-inset-bottom))',
@@ -5022,13 +5214,14 @@ function PlanEditor({
           <div className="fixed inset-0 z-[158] bg-black/30" onClick={() => setShowMore(false)} />
           <div data-plan-more-sheet className="fixed z-[159] rounded-2xl overflow-hidden bg-white p-1.5"
             style={{
-              top: 54, right: 8, width: 'min(300px, calc(100vw - 16px))',
-              maxHeight: 'calc(100vh - 66px)', overflowY: 'auto',
+              top: tablet ? 60 : 54, right: 8, width: tablet ? 340 : 'min(300px, calc(100vw - 16px))',
+              maxHeight: `calc(100vh - ${tablet ? 72 : 66}px)`, overflowY: 'auto',
               boxShadow: '0 24px 60px -12px rgba(15,23,42,.45)',
             }}>
             {/* Zoom, as one row. A pinch does this too, but a number you can
                 read is how you get back to a known size. */}
-            <div className="flex items-center gap-1 px-1 py-1">
+            {/* The tablet zooms from the pill over the sheet. */}
+            <div className={`flex items-center gap-1 px-1 py-1 ${tablet ? 'hidden' : ''}`}>
               <button onClick={() => zoomStep(-1, 0.2, 5)} disabled={atZoomFloor}
                 title={atZoomFloor ? 'As small as it goes' : 'Zoom out'}
                 className="rounded-lg flex items-center justify-center min-w-[42px] min-h-[42px] disabled:opacity-40"
@@ -5053,6 +5246,12 @@ function PlanEditor({
             <SheetRow icon={ChevronsUpDown} label="Plans"
               hint="This job's drawings, and the rest of its Drive"
               onClick={() => { setShowMore(false); setShowPlans(true); }} />
+            {/* The tablet keeps Neat shapes here — touched once a session. */}
+            {tablet && !locked && (
+              <SheetRow icon={Shapes} label={shapeSnap ? 'Neat shapes: on' : 'Neat shapes: off'}
+                hint={shapeSnap ? 'A drawn square becomes a straight square' : 'Strokes stay exactly as drawn'}
+                onClick={() => { toggleShapeSnap(); }} />
+            )}
             <SheetRow icon={Layers2} label="Layers"
               disabled={isImagePlan}
               hint={isImagePlan ? 'A picture has no layers of its own'

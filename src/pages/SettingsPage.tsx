@@ -33,6 +33,7 @@ import { WorkerLevelsPanel, WorkerLevelPicker, WorkerPermissionOverrides } from 
 import { DEFAULT_NEW_WORKER_LEVEL, permsOf, overrideCount, WORKER_PERMISSIONS, levelAnswer } from '../data/workerLevels';
 import { getDriveRoot, setDriveRoot, guessRoot } from '../data/drivePath';
 import { useMarkupScale, setMarkupScale } from '../data/markupScale';
+import { useTabletStudioPrefs, setDrawingHand, setFingerDraws } from '../data/tabletStudio';
 import {
   guessPlatform, helperInstalled, setHelperInstalled, windowsInstaller, macInstaller, download,
 } from '../data/tzviairHelper';
@@ -2761,6 +2762,7 @@ function ThisComputerCard({ onToast }: { onToast: (msg: string, type?: 'success'
   const [root, setRoot] = useState(getDriveRoot);
   const [installed, setInstalled] = useState(helperInstalled);
   const markupScale = useMarkupScale();
+  const tabletPrefs = useTabletStudioPrefs();
   const platform = guessPlatform();
   /* Only for THIS computer (a touchscreen wants bigger buttons; every PC has its own Drive letter). */
   return (
@@ -2772,6 +2774,33 @@ function ThisComputerCard({ onToast }: { onToast: (msg: string, type?: 'success'
               const on = Math.abs(markupScale - v) < 0.02;
               return (
                 <button key={v} onClick={() => { setMarkupScale(v); onToast('Saved for this computer'); }}
+                  className="tz-btn" style={on ? { backgroundColor: '#1e3a5f', color: '#fff', borderColor: '#1e3a5f' } : undefined}>
+                  {label}
+                </button>
+              );
+            })}
+          </span>
+        </SettingRow>
+        {/* The tablet studio's two choices (owner, 2026-11-09, "The Studio on the Tablet" 2 and 5). */}
+        <SettingRow label="Drawing hand" hint="Tablet only — the tool rail sits on the other side, out from under your hand">
+          <span className="inline-flex flex-wrap gap-1.5" data-drawing-hand>
+            {([['right', 'Right hand'], ['left', 'Left hand']] as const).map(([v, label]) => {
+              const on = tabletPrefs.hand === v;
+              return (
+                <button key={v} onClick={() => { setDrawingHand(v); onToast('Saved for this tablet'); }}
+                  className="tz-btn" style={on ? { backgroundColor: '#1e3a5f', color: '#fff', borderColor: '#1e3a5f' } : undefined}>
+                  {label}
+                </button>
+              );
+            })}
+          </span>
+        </SettingRow>
+        <SettingRow label="Finger draws too" hint="Tablet only — off: once a pen is used, a finger only moves and zooms the plan">
+          <span className="inline-flex flex-wrap gap-1.5" data-finger-draws>
+            {([[false, 'Off'], [true, 'On']] as const).map(([v, label]) => {
+              const on = tabletPrefs.fingerDraws === v;
+              return (
+                <button key={label} onClick={() => { setFingerDraws(v); onToast('Saved for this tablet'); }}
                   className="tz-btn" style={on ? { backgroundColor: '#1e3a5f', color: '#fff', borderColor: '#1e3a5f' } : undefined}>
                   {label}
                 </button>

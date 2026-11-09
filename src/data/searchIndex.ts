@@ -114,6 +114,40 @@ export interface SearchOpts {
   now?: number;
   /** Skip the learned picks (a shelf preview, a harness). */
   noPicks?: boolean;
+  /**
+   * Among jobs that match equally well, the one whose Drive folder moved most
+   * recently comes first (`driveBoost`). Only reorders — never adds or drops a
+   * hit. `searchJobs` turns it on unless told otherwise.
+   */
+  driveRecent?: boolean;
+  /** When a job's Drive folder last moved (ms). For harnesses; the app uses what driveActivity registers. */
+  driveAt?: (job: Apartment) => number | undefined;
+}
+
+/**
+ * Where "when did this job's Drive folder last move" comes from. driveActivity
+ * registers it when it loads, so this module never reaches into the store.
+ */
+let driveClock: ((job: Apartment) => number | undefined) | null = null;
+export function setSearchDriveClock(fn: ((job: Apartment) => number | undefined) | null): void { driveClock = fn; }
+
+/**
+ * DRIVE ACTIVITY IN THE ORDER, in plain words: a job whose Drive folder moved
+ * gets a head start of at most 25 points — the full 25 when it moved just now,
+ * about 9 after a week, nearly nothing after a month. Tiers sit 100 points
+ * apart and everything else a job collects inside a tier (match strength 40,
+ * edited lately 6, filed in a group 8, another workspace 2, learned picks 15)
+ * spans 71, so with the head start it is still under 100: it can only reorder
+ * jobs that matched EQUALLY WELL (same tier) — an exact name match with a
+ * quiet folder still beats a near-miss with a busy one. No Drive data, no
+ * head start — the order is exactly what it was.
+ */
+const DRIVE_BOOST = 25;
+const DRIVE_FADE_DAYS = 7;
+export function driveBoost(at: number | undefined, now: number): number {
+  if (!at || !Number.isFinite(at)) return 0;
+  const days = Math.max(0, (now - at) / 86400000);
+  return DRIVE_BOOST * Math.exp(-days / DRIVE_FADE_DAYS);
 }
 
 // ───────────────────────────── the document ─────────────────────────────
@@ -791,6 +825,7 @@ export function searchIndex(index: Index, rawQuery: string, opts: SearchOpts = {
   found.forEach(f => { if (f.rel > maxRel) maxRel = f.rel; });
   const picks = opts.noPicks ? {} : readPicks();
   const pid = opts.projectId ?? '';
+  const driveAt = opts.driveRecent ? (opts.driveAt ?? driveClock) : null;
   const hits: SearchHit[] = [];
   for (const [id, f] of found) {
     const d = index.docs.get(id)!;
@@ -801,6 +836,7 @@ export function searchIndex(index: Index, rawQuery: string, opts: SearchOpts = {
       rank -= 6 * Math.exp(-days / 90);
     }
     if (d.bin && d.kind === 'job') rank += 8;
+    if (driveAt && d.kind === 'job') rank -= driveBoost(driveAt(d.rec as Apartment), now);
     if (pid) {
       const p: PickMemory | undefined = picks[pickKey(pid, d.id)];
       if (p) {
@@ -856,11 +892,12 @@ export function capHits(hits: SearchHit[], limit: number, perKind: number): Sear
 
 /**
  * Search ONE list of jobs — the job list page, a group window, the Find-a-job
- * widget. Returns hits in rank order; `hit.rec` is the Apartment.
+ * widget. Returns hits in rank order; `hit.rec` is the Apartment. Equal
+ * matches come busiest-Drive-folder first unless `driveRecent: false`.
  */
 export function searchJobs(jobs: Apartment[], query: string, opts: SearchOpts & { stages?: Stage[]; includeTrash?: boolean } = {}): SearchHit<Apartment>[] {
   const index = jobsIndex(jobs, opts.stages, opts.includeTrash ?? true);
-  return searchIndex(index, query, { limit: 500, perKind: 500, noPicks: true, ...opts, kinds: ['job'] }) as SearchHit<Apartment>[];
+  return searchIndex(index, query, { limit: 500, perKind: 500, noPicks: true, driveRecent: true, ...opts, kinds: ['job'] }) as SearchHit<Apartment>[];
 }
 
 /** A hit's "why" as one short line: "Folder: Cohen, David - 5555". */

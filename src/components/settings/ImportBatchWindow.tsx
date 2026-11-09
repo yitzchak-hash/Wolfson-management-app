@@ -79,7 +79,7 @@ export function ImportBatchWindow({ stamp, label, onClose }: {
   const edited = useMemo(() => jobs.filter(a => a.contentUpdatedAt && a.contentUpdatedAt !== a.createdAt).length, [jobs]);
   const sortedStages = useMemo(() => [...stages].sort((x, y) => x.order - y.order), [stages]);
   const shown = useMemo(() => {
-    if (needle) return searchJobs(jobs, needle, { stages, includeTrash: true, limit: 2000, perKind: 2000 }).map(h => h.rec);
+    if (needle) return searchJobs(jobs, needle, { stages, includeTrash: true, limit: 2000, perKind: 2000, driveRecent: false }).map(h => h.rec);
     return [...jobs].sort((x, y) => (x.displayName || '').localeCompare(y.displayName || ''));
   }, [jobs, needle, stages]);
 

@@ -156,7 +156,7 @@ Legend: ☑ shipped · ☐ decided, not built · ◐ built in part · ✎ needs 
 - ☑ A general job's task sheet has no Close job: "Choose the apartment you are working in" → that project's building(s) + a hunt banner → "I'm going to work here" files the visit under the general job; no-permission pop-up (2026-09-17)
 - ☑ The plan opens BIG on a tablet: an upright sheet on a sideways screen no longer fits to the height — it opens as big as it can while keeping 60% of the page on screen (420 → 700px on the Tab S10 FE); the Fit control still shows the whole page; the phone untouched (2026-09-17)
 - ☑ Stage names in Russian (`Stage.nameRu`, `stageNameIn`), typed in project settings; the worker's portal names every stage in his own language (2026-09-17)
-- ☒ The markup studio tablet REDESIGN — owner's ruling 2026-09-17: the design and layout are approved as they are; only the scaling was wrong, and that is fixed. The eight starred questions on "The Studio on the Tablet" are not to be built.
+- ☑ The markup studio tablet REDESIGN — held back 2026-09-17, then the owner said YES on 2026-11-09: built to every star of "The Studio on the Tablet" (one 56px bar, 56px tiles, docked tray, pen draws / finger moves, full bleed, Drawing hand + Finger draws too in Settings).
 - ☑ One media viewer for every file — pictures, films, memos, documents — with full screen, an info panel, Download and Open in Drive; the Drive browser's videos and files are no longer dead tiles (2026-09-17)
 - ☑ A file's kind is decided by its NAME (`mediaKindOf`): a `.dwg` that Drive calls `image/vnd.dwg` no longer draws as a broken picture (2026-09-17)
 - ☑ Task messages fold away, with a count, remembered per machine (2026-09-17)

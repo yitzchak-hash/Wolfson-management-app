@@ -3428,6 +3428,12 @@ export interface MainUiStrings {
   searchClear: string;
   searchClearPicks: string;
   searchWhyAi?: string;
+  /** A job row's quiet "its Drive folder moved lately" hint; `{ago}` is "2h ago". */
+  searchDriveMoved?: string;
+  /** "{n}m ago" / "{n}h ago" / "{n}d ago" — the hint's age, short. */
+  searchAgoMin?: string;
+  searchAgoHour?: string;
+  searchAgoDay?: string;
   searchAiBtn?: string;
   searchAiBusy?: string;
   searchAiNone?: string;
@@ -4447,6 +4453,10 @@ export const DEFAULT_MAIN_UI_STRINGS: MainUiStrings = {
   searchClear: 'Clear',
   searchClearPicks: 'Forget what I picked before',
   searchWhyAi: 'AI found it as',
+  searchDriveMoved: 'Drive · {ago}',
+  searchAgoMin: '{n}m ago',
+  searchAgoHour: '{n}h ago',
+  searchAgoDay: '{n}d ago',
   searchAiBtn: 'Not finding it? Search with AI',
   searchAiBusy: 'Asking the AI for other spellings…',
   searchAiNone: 'The AI tried other spellings too — nothing more.',
@@ -5456,6 +5466,10 @@ export const HEBREW_MAIN_UI_STRINGS: MainUiStrings = {
   searchClear: 'לנקות',
   searchClearPicks: 'לשכוח מה בחרתי בעבר',
   searchWhyAi: 'ה-AI מצא כ',
+  searchDriveMoved: 'Drive · {ago}',
+  searchAgoMin: 'לפני {n} דק׳',
+  searchAgoHour: 'לפני {n} שע׳',
+  searchAgoDay: 'לפני {n} ימים',
   searchAiBtn: 'לא מוצאים? חיפוש עם AI',
   searchAiBusy: 'שואלים את ה-AI על כתיבים אחרים…',
   searchAiNone: 'ה-AI ניסה גם כתיבים אחרים — אין עוד תוצאות.',
