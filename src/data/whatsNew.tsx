@@ -31,6 +31,17 @@ export interface WhatsNewEntry {
 
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    date: '2027-03-03',
+    title: 'The day buttons fit the phone',
+    items: [
+      {
+        title: 'This Week is always in sight',
+        body: 'On the worker\'s phone, the All · Yesterday · Today · Tomorrow · This Week buttons no longer run off the side of the screen. When they don\'t fit on one line they sit on two neat lines instead.',
+        demo: 'tap',
+      },
+    ],
+  },
+  {
     date: '2027-03-02',
     title: 'Netiv in 3D',
     items: [

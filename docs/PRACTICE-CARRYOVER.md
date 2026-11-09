@@ -43,6 +43,7 @@ change after that commit belongs in this list.
 | 2026-11-08 | Photos tab: Select → pick → Delete, Tzvi's user only; Drive files to Drive's trash (`api/drive-upload.js` mode `trash-files`, no new function), their site records removed | `ApartmentDetailDrawer.tsx` (`data-photos-select*`), `src/data/driveTrash.ts`, `api/drive-upload.js` | ″ |
 | 2026-11-08 | Photos tab: pictures and videos only; "Show all files" switch | `ApartmentDetailDrawer.tsx` (`data-photos-all-files`) | ″ |
 | 2026-11-08 | Sideways Fold: the plan pane takes at least half the window; the side pane opens on the whole sheet | `ApartmentDetailDrawer.tsx` (`fieldsW`), `PlanAnnotator.tsx` (embedded fit) | ″ |
+| 2026-11-09 | Worker portal: the day chips (All … This Week) wrap inside the screen instead of scrolling past its edge — one line when they fit, else 3 + 2 | `src/components/portal/DayFilterChips.tsx` (new), `ContractorPortal.tsx`, `whatsNew.tsx` | branch `claude/portal-week-fit` |
 
 ## Already brought across
 (nothing yet)
