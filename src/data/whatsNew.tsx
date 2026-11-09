@@ -32,17 +32,12 @@ export interface WhatsNewEntry {
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
     date: '2027-03-05',
-    title: 'The studio on the tablet, scans that read themselves, and a smarter search',
+    title: 'The studio on the tablet, and a smarter search',
     items: [
       {
         title: 'Marking up on a tablet',
         body: 'On a tablet the plan gets the whole screen. One bar on top (back, the plan and its version, undo, redo, Save and ⋯), big tool buttons down the side, and the colours, width and see-through in a tray beside the plan or under it — never over it. Tap the Pan tool on the plan to hide everything and just read it; tap again to bring it back. Once you draw with the pen, a finger only moves and zooms the plan, so a resting hand can\'t scribble. Settings → This computer: Drawing hand and Finger draws too.',
         demo: 'tap',
-      },
-      {
-        title: 'Scanned plans read their own title block',
-        body: 'A scanned or photographed plan now reads the address, phone, floor and scale off its title block by itself, and shows where on the sheet it found each one so you can check it. The first scan takes a few seconds.',
-        demo: 'sparkle',
       },
       {
         title: 'Search puts the busy jobs first',

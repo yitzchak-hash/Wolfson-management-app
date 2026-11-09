@@ -29,6 +29,13 @@
 import type { Frac } from './planAi';
 
 /** The pdf.js text-item shape the address reader takes (display space here — see above). */
+/**
+ * OFF for now (owner, 2026-11-09, reviewing it before go-live: "leave 3 out"). The reading stays in the code, but no
+ * scan is read until he turns it on: on the review sheet the address came back in the wrong order and the phone was
+ * missed. Scans then behave as before it (the AI reading only, where the server has a key).
+ */
+export const SCAN_READING_ON = false;
+
 export interface OcrItem { str: string; transform: number[]; width: number; height: number }
 
 /** The little of a viewport this needs — a pdf.js PageViewport answers it, and so does a picture. */

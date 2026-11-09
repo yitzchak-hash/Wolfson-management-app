@@ -49,7 +49,7 @@ import { fetchPlanBytes } from './driveApi';
 import { aiPlanReadingAvailable, aiReadPlanImage, canvasToJpeg, type Frac } from './planAi';
 import { tokenize } from './hebrewNormalize';
 import {
-  isPdfBytes, imageAsPage, ocrTitleBlock, ocrBox, floorIn, scaleIn, FLOOR_LABEL, SCALE_LABEL,
+  isPdfBytes, imageAsPage, ocrTitleBlock, ocrBox, floorIn, scaleIn, FLOOR_LABEL, SCALE_LABEL, SCAN_READING_ON,
   type SheetPage, type OcrItem,
 } from './planOcr';
 
@@ -841,6 +841,7 @@ export async function openRegionReader(fileId: string): Promise<RegionReader | n
       async readScan(r) {
         // Only that box, rendered from the page itself (not the picker's
         // picture) at OCR resolution; its words through the same line model.
+        if (!SCAN_READING_ON) return '';   // switched off (planOcr.ts)
         const its = await ocrBox(page, r);
         if (!its || !its.length) return '';
         const ls = buildLines(its).sort((a, b) => b.y1 - a.y1);
@@ -927,7 +928,7 @@ async function readNow(fileId: string): Promise<PlanAddressResult> {
     // is marked 'ocr', and the honesty rule applies to them unchanged.
     const realText = items.length >= 5;
     let ocrUsed = false;
-    if (!realText) {
+    if (!realText && SCAN_READING_ON) {
       setStage(fileId, 'scan');
       const ocr = await ocrTitleBlock(page).finally(() => setStage(fileId, null));
       if (ocr && ocr.length >= 5) { items = ocr; ocrUsed = true; }
