@@ -207,7 +207,7 @@ export function StageSection({
           </span>
         )}
         {onInspect && (
-          <button type="button" data-inspect disabled={inspecting} onClick={() => onInspect(lastDone)}
+          <button type="button" data-inspect data-inspect-busy={inspecting ? '1' : undefined} onClick={() => onInspect(lastDone)}
             className="ms-auto inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold text-white disabled:opacity-60"
             style={{ backgroundColor: '#1e3a5f' }}>
             {inspecting ? <Loader2 size={13} className="animate-spin" /> : <Camera size={13} />} {rtl ? 'בדיקה' : 'Inspection'}

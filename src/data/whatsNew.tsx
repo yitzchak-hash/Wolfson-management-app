@@ -31,6 +31,32 @@ export interface WhatsNewEntry {
 
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    date: '2027-03-06',
+    title: 'One upload bar, and inspections you can keep adding to',
+    items: [
+      {
+        title: 'One bar for everything going up',
+        body: 'When several pictures or videos go up together, the corner card shows one bar for all of them: "Uploading 2 of 5" and the total percent.',
+        demo: 'tap',
+      },
+      {
+        title: 'Inspection works while it uploads',
+        body: 'The Inspection button stays ready while the last batch is still going up. Take more pictures and they join the same inspection.',
+        demo: 'tap',
+      },
+      {
+        title: 'The phone\'s own photo camera',
+        body: 'In the inspection camera, Phone camera (at the top) opens the phone\'s own camera for a full-quality picture. Each one comes back into the strip; take as many as you like, and they all go up together at Done.',
+        demo: 'tap',
+      },
+      {
+        title: 'Inspections show in Photos at once',
+        body: 'The Photos tab shows an inspection\'s pictures the moment they are saved, under Inspections — also on a job with no Drive folder of its own.',
+        demo: 'tap',
+      },
+    ],
+  },
+  {
     date: '2027-03-05',
     title: 'The studio on the tablet, and a smarter search',
     items: [

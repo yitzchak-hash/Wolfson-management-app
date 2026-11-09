@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef, lazy, Suspense } from 'react';
+import { expectUploads, forgetExpected } from '../../data/uploadTracker';
 import { jobFolderId } from '../../data/jobFolder';
 import { Mic, X, Save, Building2, MessageSquare, AlertTriangle, Link, Unlink, ExternalLink, BookOpen, Download, Eye, EyeOff, Activity, RefreshCw, Paperclip, Trash2, ChevronDown, ChevronRight, ClipboardList, CheckCircle2, CalendarDays, FileText, UserCheck, Plus, Camera, Play, ChevronLeft, FolderOpen, Clock, RotateCcw, Edit2, BarChart3, PenLine, Maximize2, Printer, Share2, Phone as PhoneIcon, Loader2, Folder, Star, ArrowRightLeft } from 'lucide-react';
 import { Apartment, User, getStageName, TaskAttachment, TaskPriority, aptLabel, ContractorAssignment, CustomButton, Inspection, InspectionFile } from '../../types';
@@ -726,7 +727,8 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
   const [sharing, setSharing] = useState(false);
   /** Tzvi's inspection: the choice sheet open (with the stage it will stand after), and an upload in progress. */
   const [inspectAsk, setInspectAsk] = useState<{ after: string | null } | null>(null);
-  const [inspecting, setInspecting] = useState(false);
+  /** How many inspection batches are going up right now (the button stays usable). */
+  const [inspecting, setInspecting] = useState(0);
   const inspectPhotoRef = useRef<HTMLInputElement>(null);
   const inspectVideoRef = useRef<HTMLInputElement>(null);
   const inspectPickRef = useRef<HTMLInputElement>(null);
@@ -1210,7 +1212,10 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
    */
   async function saveInspection(files: File[], after: string | null) {
     if (!apartment || !currentUser || !files.length) return;
-    setInspecting(true);
+    // The button stays usable while this goes up (owner, 2026-11-09: "the inspection button should work even while
+    // uploading and adding stuff to it"): a counter, not a lock, and the save below reads the record FRESH.
+    const aptId = apartment.id;
+    setInspecting(n => n + 1);
     const mainFolderId = backendConfigured ? await jobFolderId(apartment).catch(() => null) : null;
     const saved: InspectionFile[] = [];
     try {
@@ -1220,6 +1225,7 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
         ensureDriveShared(photosFolderId);
         folderId = await findOrCreateFolderViaBackend(photosFolderId, 'Inspections');
       }
+      if (folderId) expectUploads(files);   // one bar for the whole batch (uploadTracker)
       for (const file of files) {
         if (folderId) {
           const { fileId, webViewLink } = await uploadFileViaResumableSession(folderId, file);
@@ -1237,22 +1243,24 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
         }
       }
     } catch {
+      forgetExpected();
       onToast(ui.isRtl ? 'ההעלאה נכשלה — נסו שוב' : 'The upload failed — try again', 'error');
     }
-    setInspecting(false);
+    setInspecting(n => Math.max(0, n - 1));
     if (!saved.length) {
       if (files.some(f => f.type.startsWith('video/')) && !backendConfigured) onToast(ui.isRtl ? 'סרטון צריך את Drive' : 'A video needs Drive', 'error');
       return;
     }
     const now = new Date().toISOString();
-    const prior = apartments.find(a => a.id === apartment.id)?.inspections ?? [];
+    // FRESH, not this render's copy: another batch may have landed while this one was going up.
+    const prior = useStore.getState().apartments.find(a => a.id === aptId)?.inspections ?? [];
     // Within half an hour of his last addition he is still there: the pictures join THAT inspection
     // (owner, 2026-11-08: "they should all fold into the same inspection … because it means I'm still there").
     const last = prior[prior.length - 1];
     const lastTouch = last ? Date.parse(last.lastAt ?? last.at) : 0;
     if (last && last.byId === currentUser.id && Date.now() - lastTouch < 30 * 60 * 1000) {
       const merged: Inspection = { ...last, files: [...last.files, ...saved], lastAt: now };
-      updateApartment(apartment.id, { inspections: [...prior.slice(0, -1), merged] }, currentUser);
+      updateApartment(aptId, { inspections: [...prior.slice(0, -1), merged] }, currentUser);
       onToast(ui.isRtl ? 'נוסף לבדיקה' : 'Added to the inspection');
       return;
     }
@@ -1260,7 +1268,7 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
       id: `ins-${Date.now().toString(36)}`, at: now, lastAt: now,
       byId: currentUser.id, byName: currentUser.name, afterStageId: after, files: saved,
     };
-    updateApartment(apartment.id, { inspections: [...prior, ins] }, currentUser);
+    updateApartment(aptId, { inspections: [...prior, ins] }, currentUser);
     onToast(ui.isRtl ? 'הבדיקה נשמרה' : 'Inspection saved');
   }
 
@@ -2583,7 +2591,7 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                 onOpenPhotos={(items, index) => setLightbox({ items, index })}
                 // Only Tzvi's own user inspects (owner, 2026-11-08).
                 onInspect={isTzvi(currentUser?.name) ? after => setInspectAsk({ after }) : undefined}
-                inspecting={inspecting}
+                inspecting={inspecting > 0}
               />
               {/* The three ways in: the camera for a picture, the camera for a video, or what is already on the phone. */}
               {(['photo', 'video', 'pick'] as const).map(k => (
@@ -3459,6 +3467,32 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                 if (g) g.tiles.unshift(tile);
                 else { const ng = { name, tiles: [tile] }; byName.set(k, ng); looseGroups.unshift(ng); }
               }
+              // Tzvi's inspections, straight off the apartment record (owner, 2026-11-09: "the photos tab doesn't show
+              // on the jobs that don't have a drive folder … as soon as it uploads that same second"). A job with no
+              // Drive folder files them in the general folder, which the Drive listing above never reads, and a listing
+              // read before the upload does not have them yet — the record has them the moment they land.
+              const inspName = ui.isRtl ? 'בדיקות' : 'Inspections';
+              const inspTiles: Tile[] = [];
+              for (const ins of [...(apartment.inspections ?? [])].reverse()) {
+                ins.files.forEach((f, i) => {
+                  if (f.driveFileId && onDrive.has(f.driveFileId)) return;
+                  const src = f.driveFileId ? driveThumbUrl(f.driveFileId, 800) : (f.dataUrl ?? '');
+                  if (!src && !f.driveUrl) return;
+                  inspTiles.push({
+                    key: `ins-${ins.id}-${f.driveFileId ?? i}`, fileId: f.driveFileId ?? '', filename: f.filename,
+                    mimeType: f.mimeType,
+                    thumb: f.driveFileId ? driveThumbUrl(f.driveFileId, 400) : (f.dataUrl ?? ''), full: src,
+                    download: f.driveFileId ? `https://drive.google.com/uc?export=download&id=${f.driveFileId}` : (f.dataUrl ?? ''),
+                    onDrive: !!f.driveFileId,
+                  });
+                });
+              }
+              if (inspTiles.length) {
+                const k = keyOf(inspName);
+                const g = byName.get(k);
+                if (g) g.tiles.unshift(...inspTiles);
+                else { const ng = { name: inspName, tiles: inspTiles }; byName.set(k, ng); looseGroups.unshift(ng); }
+              }
             }
             // Pictures and videos only, unless "Show all files" is on (owner, 2026-11-08: "it started showing all the
             // files … a little toggle on top saying show all files. But the default should be off").
@@ -3504,11 +3538,16 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                 const own = picked.find(t => !t.onDrive && t.key === p.id && !t.fileId);
                 if ((p.driveFileId && gone.has(p.driveFileId)) || own) deleteContractorPhoto(p.id);
               }
-              if (gone.size) {
-                setDrivePhotos(prev => prev.filter(d => !gone.has(d.fileId)));
+              // An inspection picture kept only in the record (no Drive copy) goes by its tile's key.
+              const ownIns = new Set(picked.filter(t => !t.fileId && t.key.startsWith('ins-')).map(t => t.key));
+              const insKey = (i: { id: string }, f: { driveFileId?: string }, n: number) => `ins-${i.id}-${f.driveFileId ?? n}`;
+              if (gone.size) setDrivePhotos(prev => prev.filter(d => !gone.has(d.fileId)));
+              if (gone.size || ownIns.size) {
                 const ins = apartment.inspections ?? [];
-                if (ins.some(i => i.files.some(f => f.driveFileId && gone.has(f.driveFileId)))) {
-                  const left = ins.map(i => ({ ...i, files: i.files.filter(f => !(f.driveFileId && gone.has(f.driveFileId))) }))
+                const drop = (i: { id: string }, f: { driveFileId?: string }, n: number) =>
+                  !!(f.driveFileId && gone.has(f.driveFileId)) || ownIns.has(insKey(i, f, n));
+                if (ins.some(i => i.files.some((f, n) => drop(i, f, n)))) {
+                  const left = ins.map(i => ({ ...i, files: i.files.filter((f, n) => !drop(i, f, n)) }))
                     .filter(i => i.files.length > 0);
                   updateApartment(apartment.id, { inspections: left }, currentUser);
                 }

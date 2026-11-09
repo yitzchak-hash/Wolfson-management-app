@@ -6,12 +6,12 @@ import { PREVIEW_ID, TEST_MODE } from './previewMode';
  * byte for byte into the Plan Sketcher, which has no tracker of its own; there the events simply fall on nobody.
  */
 let uploadSeq = 0;
-function announce(detail: { id: number; name: string; pct: number; done?: boolean }) {
+function announce(detail: { id: number; name: string; pct: number; size?: number; done?: boolean }) {
   try { window.dispatchEvent(new CustomEvent('tz-upload', { detail })); } catch { /* no window */ }
 }
-const uploadStarted = (name: string) => { const id = ++uploadSeq; announce({ id, name, pct: 0 }); return { id, name }; };
-const uploadProgress = (t: { id: number; name: string }, pct: number) => announce({ ...t, pct });
-const uploadEnded = (t: { id: number; name: string }) => announce({ ...t, pct: 100, done: true });
+const uploadStarted = (name: string, size?: number) => { const id = ++uploadSeq; announce({ id, name, pct: 0, size }); return { id, name, size }; };
+const uploadProgress = (t: { id: number; name: string; size?: number }, pct: number) => announce({ ...t, pct });
+const uploadEnded = (t: { id: number; name: string; size?: number }) => announce({ ...t, pct: 100, done: true });
 // Google Drive API helpers — client-side only, no backend required
 
 declare global {
@@ -613,7 +613,7 @@ export async function uploadFileViaResumableSession(
   onProgress?: (pct: number) => void,
 ): Promise<{ fileId: string; webViewLink: string }> {
   // Every upload is seen while it goes up (uploadTracker.ts; owner, 2026-11-08).
-  const tid = uploadStarted(file.name);
+  const tid = uploadStarted(file.name, file.size);
   try {
     return await resumableUpload(folderId, file, pct => { uploadProgress(tid, pct); onProgress?.(pct); });
   } finally { uploadEnded(tid); }
@@ -692,7 +692,7 @@ export async function uploadFileViaBackend(
   file: File,
   onProgress?: (pct: number) => void,
 ): Promise<{ fileId: string; webViewLink: string }> {
-  const tid = uploadStarted(file.name);
+  const tid = uploadStarted(file.name, file.size);
   try {
     return await bodyUpload(folderId, file, pct => { uploadProgress(tid, pct); onProgress?.(pct); });
   } finally { uploadEnded(tid); }

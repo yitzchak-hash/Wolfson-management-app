@@ -26,6 +26,12 @@ export function InspectionCamera({ open, isRtl, onDone, onClose, onFallback }: {
   const pickRef = useRef<HTMLInputElement>(null);
   /** The phone's own camera, for a film (see toggleRecord). */
   const filmRef = useRef<HTMLInputElement>(null);
+  /**
+   * The phone's own PHOTO camera too (owner, 2026-11-09: "can we use the actual picture camera just like the video
+   * camera?"): its full quality, focus and flash. It brings back ONE picture a trip — each lands in the strip and they
+   * all go up together at Done. The shutter here stays for a quick run of many.
+   */
+  const snapRef = useRef<HTMLInputElement>(null);
   const [mode, setMode] = useState<'photo' | 'video'>('photo');
   const [facing, setFacing] = useState<'environment' | 'user'>('environment');
   const [shots, setShots] = useState<{ file: File; url: string }[]>([]);
@@ -35,8 +41,8 @@ export function InspectionCamera({ open, isRtl, onDone, onClose, onFallback }: {
   const [failed, setFailed] = useState(false);
   const [askDiscard, setAskDiscard] = useState(false);
   const W = isRtl
-    ? { photo: 'תמונה', video: 'וידאו', done: 'סיום', gallery: 'גלריה', noCam: 'הדפדפן לא נתן גישה למצלמה.', useCam: 'פתיחת המצלמה של הטלפון', discard: (n: number) => `למחוק ${n} צילומים?`, keep: 'להמשיך לצלם', del: 'מחיקה' }
-    : { photo: 'Photo', video: 'Video', done: 'Done', gallery: 'Gallery', noCam: 'The browser did not give the camera.', useCam: "Open the phone's camera", discard: (n: number) => `Throw away ${n} shot${n === 1 ? '' : 's'}?`, keep: 'Keep shooting', del: 'Throw away' };
+    ? { photo: 'תמונה', video: 'וידאו', done: 'סיום', gallery: 'גלריה', noCam: 'הדפדפן לא נתן גישה למצלמה.', useCam: 'פתיחת המצלמה של הטלפון', discard: (n: number) => `למחוק ${n} צילומים?`, keep: 'להמשיך לצלם', del: 'מחיקה', phoneCam: 'מצלמת הטלפון' }
+    : { photo: 'Photo', video: 'Video', done: 'Done', gallery: 'Gallery', noCam: 'The browser did not give the camera.', useCam: "Open the phone's camera", discard: (n: number) => `Throw away ${n} shot${n === 1 ? '' : 's'}?`, keep: 'Keep shooting', del: 'Throw away', phoneCam: 'Phone camera' };
 
   // The camera runs while the window is open; a switch of mode (video needs the microphone) or side restarts it.
   useEffect(() => {
@@ -110,7 +116,17 @@ export function InspectionCamera({ open, isRtl, onDone, onClose, onFallback }: {
         <button type="button" data-camera-close onClick={close} aria-label="Close" className="w-11 h-11 rounded-full bg-white/15 flex items-center justify-center"><X size={22} /></button>
         {recording
           ? <span className="px-3 py-1 rounded-full bg-red-600 text-[14px] font-bold tabular-nums">● {mm}</span>
-          : <span className="text-[14px] font-semibold tabular-nums" data-camera-count>{shots.length ? `${shots.length}` : ''}</span>}
+          : (
+            <div className="flex items-center gap-3">
+              <span className="text-[14px] font-semibold tabular-nums" data-camera-count>{shots.length ? `${shots.length}` : ''}</span>
+              {mode === 'photo' && (
+                <button type="button" data-camera-phone onClick={() => { haptic('tap'); snapRef.current?.click(); }}
+                  className="h-11 px-3.5 rounded-full bg-white/15 flex items-center gap-1.5 text-[13px] font-semibold">
+                  <Camera size={17} />{W.phoneCam}
+                </button>
+              )}
+            </div>
+          )}
         <button type="button" data-camera-flip onClick={() => setFacing(f => (f === 'environment' ? 'user' : 'environment'))} disabled={recording}
           aria-label="Flip" className="w-11 h-11 rounded-full bg-white/15 flex items-center justify-center disabled:opacity-40"><RefreshCw size={20} /></button>
       </div>
@@ -170,6 +186,8 @@ export function InspectionCamera({ open, isRtl, onDone, onClose, onFallback }: {
         </div>
       </div>
       <input ref={filmRef} type="file" accept="video/*" capture="environment" className="hidden" data-camera-film
+        onChange={e => { const fs = [...(e.target.files ?? [])]; e.target.value = ''; fs.forEach(add); }} />
+      <input ref={snapRef} type="file" accept="image/*" capture="environment" className="hidden" data-camera-snap
         onChange={e => { const fs = [...(e.target.files ?? [])]; e.target.value = ''; fs.forEach(add); }} />
       <input ref={pickRef} type="file" accept="image/*,video/*" multiple className="hidden" data-camera-pick
         onChange={e => { const fs = [...(e.target.files ?? [])]; e.target.value = ''; fs.forEach(add); }} />
