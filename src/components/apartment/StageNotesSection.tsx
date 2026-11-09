@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { jobFolderId } from '../../data/jobFolder';
 import { ChevronDown, ChevronRight, Check, Clock, User, Paperclip, ExternalLink, X, Eye, EyeOff, HardHat } from 'lucide-react';
 import { Stage, User as UserType, StageNoteAttachment, StageNoteEntry, getStageName } from '../../types';
 import { useStore } from '../../data/store';
@@ -94,9 +95,10 @@ export function StageNotesSection({ apartmentId, stages, currentUser, onSaved }:
     // camera); only the base64 fallback below is shrunk.
     const attId = Math.random().toString(36).slice(2, 11);
     let att: PendingAttachment | null = null;
-    if (isUploadBackendConfigured() && apt?.driveLink) {
+    if (isUploadBackendConfigured() && apt) {
       try {
-        const mainFolderId = extractFolderId(apt.driveLink);
+        // the job's folder, else the general one (jobFolder.ts)
+        const mainFolderId = await jobFolderId(apt);
         if (mainFolderId) {
           setUploading(p => ({ ...p, [attId]: 1 }));
           const photosFolderId = await findOrCreateFolderViaBackend(mainFolderId, 'Photos');

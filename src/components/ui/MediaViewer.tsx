@@ -74,11 +74,23 @@ export function MediaViewer({
   /**
    * DRIVE'S OWN PLAYER (owner, 2026-11-09: "tzvis inspection video is not playing"). A film recorded inside a web page
    * on an iPhone is saved as a streaming-style MP4 whose header says "length unknown"; some players never start it.
-   * Drive re-processes every video into a form every device plays, so when ours has not started within a few seconds
-   * (or refuses the file), the viewer shows Drive's player instead.
+   * Drive re-processes every video into a form every device plays, so when ours REFUSES the file the viewer shows
+   * Drive's player instead. Only then: Drive's player streams at a lower quality (owner, 2026-11-09: "the quality is
+   * bad"), so a film that is merely slow keeps the full-quality player.
    */
   const [drivePlayer, setDrivePlayer] = React.useState(false);
-  const started = React.useRef(false);
+  /**
+   * A film waits for a PRESS to start (owner, 2026-11-09: "streaming … still doesn't work with sound"): a phone starts a
+   * film that plays by itself without its sound, or not at all; started from the person's own press, it has sound.
+   */
+  const [played, setPlayed] = React.useState(false);
+  const filmRef = React.useRef<HTMLVideoElement>(null);
+  const playWithSound = () => {
+    const v = filmRef.current; if (!v) return;
+    v.muted = false; v.defaultMuted = false; if (v.volume === 0) v.volume = 1;
+    setPlayed(true);
+    void v.play().catch(() => {});
+  };
   const rootRef = React.useRef<HTMLDivElement>(null);
 
   const item = items[Math.min(idx, items.length - 1)];
@@ -95,12 +107,7 @@ export function MediaViewer({
   const next = React.useCallback(() => setIdx(i => Math.min(items.length - 1, i + 1)), [items.length]);
 
   // A new item is a fresh load: nothing carried over from the last one.
-  React.useEffect(() => { setBytesSrc(null); setLoadFailed(false); setStreamFailed(false); setDrivePlayer(false); started.current = false; }, [idx]);
-  React.useEffect(() => {
-    if (kind !== 'video' || !item?.fileId || drivePlayer) return;
-    const t = window.setTimeout(() => { if (!started.current) setDrivePlayer(true); }, 8000);
-    return () => window.clearTimeout(t);
-  }, [kind, item?.fileId, idx, drivePlayer]);
+  React.useEffect(() => { setBytesSrc(null); setLoadFailed(false); setStreamFailed(false); setDrivePlayer(false); setPlayed(false); }, [idx]);
 
   /**
    * A Drive VIDEO (or sheet we mean to draw) has no address a <video> can
@@ -225,15 +232,22 @@ export function MediaViewer({
             allow="autoplay; fullscreen" allowFullScreen className="w-full h-full bg-black rounded" />
         ) : kind === 'video' ? (
           (playable || bytesSrc) && !loadFailed
-            ? <video data-viewer-video src={playable || bytesSrc!} controls autoPlay playsInline className="max-w-full max-h-full"
+            ? <div className="relative max-w-full max-h-full flex items-center justify-center">
+              <video ref={filmRef} data-viewer-video src={playable || bytesSrc!} controls playsInline preload="metadata" className="max-w-full max-h-[calc(100dvh-140px)]"
                 // With its sound (owner, 2026-10-29: "I can't hear the video"):
                 // some browsers start an autoplaying film muted; opening the
                 // viewer was the person's own tap, so the sound goes on.
                 onLoadedMetadata={e => { const v = e.currentTarget; v.muted = false; v.defaultMuted = false; if (v.volume === 0) v.volume = 1; }}
-                onPlaying={() => { started.current = true; }}
-                onCanPlay={() => { started.current = true; }}
+                onPlay={() => setPlayed(true)}
                 // a Drive film our player refuses goes straight to Drive's player (never a whole-file download)
                 onError={() => { if (item.fileId) setDrivePlayer(true); else if (!playable && isDriveStreamUrl(bytesSrc)) setStreamFailed(true); }} />
+              {!played && (
+                <button type="button" data-viewer-play onClick={playWithSound} aria-label="Play"
+                  className="absolute inset-0 m-auto w-20 h-20 rounded-full bg-black/55 border-2 border-white/80 flex items-center justify-center text-white">
+                  <svg width="30" height="30" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z" /></svg>
+                </button>
+              )}
+            </div>
             : loadFailed
               ? <div className="flex flex-col items-center gap-3">
                   <span className="text-gray-400 text-sm">{imageUnavailable}</span>

@@ -24,6 +24,8 @@ export function InspectionCamera({ open, isRtl, onDone, onClose, onFallback }: {
   const recRef = useRef<MediaRecorder | null>(null);
   const chunks = useRef<Blob[]>([]);
   const pickRef = useRef<HTMLInputElement>(null);
+  /** The phone's own camera, for a film (see toggleRecord). */
+  const filmRef = useRef<HTMLInputElement>(null);
   const [mode, setMode] = useState<'photo' | 'video'>('photo');
   const [facing, setFacing] = useState<'environment' | 'user'>('environment');
   const [shots, setShots] = useState<{ file: File; url: string }[]>([]);
@@ -41,10 +43,8 @@ export function InspectionCamera({ open, isRtl, onDone, onClose, onFallback }: {
     if (!open) return;
     let dead = false;
     setFailed(false);
-    // A film at 720p (owner, 2026-11-09: a 2-minute clip at the phone's 1080p default was 173 MB and would not play);
-    // photos keep the full 1080p.
-    const big = mode === 'photo';
-    navigator.mediaDevices?.getUserMedia({ video: { facingMode: { ideal: facing }, width: { ideal: big ? 1920 : 1280 }, height: { ideal: big ? 1080 : 720 } }, audio: mode === 'video' })
+    // The viewfinder only: a film is taken by the phone's own camera (toggleRecord), so no microphone is asked for here.
+    navigator.mediaDevices?.getUserMedia({ video: { facingMode: { ideal: facing }, width: { ideal: 1920 }, height: { ideal: 1080 } }, audio: false })
       .then(s => {
         if (dead) { s.getTracks().forEach(t => t.stop()); return; }
         streamRef.current = s;
@@ -79,18 +79,14 @@ export function InspectionCamera({ open, isRtl, onDone, onClose, onFallback }: {
 
   function toggleRecord() {
     if (recording) { recRef.current?.stop(); haptic('tap'); return; }
-    const s = streamRef.current; if (!s || typeof MediaRecorder === 'undefined') return;
-    const type = ['video/mp4', 'video/webm;codecs=vp9', 'video/webm'].find(t => MediaRecorder.isTypeSupported?.(t)) ?? '';
-    // ~3 Mbit/s: about 50 MB for two minutes instead of 170.
-    const rec = new MediaRecorder(s, { ...(type ? { mimeType: type } : {}), videoBitsPerSecond: 3_000_000, audioBitsPerSecond: 96_000 });
-    chunks.current = [];
-    rec.ondataavailable = e => { if (e.data.size) chunks.current.push(e.data); };
-    rec.onstop = () => {
-      const mime = rec.mimeType || 'video/webm';
-      add(new File(chunks.current, `inspection-${stamp()}.${mime.includes('mp4') ? 'mp4' : 'webm'}`, { type: mime.split(';')[0] }));
-      setRecording(false);
-    };
-    recRef.current = rec; rec.start(500); setRecording(true); haptic('tap');
+    /**
+     * A FILM IS TAKEN BY THE PHONE'S OWN CAMERA (owner, 2026-11-09: "it's saving videos with really bad sound … really
+     * bad quality"). Recording inside a web page gives the phone-call microphone (mono, voice-filtered) and, on an
+     * iPhone, a "length unknown" file some players never start. The phone's camera records full quality with proper
+     * sound and a finished file; the film comes back into the strip beside the photos, and nothing is sent until Done.
+     */
+    haptic('tap');
+    filmRef.current?.click();
   }
 
   function finish() {
@@ -173,6 +169,8 @@ export function InspectionCamera({ open, isRtl, onDone, onClose, onFallback }: {
           </button>
         </div>
       </div>
+      <input ref={filmRef} type="file" accept="video/*" capture="environment" className="hidden" data-camera-film
+        onChange={e => { const fs = [...(e.target.files ?? [])]; e.target.value = ''; fs.forEach(add); }} />
       <input ref={pickRef} type="file" accept="image/*,video/*" multiple className="hidden" data-camera-pick
         onChange={e => { const fs = [...(e.target.files ?? [])]; e.target.value = ''; fs.forEach(add); }} />
 

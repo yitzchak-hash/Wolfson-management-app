@@ -50,3 +50,14 @@ Harness: `foldbuilding.mjs` 24 (his Fold ~938×620 and six other screens, floor 
 - Found by looking: B2/23 has no Drive folder, so its inspection picture rode inside the record at full size. Such pictures are shrunk to 1280 px now.
 
 Harness: `inspectvideo.mjs` 6.
+
+## 2026-11-09, his five points
+| # | His words | Done |
+|---|---|---|
+| 1 | "streaming videos of inspection is really bad. The quality is bad … takes forever to load" | The 8 s switch to Drive's (lower-quality) player is gone; our full-quality stream stays unless it refuses the film |
+| 2 | "it's saving videos with really bad sound. In really bad quality" | Video is taken by the phone's own camera (full quality, real sound, a finished file); the web recording gave the call microphone (mono, voice filter) |
+| 3 | "Jobs with no drive link, it doesn't even upload and it doesn't show any error message … save it to the general place" | `jobFolder.ts`: the job's folder, else the general Drive folder (Settings → Backups) › "Jobs without a Drive folder" › workspace · building · job; used by inspections, stage notes, the problem form, job notes, the office thread, task files. No folder anywhere: a film is refused out loud |
+| 4 | "streaming online when the video does work still doesn't work with sound" | The viewer no longer autoplays (a phone starts a self-starting film without sound); a big play button, the press starts it with sound |
+| 5 | "in the netiv project. Building one on the right and building two on the left" | Board and building view (All): B2 left, B1 right |
+
+Harnesses: `inspect2.mjs` 16 · `inspectvideo.mjs` 7 · `netivbuilding.mjs` 21.

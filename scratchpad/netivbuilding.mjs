@@ -83,6 +83,15 @@ async function open(w, h, opts = {}) {
   if (await all.count()) { await all.click(); await p.waitForTimeout(800); }
   await p.locator('[data-view-switch] [data-view="building"]').first().click().catch(() => {}); await p.waitForTimeout(1500);
   T(await p.locator('[data-building-trio] .bv-root').count() === 2, 'All shows B1 and B2 side by side');
+  const order = await p.locator('[data-building-trio] .bv-title').allTextContents();
+  T(order.join(',') === 'B2,B1', `Building 2 on the left, Building 1 on the right (${order.join(',')})`);
+  await p.locator('[data-view-switch] [data-view="board"]').first().click(); await p.waitForTimeout(1200);
+  // the two navy building headers, read where they stand (y under the toolbar)
+  const xOf = async t => { for (const h of await p.getByText(t, { exact: true }).all()) { const b = await h.boundingBox(); if (b && b.y > 140 && b.width > 0) return b.x; } return null; };
+  const x1 = await xOf('B1'), x2 = await xOf('B2');
+  const heads = x1 != null && x2 != null ? (x2 < x1 ? ['B2', 'B1'] : ['B1', 'B2']) : [];
+  T(heads.join(',') === 'B2,B1', `the board too: B2 left, B1 right (${heads.join(',')})`);
+  await p.locator('[data-view-switch] [data-view="building"]').first().click(); await p.waitForTimeout(1200);
   await p.screenshot({ path: `${OUT}/netiv-all.png` });
   T(!errs.length, `no page errors (${errs.join(' | ')})`);
   await ctx.close();

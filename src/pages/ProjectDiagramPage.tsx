@@ -292,7 +292,9 @@ export function ProjectDiagramPage() {
   const buildingFloorLabels = useMemo(() => (showBuilding ? floorLabelsOf(bvBuilding as BuildingId) : undefined),
     [showBuilding, bvBuilding, floorLabelsOf]);
   const trioBuildings = useMemo(() => (showTrio
-    ? buildings.filter(b => !!planFor(currentProjectId, b.id)).map(b => ({ id: b.id, title: buildingShort(b.id), apartments: apartments.filter(a => a.buildingId === b.id), floorLabels: floorLabelsOf(b.id) }))
+    ? buildings.filter(b => !!planFor(currentProjectId, b.id))
+      // Netiv: Building 2 on the left, Building 1 on the right (owner, 2026-11-09)
+      .sort((a, b) => (currentProjectId === 'netiv' ? (b.id === 'B2' ? 1 : 0) - (a.id === 'B2' ? 1 : 0) : 0)).map(b => ({ id: b.id, title: buildingShort(b.id), apartments: apartments.filter(a => a.buildingId === b.id), floorLabels: floorLabelsOf(b.id) }))
     : []), [showTrio, buildings, apartments, floorLabelsOf]);
   const lookValue = useMemo(() => ({
     big: !isNarrow && selectedBuilding !== 'all',

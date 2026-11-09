@@ -53,12 +53,27 @@ export const WHATS_NEW: WhatsNewEntry[] = [
   },
   {
     date: '2027-03-04',
-    title: 'Videos that play',
+    title: 'Videos with sound and full quality',
     items: [
       {
-        title: 'Inspection videos always play',
-        body: 'When a video will not start in the app (an iPhone recording can do that), it switches to Google Drive\'s own player by itself. Videos taken in the app are also smaller now, so they load faster.',
+        title: 'Inspection videos use the phone\'s own camera',
+        body: 'In the inspection camera, Video now opens the phone\'s own camera: full quality and proper sound. The video comes back into the strip with the photos, and nothing is sent until Done.',
         demo: 'tap',
+      },
+      {
+        title: 'Press play for sound',
+        body: 'A video opens with a big play button and plays with its sound. If the app cannot play a video at all, it opens in Google Drive\'s own player.',
+        demo: 'tap',
+      },
+      {
+        title: 'Jobs without a Drive folder',
+        body: 'Photos and videos for a job with no Drive folder are saved in the general Drive folder (Settings → Backups), under "Jobs without a Drive folder". If no folder is set anywhere, a message says so.',
+        demo: 'list',
+      },
+      {
+        title: 'Netiv: Building 2 on the left',
+        body: 'On All, Netiv shows Building 2 on the left and Building 1 on the right, on the board and in the building view.',
+        demo: 'list',
       },
     ],
   },

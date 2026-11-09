@@ -1158,7 +1158,10 @@ export function BuildingDiagram({
 }: BuildingDiagramProps) {
   const { isRtl } = useStore(state => state.mainUiStrings);
   const buildings = useStore(state => state.buildings);
-  const buildingOrder: BuildingId[] = isRtl ? [...buildings].reverse().map(b => b.id) : buildings.map(b => b.id);
+  // Netiv stands Building 2 on the left, Building 1 on the right (owner, 2026-11-09), as on the site.
+  const netivSide = useStore(state => state.currentProjectId) === 'netiv';
+  const leftToRight = netivSide ? [...buildings].sort((a, b) => (b.id === 'B2' ? 1 : 0) - (a.id === 'B2' ? 1 : 0)) : buildings;
+  const buildingOrder: BuildingId[] = isRtl ? [...leftToRight].reverse().map(b => b.id) : leftToRight.map(b => b.id);
   const visibleBuildings = selectedBuilding === 'all' ? buildingOrder : [selectedBuilding];
   const single = selectedBuilding !== 'all';
   const bigLook = React.useContext(DiagramLook).big && single && !compact && !phone;

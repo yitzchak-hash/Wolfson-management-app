@@ -31,8 +31,15 @@ for (const mode of ['refused', 'stalls']) {
   await row.locator('[data-inspection-toggle]').click(); await p.waitForTimeout(300);
   await row.locator('[data-inspection-file]').first().click(); await p.waitForTimeout(mode === 'refused' ? 2500 : 9500);
   const player = p.locator('[data-viewer-drive-player]');
-  T(await player.count() === 1, `${mode}: the viewer switches to Drive's player`);
-  T((await player.getAttribute('src') ?? '').includes('VIDEOFILE0001'), `${mode}: Drive's player shows that file`);
+  if (mode === 'refused') {
+    T(await player.count() === 1, `${mode}: a film our player refuses opens in Drive's player`);
+    T((await player.getAttribute('src') ?? '').includes('VIDEOFILE0001'), `${mode}: Drive's player shows that file`);
+  } else {
+    // slow is not refused: the full-quality player stays (Drive's is lower quality), with a press to play WITH sound
+    T(await player.count() === 0, `${mode}: a slow film keeps the full-quality player`);
+    T(await p.locator('[data-viewer-play]').count() === 1, `${mode}: a big play button waits for the press`);
+    T(await p.locator('[data-viewer-video]').evaluate(v => !v.autoplay), `${mode}: the film does not start by itself (a phone would start it without sound)`);
+  }
   T(await p.locator('[data-viewer-drive]').count() === 1, `${mode}: "Open in Drive" stays in the bar`);
   await p.screenshot({ path: `${OUT}/inspect-video-${mode}.png` });
   await ctx.close();

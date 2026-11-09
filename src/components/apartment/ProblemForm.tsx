@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { jobFolderId } from '../../data/jobFolder';
 import { createPortal } from 'react-dom';
 import { AlertTriangle, X, Camera, Loader2 } from 'lucide-react';
 import { useStore, trackUndo } from '../../data/store';
@@ -79,8 +80,8 @@ export function ProblemForm({ apartments, currentUser, onClose, onSaved }: {
 
   /** Files go to the FIRST apartment's Drive folder (Photos/Contractor Notes) when it has one; else data URLs. */
   async function attach(file: File, transcript?: boolean) {
-    const link = apartments[0]?.driveLink;
-    const mainFolderId = link ? extractFolderId(link) : null;
+    // the job's folder, else the general one (jobFolder.ts)
+    const mainFolderId = isUploadBackendConfigured() && !many ? await jobFolderId(apartments[0]).catch(() => null) : null;
     const isImg = file.type.startsWith('image/');
     let att: PendingAtt | null = null;
     if (isUploadBackendConfigured() && mainFolderId && !many) {

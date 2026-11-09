@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef, lazy, Suspense } from 'react';
+import { jobFolderId } from '../../data/jobFolder';
 import { Mic, X, Save, Building2, MessageSquare, AlertTriangle, Link, Unlink, ExternalLink, BookOpen, Download, Eye, EyeOff, Activity, RefreshCw, Paperclip, Trash2, ChevronDown, ChevronRight, ClipboardList, CheckCircle2, CalendarDays, FileText, UserCheck, Plus, Camera, Play, ChevronLeft, FolderOpen, Clock, RotateCcw, Edit2, BarChart3, PenLine, Maximize2, Printer, Share2, Phone as PhoneIcon, Loader2, Folder, Star, ArrowRightLeft } from 'lucide-react';
 import { Apartment, User, getStageName, TaskAttachment, TaskPriority, aptLabel, ContractorAssignment, CustomButton, Inspection, InspectionFile } from '../../types';
 import { createPortal } from 'react-dom';
@@ -504,7 +505,8 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
   const [officeNoteAtts, setOfficeNoteAtts] = useState<Record<string, OfficeThreadAtt[]>>({});
   async function officeThreadAttach(a: ContractorAssignment, file: File, transcript?: boolean) {
     if (!apartment) return;
-    const mainFolderId = apartment.driveLink ? extractFolderId(apartment.driveLink) : null;
+    // the job's folder, else the general one (jobFolder.ts)
+    const mainFolderId = backendConfigured ? await jobFolderId(apartment).catch(() => null) : null;
     const isImg = file.type.startsWith('image/');
     let att: OfficeThreadAtt | null = null;
     if (backendConfigured && mainFolderId) {
@@ -1096,9 +1098,9 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
     // Drive gets the ORIGINAL file, EXIF and all (location, date taken,
     // camera); only the base64 fallback below is shrunk.
     const id = crypto.randomUUID();
-    if (backendConfigured && apartment?.driveLink) {
+    if (backendConfigured && apartment) {
       try {
-        const mainFolderId = extractFolderId(apartment.driveLink);
+        const mainFolderId = await jobFolderId(apartment);
         if (mainFolderId) {
           setDrawerEditProgress(1);
           const tasksFolderId = await findOrCreateFolderViaBackend(mainFolderId, 'Tasks');
@@ -1209,7 +1211,7 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
   async function saveInspection(files: File[], after: string | null) {
     if (!apartment || !currentUser || !files.length) return;
     setInspecting(true);
-    const mainFolderId = apartment.driveLink ? extractFolderId(apartment.driveLink) : null;
+    const mainFolderId = backendConfigured ? await jobFolderId(apartment).catch(() => null) : null;
     const saved: InspectionFile[] = [];
     try {
       let folderId: string | null = null;
@@ -1223,7 +1225,11 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
           const { fileId, webViewLink } = await uploadFileViaResumableSession(folderId, file);
           void shareFileToDrive(fileId);
           saved.push({ filename: file.name, mimeType: file.type || 'application/octet-stream', driveFileId: fileId, driveUrl: webViewLink });
-        } else if (file.type.startsWith('image/')) {
+        } else if (!file.type.startsWith('image/')) {
+          // no Drive anywhere: a film cannot ride inside the record — say so, never drop it silently
+          onToast(ui.isRtl ? `הסרטון לא נשמר: אין לעבודה תיקיית Drive, ואין תיקייה כללית בהגדרות → גיבויים`
+            : `The video was not saved: this job has no Drive folder and no general folder is set (Settings → Backups)`, 'error');
+        } else {
           // No Drive folder: the picture rides inside the apartment's record, so it is shrunk first (1280 px JPEG,
           // ~150 KB) — a full phone photo nearly fills a record's 1 MB and a second one would make the save fail.
           const dataUrl = await shrinkToDataUrl(file);
@@ -1260,7 +1266,7 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
 
   async function attachOfficeFile(file: File, transcript?: boolean) {
     if (!apartment || !currentUser) return;
-    const mainFolderId = apartment.driveLink ? extractFolderId(apartment.driveLink) : null;
+    const mainFolderId = backendConfigured ? await jobFolderId(apartment).catch(() => null) : null;
     let stored: { id: string; src: string } | null = null;
     if (backendConfigured && mainFolderId) {
       try {
