@@ -26,7 +26,11 @@ export function assertPractice(project) {
 
 const requested = process.env.PRACTICE_PROJECT ?? PRACTICE_PROJECT;
 assertPractice(requested);
-const BASE = `https://firestore.googleapis.com/v1/projects/${PRACTICE_PROJECT}/databases/(default)/documents`;
+// FIRESTORE_EMULATOR_HOST (host:port): the local emulator under the practice name, for tests.
+const EMU = process.env.FIRESTORE_EMULATOR_HOST;
+if (EMU && !/^(localhost|127\.0\.0\.1):\d+$/.test(EMU)) throw new Error("REFUSED: the emulator must be on this machine");
+const ORIGIN = EMU ? `http://${EMU}` : "https://firestore.googleapis.com";
+const BASE = `${ORIGIN}/v1/projects/${PRACTICE_PROJECT}/databases/(default)/documents`;
 if (!BASE.includes(`/projects/${PRACTICE_PROJECT}/`)) throw new Error('REFUSED: bad base address');
 
 async function tokenFromKeyFile(file) {
@@ -52,6 +56,7 @@ async function tokenFromKeyFile(file) {
 let authHeaders = null;
 async function headers() {
   if (authHeaders) return authHeaders;
+  if (EMU) { authHeaders = { Authorization: "Bearer owner" }; return authHeaders; }
   if (process.env.GOOGLE_ACCESS_TOKEN) {
     authHeaders = { Authorization: `Bearer ${process.env.GOOGLE_ACCESS_TOKEN}`, 'x-goog-user-project': PRACTICE_PROJECT };
   } else if (process.env.PRACTICE_SA_JSON_FILE) {
@@ -66,7 +71,7 @@ const withKey = (url) => (authHeaders && authHeaders.Authorization ? url : `${ur
 async function call(path, init = {}) {
   const h = await headers();
   const url = withKey(`${BASE}${path}`);
-  if (!url.startsWith(`https://firestore.googleapis.com/v1/projects/${PRACTICE_PROJECT}/`)) throw new Error('REFUSED: address outside the practice project');
+  if (!url.startsWith(`${ORIGIN}/v1/projects/${PRACTICE_PROJECT}/`)) throw new Error('REFUSED: address outside the practice project');
   for (let attempt = 0; ; attempt++) {
     const r = await fetch(url, { ...init, headers: { 'content-type': 'application/json', ...h, ...(init.headers ?? {}) } });
     if (r.ok) return r.json();

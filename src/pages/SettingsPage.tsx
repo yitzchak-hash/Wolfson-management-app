@@ -43,6 +43,8 @@ import { fetchContractorSheet } from '../data/sheetApi';
 import { LayoutStudio } from '../components/settings/LayoutStudio';
 import { ImportJobsCard } from '../components/settings/ImportJobsCard';
 import { AutoJobsCard } from '../components/settings/AutoJobsCard';
+import TestWorldCard from '../components/settings/TestWorldCard';
+import { PRACTICE } from '../data/practice';
 
 /** The shape the wall is set to, as a number. Defaults to 16:9. */
 function ratioOfShape(id?: string): number {
@@ -354,7 +356,13 @@ export function SettingsPage({ scope = 'project' }: { scope?: SettingsScope }) {
       ) },
     ] },
     { name: 'Data', categories: [
-      { id: 'backups', label: 'Backups', icon: HardDriveDownload, tile: 'gray', render: () => <BackupsPage onToast={showToast} /> },
+      { id: 'backups', label: 'Backups', icon: HardDriveDownload, tile: 'gray', render: () => (
+        <>
+          <BackupsPage onToast={showToast} />
+          {/* Practice build only: the shared test world (renders nothing elsewhere). */}
+          {PRACTICE && <div className="mt-5"><TestWorldCard /></div>}
+        </>
+      ) },
       { id: 'computer', label: 'This computer', icon: Monitor, tile: 'stone', render: () => (
         <>
           <ThisComputerCard onToast={showToast} />
