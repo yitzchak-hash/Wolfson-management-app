@@ -1,4 +1,5 @@
 import React, { useState, useCallback, useMemo, useEffect } from 'react';
+import { StandardPlanButton } from '../components/building/StandardPlan';
 import { WOLFSON_PLAN, type BuildingPlan } from '../components/building/buildingPlan';
 import { NETIV_PLAN } from '../components/building/netivPlan';
 import { haptic } from '../data/haptics';
@@ -710,7 +711,8 @@ export function ProjectDiagramPage() {
         <div className="short-scroll-body flex-1 overflow-auto scrollbar-thin bg-gray-100 print:overflow-visible print:bg-white">
           {showTrio ? (
             <div className="h-full p-4" style={{ minHeight: 380 }} data-building-view-wrap>
-              <BuildingTrio buildings={trioBuildings} stages={stages} onOpen={handleAptClick} plan={bvPlan} interiorSrc={isWolfsonPlan ? WOLFSON_INTERIOR : undefined} lower={isWolfsonPlan ? lowerLevels : []} customButtons={boardSet?.customButtons}
+              <BuildingTrio buildings={trioBuildings} stages={stages} onOpen={handleAptClick} plan={bvPlan}
+                planSlot={b => <StandardPlanButton buildingId={b.id} buildingTitle={b.title} />} interiorSrc={isWolfsonPlan ? WOLFSON_INTERIOR : undefined} lower={isWolfsonPlan ? lowerLevels : []} customButtons={boardSet?.customButtons}
                 words={{ floor: s.floorWindowTitle, notSold: s.notSoldWord, notStarted: s.notStartedOption.replace(/[—–]/g, '').trim(), upgraded: s.upgradedWord, open: s.bvOpen, floorsHint: s.bvHint, joinedWith: s.bvJoined, yes: s.customYes, no: s.customNo, unknown: s.customUnknown }} />
             </div>
           ) : showBuilding ? (
@@ -722,6 +724,7 @@ export function ProjectDiagramPage() {
                 floorLabels={buildingFloorLabels}
                 interiorSrc={isWolfsonPlan ? WOLFSON_INTERIOR : undefined}
                 plan={bvPlan}
+                planSlot={<StandardPlanButton bubble buildingId={bvBuilding} buildingTitle={buildingShort(bvBuilding)} />}
                 lower={isWolfsonPlan ? lowerLevels : undefined} customButtons={boardSet?.customButtons}
                 tower={Math.max(0, buildings.filter(b => !!planFor(currentProjectId, b.id)).findIndex(b => b.id === bvBuilding))}
                 words={{ floor: s.floorWindowTitle, notSold: s.notSoldWord, notStarted: s.notStartedOption.replace(/[—–]/g, '').trim(), upgraded: s.upgradedWord, open: s.bvOpen, floorsHint: s.bvHint, joinedWith: s.bvJoined, yes: s.customYes, no: s.customNo, unknown: s.customUnknown }}

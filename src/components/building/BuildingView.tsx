@@ -67,6 +67,8 @@ export interface BuildingViewProps {
   compact?: boolean;
   /** The building's name, drawn over it when compact. */
   title?: string;
+  /** The standard-plan button (owner, 2026-11-10): under the title in the trio, a bubble on top of one building. */
+  planSlot?: React.ReactNode;
   /** The shared levels under the towers, bottom first; this tower's own slice is lit, the rest grey. */
   lower?: LowerLevel[];
   /**
@@ -128,7 +130,7 @@ function slabPath(plan: BuildingPlan, spec: FloorSpec): string {
   return spec.slab.flatMap(k => [plan.shapes[k], ...(plan.terraces[k] ?? [])]).filter(Boolean).map(pathOf).join(' ') + ' ' + pathOf(spec.core);
 }
 
-export default function BuildingView({ apartments, stages, onOpen, words, initialFloor, floorLabels, interiorSrc, bus: sharedBus, compact, title, lower, tower = 0, hideLower, customButtons = [], plan = WOLFSON_PLAN }: BuildingViewProps) {
+export default function BuildingView({ apartments, stages, onOpen, words, initialFloor, floorLabels, interiorSrc, bus: sharedBus, compact, title, lower, tower = 0, hideLower, customButtons = [], plan = WOLFSON_PLAN, planSlot }: BuildingViewProps) {
   /** A flat's answers as short words: "Wall ✓", "Wall ✗", "Wall ?". */
   const answersOf = (a: Apartment) => customButtons.flatMap(cb => {
     const v = a.customAnswers?.[cb.id];
@@ -353,6 +355,7 @@ export default function BuildingView({ apartments, stages, onOpen, words, initia
   return (
     <div className={`bv-root${compact ? ' bv-compact' : ''}`} data-building-view={title ?? ''}>
       {compact && title && <div className="bv-title">{title}</div>}
+      {planSlot && <div className={compact ? "bv-plan-slot" : "bv-plan-slot bv-plan-slot-top"}>{planSlot}</div>}
       <div
         ref={stageRef}
         className="bv-stage"

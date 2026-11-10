@@ -1,0 +1,213 @@
+import React, { Suspense, useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
+import { FileText, Loader2, X, Link2, FolderOpen, Trash2 } from 'lucide-react';
+import { useStore } from '../../data/store';
+import { extractFileId, extractFolderId, getFolderNameViaBackend } from '../../data/driveApi';
+import type { StandardPlan } from '../../types';
+import { sharePlanFile } from '../../data/sharePlan';
+import { PlanPicker } from '../plans/PlanPicker';
+
+const PlanAnnotator = React.lazy(() =>
+  import('../plans/PlanAnnotator').then(m => ({ default: m.PlanAnnotator })));
+
+/**
+ * THE STANDARD PLAN BUTTON (owner, recording 2026-11-10 144934): under each building's number in the Building view —
+ * "one button, two button, three button" — and as a small bubble on top of a single building. A press opens the
+ * building's plan full screen in the same viewer the File Tray uses (zoom, pages, Share: "very well coded"); a
+ * RIGHT-click (a long press on a phone) opens the box that sets it — paste a Drive link, or browse the Drive with the
+ * plan picker and choose the plan with the star. Kept per workspace and building (BoardSetting.standardPlans), so
+ * Wolfson, Netiv and every workspace after them each have their own.
+ */
+export function StandardPlanButton({ buildingId, buildingTitle, bubble }: {
+  buildingId: string;
+  /** "1", "B2" — said in the viewer's and the box's title. */
+  buildingTitle: string;
+  /** The single-building view's small round bubble, rather than the trio's label-width button. */
+  bubble?: boolean;
+}) {
+  const rtl = useStore(st => !!st.mainUiStrings.isRtl);
+  const plan = useStore(st => st.boardSettings[st.currentProjectId]?.standardPlans?.[buildingId]);
+  const [view, setView] = useState(false);
+  const [setup, setSetup] = useState(false);
+  const press = useRef<{ t: number; timer: number } | null>(null);
+  const word = rtl ? 'תוכנית טיפוסית' : 'Standard plan';
+
+  const openSetup = () => { setView(false); setSetup(true); };
+  return (
+    <>
+      <button type="button" data-standard-plan={buildingId} data-standard-plan-set={plan ? '1' : '0'}
+        title={plan ? `${word} — ${plan.name}` : word}
+        onClick={e => { e.stopPropagation(); if (press.current?.t === -1) { press.current = null; return; } if (plan) setView(true); else openSetup(); }}
+        onContextMenu={e => { e.preventDefault(); e.stopPropagation(); openSetup(); }}
+        // A finger has no right-click: a long press opens the box.
+        onPointerDown={e => {
+          if (e.pointerType === 'mouse') return;
+          const timer = window.setTimeout(() => { press.current = { t: -1, timer: 0 }; openSetup(); }, 550);
+          press.current = { t: Date.now(), timer };
+        }}
+        onPointerUp={() => { if (press.current && press.current.t !== -1) { window.clearTimeout(press.current.timer); press.current = null; } }}
+        onPointerLeave={() => { if (press.current && press.current.t !== -1) { window.clearTimeout(press.current.timer); press.current = null; } }}
+        className={bubble ? 'bv-plan-btn bv-plan-bubble' : 'bv-plan-btn'}>
+        <FileText size={bubble ? 13 : 12} />
+        <span>{word}</span>
+        {!plan && <span className="bv-plan-dot" aria-hidden />}
+      </button>
+      {view && plan && <PlanViewer plan={plan} title={`${word} · ${buildingTitle}`} onClose={() => setView(false)} onChange={openSetup} rtl={rtl} />}
+      {setup && <PlanSetup buildingId={buildingId} buildingTitle={buildingTitle} current={plan} onClose={() => setSetup(false)} rtl={rtl}
+        onOpen={() => { setSetup(false); setView(true); }} />}
+    </>
+  );
+}
+
+/** Full screen, the File Tray's read-only studio: zoom, pages, Share. */
+function PlanViewer({ plan, title, onClose, onChange, rtl }: { plan: StandardPlan; title: string; onClose: () => void; onChange: () => void; rtl: boolean }) {
+  const me = useStore(st => st.currentUser?.name ?? '');
+  // Share, as in the job window's plan ("with the share and everything").
+  const [sharing, setSharing] = useState(false);
+  const [said, setSaid] = useState('');
+  const share = async () => {
+    if (sharing) return;
+    setSharing(true);
+    const out = await sharePlanFile(plan.fileId, plan.name, title);
+    setSharing(false);
+    setSaid(out === 'failed' ? (rtl ? 'השיתוף נכשל' : 'Sharing failed') : out === 'downloaded' ? (rtl ? 'הקובץ הורד' : 'Downloaded') : '');
+  };
+  useEffect(() => {
+    const key = (e: KeyboardEvent) => { if (e.key === 'Escape') { e.stopPropagation(); onClose(); } };
+    window.addEventListener('keydown', key, { capture: true });
+    return () => window.removeEventListener('keydown', key, { capture: true });
+  }, [onClose]);
+  const seal = {
+    onPointerDown: (e: React.PointerEvent) => e.stopPropagation(),
+    onWheel: (e: React.WheelEvent) => e.stopPropagation(),
+    onContextMenu: (e: React.MouseEvent) => e.stopPropagation(),
+  };
+  return createPortal(
+    <div className="fixed inset-0 z-[240] flex flex-col" data-standard-plan-viewer {...seal} style={{ backgroundColor: 'rgba(10,16,28,.88)' }}>
+      <div className="flex items-center gap-2 px-3 md:px-5 py-2.5 flex-shrink-0" style={{ backgroundColor: '#1e3a5f' }}>
+        <span className="text-white font-bold text-[14px] truncate">{title}</span>
+        <span className="text-white/60 text-[12.5px] truncate flex-1" dir="auto">{plan.name}</span>
+        {said && <span className="text-white/80 text-[12px]" data-standard-plan-said>{said}</span>}
+        <button type="button" data-standard-plan-change onClick={onChange}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/10 text-white text-[12px] font-bold hover:bg-white/20">
+          {rtl ? 'החלפה' : 'Change'}
+        </button>
+        <button type="button" onClick={onClose} aria-label={rtl ? 'סגירה' : 'Close'} data-standard-plan-close className="p-2 rounded-xl text-white/80 hover:bg-white/10"><X size={17} /></button>
+      </div>
+      <div className="flex-1 min-h-0 relative">
+        <Suspense fallback={<div className="absolute inset-0 flex items-center justify-center gap-2 text-white/80 text-sm"><Loader2 size={16} className="animate-spin" /> {rtl ? 'פותח…' : 'Opening…'}</div>}>
+          <PlanAnnotator planFileId={plan.fileId} planName={plan.name} apartmentId={`SP-${plan.fileId}`} apartmentLabel={title}
+            authorName={me} embedded readOnly onClose={onClose} onShare={() => void share()} shareBusy={sharing} />
+        </Suspense>
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
+/** The box that sets it: paste a Drive link (a file is the plan; a folder opens the picker), or browse, or remove. */
+function PlanSetup({ buildingId, buildingTitle, current, onClose, onOpen, rtl }: {
+  buildingId: string; buildingTitle: string; current?: StandardPlan; onClose: () => void; onOpen: () => void; rtl: boolean;
+}) {
+  const setting = useStore(st => st.boardSettings[st.currentProjectId]);
+  const setBoardSetting = useStore(st => st.setBoardSetting);
+  const me = useStore(st => st.currentUser?.name ?? '');
+  const [link, setLink] = useState('');
+  const [err, setErr] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [browse, setBrowse] = useState<string | null>(null);   // a folder link to browse
+  const W = (en: string, he: string) => (rtl ? he : en);
+  useEffect(() => {
+    if (browse) return undefined;
+    const key = (e: KeyboardEvent) => { if (e.key === 'Escape') { e.stopPropagation(); onClose(); } };
+    window.addEventListener('keydown', key, { capture: true });
+    return () => window.removeEventListener('keydown', key, { capture: true });
+  }, [onClose, browse]);
+
+  const save = (p: StandardPlan | null, folderLink?: string) => {
+    const fresh = useStore.getState().boardSettings[useStore.getState().currentProjectId] ?? {};
+    const plans = { ...(fresh.standardPlans ?? {}) };
+    if (p) plans[buildingId] = p; else delete plans[buildingId];
+    setBoardSetting('standardPlans', plans);
+    if (folderLink) setBoardSetting('standardPlansFolder', folderLink);
+  };
+
+  const useLink = async () => {
+    setErr('');
+    const raw = link.trim();
+    if (!raw) return;
+    // A folder link (…/folders/…) opens the picker inside it; anything else is read as a file.
+    const folder = /\/folders\//.test(raw) ? extractFolderId(raw) : null;
+    if (folder) { setBrowse(raw); return; }
+    const fileId = extractFileId(raw) ?? (/^[\w-]{20,}$/.test(raw) ? raw : null);
+    if (!fileId) { setErr(W('That is not a Google Drive link', 'זה לא קישור של Google Drive')); return; }
+    setBusy(true);
+    const name = (await getFolderNameViaBackend(fileId)) ?? W('Standard plan', 'תוכנית טיפוסית');
+    setBusy(false);
+    save({ fileId, name, by: me, at: new Date().toISOString() });
+    onOpen();
+  };
+
+  const startFolder = browse ?? setting?.standardPlansFolder ?? null;
+  return createPortal(
+    <div className="fixed inset-0 z-[230] bg-black/40 flex items-center justify-center p-4" data-standard-plan-setup
+      onClick={onClose} onContextMenu={e => e.preventDefault()}>
+      {!browse && (
+        <div className="w-full max-w-[440px] rounded-2xl bg-white shadow-2xl overflow-hidden" onClick={e => e.stopPropagation()} dir={rtl ? 'rtl' : 'ltr'}>
+          <div className="flex items-center gap-2 px-4 py-3 text-white" style={{ backgroundColor: '#1e3a5f' }}>
+            <b className="flex-1 truncate">{W(`Standard plan · Building ${buildingTitle}`, `תוכנית טיפוסית · בניין ${buildingTitle}`)}</b>
+            <button type="button" onClick={onClose} aria-label={W('Close', 'סגירה')} className="p-1 rounded-lg hover:bg-white/10"><X size={16} /></button>
+          </div>
+          <div className="p-4 space-y-3">
+            {current && (
+              <div className="flex items-center gap-2 rounded-xl border border-gray-200 px-3 py-2" data-standard-plan-current>
+                <FileText size={15} className="text-[#1e3a5f] flex-shrink-0" />
+                <span className="flex-1 min-w-0 truncate text-[13px] font-semibold" dir="auto">{current.name}</span>
+                <button type="button" onClick={onOpen} className="text-[12px] font-bold text-[#1e3a5f] underline">{W('Open', 'פתיחה')}</button>
+                <button type="button" data-standard-plan-remove onClick={() => { save(null); onClose(); }} title={W('Remove', 'הסרה')}
+                  className="p-1 text-red-500 hover:bg-red-50 rounded"><Trash2 size={14} /></button>
+              </div>
+            )}
+            <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wide">{W('Paste a Drive link', 'הדביקו קישור Drive')}</label>
+            <div className="flex gap-2">
+              <div className="flex-1 flex items-center gap-2 border border-gray-200 rounded-xl px-3 focus-within:ring-2 focus-within:ring-[#1e3a5f]/30">
+                <Link2 size={14} className="text-gray-400 flex-shrink-0" />
+                <input data-standard-plan-link autoFocus value={link} onChange={e => setLink(e.target.value)} dir="ltr"
+                  onKeyDown={e => { if (e.key === 'Enter') void useLink(); }}
+                  placeholder="https://drive.google.com/…" className="flex-1 min-w-0 py-2.5 text-[13px] outline-none bg-transparent" />
+              </div>
+              <button type="button" data-standard-plan-use disabled={!link.trim() || busy} onClick={() => void useLink()}
+                className="px-4 rounded-xl text-white text-[13px] font-bold disabled:opacity-40" style={{ backgroundColor: '#1e3a5f' }}>
+                {busy ? <Loader2 size={14} className="animate-spin" /> : W('Use', 'אישור')}
+              </button>
+            </div>
+            {err && <div className="text-[12.5px] text-red-600" data-standard-plan-err>{err}</div>}
+            {startFolder && (
+              <button type="button" data-standard-plan-browse onClick={() => setBrowse(startFolder)}
+                className="w-full flex items-center justify-center gap-2 rounded-xl border border-gray-200 py-2.5 text-[13px] font-bold text-[#1e3a5f] hover:bg-gray-50">
+                <FolderOpen size={15} /> {W('Choose from Drive', 'בחירה מ-Drive')}
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+      {browse && (
+        <div onClick={e => e.stopPropagation()}>
+          <PlanPicker
+            driveLink={browse}
+            plansFolderId={extractFolderId(browse)}
+            plansFolderName={W('Drive folder', 'תיקיית Drive')}
+            plans={[]}
+            current={current?.fileId}
+            starredId={current?.fileId ?? null}
+            onClose={() => setBrowse(null)}
+            // "Choose the plan with the star" (S9) — and a plain press chooses it too.
+            onStar={p => { save({ fileId: p.id, name: p.name, by: me, at: new Date().toISOString() }, browse); onOpen(); }}
+            onPick={p => { save({ fileId: p.id, name: p.name, by: me, at: new Date().toISOString() }, browse); onOpen(); }}
+          />
+        </div>
+      )}
+    </div>,
+    document.body,
+  );
+}

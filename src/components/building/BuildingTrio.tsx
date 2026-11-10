@@ -5,7 +5,7 @@
  * BuildingView; they share one FloorBus, so the wheel over any of them, a
  * press on the rail or a key moves all three to the same floor.
  */
-import { useMemo, useEffect, useRef, useState } from 'react';
+import React, { useMemo, useEffect, useRef, useState } from 'react';
 import type { Apartment, Stage } from '../../types';
 import BuildingView, { makeFloorBus, shortFloor, slotName, slotsOn, SlotChip, type BuildingViewWords, type FloorBus } from './BuildingView';
 import { STRIP, CORES_X, zoneFor, type LowerLevel } from './wolfsonPlan';
@@ -13,11 +13,13 @@ import type { BuildingPlan } from './buildingPlan';
 
 export interface TrioBuilding { id: string; title: string; apartments: Apartment[]; floorLabels?: Record<number, string> }
 
-export default function BuildingTrio({ buildings, stages, onOpen, words, interiorSrc, lower = [], customButtons, plan }: {
+export default function BuildingTrio({ buildings, stages, onOpen, words, interiorSrc, lower = [], customButtons, plan, planSlot }: {
   buildings: TrioBuilding[]; stages: Stage[]; onOpen: (apt: Apartment) => void;
   words?: Partial<BuildingViewWords>; interiorSrc?: string; lower?: LowerLevel[]; customButtons?: import('../../types').CustomButton[];
   /** The project's plan (Wolfson's when absent). */
   plan?: BuildingPlan;
+  /** Each building's standard-plan button, under its number. */
+  planSlot?: (b: TrioBuilding) => React.ReactNode;
 }) {
   // The floors every building has, bottom first — the rail and the bus count them.
   const floors = useMemo(() => {
@@ -59,7 +61,7 @@ export default function BuildingTrio({ buildings, stages, onOpen, words, interio
         {buildings.map((b, i) => (
           <BuildingView key={b.id} compact title={b.title} bus={bus} apartments={b.apartments} stages={stages}
             onOpen={onOpen} words={words} floorLabels={b.floorLabels} interiorSrc={interiorSrc}
-            lower={lower} tower={i} hideLower customButtons={customButtons} plan={plan} />
+            lower={lower} tower={i} hideLower customButtons={customButtons} plan={plan} planSlot={planSlot?.(b)} />
         ))}
       </div>
       <nav className="bv-rail" aria-label={words?.floor ?? 'Floor'}>

@@ -31,6 +31,17 @@ export interface WhatsNewEntry {
 
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    date: '2027-03-08',
+    title: 'A standard plan for every building',
+    items: [
+      {
+        title: 'Standard plan',
+        body: 'In the Building view, each building has a Standard plan button under its number (a small bubble on top when one building is open). Press it to open the building\'s plan full screen, with zoom and Share. Right-click it (a long press on a phone) to set the plan: paste a Drive link to the file, or a link to a folder and choose the plan with the star. Each building, in every workspace, keeps its own.',
+        demo: 'tap',
+      },
+    ],
+  },
+  {
     date: '2027-03-07',
     title: 'Workers open and close their work, and inspections with approval',
     items: [

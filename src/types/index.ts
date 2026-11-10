@@ -103,6 +103,14 @@ export type CustomAnswer = 'yes' | 'no' | 'unknown';
 export interface BoardSetting {
   /** What is on the toolbar and in what order. */
   toolbar?: ToolbarSetup;
+  /**
+   * THE STANDARD PLAN of each building (owner, recording 2026-11-10: "a standard plan button … for each one
+   * separately … for all projects going forward"): the building's typical floor plan, opened full screen from the
+   * button under its number in the Building view. By building id.
+   */
+  standardPlans?: Record<string, StandardPlan>;
+  /** The Drive folder last browsed for a standard plan, so the next building opens there. */
+  standardPlansFolder?: string;
   /** The Drive intake sweep — Job Board only. */
   autoJobs?: AutoJobsSetting;
   /** The workspace's list of apartment types — see Apartment.tipus. */
@@ -325,6 +333,9 @@ export interface BoardSetting {
    */
   buildings?: { id: string; name: string; displayOrder: number }[];
 }
+
+/** A building's standard plan: a Drive file (PDF or picture), who set it and when. */
+export interface StandardPlan { fileId: string; name: string; mimeType?: string; by?: string; at?: string }
 
 export type BoardSettingKey = keyof BoardSetting;
 
