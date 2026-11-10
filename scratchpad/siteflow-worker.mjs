@@ -66,9 +66,7 @@ check(await start.count() === 1 && /I'm working here/.test(await start.innerText
 check(await page.locator('[data-site-cancel]').count() === 1, '1 · and Cancel');
 const bg = await start.evaluate(e => getComputedStyle(e).backgroundColor);
 check(bg === 'rgb(5, 150, 105)', '1 · the button is green', bg);
-check(await page.locator('[data-work-here]').count() === 1, '1 · the old "I started working here" is still there below it');
-const sy = await start.boundingBox(), oy = await page.locator('[data-work-here]').boundingBox();
-check(sy && oy && sy.y < oy.y, '1 · the new button stands above the existing sheet');
+check(await page.locator('[data-work-here]').count() === 0, '1 · the old "I started working here" is gone (owner, 2026-11-10: "remove the old one")');
 await shot('1-sheet');
 await start.click(); await page.waitForTimeout(600);
 let a23 = await aptOf('A1-23');

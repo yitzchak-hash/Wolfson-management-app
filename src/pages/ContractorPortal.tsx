@@ -5260,17 +5260,8 @@ plansPdfFileId && (
                         ))}
                       </div>
                     )}
-                    {perms.workHere && (
-                    <button data-work-here
-                      onClick={() => { if (generalHunt) { const gid = generalHunt; setGeneralHunt(null); goPick(gid); } else if (generalJobs.length) setWorkHere({ ...workHere, step: 'part' }); else goPick(null); }}
-                      className="w-full py-4 rounded-xl text-base font-bold text-white flex items-center justify-center gap-2 active:scale-[0.98]"
-                      style={{ background: 'linear-gradient(135deg, #1e3a5f, #2c4f78)' }}>
-                      <Hammer size={19} />
-                      {assignments.some(t => t.apartmentId === apt.id && t.contractorId === contractorId && t.stageReport)
-                        ? w('Continue working here', 'ממשיך לעבוד כאן', 'Продолжаю работать здесь')
-                        : w('I started working here', 'התחלתי לעבוד כאן', 'Я начал работать здесь')}
-                    </button>
-                    )}
+                    {/* The old "I started working here" is gone (owner, 2026-11-10: "remove the old one"): the green "I'm
+                        working here" above (SiteVisit) is the one way in; his tasks still open from the list above. */}
                   </>
                 )}
                 {workHere.step === 'part' && (
