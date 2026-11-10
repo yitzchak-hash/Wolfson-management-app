@@ -13,8 +13,12 @@ import { stageSetOf, stageStateOf, isStartStage, type SetContext } from './stage
  * board all ask here.
  */
 
-export function howOf(st: Pick<Stage, 'how'>): StageHow {
-  return st.how ?? 'site';
+export function howOf(st: Pick<Stage, 'how'> & Partial<Pick<Stage, 'name' | 'nameHe'>>): StageHow {
+  if (st.how) return st.how;
+  // Wolfson's list already holds "Inspection 1" / "Inspection 2" (ביקורת) as plain stages: until Settings says
+  // otherwise, a stage NAMED an inspection is one, so nothing in the live records has to be rewritten.
+  if (/^\s*inspection\b/i.test(st.name ?? '') || /^\s*ביקורת/.test(st.nameHe ?? '')) return 'inspection';
+  return 'site';
 }
 
 /** An inspection with nobody ticked is Tzvi's — the button was his alone before it became a setting. */

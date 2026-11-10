@@ -18,6 +18,7 @@ import { TV_DASH_BOARD } from '../types';
 import { portalLink, bareDomain, looksLikePreviewHost } from '../data/portalLink';
 import type { BoardAccess, PortalLang, CustomButton } from '../types';
 import { INCLUDE_LANGS, includeRow, langOfWord } from '../data/stageIncludes';
+import { isTzviName, howOf } from '../data/stageHow';
 import { requestTranslation, translationAvailable } from '../data/translate';
 import { personColor, projectColor, BoardView, Stage, User, Contractor, ContractorCategory, ContractorUiStrings, DEFAULT_CONTRACTOR_UI_STRINGS, HEBREW_CONTRACTOR_UI_STRINGS, MainUiStrings, DEFAULT_MAIN_UI_STRINGS, HEBREW_MAIN_UI_STRINGS, BackupFrequency, DriveExportFrequency, getStageName, Apartment, isCountableApartment, BoardSetting, CanvasElement } from '../types';
 import { loadTvScreens, forgetTvScreen, screenIsLive, shapeNameOf, TvScreenPresence } from '../data/tvScreens';
@@ -766,6 +767,123 @@ function AiFillBox({ lang, empty, source, onFill, children }: {
     </div>
   );
 }
+/**
+ * HOW IT'S DONE (owner, 2026-11-10, the Site Flow Preview — "build it"). Every stage card carries the same three
+ * settings whatever its kind: who can do it (the worker trades, then the office users), the proof to finish, and the
+ * word it shows when done. Site work is the worker's; an inspection a user's (Tzvi to start with); an office task is
+ * everyone in the office's. No explaining lines on screen (owner: "I never put those").
+ */
+function StageHow({ stage, onChange }: { stage: Stage; onChange: (patch: Partial<Stage>) => void }) {
+  const rtl = useStore(st => st.mainUiStrings.isRtl);
+  const allUsers = useStore(st => st.users);
+  const users = useMemo(() => allUsers.filter(u => u.active), [allUsers]);
+  const how = howOf(stage);
+  const W = (en: string, he: string) => (rtl ? he : en);
+  const trades: Array<[ContractorCategory, string]> = [
+    ['ac', W('AC workers', 'עובדי מיזוג')], ['drywall', W('Drywall workers', 'עובדי גבס')], ['general', W('General workers', 'עובדים כלליים')],
+  ];
+  const onTrades = stage.canTrades ?? (stage.trade ? [stage.trade] : []);
+  const ticked = stage.canUsers ?? (how === 'inspection' ? users.filter(u => isTzviName(u.name)).map(u => u.id) : []);
+  const toggleTrade = (t: ContractorCategory) => {
+    const next = onTrades.includes(t) ? onTrades.filter(x => x !== t) : [...onTrades, t];
+    // The notebook still reads the one `trade`: it follows a single tick.
+    onChange({ canTrades: next.length ? next : undefined, trade: next.length === 1 ? next[0] : stage.trade && next.includes(stage.trade) ? stage.trade : undefined });
+  };
+  const toggleUser = (id: string) => {
+    const next = ticked.includes(id) ? ticked.filter(x => x !== id) : [...ticked, id];
+    onChange({ canUsers: next });
+  };
+  const chip = (on: boolean) => `px-2 py-1 rounded-md border text-[11.5px] font-semibold whitespace-nowrap ${on ? 'bg-[#1e3a5f] border-[#1e3a5f] text-white' : 'bg-white border-gray-200 text-gray-600'}`;
+  const kinds: Array<[NonNullable<Stage['how']>, string, string]> = [
+    ['site', W('Site work', 'עבודה באתר'), '#1e3a5f'], ['inspection', W('Inspection', 'ביקורת'), '#7c3aed'], ['office', W('Office task', 'משימת משרד'), '#b45309'],
+  ];
+  const pics = stage.proofPictures ?? 0;
+  return (
+    <div data-stage-how={stage.id} data-how={how} className="px-4 pb-3 pt-2.5 border-t border-dashed border-gray-200 space-y-2.5">
+      <div className="flex items-center gap-3 flex-wrap">
+        <span className="text-[10.5px] font-semibold text-gray-500 uppercase tracking-wide">{W("How it's done", 'איך זה נעשה')}</span>
+        <div className="inline-flex rounded-lg border border-gray-200 overflow-hidden bg-white" role="radiogroup">
+          {kinds.map(([v, label, c]) => (
+            <button key={v} type="button" role="radio" aria-checked={how === v} data-how-pick={v}
+              onClick={() => onChange({ how: v })}
+              className="px-3 py-1.5 text-[12.5px] font-bold border-e border-gray-200 last:border-e-0"
+              style={how === v ? { backgroundColor: c, color: '#fff' } : { color: '#475569' }}>
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-2.5">
+        <div className="rounded-lg bg-gray-50 px-2.5 py-2 space-y-1.5" data-stage-who={stage.id}>
+          <div className="text-[10.5px] font-semibold text-gray-500 uppercase tracking-wide">{W('Who can do it', 'מי יכול לבצע')}</div>
+          {how === 'office' ? (
+            <div className="text-[12.5px] font-semibold text-gray-700" data-who-office>{W('Everyone in the office', 'כל המשרד')}</div>
+          ) : (
+            <div className="flex flex-wrap gap-1 items-center">
+              {how === 'site' && trades.map(([t, label]) => (
+                <button key={t} type="button" data-who-trade={t} aria-pressed={onTrades.includes(t)} onClick={() => toggleTrade(t)} className={chip(onTrades.includes(t))}>{label}</button>
+              ))}
+              {how === 'site' && users.length > 0 && <span className="w-px self-stretch bg-gray-300 mx-0.5" />}
+              {users.map(u => (
+                <button key={u.id} type="button" data-who-user={u.id} aria-pressed={ticked.includes(u.id)} onClick={() => toggleUser(u.id)} className={chip(ticked.includes(u.id))}>{u.name}</button>
+              ))}
+            </div>
+          )}
+        </div>
+        <div className="rounded-lg bg-gray-50 px-2.5 py-2 space-y-1.5" data-stage-proof={stage.id}>
+          <div className="text-[10.5px] font-semibold text-gray-500 uppercase tracking-wide">{W('Proof to finish', 'הוכחה לסיום')}</div>
+          <label className="flex items-center gap-2 text-[12.5px] font-medium text-gray-700">
+            <input type="checkbox" data-proof-pictures checked={pics > 0} onChange={e => onChange({ proofPictures: e.target.checked ? 1 : undefined })} />
+            {W('Pictures', 'תמונות')}
+            {pics > 0 && (<>
+              <span className="text-gray-400">· {W('at least', 'לפחות')}</span>
+              <input type="number" min={1} max={20} value={pics} data-proof-pictures-n
+                onChange={e => onChange({ proofPictures: Math.max(1, Math.min(20, Number(e.target.value) || 1)) })}
+                className="w-12 border border-gray-200 rounded px-1 py-0.5 text-center" />
+            </>)}
+          </label>
+          <label className="flex items-center gap-2 text-[12.5px] font-medium text-gray-700">
+            <input type="checkbox" data-proof-video checked={stage.proofVideo ?? how === 'inspection'} onChange={e => onChange({ proofVideo: e.target.checked })} />
+            {W('A video', 'סרטון')}
+          </label>
+          {how !== 'inspection' && (
+            <label className="flex items-center gap-2 text-[12.5px] font-medium text-gray-700">
+              <input type="checkbox" data-proof-file checked={!!stage.proofFile} onChange={e => onChange({ proofFile: e.target.checked || undefined })} />
+              {W('A file', 'קובץ')}
+            </label>
+          )}
+          {how === 'inspection' && (
+            <label className="flex items-center gap-2 text-[12.5px] font-medium text-gray-700">
+              <input type="checkbox" data-proof-approve checked={stage.proofApprove !== false} onChange={e => onChange({ proofApprove: e.target.checked ? undefined : false })} />
+              {W('"Do you approve this apartment?"', '"האם אתה מאשר את הדירה?"')}
+            </label>
+          )}
+        </div>
+        <div className="rounded-lg bg-gray-50 px-2.5 py-2 space-y-1.5" data-stage-doneword={stage.id}>
+          <div className="text-[10.5px] font-semibold text-gray-500 uppercase tracking-wide">{W("When it's done, it says", 'כשזה נגמר, כתוב')}</div>
+          <DoneWordBox value={stage.doneWord ?? ''} placeholder={how === 'inspection' ? 'Approved' : 'Done'} dir="ltr"
+            onCommit={v => onChange({ doneWord: v || undefined })} hook="en" />
+          <DoneWordBox value={stage.doneWordHe ?? ''} placeholder={how === 'inspection' ? 'אושר' : 'בוצע'} dir="rtl"
+            onCommit={v => onChange({ doneWordHe: v || undefined })} hook="he" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** A done-word box that saves when the hand leaves it (module level: a box declared in a render loses its caret). */
+function DoneWordBox({ value, placeholder, dir, onCommit, hook }: { value: string; placeholder: string; dir: 'ltr' | 'rtl'; onCommit: (v: string) => void; hook: string }) {
+  const [v, setV] = useState(value);
+  useEffect(() => { setV(value); }, [value]);
+  return (
+    <input data-doneword={hook} value={v} placeholder={placeholder} dir={dir}
+      onChange={e => setV(e.target.value)}
+      onBlur={() => { if (v.trim() !== value) onCommit(v.trim()); }}
+      onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
+      className="w-full border border-gray-200 rounded-md px-2 py-1 text-[12.5px] bg-white focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30" />
+  );
+}
+
 function StageIncludes({ stage, onChange }: { stage: Stage; onChange: (patch: Partial<Stage>) => void }) {
   const s = useStore(state => state.mainUiStrings);
   const blank = { en: '', he: '', ru: '' } as Record<PortalLang, string>;
@@ -1112,30 +1230,7 @@ function StageSettings({ stages, updateStage, addStage, deleteStage, onToast, cu
                           : { backgroundColor: '#eff6ff', borderColor: '#bfdbfe', color: '#1d4ed8' }}>
                         {kind === 'marker' ? s.setKindMarker : s.setKindWork}
                       </button>
-                      {/* WHO DOES IT — the trade that performs this stage.
-                          Pressing the lit choice again clears it (absent = not set). */}
-                      {kind === 'work' && (() => {
-                        const trade = edit.trade !== undefined ? edit.trade : stage.trade;
-                        const opts: Array<[NonNullable<Stage['trade']>, string]> = [
-                          ['ac', s.stageTradeAc], ['drywall', s.stageTradeDrywall], ['general', s.stageTradeGeneral],
-                        ];
-                        return (
-                          <div data-stage-trade={stage.id} data-trade={trade ?? ''}
-                            className="flex items-center gap-1 text-[10px] text-gray-500 whitespace-nowrap">
-                            <span>{s.stageTradeLabel}:</span>
-                            {opts.map(([v, label]) => (
-                              <button key={v} type="button" data-stage-trade-pick={v} data-on={trade === v ? '' : undefined}
-                                onClick={() => commit(stage, { trade: trade === v ? undefined : v })}
-                                className="px-1.5 py-0.5 rounded-md border font-semibold"
-                                style={trade === v
-                                  ? { backgroundColor: '#1e3a5f', borderColor: '#1e3a5f', color: '#fff' }
-                                  : { backgroundColor: '#fff', borderColor: '#e2e8f0', color: '#475569' }}>
-                                {label}
-                              </button>
-                            ))}
-                          </div>
-                        );
-                      })()}
+                      {/* WHO DOES IT moved into "Who can do it" under the card (StageHow, 2026-11-10). */}
                       {kind === 'work' && !stage.custom && (
                         <label className="flex items-center gap-1 text-[10px] text-gray-500 whitespace-nowrap cursor-pointer">
                           <input type="checkbox" data-stage-everywhere={stage.id}
@@ -1168,6 +1263,9 @@ function StageSettings({ stages, updateStage, addStage, deleteStage, onToast, cu
                     className="p-2 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg"><Trash2 size={16} /></button>
                 </Tooltip>
               </div>
+              {(stage.kind ?? 'work') === 'work' && (
+                <StageHow stage={stage} onChange={patch => commit(stage, patch)} />
+              )}
               {(stage.kind ?? 'work') === 'work' && (
                 <StageIncludes stage={stage} onChange={patch => commit(stage, patch)} />
               )}

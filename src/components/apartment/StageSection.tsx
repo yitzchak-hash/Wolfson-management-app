@@ -10,6 +10,7 @@ import {
 import { driveThumbUrl } from '../../data/driveApi';
 import type { CustomWhere } from './StagePicker';
 import { includeIn } from '../../data/stageIncludes';
+import { howOf, doneWordOf, waitingInspection, workingVisits, openQuestions, inspectionsOf } from '../../data/stageHow';
 
 /**
  * THE STAGES, AS A SECTION OF THE WINDOW (owner, recording 2026-10-28).
@@ -94,7 +95,7 @@ function InspectionRow({ ins, rtl, day, onOpenPhotos }: {
 }
 
 export function StageSection({
-  apartment, stages, tasks, ctx, workers, photos, onMarks, onMarker, onAddCustom, ui, onReportProblem, onOpenPhotos, onInspect, inspecting, onOneTapDone,
+  apartment, stages, tasks, ctx, workers, photos, onMarks, onMarker, onAddCustom, ui, onReportProblem, onOpenPhotos, onInspect, inspecting, onOneTapDone, canInspect, onAnswer, onCloseVisit,
 }: {
   apartment: Apartment;
   stages: Stage[];
@@ -108,14 +109,24 @@ export function StageSection({
   ui: MainUiStrings;
   onReportProblem?: () => void;
   onOpenPhotos: (items: StagePhotoItem[], index: number) => void;
-  /** Tzvi's Inspection press — absent for everybody else. `afterStageId` is the last finished stage now. */
-  onInspect?: (afterStageId: string | null) => void;
+  /** The Inspection press — absent for whoever may not inspect. `afterStageId` is the last finished stage now; `stageId` the inspection chosen. */
+  onInspect?: (afterStageId: string | null, stageId?: string) => void;
   inspecting?: boolean;
   /** Installation was just marked done with its one tap — the window closes (owner, 2026-11-09). */
   onOneTapDone?: (stageId: string) => void;
+  /** May the person here do this inspection stage? (Settings → Stages → Who can do it.) */
+  canInspect?: (st: Stage) => boolean;
+  /** The office answers a worker's "No, something else": this is the stage he did. */
+  onAnswer?: (visitId: string, stageId: string) => void;
+  /** The office closes a visit a worker forgot to finish. */
+  onCloseVisit?: (visitId: string) => void;
 }) {
   const [adding, setAdding] = useState(false);
   const [custom, setCustom] = useState<{ name: string; color: string; where: CustomWhere } | null>(null);
+  /** The inspection pop-up: open, and whether "Choose another" is unfolded. */
+  const [inspPop, setInspPop] = useState<null | { other: boolean; pick: string | null }>(null);
+  /** Which question's stage the office picked. */
+  const [answerPick, setAnswerPick] = useState<Record<string, string>>({});
   const rtl = !!ui.isRtl;
   const marks = apartment.stageMarks;
   const set = stageSetOf(apartment, stages, ctx).filter(st => !isStartStage(st));
@@ -143,6 +154,15 @@ export function StageSection({
   const after = (stageId: string) => inspections.filter(i => i.afterStageId === stageId);
   /** The last finished stage in the list — where a new inspection will stand. */
   const lastDone = [...rows].reverse().find(r => r.state === 'done')?.stage.id ?? null;
+  /** The inspections this person may do here, in order, and the next one (the pop-up starts it). */
+  const myInspections = inspectionsOf(apartment, stages, ctx).filter(r => !canInspect || canInspect(r.st));
+  const nextInsp = myInspections.find(r => !r.done)?.st ?? null;
+  const waitingFor = waitingInspection(apartment, stages, ctx);
+  const working = workingVisits(apartment);
+  const questions = openQuestions(apartment);
+  const W = (en: string, he: string) => (rtl ? he : en);
+  const hm = (iso?: string) => { try { return iso ? format(parseISO(iso), 'HH:mm') : ''; } catch { return ''; } };
+  const siteOpen = rows.filter(r => howOf(r.stage) === 'site' && r.state !== 'done' && r.state !== 'off').map(r => r.stage);
 
   /** Who finished it and when — the newest closed task that did this stage. */
   function finishedLine(st: Stage): string {
@@ -209,13 +229,100 @@ export function StageSection({
           </span>
         )}
         {onInspect && (
-          <button type="button" data-inspect data-inspect-busy={inspecting ? '1' : undefined} onClick={() => onInspect(lastDone)}
+          <button type="button" data-inspect data-inspect-busy={inspecting ? '1' : undefined}
+            onClick={() => (myInspections.length ? setInspPop(p => (p ? null : { other: false, pick: null })) : onInspect(lastDone))}
             className="ms-auto inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold text-white disabled:opacity-60"
             style={{ backgroundColor: '#1e3a5f' }}>
             {inspecting ? <Loader2 size={13} className="animate-spin" /> : <Camera size={13} />} {rtl ? 'בדיקה' : 'Inspection'}
           </button>
         )}
       </div>
+
+      {inspPop && onInspect && (() => {
+        const chosen = stages.find(x => x.id === inspPop.pick) ?? nextInsp ?? myInspections[myInspections.length - 1]?.st;
+        if (!chosen) return null;
+        return (
+          <div data-insp-pop className="ms-auto w-full max-w-[300px] rounded-xl border border-gray-200 bg-white shadow-lg p-3 space-y-2">
+            <div className="text-[15px] font-extrabold text-gray-900" data-insp-pop-title>{W(`Starting ${getStageName(chosen, false)}`, `מתחילים ${getStageName(chosen, true)}`)}</div>
+            <button type="button" data-insp-start onClick={() => { setInspPop(null); onInspect(lastDone, chosen.id); }}
+              className="w-full rounded-lg py-2 text-sm font-bold text-white" style={{ backgroundColor: '#7c3aed' }}>{W('Start', 'התחלה')}</button>
+            {myInspections.length > 1 && (
+              <button type="button" data-insp-other onClick={() => setInspPop(p => p && { ...p, other: !p.other })}
+                className="block w-full text-center text-[11.5px] text-gray-500">{W('Not this inspection?', 'לא הביקורת הזאת?')} <u>{W('Choose another', 'לבחור אחרת')}</u></button>
+            )}
+            {inspPop.other && (
+              <div data-insp-list className="border-t border-gray-100 pt-2 space-y-1.5">
+                {myInspections.map(({ st: x, done }) => (
+                  <button key={x.id} type="button" data-insp-choice={x.id} onClick={() => setInspPop({ other: false, pick: x.id })}
+                    className={`w-full flex items-center gap-2 rounded-lg border px-2.5 py-1.5 text-start text-[13px] ${x.id === chosen.id ? 'border-violet-500 bg-violet-50' : 'border-gray-200'}`}>
+                    <span className="font-bold flex-1">{getStageName(x, rtl)}</span>
+                    <span className="text-[11px] text-gray-500">{done ? doneWordOf(x, rtl) : x.id === nextInsp?.id ? W('next', 'הבאה') : ''}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        );
+      })()}
+
+      {/* Someone working here now (owner, 2026-11-10): the worker's "I'm working here". A forgotten one stays until
+          someone closes it — the office closes it here. */}
+      {working.map(v => (
+        <div key={v.id} data-visit-working={v.id} className="flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-[13px] font-semibold text-emerald-900">
+          <span className="w-2.5 h-2.5 rounded-full bg-emerald-600 apt-signal-work flex-shrink-0" />
+          <span className="flex-1 min-w-0 truncate">{W(`Working here · ${v.byName} since ${hm(v.startedAt)}`, `עובד כאן · ${v.byName} מ-${hm(v.startedAt)}`)}</span>
+          {onCloseVisit && <button type="button" data-visit-close={v.id} onClick={() => onCloseVisit(v.id)}
+            className="text-[12px] font-bold text-emerald-900 rounded-md border border-emerald-300 bg-white px-2 py-0.5">{W('Close', 'סגירה')}</button>}
+        </div>
+      ))}
+
+      {/* A worker's "No, something else": his pictures, then the stage he really did, picked by the office. */}
+      {questions.map(v => {
+        const asked = stages.find(x => x.id === v.askedStageId);
+        const files = v.files ?? [];
+        const items: StagePhotoItem[] = files.map(f => ({
+          fileId: f.driveFileId ?? '', filename: f.filename, mimeType: f.mimeType,
+          thumbSrc: f.driveFileId ? driveThumbUrl(f.driveFileId, 1600) : (f.dataUrl ?? ''),
+          downloadHref: f.driveFileId ? `https://drive.google.com/uc?export=download&id=${f.driveFileId}` : (f.dataUrl ?? ''),
+        }));
+        const pick = answerPick[v.id] ?? '';
+        const picked = stages.find(x => x.id === pick);
+        return (
+          <div key={v.id} data-visit-question={v.id} className="rounded-xl border-2 border-amber-300 bg-white p-3 space-y-2">
+            <div className="text-[14px] font-extrabold text-gray-900">
+              {asked ? W(`${v.byName} didn't do ${getStageName(asked, false)}`, `${v.byName} לא עשה ${getStageName(asked, true)}`) : W(`A question from ${v.byName}`, `שאלה מ${v.byName}`)}
+            </div>
+            <div className="text-[11.5px] text-gray-500">{day(v.endedAt)} {hm(v.endedAt)} · {W(`${files.length} pictures and videos`, `${files.length} תמונות וסרטונים`)}</div>
+            {items.length > 0 && (
+              <div className="flex gap-1.5 flex-wrap">
+                {items.map((it, i) => (
+                  <button key={i} type="button" data-question-thumb onClick={() => onOpenPhotos(items, i)}
+                    className="relative w-16 h-16 rounded-lg overflow-hidden bg-gray-100 border border-gray-200">
+                    {it.thumbSrc && <img src={it.mimeType.startsWith('video/') && files[i]?.driveFileId ? driveThumbUrl(files[i].driveFileId!, 200) : it.thumbSrc} alt="" className="w-full h-full object-cover" />}
+                    {it.mimeType.startsWith('video/') && <span className="absolute inset-0 flex items-center justify-center text-white"><Play size={18} fill="#fff" /></span>}
+                  </button>
+                ))}
+              </div>
+            )}
+            <div className="text-[10.5px] font-semibold text-gray-500 uppercase tracking-wide">{W('What did he do here?', 'מה הוא עשה כאן?')}</div>
+            <div className="flex flex-wrap gap-1.5">
+              {siteOpen.map(x => (
+                <button key={x.id} type="button" data-question-pick={x.id} aria-pressed={pick === x.id}
+                  onClick={() => setAnswerPick(m => ({ ...m, [v.id]: x.id }))}
+                  className={`rounded-full border px-2.5 py-1 text-[12px] font-bold ${pick === x.id ? 'bg-[#1e3a5f] border-[#1e3a5f] text-white' : 'bg-white border-gray-200 text-gray-700'}`}>
+                  {getStageName(x, rtl)}
+                </button>
+              ))}
+            </div>
+            {onAnswer && (
+              <button type="button" data-question-answer disabled={!picked} onClick={() => picked && onAnswer(v.id, picked.id)}
+                className="rounded-lg px-3 py-2 text-[13px] font-bold text-white disabled:opacity-40" style={{ backgroundColor: '#1e3a5f' }}>
+                {picked ? W(`Mark ${getStageName(picked, false)} done`, `לסמן ${getStageName(picked, true)} כבוצע`) : W('Pick the stage', 'לבחור שלב')}
+              </button>
+            )}
+          </div>
+        );
+      })}
 
       <div data-stage-flow className="space-y-2">
       {lead.map(ins => <InspectionRow key={ins.id} ins={ins} rtl={rtl} day={day} onOpenPhotos={onOpenPhotos} />)}
@@ -226,7 +333,10 @@ export function StageSection({
           fileId: p.driveFileId ?? '', filename: p.filename, mimeType: p.mimeType ?? 'image/jpeg',
           thumbSrc: photoSrc(p, 1600), downloadHref: p.driveFileId ? `https://drive.google.com/uc?export=download&id=${p.driveFileId}` : (p.storageUrl || p.dataUrl),
         }));
-        const who = state === 'done' ? finishedLine(st) : state === 'doing' || state === 'booked' ? openLine(st, state) : '';
+        const doneBy = apartment.stageDone?.[st.id];
+        const who = state === 'done' ? (finishedLine(st) || (doneBy ? `${doneBy.by} · ${day(doneBy.at)} ${hm(doneBy.at)}` : ''))
+          : state === 'doing' || state === 'booked' ? openLine(st, state) : '';
+        const waiting = waitingFor?.id === st.id && state !== 'done';
         const part = state === 'pending' || state === 'done' ? partLine(st) : '';
         const isOff = state === 'off';
         return (
@@ -245,8 +355,9 @@ export function StageSection({
                 </button>
               )}
               <span className={`text-[15px] font-bold min-w-0 truncate ${isOff ? 'text-gray-400' : 'text-gray-900'}`}>{getStageName(st, rtl)}</span>
-              <span data-stage-word className="text-[11px] font-semibold rounded-full px-2 py-0.5 flex-shrink-0" style={stateStyle(state)}>
-                {stateWord(state)}
+              <span data-stage-word className="text-[11px] font-semibold rounded-full px-2 py-0.5 flex-shrink-0"
+                style={waiting ? { backgroundColor: '#f5f3ff', color: '#5b21b6' } : stateStyle(state)}>
+                {state === 'done' ? doneWordOf(st, rtl) : waiting ? W('Waiting', 'ממתין') : stateWord(state)}
               </span>
               {state === 'doing' && <Hammer size={12} className="flex-shrink-0" style={{ color: st.color }} />}
               {state === 'booked' && <CalendarDays size={12} className="flex-shrink-0 text-gray-400" />}

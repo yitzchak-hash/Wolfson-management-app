@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef, lazy, Suspense } from 'react';
 import { expectUploads, forgetExpected } from '../../data/uploadTracker';
+import { howOf, userCanDo, wantsVideo, asksApprove, doneWordOf } from '../../data/stageHow';
 import { jobFolderId } from '../../data/jobFolder';
 import { Mic, X, Save, Building2, MessageSquare, AlertTriangle, Link, Unlink, ExternalLink, BookOpen, Download, Eye, EyeOff, Activity, RefreshCw, Paperclip, Trash2, ChevronDown, ChevronRight, ClipboardList, CheckCircle2, CalendarDays, FileText, UserCheck, Plus, Camera, Play, ChevronLeft, FolderOpen, Clock, RotateCcw, Edit2, BarChart3, PenLine, Maximize2, Printer, Share2, Phone as PhoneIcon, Loader2, Folder, Star, ArrowRightLeft } from 'lucide-react';
 import { Apartment, User, getStageName, TaskAttachment, TaskPriority, aptLabel, ContractorAssignment, CustomButton, Inspection, InspectionFile } from '../../types';
@@ -728,7 +729,9 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
 
   const [sharing, setSharing] = useState(false);
   /** Tzvi's inspection: the choice sheet open (with the stage it will stand after), and an upload in progress. */
-  const [inspectAsk, setInspectAsk] = useState<{ after: string | null } | null>(null);
+  const [inspectAsk, setInspectAsk] = useState<{ after: string | null; stageId?: string } | null>(null);
+  /** "Do you approve this apartment?" after an inspection's video (owner, 2026-11-10). */
+  const [approveAsk, setApproveAsk] = useState<{ stageId: string; insId: string } | null>(null);
   /** How many inspection batches are going up right now (the button stays usable). */
   const [inspecting, setInspecting] = useState(0);
   const inspectPhotoRef = useRef<HTMLInputElement>(null);
@@ -1212,7 +1215,7 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
    * Photos › Inspections, and one Inspection joins the record — standing after the stage that was last finished.
    * Without Drive a picture is kept small in the record; a video needs Drive and is refused in words.
    */
-  async function saveInspection(files: File[], after: string | null) {
+  async function saveInspection(files: File[], after: string | null, stageId?: string) {
     if (!apartment || !currentUser || !files.length) return;
     // The button stays usable while this goes up (owner, 2026-11-09: "the inspection button should work even while
     // uploading and adding stuff to it"): a counter, not a lock, and the save below reads the record FRESH.
@@ -1260,18 +1263,64 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
     // (owner, 2026-11-08: "they should all fold into the same inspection … because it means I'm still there").
     const last = prior[prior.length - 1];
     const lastTouch = last ? Date.parse(last.lastAt ?? last.at) : 0;
-    if (last && last.byId === currentUser.id && Date.now() - lastTouch < 30 * 60 * 1000) {
+    if (last && last.byId === currentUser.id && (last.stageId ?? '') === (stageId ?? '') && last.approved === undefined
+      && Date.now() - lastTouch < 30 * 60 * 1000) {
       const merged: Inspection = { ...last, files: [...last.files, ...saved], lastAt: now };
       updateApartment(aptId, { inspections: [...prior.slice(0, -1), merged] }, currentUser);
-      onToast(ui.isRtl ? 'נוסף לבדיקה' : 'Added to the inspection');
+      if (!askAfterInspection(merged)) onToast(ui.isRtl ? 'נוסף לבדיקה' : 'Added to the inspection');
       return;
     }
     const ins: Inspection = {
       id: `ins-${Date.now().toString(36)}`, at: now, lastAt: now,
       byId: currentUser.id, byName: currentUser.name, afterStageId: after, files: saved,
+      ...(stageId ? { stageId } : {}),
     };
     updateApartment(aptId, { inspections: [...prior, ins] }, currentUser);
-    onToast(ui.isRtl ? 'הבדיקה נשמרה' : 'Inspection saved');
+    if (!askAfterInspection(ins)) onToast(ui.isRtl ? 'הבדיקה נשמרה' : 'Inspection saved');
+  }
+
+  /**
+   * After an inspection STAGE's pictures land (owner, 2026-11-10): it wants its video first, then asks "Do you
+   * approve this apartment?". A stage that asks nothing is done the moment its proof is in. Returns whether it said
+   * something itself.
+   */
+  function askAfterInspection(ins: Inspection): boolean {
+    const st = ins.stageId ? stages.find(x => x.id === ins.stageId) : undefined;
+    if (!st) return false;
+    if (wantsVideo(st) && !ins.files.some(f => f.mimeType.startsWith('video/'))) {
+      onToast(ui.isRtl ? `${getStageName(st, true)} צריכה סרטון — הוסיפו סרטון כדי לסיים` : `${st.name} needs a video — add one to finish`, 'error');
+      return true;
+    }
+    if (asksApprove(st)) { setApproveAsk({ stageId: st.id, insId: ins.id }); return true; }
+    finishStage(st.id, currentUser?.name ?? '');
+    onToast(ui.isRtl ? `${getStageName(st, true)}: ${doneWordOf(st, true)}` : `${st.name}: ${doneWordOf(st, false)}`);
+    return true;
+  }
+
+  /** A stage done, with who and when (stageDone) — read fresh, written through the store's one writer. */
+  function finishStage(stageId: string, by: string, extra?: Partial<Apartment>) {
+    if (!apartment || !currentUser) return;
+    const fresh = useStore.getState().apartments.find(a => a.id === apartment.id) ?? apartment;
+    setApartmentMarks(apartment.id, { ...(fresh.stageMarks ?? {}), [stageId]: 'done' }, currentUser);
+    updateApartment(apartment.id, { stageDone: { ...(fresh.stageDone ?? {}), [stageId]: { by, at: new Date().toISOString() } }, ...(extra ?? {}) }, currentUser);
+  }
+
+  /** The approve answer: yes finishes the inspection stage; no opens Report a problem (owner, 2026-11-10). */
+  function answerApprove(yes: boolean) {
+    if (!apartment || !currentUser || !approveAsk) return;
+    const { stageId, insId } = approveAsk;
+    setApproveAsk(null);
+    const fresh = useStore.getState().apartments.find(a => a.id === apartment.id) ?? apartment;
+    const inspections = (fresh.inspections ?? []).map(i => (i.id === insId ? { ...i, approved: yes } : i));
+    const st = stages.find(x => x.id === stageId);
+    if (yes) {
+      finishStage(stageId, currentUser.name, { inspections });
+      haptic('success');
+      onToast(ui.isRtl ? `${st ? getStageName(st, true) : ''}: ${st ? doneWordOf(st, true) : 'אושר'}` : `${st?.name ?? ''}: ${st ? doneWordOf(st, false) : 'Approved'}`);
+    } else {
+      updateApartment(apartment.id, { inspections }, currentUser);
+      setProblemFormOpen(true);
+    }
   }
 
   async function attachOfficeFile(file: File, transcript?: boolean) {
@@ -2598,7 +2647,20 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                 ctx={setCtx}
                 workers={contractors}
                 photos={contractorPhotos}
-                onMarks={next => setApartmentMarks(apartment.id, next, currentUser)}
+                onMarks={next => {
+                  // Who finished a stage and when (owner, 2026-11-10: an office task reads "Sent · Efrat · 09:14").
+                  const before = apartment.stageMarks ?? {};
+                  const nowDone = Object.keys(next ?? {}).filter(id => next![id] === 'done' && before[id] !== 'done');
+                  const undone = Object.keys(apartment.stageDone ?? {}).filter(id => next?.[id] !== 'done');
+                  setApartmentMarks(apartment.id, next, currentUser);
+                  if (nowDone.length || undone.length) {
+                    const stageDone = { ...(apartment.stageDone ?? {}) };
+                    undone.forEach(id => { delete stageDone[id]; });
+                    const at = new Date().toISOString();
+                    nowDone.forEach(id => { stageDone[id] = { by: currentUser.name, at }; });
+                    updateApartment(apartment.id, { stageDone }, currentUser);
+                  }
+                }}
                 // Installation done in one tap closes the window (owner, 2026-11-09: "only installation should be that
                 // one click, closes it automatically. If it messes up the app, just put an error message"): it closes
                 // only once the record really says done; otherwise it stays open and says so.
@@ -2620,7 +2682,24 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                 onReportProblem={isGeneralProject ? undefined : () => setProblemFormOpen(true)}
                 onOpenPhotos={(items, index) => setLightbox({ items, index })}
                 // Only Tzvi's own user inspects (owner, 2026-11-08).
-                onInspect={isTzvi(currentUser?.name) ? after => setInspectAsk({ after }) : undefined}
+                onInspect={isTzvi(currentUser?.name) || sortedStages.some(st => howOf(st) === 'inspection' && userCanDo(st, currentUser, users))
+                  ? (after, stageId) => setInspectAsk({ after, stageId }) : undefined}
+                canInspect={st => userCanDo(st, currentUser, users)}
+                onAnswer={(visitId, stageId) => {
+                  const fresh = useStore.getState().apartments.find(a => a.id === apartment.id) ?? apartment;
+                  const v = (fresh.siteVisits ?? []).find(x => x.id === visitId);
+                  const siteVisits = (fresh.siteVisits ?? []).map(x => (x.id === visitId
+                    ? { ...x, status: 'answered' as const, stageId, answeredBy: currentUser.name, answeredAt: new Date().toISOString() } : x));
+                  finishStage(stageId, v?.byName ?? currentUser.name, { siteVisits });
+                  haptic('success');
+                }}
+                onCloseVisit={visitId => {
+                  const fresh = useStore.getState().apartments.find(a => a.id === apartment.id) ?? apartment;
+                  const now = new Date().toISOString();
+                  const siteVisits = (fresh.siteVisits ?? []).map(x => (x.id === visitId
+                    ? { ...x, status: 'done' as const, endedAt: now, answeredBy: currentUser.name, answeredAt: now } : x));
+                  trackUndo(null, () => updateApartment(apartment.id, { siteVisits }, currentUser));
+                }}
                 inspecting={inspecting > 0}
               />
               {/* The three ways in: the camera for a picture, the camera for a video, or what is already on the phone. */}
@@ -2631,16 +2710,32 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                   {...(k === 'pick' ? { multiple: true } : { capture: 'environment' as const })}
                   onChange={e => {
                     const files = [...(e.target.files ?? [])]; e.target.value = '';
-                    const after = inspectAsk?.after ?? null; setInspectAsk(null);
-                    void saveInspection(files, after);
+                    const after = inspectAsk?.after ?? null; const sid = inspectAsk?.stageId; setInspectAsk(null);
+                    void saveInspection(files, after, sid);
                   }} />
               ))}
               {/* Inspection opens the camera INSIDE the app: as many pictures and videos as he likes, then Done
                   (owner, 2026-11-08). Where the browser refuses the camera, the phone's own camera or gallery opens. */}
               <InspectionCamera open={!!inspectAsk} isRtl={!!ui.isRtl}
                 onClose={() => setInspectAsk(null)}
-                onDone={files => { const after = inspectAsk?.after ?? null; setInspectAsk(null); void saveInspection(files, after); }}
+                onDone={files => { const after = inspectAsk?.after ?? null; const sid = inspectAsk?.stageId; setInspectAsk(null); void saveInspection(files, after, sid); }}
                 onFallback={k => (k === 'camera' ? inspectPhotoRef : inspectPickRef).current?.click()} />
+
+              {approveAsk && (() => {
+                const st = stages.find(x => x.id === approveAsk.stageId);
+                return (
+                  <div data-approve-ask className="fixed inset-0 z-[200] bg-black/40 flex items-center justify-center p-5" onClick={() => setApproveAsk(null)}>
+                    <div className="w-full max-w-[340px] rounded-2xl bg-white p-5 space-y-3 shadow-2xl" onClick={e => e.stopPropagation()} dir={ui.isRtl ? 'rtl' : 'ltr'}>
+                      <div className="text-[12px] font-semibold text-violet-700">{st ? getStageName(st, !!ui.isRtl) : ''}</div>
+                      <div className="text-[19px] font-extrabold leading-tight text-gray-900">{ui.isRtl ? 'האם אתה מאשר את הדירה?' : 'Do you approve this apartment?'}</div>
+                      <button type="button" data-approve-yes onClick={() => answerApprove(true)}
+                        className="w-full rounded-xl py-3.5 text-[16px] font-bold text-white" style={{ backgroundColor: '#059669' }}>{ui.isRtl ? 'כן, מאושר' : 'Yes, approved'}</button>
+                      <button type="button" data-approve-no onClick={() => answerApprove(false)}
+                        className="w-full rounded-xl py-3.5 text-[16px] font-bold border border-red-200 text-red-600 bg-white">{ui.isRtl ? 'לא, צריך תיקון' : 'No, needs fixing'}</button>
+                    </div>
+                  </div>
+                );
+              })()}
 
               {/* Elsewhere they stay below the stages. */}
               {!isWolfsonProject && customButtons.length > 0 && (
