@@ -34,7 +34,8 @@ ask built or answered) · **not this app** (a recording of another project — r
 | 22 | 20261104_144506.mp4 (a camera filming the Fold) | `10y6uVBlTDk3YYlhpQFa5pCjZjMvyGQrs` | 0:51 | open (built on preview) | [2026-11-04-fold.md](2026-11-04-fold.md) |
 | 23 | Screen_Recording_20261104_145647_Samsung Browser.mp4 (no sound) | `1aXrXbRTRNHdoZvBIL6WJPJ4JW_K-Aa5b` | 1:53 | open (built on preview) | [2026-11-04-fold.md](2026-11-04-fold.md) |
 | 21 | Recording 2026-11-03 145621.mp4 | `1_zIfohBbNIsJlE3Ui1SyBM6_-q3yliO6` | 0:55 | open (built on preview) | [2026-11-03-145621.md](2026-11-03-145621.md) |
-Folder last listed: 2026-11-03 — recordings 18, 19 and 20 at the top (19 and 20 each twice). 1–18 are done and belong in Processed.
+| 24 | Recording 2026-11-10 144934.mp4 (41.6 MB, 1440×1302) | `1rkRy5GXJKZDXOPsYAWHqmqupbHWLBl9L` | 1:15 | open (built on preview) | [2026-11-10-144934.md](2026-11-10-144934.md) |
+Folder last listed: 2026-11-10 — recording 24 at the top. Earlier: 2026-11-03 — recordings 18, 19 and 20 at the top (19 and 20 each twice). 1–18 are done and belong in Processed.
 
 ## The folder's two subfolders (owner, 2026-10-18)
 After every new video a helper sorts the folder: **Processed**
