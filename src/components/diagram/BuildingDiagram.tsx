@@ -4,6 +4,7 @@ import { Apartment, BuildingId, Stage, relativeTime } from '../../types';
 import { useStore } from '../../data/store';
 import { PROBLEM_FILL } from '../../data/problems';
 import { progressOf, StageProgress, isStartStage } from '../../data/stageMarks';
+import { signalOf } from '../../data/stageHow';
 import { realName, isSold } from '../../data/aptSale';
 import { driveThumbUrl } from '../../data/driveApi';
 
@@ -236,6 +237,15 @@ function AptCell({
 }: AptCellProps) {
   const ui = useStore(state => state.mainUiStrings);
   const projectId = useStore(state => state.currentProjectId);
+  /**
+   * THE SITE SIGNAL (owner, 2026-11-10): someone working here GLOWS green, a worker's question for the office FLASHES
+   * amber, an apartment whose next stage is an inspection waits in dashed violet — on the office board and on the
+   * worker's phone alike, read straight off the apartment (stageHow.signalOf).
+   */
+  const allStages = useStore(state => state.stages);
+  const tipusStages = useStore(state => state.boardSettings[state.currentProjectId]?.tipusStages);
+  const signal = useMemo(() => (apt ? signalOf(apt, [...allStages].sort((a, b) => a.order - b.order), { tipusStages }) : null),
+    [apt, allStages, tipusStages]);
   const hasStage = !!stage;
   /**
    * PROJECT TILES (owner, 2026-11-01 — "Wolfson Diagram Preview", option A):
@@ -338,12 +348,13 @@ function AptCell({
       // Addressable by id, so "show me where it is" can scroll to the cell and
       // a harness can reach one without matching on its text.
       data-apt-id={apt?.id}
+      data-signal={signal ?? undefined}
       // apt-tile: a size container — a NARROW placed tile (the Galaxy Fold's
       // big screen, 2026-11-02: the tipus sat on the number, names torn
       // mid-word) moves its tipus under the number (index.css).
       data-has-tipus={placed && tipusLine ? '1' : undefined}
       data-big={bigCell ? '1' : undefined}
-      className={`${placed ? 'apt-tile ' : ''}relative flex flex-col items-center justify-center cursor-pointer select-none rounded-md overflow-hidden transition-all duration-100 ${scale}`}
+      className={`${placed ? 'apt-tile ' : ''}${signal && !isDimmed ? `apt-signal-${signal} ` : ''}relative flex flex-col items-center justify-center cursor-pointer select-none rounded-md overflow-hidden transition-all duration-100 ${scale}`}
       onMouseEnter={() => apt && onHover?.(apt.id)}
       onMouseLeave={() => onHover?.(null)}
       style={{

@@ -975,3 +975,12 @@ html.board-full [data-board-page-root] {
 .apt-tile[data-big] [data-upgraded-badge] span { font-size: 14px !important; }
 .apt-tile[data-big] [data-cell-strip] { height: 14px !important; left: 6px !important; right: 6px !important; bottom: 6px !important; }
 .apt-tile[data-big] > button[title] { width: 28px !important; height: 28px !important; font-size: 20px !important; top: 6px !important; right: 6px !important; }
+
+/* THE SITE SIGNAL on a building tile (owner, 2026-11-10, the Site Flow Preview): working here glows green, a question
+   for the office flashes amber, waiting for an inspection is ruled dashed violet. The tile keeps its own colour. */
+.apt-signal-work { animation: aptSignalGlow 1.6s ease-in-out infinite; outline: 2px solid #059669; outline-offset: -2px; }
+.apt-signal-ask { animation: aptSignalFlash 1s steps(2, start) infinite; outline: 2px solid #d97706; outline-offset: -2px; }
+.apt-signal-wait { outline: 2px dashed #7c3aed; outline-offset: -2px; }
+@keyframes aptSignalGlow { 0%, 100% { box-shadow: 0 0 0 0 rgba(5, 150, 105, .55); } 50% { box-shadow: 0 0 0 6px rgba(5, 150, 105, 0); } }
+@keyframes aptSignalFlash { 0% { filter: none; } 50% { filter: brightness(1.18) saturate(1.4); } }
+@media (prefers-reduced-motion: reduce) { .apt-signal-work, .apt-signal-ask { animation: none; } }

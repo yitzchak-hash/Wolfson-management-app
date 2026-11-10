@@ -610,8 +610,53 @@ export interface Stage {
    * lands on the job's next stage of THAT worker's trade.
    */
   trade?: ContractorCategory;
+  /**
+   * HOW IT'S DONE (owner, 2026-11-10, the Site Flow Preview he approved): SITE work is the worker's — "I'm working
+   * here", then "I'm done here" with pictures; an INSPECTION is a user's — a video and "Do you approve this
+   * apartment?"; an OFFICE task is one tick in the office ("Sent plans back to contractor"). Absent = site.
+   */
+  how?: StageHow;
+  /** Who can do it: worker trades (absent → `trade` if set, else every trade). */
+  canTrades?: ContractorCategory[];
+  /** Who can do it: office users, by id. An inspection with none set falls back to Tzvi. */
+  canUsers?: string[];
+  /** Proof to finish: at least this many pictures (absent → the worker's usual minimum). */
+  proofPictures?: number;
+  proofVideo?: boolean;
+  proofFile?: boolean;
+  /** An inspection asks "Do you approve this apartment?" (absent → yes for an inspection). */
+  proofApprove?: boolean;
+  /** The word it shows when done ("Sent", "Approved"); absent → Done. */
+  doneWord?: string;
+  doneWordHe?: string;
   createdAt: string;
   updatedAt: string;
+}
+
+export type StageHow = 'site' | 'inspection' | 'office';
+
+/**
+ * A WORKER'S VISIT to an apartment (owner, 2026-11-10): he presses "I'm working here" — no stage, no questions — and
+ * the apartment glows until he presses "I'm done here", sends his pictures and answers "Did you do <next stage>?".
+ * Yes marks that stage done; No leaves a QUESTION the office answers by picking what he did. Kept on the apartment
+ * record, so it is in the cloud and the full backup with it.
+ */
+export interface SiteVisit {
+  id: string;
+  /** The worker (a contractor id) and his name as it was then. */
+  byId: string;
+  byName: string;
+  startedAt: string;
+  endedAt?: string;
+  /** working → (done | question) → answered. */
+  status: 'working' | 'done' | 'question' | 'answered';
+  /** The stage the app suggested at the end ("Did you do Framing?"). */
+  askedStageId?: string | null;
+  /** The stage that was done: his yes, or the office's answer. */
+  stageId?: string | null;
+  files?: InspectionFile[];
+  answeredBy?: string;
+  answeredAt?: string;
 }
 
 export function getStageName(stage: Stage, isRtl: boolean): string {
@@ -798,6 +843,10 @@ export interface Inspection {
   /** The stage it stands after — the last finished one when it was taken (null: before every stage). */
   afterStageId: string | null;
   files: InspectionFile[];
+  /** The inspection STAGE this one answered (owner, 2026-11-10); absent on the older, stage-less inspections. */
+  stageId?: string;
+  /** "Do you approve this apartment?" — yes or no; absent when the stage did not ask. */
+  approved?: boolean;
 }
 
 export interface Apartment {
@@ -806,6 +855,10 @@ export interface Apartment {
   apartmentNumber: string;
   /** Tzvi's inspections, oldest first (see Inspection). */
   inspections?: Inspection[];
+  /** Workers' visits: who is working here now, and what they sent at the end (see SiteVisit). */
+  siteVisits?: SiteVisit[];
+  /** Who finished a stage and when (owner, 2026-11-10: an office task shows "Sent · Efrat · 09:14"). */
+  stageDone?: Record<string, { by: string; at: string }>;
   /**
    * TIPUS (טיפוס) — the apartment's TYPE from the project's own list ("A2",
    * "C3"…), owner's ask 2026-09-06. Optional; printed right after the number

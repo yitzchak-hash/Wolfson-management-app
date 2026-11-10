@@ -441,7 +441,8 @@ export function tapMark(
   st: Stage,
   current: StageState,
 ): Record<string, StageMark> | undefined {
-  if (!isOneTapStage(st)) return cycleMark(marks, st.id, 'left', current);
+  // An OFFICE task is one tick too (owner, 2026-11-10): no "working" step between to-do and done.
+  if (!isOneTapStage(st) && st.how !== 'office') return cycleMark(marks, st.id, 'left', current);
   const next: Record<string, StageMark> = { ...(marks ?? {}) };
   next[st.id] = current === 'done' ? 'todo' : 'done';
   return next;
