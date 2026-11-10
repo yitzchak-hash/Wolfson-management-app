@@ -58,6 +58,7 @@ change after that commit belongs in this list.
 | 2026-11-10 | Weekly notebook: "Older…" became a + that lists the coming weeks (+4 to +26) above the earlier ones; a week ahead gets its chip after the others | `WeekRibbon.tsx` | ″ |
 | 2026-11-10 | Worker portal: the old "I started working here" button removed from the apartment sheet — "I'm working here" is the one way in | `ContractorPortal.tsx` | ″ |
 | 2026-11-10 | The standard plan per building (recording 2026-11-10 144934): a button under each building's number in the Building view, a bubble on a single building; press = the plan full screen (read-only studio + Share); right-click / long press = paste a Drive file link, or a folder link → the plan picker → the star; kept in `BoardSetting.standardPlans` (+ `standardPlansFolder`) per workspace | `building/StandardPlan.tsx` (new), `BuildingView.tsx`, `BuildingTrio.tsx`, `buildingView.css`, `ProjectDiagramPage.tsx`, `types` | ″ |
+| 2026-11-10 | The Plan Finder (approved preview, answers 1b 2b 3b 4b): PlanPicker rebuilt — bigger window, search first, folders on the side, cards with Drive pictures, names, badges, dates, newest first, marked-up versions as their own cards, non-markable files greyed, forgiving search (planSearch.ts: typos, word order, wrong keyboard), keyboard; `api/drive-files.js` now returns modifiedTime; new browser key `plan_finder_recent` | `PlanPicker.tsx`, `planSearch.ts` (new), `driveApi.ts`, `api/drive-files.js`, `deviceOnly.ts` | ″ |
 
 ## Already brought across
 (nothing yet)

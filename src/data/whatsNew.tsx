@@ -35,6 +35,11 @@ export const WHATS_NEW: WhatsNewEntry[] = [
     title: 'A standard plan for every building',
     items: [
       {
+        title: 'The Plan Finder',
+        body: 'Plans in a job\'s plan pane opens a bigger window: the search box ready to type, the job\'s folders down the side, and every file as a card with its own picture, full name, type and date, newest first. Marked-up versions stand beside their plan. The search forgives typos and the wrong keyboard (Hebrew letters for English words) and looks in every folder of the job; Enter opens the first. Files that cannot be marked up are shown greyed out.',
+        demo: 'tap',
+      },
+      {
         title: 'Standard plan',
         body: 'In the Building view, each building has a Standard plan button under its number (a small bubble on top when one building is open). Press it to open the building\'s plan full screen, with zoom and Share. Right-click it (a long press on a phone) to set the plan: paste a Drive link to the file, or a link to a folder and choose the plan with the star. Each building, in every workspace, keeps its own.',
         demo: 'tap',
