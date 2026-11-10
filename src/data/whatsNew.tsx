@@ -31,6 +31,37 @@ export interface WhatsNewEntry {
 
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    date: '2027-03-07',
+    title: 'Workers open and close their work, and inspections with approval',
+    items: [
+      {
+        title: '"I\'m working here"',
+        body: 'On his phone\'s building map, a worker taps an apartment and presses I\'m working here. It glows green on his phone and on your board until he presses I\'m done here, sends his pictures and videos, and answers "Did you do <stage>?". Yes marks it done. No sends it to the office.',
+        demo: 'tap',
+      },
+      {
+        title: 'A question from the site',
+        body: 'When a worker says "No, something else", the apartment flashes amber on the board. Open it to see what he sent, pick the stage he did, and press Mark done. A visit a worker forgot to close shows in the job window with a Close button.',
+        demo: 'tap',
+      },
+      {
+        title: 'Three kinds of stage',
+        body: 'Settings → Stages: every stage now says how it\'s done (Site work, Inspection or Office task), who can do it, the proof to finish (pictures, a video, a file) and the word it shows when done, like "Sent" or "Approved". An office task is one tick in the job window and shows who ticked it and when.',
+        demo: 'tap',
+      },
+      {
+        title: 'Inspections with approval',
+        body: 'The little Inspection button in a job starts the next inspection, with "Choose another" under it. After the video it asks "Do you approve this apartment?". Yes marks it Approved. No opens Report a problem. An apartment waiting for an inspection is ruled dashed violet on the board.',
+        demo: 'tap',
+      },
+      {
+        title: 'Full-quality video',
+        body: 'Video in the inspection camera now records inside the app at full quality (1080p) with stereo sound, and opens instantly when played.',
+        demo: 'tap',
+      },
+    ],
+  },
+  {
     date: '2027-03-06',
     title: 'One upload bar, and inspections you can keep adding to',
     items: [
