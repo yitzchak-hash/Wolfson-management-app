@@ -186,7 +186,10 @@ export default async function handler(req, res) {
     for (let page = 0; page < 25; page++) {
       const resp = await drive.files.list({
         q: `'${listId}' in parents and trashed = false`,
-        fields: 'nextPageToken,files(id,name,mimeType,shortcutDetails)',
+        // modifiedTime rides along: the Plan Finder sorts newest first and
+        // says "2 days ago" on every card, and the job's "latest activity"
+        // star reads it too — without it every file was dateless.
+        fields: 'nextPageToken,files(id,name,mimeType,modifiedTime,shortcutDetails)',
         pageSize: 200,
         pageToken,
         supportsAllDrives: true,
@@ -194,8 +197,8 @@ export default async function handler(req, res) {
       });
       for (const f of resp.data.files ?? []) {
         files.push(f.mimeType === SHORTCUT && f.shortcutDetails?.targetId
-          ? { id: f.shortcutDetails.targetId, name: f.name, mimeType: f.shortcutDetails.targetMimeType || f.mimeType }
-          : { id: f.id, name: f.name, mimeType: f.mimeType });
+          ? { id: f.shortcutDetails.targetId, name: f.name, mimeType: f.shortcutDetails.targetMimeType || f.mimeType, modifiedTime: f.modifiedTime }
+          : { id: f.id, name: f.name, mimeType: f.mimeType, modifiedTime: f.modifiedTime });
       }
       pageToken = resp.data.nextPageToken;
       if (!pageToken) break;

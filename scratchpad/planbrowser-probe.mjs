@@ -13,7 +13,7 @@
 // dead without a key). Every /api route is stubbed — the catch-all FIRST,
 // because Playwright consults routes newest-first — and drive.google.com is
 // aborted (the aspect probe's image decode must fail fast, not hang).
-import { chromium } from 'playwright';
+import { chromium } from '/opt/node22/lib/node_modules/playwright/index.mjs';
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
 
 const APP = process.env.APP ?? 'http://localhost:5174';
@@ -64,7 +64,7 @@ const LISTING = {
   'F-annot': [{ id: 'ANN-1', name: 'annotated version 1.0 — probe.pdf', mimeType: PDF }],
 };
 
-const b = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' });
+const b = await chromium.launch();
 const ctx = await b.newContext({ viewport: { width: 1440, height: 900 } });
 
 // The catch-all FIRST (newest-first consultation), then the specific ones.

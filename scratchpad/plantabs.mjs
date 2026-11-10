@@ -7,10 +7,10 @@
 //
 // Runs against the 5174 dev server (started WITH VITE_DRIVE_API_KEY — the
 // sharewire precedent), every backend route stubbed via ctx.route.
-import { chromium } from 'playwright';
+import { chromium } from '/opt/node22/lib/node_modules/playwright/index.mjs';
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
 
-const APP = 'http://localhost:5174';
+const APP = process.env.APP ?? 'http://localhost:5174';
 let fails = 0;
 const check = (ok, l, extra = '') => { console.log(`${ok ? 'PASS' : 'FAIL'} ${l}${extra ? ' — ' + extra : ''}`); if (!ok) fails++; };
 
@@ -28,7 +28,7 @@ const PLANS = {
   PDF3: await makePlan('ROOF DUCTWORK'),
 };
 
-const b = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' });
+const b = await chromium.launch();
 const ctx = await b.newContext({ viewport: { width: 1440, height: 900 } });
 
 const FOLDER_MIME = 'application/vnd.google-apps.folder';
@@ -276,12 +276,14 @@ check(stamped === 1, 'Save files it through the real Annotated Plans pipeline', 
 check(await page.locator('[data-tab-ask]').count() === 0, 'and the ask closes with the tab');
 
 // ── 5b · the saved markup lives under Annotated Plans in the chooser ───────
-// (Re-encoded to the originals-first ruling: the opening view shows only the
-// plans folder's own files; the markups are one press away in the dropdown.)
+// (Re-encoded 2026-11-10 to the Plan Finder, the owner's answer 2b: each
+// marked-up version is its own card BESIDE its plan on the opening view, and
+// the Annotated Plans folder still opens on its own from the side list.
+// Was: "the opening view keeps the markups out of the way".)
 await page.locator('[data-plan-tab-new]').click();
-await page.waitForTimeout(800);
-check(await page.locator('[data-plan-picker] [data-plan-row="ANN-1"]').count() === 0,
-  'the opening view keeps the markups out of the way');
+await page.waitForTimeout(2500);
+check(await page.locator('[data-plan-picker] [data-plan-row="ANN-1"] [data-annot-chip]').count() === 1,
+  'the opening view shows the markup as its own card, with the marked-up chip');
 await page.locator('[data-plan-picker] [data-folder-button]').click();
 await page.waitForTimeout(2500);
 await page.locator('[data-folder-row="F-annot"]').click();

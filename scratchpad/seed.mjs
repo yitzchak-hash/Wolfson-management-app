@@ -25,7 +25,7 @@ const STAGES = ['s2', 's7', 's6', 's1', 's2', 's7', 's3', 's4', 's5', 's2', 's6'
 export async function realisticWolfson(browser, { hebrew = false } = {}) {
   const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
   const page = await ctx.newPage();
-  await page.goto('http://localhost:5173/');
+  await page.goto(process.env.SEED_BASE || 'http://localhost:5173/');
   // The app persists only on MUTATION, so a fresh boot leaves nothing to read
   // back. Import its own generator through Vite instead — the apartments then
   // come from the same source the app itself uses, not a copy that can drift.

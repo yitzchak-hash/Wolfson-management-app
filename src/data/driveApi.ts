@@ -1068,6 +1068,25 @@ export async function listFolderPlansViaBackend(folderId: string): Promise<PlanE
   }
 }
 
+/**
+ * EVERYTHING in one folder — files of every kind and its subfolders, each with
+ * Drive's modified stamp — for the Plan Finder, which shows every file (the
+ * ones that cannot be marked up greyed out) and sorts newest first. `null`,
+ * not an empty list, when Drive refused the listing.
+ */
+export async function listFolderAllViaBackend(folderId: string): Promise<DriveFile[] | null> {
+  try {
+    return await listFolderViaBackend(folderId);
+  } catch {
+    return null;
+  }
+}
+
+/** Is this a folder entry (the Plan Finder's own sort of the listing above)? */
+export function isDriveFolder(f: { mimeType: string }): boolean {
+  return f.mimeType === FOLDER_MIME;
+}
+
 export async function listPlansViaBackend(plansFolderId: string): Promise<{
   plans: PlanEntry[];
   annotatedFolderId: string | null;

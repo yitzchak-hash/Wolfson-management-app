@@ -40,6 +40,7 @@ export const DEVICE_ONLY: Record<string, string> = {
   'drive_shared_name': 'The shared-drive folder name as Drive for desktop shows it on THIS computer.',
   'drive_drive_name': 'The drive letter/name of Drive for desktop on THIS computer.',
   'tzviair_helper_installed': 'Whether the TzviAir helper app is installed on THIS computer.',
+  'plan_finder_recent': 'The last few plans opened from the Plan Finder in THIS browser — a shortcut list, not a record; it simply starts empty on a new computer.',
   'markup_ui_scale': 'Button size for THIS screen (a touchscreen needs bigger ones).',
   'studio_drawing_hand': 'Which hand holds the pen on THIS tablet — decides which side the studio\'s tool rail sits.',
   'studio_finger_draws': 'Whether a finger may still draw on THIS tablet once a pen has been seen.',

@@ -1,6 +1,6 @@
 // The Plans picker's folder dropdown: folders, THEN their subfolders — each
 // child slotted in under its parent, indented, choosable.
-import { chromium } from 'playwright';
+import { chromium } from '/opt/node22/lib/node_modules/playwright/index.mjs';
 import { PDFDocument, rgb } from 'pdf-lib';
 import { realisticWolfson, applySeed } from './seed.mjs';
 
@@ -30,7 +30,9 @@ async function makePlan() {
 }
 
 const planBytes = await makePlan();
-const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome', headless: true });
+const APP = process.env.APP ?? 'http://localhost:5174';
+process.env.SEED_BASE = APP + '/';
+const browser = await chromium.launch();
 const blob = await realisticWolfson(browser);
 const ctx = await browser.newContext({ viewport: { width: 1600, height: 1000 } });
 await applySeed(ctx, blob);
@@ -57,8 +59,11 @@ await ctx.route('**/api/share', r => r.fulfill({ status: 200, contentType: 'appl
 await ctx.route('**://drive.google.com/**', r => r.abort());
 
 const page = await ctx.newPage();
-await page.goto('http://localhost:5174/project');
+await page.goto(APP + '/project');
 await page.waitForTimeout(3000);
+// The project page now opens on another view; the apartment cells are the Board's.
+await page.locator('[data-view-switch] [data-view="board"]').first().click().catch(() => {});
+await page.waitForTimeout(800);
 await page.evaluate(() => document.querySelector('[data-apt-id="A1-53"]')?.click());
 await page.waitForTimeout(6000);
 
@@ -69,12 +74,17 @@ await page.evaluate(() => {
 await page.waitForTimeout(1200);
 check(await page.locator('[data-plan-picker]').count() === 1, 'the picker opened');
 
-// The opening view is the plans folder's OWN files — the markup inside
-// Annotated Plans is NOT mixed in (the owner's ruling).
+// RE-ENCODED 2026-11-10 (the Plan Finder, the owner's answer 2b): each
+// marked-up version is its own card BESIDE its plan — the Annotated Plans
+// files are shown with the plans folder's files. (Was: "the first screen
+// shows only the main folder's files", his earlier ruling, now replaced.)
+await page.waitForTimeout(2500);
 const firstView = await page.evaluate(() =>
   [...document.querySelectorAll('[data-plan-row]')].map(r => r.getAttribute('data-plan-row')));
-check(firstView.includes('PLANPDF1') && !firstView.includes('ANN1'),
-  'the first screen shows only the main folder\'s files', JSON.stringify(firstView));
+check(firstView.includes('PLANPDF1') && firstView.includes('ANN1'),
+  'the first screen shows the plans AND their marked-up versions as cards', JSON.stringify(firstView));
+check(/marked up/i.test(await page.locator('[data-plan-row="ANN1"] [data-annot-chip]').textContent().catch(() => '') ?? ''),
+  'the version wears the marked-up chip');
 
 await page.locator('[data-folder-button]').click();
 await page.waitForTimeout(2500);
@@ -96,18 +106,25 @@ check(ph >= 0 && bef === ph + 1, 'Before works sits directly under Photos');
 check(rows[ap]?.sub && rows[bef]?.sub && !rows[ep]?.sub, 'children are marked as children');
 check(rows[ap] && rows[ep] && rows[ap].left > rows[ep].left + 8, `and drawn indented (${rows[ep]?.left} -> ${rows[ap]?.left})`);
 
-// A subfolder is choosable like any folder — and while its (dawdling)
-// listing loads, the file area shows SKELETONS, never a jump.
+// A subfolder is choosable like any folder. RE-ENCODED 2026-11-10: the
+// Plan Finder lists every folder as it opens (the side list's counts and
+// the job-wide search need it), so by now the dawdling AP is already known
+// and lands AT ONCE — never a blank. (Was: skeletons for 350 ms; skeletons
+// still stand for a folder not yet listed.)
 await page.locator('[data-folder-row="AP"]').click();
 await page.waitForTimeout(350);
-check(await page.locator('[data-plan-skeleton]').count() === 3,
-  'the file list waits out loud with skeleton rows');
+const early = await page.evaluate(() => ({
+  sk: document.querySelectorAll('[data-plan-skeleton]').length,
+  rows: document.querySelectorAll('[data-plan-row]').length,
+}));
+check(early.sk === 3 || early.rows > 0,
+  'the file list is never a blank — skeletons, or the files at once', JSON.stringify(early));
 await page.waitForTimeout(1600);
 const head = await page.locator('[data-folder-button]').textContent();
 check(/Annotated Plans/.test(head ?? ''), 'choosing a subfolder opens it', head?.trim());
 const apView = await page.evaluate(() => ({
   rows: [...document.querySelectorAll('[data-plan-row]')].map(r => r.getAttribute('data-plan-row')),
-  chip: document.body.innerText.includes('marked up'),
+  chip: /marked up/i.test(document.querySelector('[data-plan-picker]')?.innerText ?? ''),
   skeletons: document.querySelectorAll('[data-plan-skeleton]').length,
 }));
 check(apView.rows.includes('ANN1') && apView.skeletons === 0,
