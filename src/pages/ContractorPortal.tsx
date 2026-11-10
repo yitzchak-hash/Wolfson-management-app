@@ -51,6 +51,7 @@ import { Translated, TrText } from '../components/ui/Translated';
 import { includeIn } from '../data/stageIncludes';
 import { StageInfoButton } from '../components/portal/StageInfo';
 import { DayFilterChips } from '../components/portal/DayFilterChips';
+import { SiteHereBlock, WorkingBars, SiteVisitFlow, startSiteVisit, myOpenVisit } from '../components/portal/SiteVisit';
 import { sortClosePhotos } from '../data/closeSort';
 import { installPortalManifest } from '../data/portalManifest';
 import { findPlanSetViaBackend, findAllPlansPdfsViaBackend } from '../data/driveApi';
@@ -826,6 +827,12 @@ export function ContractorPortal() {
    * word. Reset whenever the work sheet moves to another apartment.
    */
   const [notListed, setNotListed] = useState<{ open: boolean; text: string; sent?: string }>({ open: false, text: '' });
+  /**
+   * THE SITE FLOW (owner, 2026-11-10, the approved Site Flow Preview): "I'm working here" opens a visit on the
+   * apartment (no stage, no questions); "I'm done here" opens this full screen — pictures and videos, then "Did you
+   * do <the next open stage>?". `start` is the screen it opens on: 'ask' from the green bar, 'media' from the sheet.
+   */
+  const [siteFlow, setSiteFlow] = useState<{ aptId: string; visitId: string; start: 'ask' | 'media' } | null>(null);
   useEffect(() => { setNotListed({ open: false, text: '' }); }, [workHere?.aptId]);
   /**
    * The closing screen's two questions for a stage report (owner, 2026-09-16):
@@ -1055,6 +1062,14 @@ export function ContractorPortal() {
    */
   const notFound = !contractor;
   const contractorId = contractor?.id ?? '';
+  /** The worker as the site flow names him (his trade decides which stage he is asked about). */
+  const siteWorker = { id: contractorId, name: contractor?.name ?? 'Worker', category: contractor?.category };
+  /** "Apartment 23" and "Floor 6 · Cohen" — the site flow's title lines. */
+  const siteTitleOf = (a: Apartment) => `${w('Apartment', 'דירה', 'Квартира')} ${a.apartmentNumber?.trim() || aptLabel(a)}`;
+  const siteSubOf = (a: Apartment) => [
+    rowNumOf(a.buildingId, a.floor) !== '' ? `${w('Floor', 'קומה', 'Этаж')} ${rowNumOf(a.buildingId, a.floor)}` : '',
+    a.displayName?.trim() && a.displayName.trim() !== a.apartmentNumber ? a.displayName.trim() : '',
+  ].filter(Boolean).join(' · ');
   // This page is FOR the worker: his speaking language (speakLang.ts) drives
   // the dictation mic and keeps his own words untranslated for him, whatever
   // language the screen is set to.
@@ -1163,6 +1178,16 @@ export function ContractorPortal() {
     () => new Set(assignments.filter(a => !a.completedAt && a.apartmentId).map(a => a.apartmentId)),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [contractorAssignments, contractorId]);
+  /**
+   * What the map lights: his open tasks, plus every flat where HIS site visit is open or waiting on the office — a
+   * flat he is working in with no task in it was drawn grey, and a grey tile never shows the glow (the diagram leaves
+   * the signal off a dimmed tile).
+   */
+  const mapLitIds = useMemo(() => {
+    const ids = new Set(openAptIds);
+    for (const a of apartments) if ((a.siteVisits ?? []).some(v => v.byId === contractorId && (v.status === 'working' || v.status === 'question'))) ids.add(a.id);
+    return ids;
+  }, [openAptIds, apartments, contractorId]);
   /** Work he began himself on the map ("I'm going to work here") — his to move, no permission needed. */
   const startedByHim = (a: ContractorAssignment) => !!a.stageReport && a.createdBy === contractorId;
   /**
@@ -3586,6 +3611,12 @@ plansPdfFileId && (
               </>
             )}
 
+            {/* Where he is working now — one green bar per open visit; a tap takes him to "I'm done here". */}
+            {!switching && (
+              <WorkingBars apartments={apartments} workerId={contractorId} w={w}
+                label={a => a.apartmentNumber?.trim() || aptLabel(a)}
+                onOpen={(aptId, visitId) => setSiteFlow({ aptId, visitId, start: 'ask' })} />
+            )}
             {switching ? (
               <div className="flex-1 flex items-center justify-center text-sm text-gray-400">…</div>
             ) : here.length === 0 ? (
@@ -3617,7 +3648,7 @@ plansPdfFileId && (
                       selectedBuilding={shown as never}
                       onApartmentClick={handleDiagramClick}
                       showShinuiBadge={false}
-                      highlightedApartmentIds={openAptIds}
+                      highlightedApartmentIds={mapLitIds}
                       aptSubLabels={aptSubLabels}
                       compact={!phonePortal}
                       phone={phonePortal}
@@ -5172,6 +5203,18 @@ plansPdfFileId && (
               <div className="flex-1 overflow-y-auto px-5 py-4 space-y-3">
                 {workHere.step === 'view' && (
                   <>
+                    {/* THE SITE FLOW first (owner, 2026-11-10): one big green "I'm working here" — or, when he is
+                        already working here, "I'm done here" and "Still working". Everything below stays as it was. */}
+                    {perms.workHere && (
+                      <SiteHereBlock apt={apt} workerId={contractorId} w={w}
+                        onStart={() => { startSiteVisit(apt.id, siteWorker, workerUser()); closeSheet(); }}
+                        onDone={() => {
+                          const v = myOpenVisit(useStore.getState().apartments.find(x => x.id === apt.id), contractorId);
+                          closeSheet();
+                          if (v) setSiteFlow({ aptId: apt.id, visitId: v.id, start: 'media' });
+                        }}
+                        onCancel={closeSheet} />
+                    )}
                     {/* The unit's plan, before the work starts (owner,
                         2026-10-18): any unit with "Open any engineered plan",
                         or a unit he has a task in with the ordinary plan
@@ -5526,6 +5569,17 @@ plansPdfFileId && (
               onClose={() => setMarkup(null)}
             />
           </Suspense>
+        );
+      })()}
+
+      {siteFlow && (() => {
+        const a = apartments.find(x => x.id === siteFlow.aptId);
+        if (!a) return null;
+        return (
+          <SiteVisitFlow key={siteFlow.visitId} aptId={a.id} visitId={siteFlow.visitId} start={siteFlow.start}
+            worker={siteWorker} user={workerUser()} lang={readLang} w={w}
+            title={siteTitleOf(a)} sub={siteSubOf(a)}
+            onClose={() => setSiteFlow(null)} />
         );
       })()}
 
