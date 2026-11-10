@@ -4,7 +4,7 @@
 // made in, a drag HELD over a chip turning the notebook to that week (board
 // tiles and task bars alike), the TV showing the same chips, and the
 // Dashboard's compact "This week" card. Dates from the real clock.
-import { chromium } from 'playwright';
+import { chromium } from '/opt/node22/lib/node_modules/playwright/index.mjs';
 
 const APP = process.env.APP || 'http://localhost:5173';
 let fails = 0;
@@ -47,7 +47,7 @@ const seed = ({ THIS, LAST, NEXT, firstWeek, lastTue, thisMon, nextWed }) => {
 };
 const args = { THIS, LAST, NEXT, firstWeek: W(-2), lastTue: day(LAST, 2), thisMon: day(THIS, 1), nextWed: day(NEXT, 3) };
 
-const b = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome' });
+const b = await chromium.launch();
 const ctx = await b.newContext({ viewport: { width: 1440, height: 900 } });
 await ctx.addInitScript(seed, args);
 const page = await ctx.newPage();
@@ -138,7 +138,14 @@ if (process.env.SHOTS) await page.locator(N).screenshot({ path: `${process.env.S
   check((await drawnWeeks())[0] === THIS, '2 · a pick from an earlier week is forgotten — it opens on this week');
   await page.locator(`${N} [data-week-older]`).click();
   check(await page.locator('[data-week-older-list] [data-week-older-pick]').count() > 3, '2 · Older… lists earlier weeks');
-  await page.keyboard.press('Escape');
+  // owner, 2026-11-10: "the button should be a + and show future dates as well"
+  check(await page.locator(`${N} [data-week-older] svg`).count() === 1 && !(await page.locator(`${N} [data-week-older]`).innerText()).trim(), '2 · the button is a +');
+  const ahead = await page.locator('[data-week-older-list] [data-week-ahead-pick]').evaluateAll(es => es.map(e => e.getAttribute('data-week-ahead-pick')));
+  check(ahead.length >= 20 && ahead[0] > THIS, `2 · the list shows the coming weeks too (${ahead.length}, first ${ahead[0]})`);
+  await page.locator(`[data-week-ahead-pick="${ahead[2]}"]`).click(); await page.waitForTimeout(600);
+  check((await drawnWeeks())[0] === ahead[2], '2 · picking a coming week turns the notebook to it');
+  check(await page.locator(`${N} [data-week-chip="${ahead[2]}"][data-on]`).count() === 1, '2 · and it gets its own chip, lit');
+  await page.locator(`${N} [data-week-today]`).click(); await page.waitForTimeout(400);
 }
 
 // ── 3 · a board tile HELD over "Last week" turns the page, then drops there ──

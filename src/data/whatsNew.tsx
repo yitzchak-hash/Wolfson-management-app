@@ -35,6 +35,11 @@ export const WHATS_NEW: WhatsNewEntry[] = [
     title: 'Workers open and close their work, and inspections with approval',
     items: [
       {
+        title: 'Any week, ahead or back',
+        body: 'In the weekly notebook, the + after the week chips lists the coming weeks (about six months ahead) and the earlier ones. Pick one and the notebook turns to it.',
+        demo: 'tap',
+      },
+      {
         title: '"I\'m working here"',
         body: 'On his phone\'s building map, a worker taps an apartment and presses I\'m working here. It glows green on his phone and on your board until he presses I\'m done here, sends his pictures and videos, and answers "Did you do <stage>?". Yes marks it done. No sends it to the office.',
         demo: 'tap',

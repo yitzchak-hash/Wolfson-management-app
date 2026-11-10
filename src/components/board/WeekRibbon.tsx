@@ -16,7 +16,7 @@
  */
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { ChevronDown } from 'lucide-react';
+import { Plus } from 'lucide-react';
 
 import { prefGet, prefSet, prefRemove } from '../../data/prefs';
 const isoOf = (d: Date) => {
@@ -71,11 +71,11 @@ export interface WeekStat { tasks: number; done: number }
 
 const WORDS = {
   en: { last: 'Last week', this: 'This week', next: 'Next week', older: 'Older…', today: 'Today',
-        empty: 'nothing', olderTitle: 'Go to an earlier week', hold: 'Hold here to go to this week' },
+        empty: 'nothing', olderTitle: 'Go to another week', ahead: 'Coming weeks', back: 'Earlier weeks', hold: 'Hold here to go to this week' },
   he: { last: 'שבוע שעבר', this: 'השבוע', next: 'שבוע הבא', older: 'קודמים…', today: 'היום',
-        empty: 'ריק', olderTitle: 'מעבר לשבוע קודם', hold: 'החזיקו כאן כדי לעבור לשבוע הזה' },
+        empty: 'ריק', olderTitle: 'מעבר לשבוע אחר', ahead: 'השבועות הבאים', back: 'שבועות קודמים', hold: 'החזיקו כאן כדי לעבור לשבוע הזה' },
   ru: { last: 'Прошлая неделя', this: 'Эта неделя', next: 'Следующая', older: 'Раньше…', today: 'Сегодня',
-        empty: 'пусто', olderTitle: 'Перейти к прошлой неделе', hold: 'Задержите здесь, чтобы перейти' },
+        empty: 'пусто', olderTitle: 'Перейти к другой неделе', ahead: 'Следующие недели', back: 'Прошлые недели', hold: 'Задержите здесь, чтобы перейти' },
 };
 
 export function WeekRibbon({
@@ -100,7 +100,8 @@ export function WeekRibbon({
   const olderRef = useRef<HTMLButtonElement>(null);
   const near = [-2, -1, 0, 1, 2, 3].map(n => shiftWeek(thisWeek, n));
   // A week reached through Older… gets its own chip at the front, lit.
-  const chips = near.includes(focus) ? near : [focus, ...near];
+  // A week AHEAD stands after the chips, an earlier one before them.
+  const chips = near.includes(focus) ? near : focus > thisWeek ? [...near, focus] : [focus, ...near];
   const dateOf = (wk: string) => new Date(`${wk}T00:00:00`)
     .toLocaleDateString(locale, { month: 'short', day: 'numeric' });
   const nameOf = (wk: string) =>
@@ -109,6 +110,12 @@ export function WeekRibbon({
 
   const older: string[] = [];
   for (let wk = shiftWeek(thisWeek, -3); wk >= earliest && older.length < 52; wk = shiftWeek(wk, -1)) older.push(wk);
+  /**
+   * The weeks AHEAD too (owner, 2026-11-10: "the button should be a + and show future dates as well"): about six
+   * months past the chips, so a job can be planned for a week the ribbon does not show yet.
+   */
+  const ahead: string[] = [];
+  for (let n = 4; n <= 26; n++) ahead.push(shiftWeek(thisWeek, n));
 
   return (
     <div data-week-ribbon className="flex items-stretch px-2 pb-1.5 flex-shrink-0 overflow-x-auto widget-scroll no-bar"
@@ -162,14 +169,12 @@ export function WeekRibbon({
           </button>
         );
       })}
-      {older.length > 0 && (
-        <button ref={olderRef} data-no-drag data-el-action data-week-older
-          onClick={() => setOlderOpen(o => !o)} title={w.olderTitle}
-          className="flex-shrink-0 inline-flex items-center gap-0.5 rounded-lg border border-dashed border-gray-300 px-2 font-bold text-gray-500 hover:text-[#1e3a5f]"
-          style={{ fontSize: small }}>
-          {w.older}<ChevronDown size={Math.max(10, small)} />
-        </button>
-      )}
+      <button ref={olderRef} data-no-drag data-el-action data-week-older
+        onClick={() => setOlderOpen(o => !o)} title={w.olderTitle} aria-label={w.olderTitle}
+        className="flex-shrink-0 inline-flex items-center justify-center rounded-lg border border-dashed border-gray-300 font-bold text-gray-500 hover:text-[#1e3a5f] hover:border-[#1e3a5f]"
+        style={{ minWidth: Math.max(36, fontSize * 2.6) }}>
+        <Plus size={Math.max(14, fontSize + 2)} />
+      </button>
       {focus !== thisWeek && (
         <button data-no-drag data-el-action data-week-today onClick={() => onPick(thisWeek)}
           className="flex-shrink-0 rounded-lg border border-[#4aa8d8] px-2 font-extrabold text-[#1e3a5f] bg-sky-50 hover:bg-sky-100"
@@ -178,7 +183,7 @@ export function WeekRibbon({
         </button>
       )}
       {olderOpen && (
-        <OlderList anchor={olderRef.current} weeks={older} stats={stats} locale={locale}
+        <OlderList anchor={olderRef.current} weeks={older} ahead={ahead} words={w} stats={stats} locale={locale}
           onPick={wk => { setOlderOpen(false); onPick(wk); }} onClose={() => setOlderOpen(false)} />
       )}
     </div>
@@ -186,9 +191,11 @@ export function WeekRibbon({
 }
 
 /** The earlier weeks, grouped by month — portalled, sealed, Escape backs out. */
-function OlderList({ anchor, weeks, stats, locale, onPick, onClose }: {
+function OlderList({ anchor, weeks, ahead, words, stats, locale, onPick, onClose }: {
   anchor: HTMLElement | null;
   weeks: string[];
+  ahead: string[];
+  words: { ahead: string; back: string };
   stats: Map<string, WeekStat>;
   locale: string;
   onPick: (wk: string) => void;
@@ -210,29 +217,36 @@ function OlderList({ anchor, weeks, stats, locale, onPick, onClose }: {
     onWheel: (e: React.WheelEvent) => e.stopPropagation(),
   };
   let lastMonth = '';
+  const row = (wk: string, hook: string) => {
+    const d = new Date(`${wk}T00:00:00`);
+    const month = d.toLocaleDateString(locale, { month: 'long', year: 'numeric' });
+    const head = month !== lastMonth ? month : null;
+    lastMonth = month;
+    const st = stats.get(wk);
+    return (
+      <div key={wk}>
+        {head && <div className="px-3 pt-2 pb-0.5 text-[10.5px] font-black tracking-wide text-slate-400 uppercase">{head}</div>}
+        <button {...{ [hook]: wk }} data-week-older-pick={wk} onClick={() => onPick(wk)}
+          className="w-full flex items-center gap-2 px-3 py-1.5 text-start text-[12.5px] hover:bg-slate-50">
+          <span className="font-bold text-slate-700">{d.toLocaleDateString(locale, { month: 'short', day: 'numeric' })}</span>
+          <span className="flex-1" />
+          <span className="tabular-nums text-slate-400">{st && st.tasks ? `${st.tasks} · ${st.done}✓` : '—'}</span>
+        </button>
+      </div>
+    );
+  };
+  const section = (label: string) => (
+    <div className="px-3 pt-2 pb-1 text-[11.5px] font-extrabold text-[#1e3a5f] border-t border-gray-100 first:border-t-0">{label}</div>
+  );
   return createPortal(
     <div {...seal}>
       <div className="fixed inset-0 z-[150]" onClick={onClose} />
       <div data-week-older-list className="fixed z-[151] w-[240px] rounded-xl border border-gray-200 bg-white shadow-xl py-1 overflow-y-auto"
         style={{ left, top, maxHeight: `calc(100vh - ${top + 8}px)` }}>
-        {weeks.map(wk => {
-          const d = new Date(`${wk}T00:00:00`);
-          const month = d.toLocaleDateString(locale, { month: 'long', year: 'numeric' });
-          const head = month !== lastMonth ? month : null;
-          lastMonth = month;
-          const st = stats.get(wk);
-          return (
-            <div key={wk}>
-              {head && <div className="px-3 pt-2 pb-0.5 text-[10.5px] font-black tracking-wide text-slate-400 uppercase">{head}</div>}
-              <button data-week-older-pick={wk} onClick={() => onPick(wk)}
-                className="w-full flex items-center gap-2 px-3 py-1.5 text-start text-[12.5px] hover:bg-slate-50">
-                <span className="font-bold text-slate-700">{d.toLocaleDateString(locale, { month: 'short', day: 'numeric' })}</span>
-                <span className="flex-1" />
-                <span className="tabular-nums text-slate-400">{st && st.tasks ? `${st.tasks} · ${st.done}✓` : '—'}</span>
-              </button>
-            </div>
-          );
-        })}
+        {ahead.length > 0 && section(words.ahead)}
+        {ahead.map(wk => row(wk, 'data-week-ahead-pick'))}
+        {weeks.length > 0 && (lastMonth = '', section(words.back))}
+        {weeks.map(wk => row(wk, 'data-week-back-pick'))}
       </div>
     </div>,
     document.body,
