@@ -42,6 +42,9 @@ export const WORKER_PERMISSIONS: PermissionDef[] = [
     hint: 'A line of text against the task, which the office reads.' },
   { key: 'workHere', label: 'Start work from the building map', group: 'Work',
     hint: 'The "I\'m going to work here" button on an apartment — one open task for today, closed with pictures.' },
+  { key: 'inspect', label: 'Do inspections from the building map', group: 'Work',
+    hint: 'An "Inspect here" button on an apartment: pictures and a video, then "Do you approve this apartment?". '
+      + 'For the person who inspects (owner, 2026-11-11: a worker link for Tzvi that does inspections instead of work).' },
   { key: 'selfAssign', label: 'Give themselves a task', group: 'Work',
     hint: 'For somebody who finds work on site and needs it recorded rather than remembered. '
       + 'It behaves like any other task — it takes photos and it shows in the office.' },

@@ -863,6 +863,8 @@ export interface Inspection {
   stageId?: string;
   /** "Do you approve this apartment?" — yes or no; absent when the stage did not ask. */
   approved?: boolean;
+  /** What is wrong, in the inspector's words, when he said No on his phone (SiteInspect). */
+  note?: string;
 }
 
 export interface Apartment {
@@ -1411,6 +1413,7 @@ export type ContractorCategory = 'drywall' | 'ac' | 'general';
 export type WorkerPermission =
   | 'ownTasks' | 'completeTasks' | 'uploadPhotos' | 'addNotes' | 'selfAssign'
   | 'workHere'
+  | 'inspect'
   | 'assignOthers'
   | 'moveOwnWork'
   | 'deleteOwnTasks' | 'deleteOfficeTasks'

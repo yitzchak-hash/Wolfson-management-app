@@ -52,6 +52,8 @@ import { includeIn } from '../data/stageIncludes';
 import { StageInfoButton } from '../components/portal/StageInfo';
 import { DayFilterChips } from '../components/portal/DayFilterChips';
 import { SiteHereBlock, WorkingBars, SiteVisitFlow, startSiteVisit, myOpenVisit } from '../components/portal/SiteVisit';
+import { InspectHereButton, SiteInspectFlow } from '../components/portal/SiteInspect';
+import { waitingInspection } from '../data/stageHow';
 import { sortClosePhotos } from '../data/closeSort';
 import { installPortalManifest } from '../data/portalManifest';
 import { findPlanSetViaBackend, findAllPlansPdfsViaBackend } from '../data/driveApi';
@@ -838,6 +840,8 @@ export function ContractorPortal() {
    * do <the next open stage>?". `start` is the screen it opens on: 'ask' from the green bar, 'media' from the sheet.
    */
   const [siteFlow, setSiteFlow] = useState<{ aptId: string; visitId: string; start: 'ask' | 'media' } | null>(null);
+  /** The inspector's screen (SiteInspect) — open on one apartment. */
+  const [inspectFlow, setInspectFlow] = useState<string | null>(null);
   useEffect(() => { setNotListed({ open: false, text: '' }); }, [workHere?.aptId]);
   /**
    * The closing screen's two questions for a stage report (owner, 2026-09-16):
@@ -1183,6 +1187,10 @@ export function ContractorPortal() {
     () => new Set(assignments.filter(a => !a.completedAt && a.apartmentId).map(a => a.apartmentId)),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [contractorAssignments, contractorId]);
+  /** The open workspace's stages in order (the site flow's and the inspector's list). */
+  const portalSorted = useMemo(() => stages
+    .filter(x => (currentProjectId === 'general' ? x.projectId === 'general' : !x.projectId))
+    .sort((x, y) => x.order - y.order), [stages, currentProjectId]);
   /**
    * What the map lights: his open tasks, plus every flat where HIS site visit is open or waiting on the office — a
    * flat he is working in with no task in it was drawn grey, and a grey tile never shows the glow (the diagram leaves
@@ -1193,8 +1201,11 @@ export function ContractorPortal() {
     const today = new Date().toDateString();
     for (const a of apartments) if ((a.siteVisits ?? []).some(v => v.byId === contractorId && (v.status === 'working' || v.status === 'question'
       || (!!v.endedAt && new Date(v.endedAt).toDateString() === today)))) ids.add(a.id);
+    // An inspector's map also lights every flat that is waiting for an inspection — that is his work.
+    if (perms.inspect) for (const a of apartments) if (waitingInspection(a, portalSorted, { tipusStages: tipusStagesPortal })) ids.add(a.id);
     return ids;
-  }, [openAptIds, apartments, contractorId]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openAptIds, apartments, contractorId, perms.inspect, portalSorted, tipusStagesPortal]);
   /** The worker map reads the site signals as HIS (BuildingDiagram.MapViewerContext): no office flash, a ✓ where he finished. */
   const mapViewer = useMemo(() => ({ workerId: contractorId }), [contractorId]);
   /** Work he began himself on the map ("I'm going to work here") — his to move, no permission needed. */
@@ -5494,16 +5505,21 @@ plansPdfFileId && (
               {/* THE SITE FLOW at the FOOT of the sheet (owner, recording 2026-11-11 122535, 0:35 — "flip the plan. The
                   plan should be on top. I'm working here should be on the bottom"): the plan and the notes scroll above,
                   the one big button stays in reach under the thumb. No Cancel or Still working — the X closes. */}
-              {workHere.step === 'view' && perms.workHere && (
-                <div data-work-foot className="flex-shrink-0 px-5 pt-2 border-t border-gray-100"
+              {workHere.step === 'view' && (perms.workHere || perms.inspect) && (
+                <div data-work-foot className="flex-shrink-0 px-5 pt-2 border-t border-gray-100 space-y-2"
                   style={{ paddingBottom: 'max(14px, env(safe-area-inset-bottom))' }}>
-                  <SiteHereBlock apt={apt} workerId={contractorId} w={w}
+                  {/* The inspector's button (owner, 2026-11-11): the same sheet as every worker, inspections in place of work. */}
+                  {perms.inspect && (
+                    <InspectHereButton apt={apt} sorted={wsSortedAll} ctx={{ tipusStages: tipusStagesPortal }} lang={readLang} w={w}
+                      onInspect={() => { closeSheet(); setInspectFlow(apt.id); }} />
+                  )}
+                  {perms.workHere && <SiteHereBlock apt={apt} workerId={contractorId} w={w}
                     onStart={() => { startSiteVisit(apt.id, siteWorker, workerUser()); closeSheet(); }}
                     onDone={() => {
                       const v = myOpenVisit(useStore.getState().apartments.find(x => x.id === apt.id), contractorId);
                       closeSheet();
                       if (v) setSiteFlow({ aptId: apt.id, visitId: v.id, start: 'media' });
-                    }} />
+                    }} />}
                 </div>
               )}
             </div>
@@ -5615,6 +5631,16 @@ plansPdfFileId && (
               onClose={() => setMarkup(null)}
             />
           </Suspense>
+        );
+      })()}
+
+      {inspectFlow && (() => {
+        const a = apartments.find(x => x.id === inspectFlow);
+        if (!a) return null;
+        return (
+          <SiteInspectFlow aptId={a.id} sorted={portalSorted} ctx={{ tipusStages: tipusStagesPortal }}
+            inspector={{ id: contractorId, name: contractor?.name ?? 'Inspector' }} user={workerUser()} lang={readLang} w={w}
+            title={siteTitleOf(a)} sub={siteSubOf(a)} onClose={() => setInspectFlow(null)} />
         );
       })()}
 

@@ -38,7 +38,7 @@ ask built or answered) · **not this app** (a recording of another project — r
 | 25 | Recording 2026-11-11 094048.mp4 (33.3 MB, 1440×1246) | `161dv2cC81BfdzSEDjvbY3IhgDStqH0XK` | 1:21 | done (live 2026-11-11) | [2026-11-11-094048.md](2026-11-11-094048.md) |
 | 26 | Recording 2026-11-11 121720.mp4 (122.4 MB, 1920×1020, NO VOICE) | `1x9GSXKSaa9HKM3_nEF5XJSNKyGxJu-ig` | 2:55 | superseded by 28 (he recorded it again with voice) | [2026-11-11-121720.md](2026-11-11-121720.md) |
 | 27 | Recording 2026-11-11 122535.mp4 (410×824 phone, Igor's worker link) | `1IsVdRosrgXFvPPlVWamCA3FNb0twSwWh` | 3:28 | done (live 2026-11-11) | [2026-11-11-122535.md](2026-11-11-122535.md) |
-| 28 | Recording 2026-11-11 123621.mp4 (86.2 MB, 1920×1032 — the redo of 26, with voice) | `1n_dES4CybR-5rol5L8O16Fos4GWep2dU` | 2:46 | open (11 of 14 live 2026-11-11; the wall on the plan, the 9 flats' Inspection 1, Tzvi's inspection link wait on him) | [2026-11-11-123621.md](2026-11-11-123621.md) |
+| 28 | Recording 2026-11-11 123621.mp4 (86.2 MB, 1920×1032 — the redo of 26, with voice) | `1n_dES4CybR-5rol5L8O16Fos4GWep2dU` | 2:46 | open (13 of 14 live 2026-11-11; the wall on the plan waits for his marks on the artifact page) | [2026-11-11-123621.md](2026-11-11-123621.md) |
 Folder last listed: 2026-11-11 (later) — recording 26 at the top. Before: recording 25 at the top (24 is done and belongs in Processed). Earlier: 2026-11-10 — recording 24 at the top. Earlier: 2026-11-03 — recordings 18, 19 and 20 at the top (19 and 20 each twice). 1–18 are done and belong in Processed.
 
 ## The folder's two subfolders (owner, 2026-10-18)

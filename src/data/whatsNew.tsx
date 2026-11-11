@@ -35,6 +35,11 @@ export const WHATS_NEW: WhatsNewEntry[] = [
     title: 'Contractor, AC company, and stages that stand alone',
     items: [
       {
+        title: 'A worker link for inspections',
+        body: 'Settings → Workers has a new switch: "Do inspections from the building map". A worker with it sees the whole building map, and an apartment\'s card has a purple "Inspect here" button: pictures and a video, then "Do you approve this apartment?". Yes finishes the inspection in his name; No keeps it open with his words for the office.',
+        demo: 'tap',
+      },
+      {
         title: 'Type any contractor — or let the app fill it in',
         body: 'The Contractor box in a job now takes any name you type. If you leave it empty and a worker finished Installation through the app, his name shows there by itself with a small sparkle.',
         demo: 'tap',

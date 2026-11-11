@@ -70,6 +70,8 @@ function InspectionRow({ ins, rtl, day, onOpenPhotos }: {
         </span>
         <span className="text-[15px] font-bold text-gray-900 min-w-0 truncate">{rtl ? `נבדק ע״י ${first}` : `Inspected by ${first}`}</span>
         <span className="text-[12px] text-gray-600 flex-shrink-0">{day(ins.at)}</span>
+        {ins.approved === false && <span data-inspection-no className="text-[11px] font-bold px-1.5 py-0.5 rounded-full flex-shrink-0" style={{ backgroundColor: '#fff7ed', color: '#9a3412' }}>{rtl ? 'לא אושר' : 'Not approved'}</span>}
+        {ins.note && <span data-inspection-note className="text-[12px] text-gray-700 min-w-0 truncate" title={ins.note}>{ins.note}</span>}
         <span className="flex-1" />
         <span className="text-[11px] font-semibold text-gray-500 flex-shrink-0 inline-flex items-center gap-1">
           {ins.files.some(f => f.mimeType.startsWith('video/')) ? <Video size={12} /> : <Camera size={12} />}{ins.files.length}
