@@ -11,7 +11,7 @@
  */
 import type { Apartment } from '../../types';
 import {
-  CARD_CORNER, CORE, CORE_PH14, CORE_PH15, FLOOR_NO_AT, LABEL_AT, PH_BOX, PH_DRAWING, PH_TERRACES, PLAN_BOX, SHAPES,
+  CARD_CORNER, CORE, CORE_PH14, CORE_PH15, FLOOR_NO_AT, LABEL_AT, PH_BOX, PH_DRAWING, PH_TERRACES, PLAN_BOX, SHAPES, WALLS,
   isPenthouseShape, shapesOf as wolfsonShapesOf, type ShapeKey,
 } from './wolfsonPlan';
 
@@ -46,6 +46,8 @@ export interface BuildingPlan {
   shapes: Record<string, Pt[]>;
   terraces: Record<string, Pt[][]>;
   labelAt: Record<string, Pt>;
+  /** The marked wall of a shape (a list of polylines) — drawn green on a flat answered "Wall: Yes". */
+  walls?: Record<string, Pt[][]>;
   cardSpot: Record<string, CardSpot>;
   /** The shapes a flat is drawn as on floor `rowFloor`. */
   shapesOf(apt: Apartment, rowFloor: number): string[];
@@ -62,6 +64,7 @@ export const WOLFSON_PLAN: BuildingPlan = {
   shapes: SHAPES,
   terraces: PH_TERRACES as Record<string, Pt[][]>,
   labelAt: LABEL_AT,
+  walls: WALLS as Record<string, Pt[][]>,
   cardSpot: CARD_CORNER,
   shapesOf: apt => wolfsonShapesOf(apt),
   floorOf(row, interiorSrc) {

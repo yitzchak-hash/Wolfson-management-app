@@ -13,7 +13,7 @@
  * documented smoulder). React state changes only when the hovered flat or the
  * landed floor changes.
  */
-import { crewOf, acCompanyOf, isCompanyButton } from '../../data/aptCrew';
+import { crewOf, acCompanyOf, isCompanyButton, isWallButton } from '../../data/aptCrew';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Apartment, Stage, CustomButton } from '../../types';
 import { realName } from '../../data/aptSale';
@@ -136,11 +136,15 @@ export default function BuildingView({ apartments, stages, onOpen, words, initia
   const answersOf = (a: Apartment) => customButtons.flatMap(cb => {
     // A company button is said by the AC company chip below, never twice.
     if (isCompanyButton(cb)) return [];
+    // The wall is DRAWN on the plan where the plan has it marked (wallOn below) — never a "Wall: Yes" chip as well.
+    if (isWallButton(cb) && plan.walls) return [];
     const v = a.customAnswers?.[cb.id];
     // "Wall Yes/No" is the button's name; the answer already says yes or no, so it reads "Wall: Yes" (owner, 2026-11-03).
     const name = cb.name.replace(/\s*\(?\s*(yes\s*\/\s*no|כן\s*\/\s*לא)\s*\)?\s*\??\s*$/i, '').trim() || cb.name;
     return v ? [{ id: cb.id, name, v, mark: v === 'yes' ? '✓' : v === 'no' ? '✗' : '?' }] : [];
   });
+  /** A flat answered "Wall: Yes" (the project's own Wall button). */
+  const wallOn = (a: Apartment) => customButtons.some(cb => isWallButton(cb) && a.customAnswers?.[cb.id] === 'yes');
   /** The contractor and the AC company, as chips under the answers (owner, recording 2026-11-11 123621, 1:42 — "you
    *  also want to see the contractor name and the AC company name"). */
   const factsOf = (a: Apartment) => [crewOf(a, stages).name, acCompanyOf(a, customButtons)].filter(Boolean);
@@ -472,6 +476,12 @@ export default function BuildingView({ apartments, stages, onOpen, words, initia
                       clipPath={`url(#bv-clip-${plan.id}-${row.floor})`} preserveAspectRatio="none" />
                   </g>
                 )}
+                {/* The wall, lit green, on every flat answered "Wall: Yes" — above the drawing, under the labels. */}
+                {plan.walls && row.flats.filter(({ apt }) => wallOn(apt)).flatMap(({ apt, shapes }) =>
+                  shapes.flatMap(s => (plan.walls![s] ?? []).map((wl, wi) => (
+                    <polyline key={`w-${apt.id}-${s}-${wi}`} className="bv-wall" data-flat-wall={apt.id}
+                      points={wl.map(p => p.join(',')).join(' ')} pointerEvents="none" />
+                  ))))}
                 {/* The labels lie ABOVE the plan's drawing, so its lines never cross them (owner, 2026-11-03:
                     "it's getting hidden behind the lines of the plan"). */}
                 {row.flats.map(({ apt, shapes }) => {

@@ -35,6 +35,11 @@ export const WHATS_NEW: WhatsNewEntry[] = [
     title: 'Contractor, AC company, and stages that stand alone',
     items: [
       {
+        title: 'The wall, lit green on the plan',
+        body: 'In the building view, an apartment marked Wall: Yes now shows the wall itself glowing green on its plan, instead of a "Wall: Yes" label.',
+        demo: 'sparkle',
+      },
+      {
         title: 'A worker link for inspections',
         body: 'Settings → Workers has a new switch: "Do inspections from the building map". A worker with it sees the whole building map, and an apartment\'s card has a purple "Inspect here" button: pictures and a video, then "Do you approve this apartment?". Yes finishes the inspection in his name; No keeps it open with his words for the office.',
         demo: 'tap',

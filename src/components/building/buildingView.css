@@ -232,3 +232,9 @@
 .bv-plan-btn:hover { background: #eef4fb; border-color: #1e3a5f; }
 .bv-plan-bubble { font-size: 12px; padding: 4px 11px; }
 .bv-plan-dot { width: 6px; height: 6px; border-radius: 50%; background: #f59e0b; }
+
+/* the marked wall of a flat answered "Wall: Yes" — lit green (owner, 2026-11-11) */
+.bv-wall { fill: none; stroke: #10b981; stroke-width: 14; stroke-linecap: round; stroke-linejoin: round;
+  /* a white rim first, so green reads on a yellow or orange flat too */
+  filter: drop-shadow(0 0 3px #ffffff) drop-shadow(0 0 3px #ffffff) drop-shadow(0 0 12px rgba(16,185,129,.95)); }
+.bv-plate[data-solid='0'] .bv-wall { display: none; }

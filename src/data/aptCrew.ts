@@ -44,3 +44,6 @@ export function acCompanyOf(apt: Pick<Apartment, 'acCompany' | 'customAnswers'>,
   }
   return '';
 }
+
+/** The project's "Wall Yes/No" button — where the plan has the wall marked, the building view draws it instead. */
+export const isWallButton = (cb: Pick<CustomButton, 'name'>) => /^\s*wall\b/i.test(cb.name) || /^\s*קיר/.test(cb.name);

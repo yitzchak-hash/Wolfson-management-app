@@ -65,6 +65,19 @@ export const FLOOR_NO_AT: [number, number] = [551, 444];
 export const PH_DRAWING: Record<string, string> = { PL14: '/building/wolfson-ph14.png', PR14: '/building/wolfson-ph14.png', PL15: '/building/wolfson-ph15.png', PR15: '/building/wolfson-ph15.png' };
 export function isPenthouseShape(k: ShapeKey): boolean { return k.startsWith('P'); }
 
+/**
+ * THE WALL of each typical apartment type, in the plan's units (owner, recording 2026-11-11 123621, 1:01 — "I don't
+ * need you to show me yes or no … add the walls to the actual thing over here and make it light up in green"). He
+ * marked them himself on the "Wolfson Wall Marker" page the same day; a wall is a list of points, a type may have
+ * several. A flat answered "Wall: Yes" draws its type's wall lit green on the building view.
+ */
+export const WALLS: Partial<Record<ShapeKey, Pt[][]>> = {
+  A: [[[132, 313], [169, 314]]],
+  B: [[[976, 317], [945, 318]]],
+  C1: [[[976, 542], [942, 542]]],
+  C2: [[[132, 541], [169, 541]]],
+};
+
 /** Where an apartment's number sits — inside its biggest room (the living wing). */
 export const LABEL_AT: Record<ShapeKey, Pt> = {
   A: [178, 215], B: [930, 228], C2: [178, 640], C1: [930, 640], WL: [180, 480], WR: [925, 480], PL14: [150, 640], PR14: [800, 640], PL15: [160, 470], PR15: [830, 470],

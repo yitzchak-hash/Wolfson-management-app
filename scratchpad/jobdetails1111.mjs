@@ -94,6 +94,19 @@ await p.locator('[data-view-switch] [data-view="building"]').first().click().cat
 const facts = await p.locator('[data-flat-fact]').allTextContents();
 T(facts.includes('Moshe the Plumber') && facts.includes('Mitsubishi'), 'the building view shows the contractor and the AC company on the flat', facts.join(' | '));
 T(!(await p.locator('[data-flat-answer]').allTextContents()).some(t => /Hisense|Mitsubishi/.test(t)), 'and no Hisense / Mitsubishi yes-no chip');
+// 8 · the wall is drawn on the plan, lit green, where Wall is Yes (he marked it on the Wolfson Wall Marker page)
+await p.evaluate(() => { const st = window.__store.getState();
+  st.updateApartment('A1-45', { customAnswers: { 'CB-wall': 'yes' } }, st.currentUser);
+  st.updateApartment('A1-46', { customAnswers: { 'CB-wall': 'no' } }, st.currentUser); });
+await p.waitForTimeout(600);
+await p.locator('[data-rail-floor="12"]').first().click().catch(() => {});
+await p.waitForTimeout(1200);
+await p.waitForTimeout(400);
+T(await p.locator('[data-flat-wall="A1-45"]').count() >= 1, 'a flat answered Wall: Yes has its wall drawn on the plan');
+T(await p.locator('[data-flat-wall="A1-46"]').count() === 0, 'a flat answered No has none');
+const wallCss = await p.locator('[data-flat-wall="A1-45"]').first().evaluate(e => getComputedStyle(e).stroke);
+T(wallCss === 'rgb(16, 185, 129)', `the wall is green (${wallCss})`);
+T(!(await p.locator('[data-flat-answer]').allTextContents()).some(t => /Wall/.test(t)), 'and there is no "Wall: Yes / No" chip any more');
 if (process.env.SHOTS) await p.screenshot({ path: process.env.SHOTS + '/building.png' });
 console.log(`\n${ok} ok · ${bad} bad`);
 await browser.close();
