@@ -31,7 +31,8 @@ const bub = p.locator(`[data-stage-bubble="${s5}"]`);
 await bub.scrollIntoViewIfNeeded(); await bub.click(); await p.waitForTimeout(300); await bub.click(); await p.waitForTimeout(800);
 const m = await p.evaluate(() => JSON.parse(JSON.stringify(window.__store.getState().apartments.find(x => x.id === 'A1-53').stageMarks)));
 T(m[s5] === 'done', `the tapped stage is done (${m[s5]})`);
-T(m[s1] === 'done' && m[s4] === 'done', `the earlier SITE stages are ticked with it (${m[s1]}, ${m[s4]})`);
+// Re-encoded (owner, recording 2026-11-11 123621, 2:17 — "each one should be separate"): nothing before it is ticked.
+T(m[s1] !== 'done' && m[s4] !== 'done', `the earlier site stages are NOT ticked with it — each stage is separate (${m[s1]}, ${m[s4]})`);
 T(m[insp] !== 'done', `the inspection between them is NOT approved by itself (${m[insp]})`);
 T(m[office] !== 'done', `the office task is NOT ticked by itself (${m[office]})`);
 console.log(`\n${ok} ok · ${bad} bad`);

@@ -13,6 +13,7 @@
  * documented smoulder). React state changes only when the hovered flat or the
  * landed floor changes.
  */
+import { crewOf, acCompanyOf, isCompanyButton } from '../../data/aptCrew';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Apartment, Stage, CustomButton } from '../../types';
 import { realName } from '../../data/aptSale';
@@ -133,11 +134,16 @@ function slabPath(plan: BuildingPlan, spec: FloorSpec): string {
 export default function BuildingView({ apartments, stages, onOpen, words, initialFloor, floorLabels, interiorSrc, bus: sharedBus, compact, title, lower, tower = 0, hideLower, customButtons = [], plan = WOLFSON_PLAN, planSlot }: BuildingViewProps) {
   /** A flat's answers as short words: "Wall ✓", "Wall ✗", "Wall ?". */
   const answersOf = (a: Apartment) => customButtons.flatMap(cb => {
+    // A company button is said by the AC company chip below, never twice.
+    if (isCompanyButton(cb)) return [];
     const v = a.customAnswers?.[cb.id];
     // "Wall Yes/No" is the button's name; the answer already says yes or no, so it reads "Wall: Yes" (owner, 2026-11-03).
     const name = cb.name.replace(/\s*\(?\s*(yes\s*\/\s*no|כן\s*\/\s*לא)\s*\)?\s*\??\s*$/i, '').trim() || cb.name;
     return v ? [{ id: cb.id, name, v, mark: v === 'yes' ? '✓' : v === 'no' ? '✗' : '?' }] : [];
   });
+  /** The contractor and the AC company, as chips under the answers (owner, recording 2026-11-11 123621, 1:42 — "you
+   *  also want to see the contractor name and the AC company name"). */
+  const factsOf = (a: Apartment) => [crewOf(a, stages).name, acCompanyOf(a, customButtons)].filter(Boolean);
   const lab = (f: number, row?: FloorRow) => row?.lower ? row.lower.label : floorLabels?.[f] || String(f);
   const w = { ...EN, ...words };
   const stageById = useMemo(() => new Map(stages.map(s => [s.id, s])), [stages]);
@@ -515,6 +521,16 @@ export default function BuildingView({ apartments, stages, onOpen, words, initia
                             </g>);
                           y2 += 56;
                         }
+                        factsOf(apt).forEach((label, fi) => {
+                          const w3 = Math.max(60, label.length * 17 + 30);
+                          const x3 = fit(w3, left);
+                          parts.push(
+                            <g key={`f-${fi}`} className="bv-flat-ans" data-flat-fact={fi === 0 && crewOf(apt, stages).name ? 'contractor' : 'company'}>
+                              <rect x={x3} y={y2 - 24} width={w3} height={48} rx={10} />
+                              <text x={x3 + w3 / 2} y={y2}>{label}</text>
+                            </g>);
+                          y2 += 56;
+                        });
                         return parts;
                       })()}
                     </g>

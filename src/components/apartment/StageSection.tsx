@@ -150,8 +150,16 @@ export function StageSection({
   // Inspections stand after the stage they were taken after; one whose stage is not in the list leads it.
   const inspections = apartment.inspections ?? [];
   const rowIds = new Set(rows.map(r => r.stage.id));
-  const lead = inspections.filter(i => !i.afterStageId || !rowIds.has(i.afterStageId));
-  const after = (stageId: string) => inspections.filter(i => i.afterStageId === stageId);
+  // Every inspection stands under an INSPECTION stage (owner, recording 2026-11-11 123621, 2:04 — four loose
+  // "Inspected by Tzvi" rows on top of the list: "that's a big fat bug that should all go into inspection one"): its
+  // own stage when it has one, else the first inspection stage in the list. Only a list with no inspection stage at
+  // all keeps the old place (after the stage that was last finished when it was taken).
+  const firstInspStage = rows.find(r => howOf(r.stage) === 'inspection')?.stage.id ?? null;
+  const homeOf = (i: typeof inspections[number]): string | null =>
+    (i.stageId && rowIds.has(i.stageId)) ? i.stageId
+      : firstInspStage ?? (i.afterStageId && rowIds.has(i.afterStageId) ? i.afterStageId : null);
+  const lead = inspections.filter(i => !homeOf(i));
+  const after = (stageId: string) => inspections.filter(i => homeOf(i) === stageId);
   /** The last finished stage in the list — where a new inspection will stand. */
   const lastDone = [...rows].reverse().find(r => r.state === 'done')?.stage.id ?? null;
   /** The inspections this person may do here, in order, and the next one (the pop-up starts it). */

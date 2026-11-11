@@ -104,6 +104,13 @@ a53 = await apt('A1-53');
 T(a53.siteVisits[0].status === 'done' && a53.siteVisits[0].answeredBy === setup.me, 'Close ends the forgotten visit');
 
 // ── 5 · the inspection ────────────────────────────────────────────────────
+// Re-encoded (owner, recording 2026-11-11 123621 — "each one should be separate"): a later tick no longer finishes the
+// stages before it, so the stages before the inspection are finished here by hand; then it is the inspection's turn.
+await p.evaluate(i => { const s = window.__store.getState(); const a = s.apartments.find(x => x.id === 'A1-53');
+  const sorted = [...s.stages].filter(x => !x.projectId).sort((x, y) => x.order - y.order); const at = sorted.findIndex(x => x.id === i);
+  const m = { ...(a.stageMarks ?? {}) }; for (const st of sorted.slice(0, at)) if (m[st.id] !== 'off') m[st.id] = 'done';
+  s.setApartmentMarks('A1-53', m, s.currentUser); }, setup.insp);
+await p.waitForTimeout(500);
 T(await p.locator(`[data-stage-row="${setup.insp}"] [data-stage-word]`).innerText().then(t => /Waiting/.test(t)), 'the inspection whose turn it is says Waiting');
 await p.locator('[data-inspect]').click(); await p.waitForTimeout(500);
 T(await p.locator('[data-insp-pop]').count() === 1, 'the little Inspection button opens a pop-up');

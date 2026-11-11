@@ -289,7 +289,12 @@ export function withImpliedDone(
   // drywall stage never ticks the AC work before it. "Not needed" stays,
   // and only a stage that has just become done does this — unticking an
   // earlier one by hand afterwards stands.
+  // EACH STAGE IS SEPARATE in a building workspace (owner, recording 2026-11-11 123621, 2:17 — "it clicks all these
+  // done. I don't want it to be related to these … each one should be separate"): a tick marks that stage and nothing
+  // before it. The Job Board keeps the same-trade rule above.
+  const separate = !!apt.buildingId && apt.buildingId !== 'G';
   for (const when of sortedStages) {
+    if (separate) break;
     if (out?.[when.id] !== 'done' || before?.[when.id] === 'done') continue;
     if (!isWorkStage(when) || isStartStage(when) || !ownStage(apt, when)) continue;
     for (const st of sortedStages) {
@@ -444,7 +449,8 @@ export function pendingStages(apartments: Apartment[], stages: Stage[]): Pending
  * done; the stage named Installation (התקנה) goes straight to done on a tap, and a tap on a done one takes it back.
  */
 export function isOneTapStage(s: Pick<Stage, 'name' | 'nameHe'>): boolean {
-  return /^\s*installation\s*$/i.test(s.name ?? '') || (s.nameHe ?? '').trim() === 'התקנה';
+  // Framing too (owner, recording 2026-11-11 123621, 2:10 — "for now change framing to a one tick").
+  return /^\s*(installation|framing)\s*$/i.test(s.name ?? '') || (s.nameHe ?? '').trim() === 'התקנה';
 }
 
 /** The tap: the one-tap stage jumps to done; every other stage cycles as below. */

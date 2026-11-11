@@ -887,6 +887,8 @@ export interface Apartment {
    * Daniel - Igor … just a selector that lets us choose between the 3"). Information only.
    */
   crew?: string;
+  /** The company of the AC system (owner, recording 2026-11-11 123621) — one of aptCrew.AC_COMPANIES, or typed. */
+  acCompany?: string;
   displayName: string;
   floor: number;
   colPosition: number;  // 1-4 within the 4-col building grid

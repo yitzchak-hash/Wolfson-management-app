@@ -43,7 +43,10 @@
 /* a flat: its true outline, tinted by its stage */
 .bv-flat { cursor: pointer; }
 .bv-flat path {
-  fill: color-mix(in srgb, var(--bv-c) 22%, #ffffff); stroke: color-mix(in srgb, var(--bv-c) 70%, #1e3a5f);
+  /* 60 %, was 22 % (owner, 2026-11-11: "you're still not putting the color based on the stage … we did two stages
+     and the apartment still didn't change a color"): the stages' own colours are pale yellows, and at 22 % over
+     white Installation, Inspection 1 and "no stage" all read as the same white. */
+  fill: color-mix(in srgb, var(--bv-c) 60%, #ffffff); stroke: color-mix(in srgb, var(--bv-c) 70%, #1e3a5f);
   stroke-width: 3; stroke-linejoin: round;
   transition: fill .25s ease, stroke-width .2s ease, filter .25s ease;
 }
@@ -52,7 +55,7 @@
 .bv-flat[data-on='1'] path.bv-terrace { fill: color-mix(in srgb, var(--bv-c) 26%, #ffffff); stroke-width: 2.5; stroke-dasharray: 8 6; filter: none; }
 .bv-flat[data-unsold='1'] path { fill: #ffffff; stroke: #94a3b8; stroke-dasharray: 10 8; }
 .bv-flat[data-on='1'] path {
-  fill: color-mix(in srgb, var(--bv-c) 62%, #ffffff); stroke: #1e3a5f; stroke-width: 6; stroke-dasharray: none;
+  fill: color-mix(in srgb, var(--bv-c) 88%, #ffffff); stroke: #1e3a5f; stroke-width: 6; stroke-dasharray: none;
   filter: drop-shadow(0 0 14px color-mix(in srgb, var(--bv-c) 70%, transparent));
 }
 .bv-flat-no { font-size: 46px; font-weight: 700; fill: #1e3a5f; text-anchor: middle; dominant-baseline: middle;
@@ -188,6 +191,8 @@
 .bv-flat-ans rect { fill: #ecfdf5; stroke: #059669; stroke-width: 3; }
 .bv-flat-ans[data-flat-answer='no'] rect { fill: #fef2f2; stroke: #dc2626; }
 .bv-flat-ans[data-flat-answer='unknown'] rect { fill: #f8fafc; stroke: #94a3b8; }
+/* the contractor and the AC company: facts, not answers — navy on pale blue */
+.bv-flat-ans[data-flat-fact] rect { fill: #eff6ff; stroke: #1e3a5f; }
 .bv-flat-ans text { font-size: 28px; font-weight: 700; fill: #1f2937; text-anchor: middle; dominant-baseline: central; }
 .bv-flat-ans { pointer-events: none; }
 .bv-plate[data-solid='0'] .bv-flat-ans { display: none; }

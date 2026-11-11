@@ -24,7 +24,8 @@ const isTzvi = (name?: string | null) => { const n = (name ?? '').trim(); return
 const CREW = ['Yaakov', 'Daniel', 'Igor'];
 import { TaskThread } from '../tasks/TaskThread';
 import { Translated } from '../ui/Translated';
-import { Send, CheckSquare, Square as SquareIcon } from 'lucide-react';
+import { Send, CheckSquare, Square as SquareIcon, Sparkles } from 'lucide-react';
+import { AC_COMPANIES, crewOf, acCompanyOf, isCompanyButton, isInspectedButton } from '../../data/aptCrew';
 import { trashDriveFiles } from '../../data/driveTrash';
 import { haptic } from '../../data/haptics';
 import { useStore, trackUndo, cloudReady } from '../../data/store';
@@ -139,6 +140,9 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
   const isWolfsonProject = currentProjectId === 'wolfson';
   const tipusim = useStore(st => st.boardSettings[st.currentProjectId]?.tipusim ?? EMPTY_TIPUSIM);
   const customButtons = useStore(st => st.boardSettings[st.currentProjectId]?.customButtons ?? EMPTY_BUTTONS);
+  // The company buttons became the AC company dropdown, and "Inspected by Tzvi" is the Inspection stages' business
+  // (owner, recording 2026-11-11 123621, 0:39 — "get rid of these two buttons … and get rid of inspected by Tzvi").
+  const shownButtons = useMemo(() => customButtons.filter(cb => !isCompanyButton(cb) && !isInspectedButton(cb)), [customButtons]);
   const users = useStore(st => st.users);
   // Who approved the plan, read LIVE — the board hands the drawer the record
   // captured at open, so an approval pressed a moment ago would not show.
@@ -2214,15 +2218,52 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                 {!isGeneralProject && (
                 <div className="flex-shrink-0">
                   <label className="block text-[10px] font-medium text-gray-500 mb-1">{ui.isRtl ? 'קבלן' : 'Contractor'}</label>
-                  <select
-                    data-crew-select
-                    value={apartment.crew ?? ''}
-                    onChange={e => trackUndo(null, () => updateApartment(apartment.id, { crew: e.target.value || undefined }, currentUser))}
-                    className="border border-gray-200 rounded-lg px-2 py-2 text-sm font-bold bg-white focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30"
-                  >
-                    <option value="">—</option>
-                    {CREW.map(c => <option key={c} value={c}>{c}</option>)}
-                  </select>
+                  {/* Typed freely (owner, recording 2026-11-11 123621, 0:07 — "I should be able to type in a random
+                      name"), with the three as suggestions. Left empty, the worker who finished Installation through
+                      the app is shown with a small sparkle (aptCrew.crewOf) — shown, never written. */}
+                  {(() => {
+                    const auto = crewOf(apartment, sortedStages);
+                    return (
+                      <span className="relative inline-block">
+                        <input
+                          key={`${apartment.id}|${apartment.crew ?? ''}`}
+                          data-crew-select data-crew-auto={auto.auto ? '1' : undefined}
+                          list="crew-names" defaultValue={apartment.crew ?? ''}
+                          placeholder={auto.auto ? auto.name : '—'}
+                          title={auto.auto ? (ui.isRtl ? `מולא אוטומטית: ${auto.name} סיים התקנה באפליקציה` : `Filled in by itself: ${auto.name} finished Installation in the app`) : undefined}
+                          onBlur={e => {
+                            const v = e.target.value.trim();
+                            if (v !== (apartment.crew ?? '')) trackUndo(null, () => updateApartment(apartment.id, { crew: v || undefined }, currentUser));
+                          }}
+                          onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
+                          className={`w-36 border border-gray-200 rounded-lg px-2 py-2 text-sm font-bold bg-white focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30 ${auto.auto ? 'pe-6 placeholder:text-gray-800' : ''}`}
+                        />
+                        {auto.auto && <Sparkles data-crew-ai size={13} className="absolute end-1.5 top-1/2 -translate-y-1/2 text-violet-500 pointer-events-none" />}
+                        <datalist id="crew-names">{CREW.map(c => <option key={c} value={c} />)}</datalist>
+                      </span>
+                    );
+                  })()}
+                </div>
+                )}
+
+                {/* The company of the AC system (0:31), in place of the Hisense / Mitsubishi yes-no buttons. */}
+                {!isGeneralProject && (
+                <div className="flex-shrink-0">
+                  <label className="block text-[10px] font-medium text-gray-500 mb-1">{ui.isRtl ? 'חברת מיזוג' : 'AC company'}</label>
+                  {(() => {
+                    const cur = acCompanyOf(apartment, customButtons);
+                    return (
+                      <select
+                        data-ac-company
+                        value={cur}
+                        onChange={e => trackUndo(null, () => updateApartment(apartment.id, { acCompany: e.target.value || undefined }, currentUser))}
+                        className="border border-gray-200 rounded-lg px-2 py-2 text-sm font-bold bg-white focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30"
+                      >
+                        <option value="">—</option>
+                        {[...AC_COMPANIES, ...(cur && !(AC_COMPANIES as readonly string[]).includes(cur) ? [cur] : [])].map(c => <option key={c} value={c}>{c}</option>)}
+                      </select>
+                    );
+                  })()}
                 </div>
                 )}
 
@@ -2264,7 +2305,7 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                 )}
 
                 {/* Family name / Job name */}
-                <div className="flex-1 min-w-[150px]">
+                <div className={isGeneralProject ? 'flex-1 min-w-[150px]' : 'flex-1 min-w-[150px] max-w-[55%]'}>
                   <label className="block text-[10px] font-medium text-gray-500 mb-1">{isGeneralProject ? ui.jobNameLabel : ui.familyName}</label>
                   <input
                     value={familyName}
@@ -2276,11 +2317,10 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                   />
                 </div>
 
-              </div>
-
-                {/* Classification toggle */}
+                {/* Classification toggle — beside the family name (owner, recording 2026-11-11 123621, 0:54 —
+                    "family name should be half of this and then this and this can be on the right side"). */}
                 {!isGeneralProject && (
-                <div data-details-row2>
+                <div data-details-row2 className="flex-shrink-0 self-end">
                 <div className="flex-shrink-0">
                   <div className="flex gap-1">
                     <Tooltip text={ui.standardApt}>
@@ -2308,14 +2348,16 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                 </div>
                 )}
 
+              </div>
+
 
               {/* Wolfson (owner, video 2026-11-03): no address or phone here — the
                   project's own buttons (Wall yes / no …) stand in their place. */}
               {/* The project's own information buttons — answer, nothing else. */}
-              {isWolfsonProject && customButtons.length > 0 && (
+              {isWolfsonProject && shownButtons.length > 0 && (
                 <div data-custom-buttons className="space-y-1.5">
                   <div className="text-sm font-bold text-gray-800">{ui.customButtonsTitle}</div>
-                  {customButtons.map(cb => {
+                  {shownButtons.map(cb => {
                     const ans = apartment.customAnswers?.[cb.id];
                     // Only the people Settings picked may change it; nobody picked = everyone.
                     const mayChange = !cb.editors?.length || cb.editors.includes(currentUser?.id);

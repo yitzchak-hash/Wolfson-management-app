@@ -31,6 +31,32 @@ export interface WhatsNewEntry {
 
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    date: '2027-03-11',
+    title: 'Contractor, AC company, and stages that stand alone',
+    items: [
+      {
+        title: 'Type any contractor — or let the app fill it in',
+        body: 'The Contractor box in a job now takes any name you type. If you leave it empty and a worker finished Installation through the app, his name shows there by itself with a small sparkle.',
+        demo: 'tap',
+      },
+      {
+        title: 'AC company',
+        body: 'A new AC company dropdown sits beside the contractor. It replaces the Hisense and Mitsubishi yes/no buttons, and apartments already answered keep their company. The building view shows the contractor and the company on each apartment.',
+        demo: 'list',
+      },
+      {
+        title: 'Each stage is its own tick',
+        body: 'Ticking a stage marks only that stage — nothing before it is ticked for you. Framing is now one tap, like Installation. Old "Inspected by Tzvi" rows sit under Inspection 1.',
+        demo: 'tap',
+      },
+      {
+        title: 'Stronger colours in the building view',
+        body: 'Apartments in the building view are now clearly coloured by their stage — the pale yellows used to look white.',
+        demo: 'sparkle',
+      },
+    ],
+  },
+  {
     date: '2027-03-10',
     title: 'The worker\'s phone, simpler',
     items: [

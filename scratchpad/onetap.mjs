@@ -29,9 +29,10 @@ await p.waitForTimeout(800);
 // the contractor selector
 const sel = p.locator('[data-crew-select]');
 T(await sel.count() === 1, 'the job shows a Contractor selector');
-const opts = await sel.locator('option').allTextContents();
-T(JSON.stringify(opts.slice(1)) === '["Yaakov","Daniel","Igor"]', `its choices are Yaakov · Daniel · Igor (${opts.join(', ')})`);
-await sel.selectOption('Daniel'); await p.waitForTimeout(1500);
+// Re-encoded (owner, recording 2026-11-11 123621 — "I should be able to type in a random name"): a typed box, the three as suggestions.
+const opts = await p.locator('#crew-names option').evaluateAll(es => es.map(e => e.value));
+T(JSON.stringify(opts) === '["Yaakov","Daniel","Igor"]', `its suggestions are Yaakov · Daniel · Igor (${opts.join(', ')})`);
+await sel.fill('Daniel'); await sel.blur(); await p.waitForTimeout(1500);
 T((await marks()).crew === 'Daniel', 'choosing Daniel is saved on the job');
 await p.screenshot({ path: `${OUT}/crew.png`, clip: { x: 0, y: 0, width: 1280, height: 420 } });
 
