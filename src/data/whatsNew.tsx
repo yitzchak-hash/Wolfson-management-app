@@ -61,7 +61,7 @@ export const WHATS_NEW: WhatsNewEntry[] = [
       },
       {
         title: 'Stronger colours in the building view',
-        body: 'Apartments in the building view are now clearly coloured by their stage — the pale yellows used to look white.',
+        body: 'Apartments in the building view are now clearly coloured by their stage — the pale yellows used to look white. An apartment that is not sold yet is coloured too, as soon as work is done in it.',
         demo: 'sparkle',
       },
     ],

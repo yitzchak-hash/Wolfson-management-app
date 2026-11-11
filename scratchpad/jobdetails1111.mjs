@@ -107,6 +107,14 @@ T(await p.locator('[data-flat-wall="A1-46"]').count() === 0, 'a flat answered No
 const wallCss = await p.locator('[data-flat-wall="A1-45"]').first().evaluate(e => getComputedStyle(e).stroke);
 T(wallCss === 'rgb(16, 185, 129)', `the wall is green (${wallCss})`);
 T(!(await p.locator('[data-flat-answer]').allTextContents()).some(t => /Wall/.test(t)), 'and there is no "Wall: Yes / No" chip any more');
+// 9 · a flat with no buyer is coloured by its stage once work is done in it (owner's recording 2026-11-11 12:31)
+const unsoldBefore = await p.locator('[data-apt="A1-49"]').first().getAttribute('data-unsold');
+await p.evaluate(([sInst]) => { const st = window.__store.getState();
+  const a = st.apartments.find(x => x.id === 'A1-49');
+  st.setApartmentMarks('A1-49', { ...(a.stageMarks ?? {}), [sInst]: 'done' }, st.currentUser); }, [sInst]);
+await p.waitForTimeout(600);
+const unsoldAfter = await p.locator('[data-apt="A1-49"]').first().getAttribute('data-unsold');
+T(unsoldBefore === '1' && unsoldAfter === '0', `a "Not sold" flat is white until work is done in it, then takes its stage's colour (${unsoldBefore} → ${unsoldAfter})`);
 if (process.env.SHOTS) await p.screenshot({ path: process.env.SHOTS + '/building.png' });
 console.log(`\n${ok} ok · ${bad} bad`);
 await browser.close();

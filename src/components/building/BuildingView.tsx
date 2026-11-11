@@ -13,6 +13,7 @@
  * documented smoulder). React state changes only when the hovered flat or the
  * landed floor changes.
  */
+import { isStartStage } from '../../data/stageMarks';
 import { crewOf, acCompanyOf, isCompanyButton, isWallButton } from '../../data/aptCrew';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Apartment, Stage, CustomButton } from '../../types';
@@ -356,7 +357,11 @@ export default function BuildingView({ apartments, stages, onOpen, words, initia
   };
   const fillOf = (apt: Apartment) => {
     const { st, name } = flatInfo(apt);
-    if (!name) return { fill: '#ffffff', tint: '#cbd5e1', dashed: true };
+    // A flat with no family name is drawn white and dashed ("not sold") — but only while nothing has been done in it.
+    // Work is done in flats that have no buyer yet (owner's recording 2026-11-11 12:31: building 2's "Not sold" flats
+    // with Installation, Inspection 1, Framing done stayed white — "why are we still having the color bug"): once its
+    // stage is past the start, the stage's colour wins.
+    if (!name && (!st || isStartStage(st))) return { fill: '#ffffff', tint: '#cbd5e1', dashed: true };
     return { fill: st?.color ?? '#94a3b8', tint: st?.color ?? '#94a3b8', dashed: false };
   };
 
