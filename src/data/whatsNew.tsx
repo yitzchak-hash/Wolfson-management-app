@@ -35,6 +35,11 @@ export const WHATS_NEW: WhatsNewEntry[] = [
     title: 'Contractor, AC company, and stages that stand alone',
     items: [
       {
+        title: 'The inspection label follows the inspection',
+        body: 'In the building view, the green label on an apartment now says "Inspection 1: Approved" (or Inspection 2) only while that inspection is ticked. Untick the inspection and the label goes. The old "Inspected by Tzvi: Yes" labels are gone.',
+        demo: 'tap',
+      },
+      {
         title: 'The wall, lit green on the plan',
         body: 'In the building view, an apartment marked Wall: Yes now shows the wall itself glowing green on its plan, instead of a "Wall: Yes" label.',
         demo: 'sparkle',

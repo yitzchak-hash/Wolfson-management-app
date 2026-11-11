@@ -14,7 +14,8 @@
  * landed floor changes.
  */
 import { isStartStage } from '../../data/stageMarks';
-import { crewOf, acCompanyOf, isCompanyButton, isWallButton, DEFAULT_AC_COMPANY } from '../../data/aptCrew';
+import { crewOf, acCompanyOf, isCompanyButton, isInspectedButton, isWallButton, DEFAULT_AC_COMPANY } from '../../data/aptCrew';
+import { inspectionsOf, doneWordOf } from '../../data/stageHow';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Apartment, Stage, CustomButton } from '../../types';
 import { realName } from '../../data/aptSale';
@@ -137,6 +138,11 @@ export default function BuildingView({ apartments, stages, onOpen, words, initia
   const answersOf = (a: Apartment) => customButtons.flatMap(cb => {
     // A company button is said by the AC company chip below, never twice.
     if (isCompanyButton(cb)) return [];
+    // The old "Inspected by Tzvi" button is not drawn in the job window any more, so its answer could never be turned
+    // off here (owner, 2026-11-11: "the labels on top of the buildings are staying the same, even though I have no way
+    // of turning them off. They need to be connected to inspection 1"). The label reads the Inspection STAGES instead
+    // (inspectedOf below).
+    if (isInspectedButton(cb)) return [];
     // The wall is DRAWN on the plan where the plan has it marked (wallOn below) — never a "Wall: Yes" chip as well.
     if (isWallButton(cb) && plan.walls) return [];
     const v = a.customAnswers?.[cb.id];
@@ -144,6 +150,13 @@ export default function BuildingView({ apartments, stages, onOpen, words, initia
     const name = cb.name.replace(/\s*\(?\s*(yes\s*\/\s*no|כן\s*\/\s*לא)\s*\)?\s*\??\s*$/i, '').trim() || cb.name;
     return v ? [{ id: cb.id, name, v, mark: v === 'yes' ? '✓' : v === 'no' ? '✗' : '?' }] : [];
   });
+  /** The furthest inspection stage that is done on this flat ("Inspection 2: Approved") — gone the moment it is unticked. */
+  const sortedStages = useMemo(() => [...stages].sort((x, y) => x.order - y.order), [stages]);
+  const inspectedOf = (a: Apartment): string => {
+    const done = inspectionsOf(a, sortedStages).filter(r => r.done);
+    const last = done[done.length - 1]?.st;
+    return last ? `${last.name}: ${doneWordOf(last, false)}` : '';
+  };
   /** A flat answered "Wall: Yes" (the project's own Wall button). */
   const wallOn = (a: Apartment) => customButtons.some(cb => isWallButton(cb) && a.customAnswers?.[cb.id] === 'yes');
   /** The contractor and the AC company, as chips under the answers (owner, recording 2026-11-11 123621, 1:42 — "you
@@ -534,6 +547,17 @@ export default function BuildingView({ apartments, stages, onOpen, words, initia
                             <g key={`c-${an.id}`} className="bv-flat-ans" data-flat-answer={an.v}>
                               <rect x={x3} y={y2 - 24} width={w3} height={48} rx={10} />
                               <text x={x3 + w3 / 2} y={y2}>{label}</text>
+                            </g>);
+                          y2 += 56;
+                        }
+                        const insp = inspectedOf(apt);
+                        if (insp) {
+                          const w3 = Math.max(60, insp.length * 17 + 30);
+                          const x3 = fit(w3, left);
+                          parts.push(
+                            <g key="insp" className="bv-flat-ans" data-flat-answer="yes" data-flat-inspected>
+                              <rect x={x3} y={y2 - 24} width={w3} height={48} rx={10} />
+                              <text x={x3 + w3 / 2} y={y2}>{insp}</text>
                             </g>);
                           y2 += 56;
                         }

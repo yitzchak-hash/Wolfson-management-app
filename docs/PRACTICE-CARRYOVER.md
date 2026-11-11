@@ -68,6 +68,7 @@ change after that commit belongs in this list.
 | 2026-11-11 | Building view: a flat answered "Wall: Yes" draws its type's wall lit green (`wolfsonPlan.WALLS`, marked by the owner; `BuildingPlan.walls`); the Wall yes/no chip is not drawn where the plan has walls | `wolfsonPlan.ts` · `buildingPlan.ts` · `BuildingView.tsx` · `buildingView.css` · `aptCrew.ts` | ″ |
 | 2026-11-11 | Building view: a flat with no family name takes its stage's colour once its stage is past the start (white + dashed only while nothing is done) — owner's clip 2026-11-11 12:31 | `BuildingView.tsx` | ″ |
 | 2026-11-11 | The AC company defaults to LG unless chosen (`DEFAULT_AC_COMPANY`); the building view's company chip shows only a non-default company | `aptCrew.ts` · `ApartmentDetailDrawer.tsx` · `BuildingView.tsx` | ″ |
+| 2026-11-11 | Building view: the "inspected" label reads the Inspection stages (the furthest one done, "Inspection 1: Approved"), never the old "Inspected by Tzvi" button's answer | `BuildingView.tsx` | ″ |
 
 ## Already brought across
 (nothing yet)
