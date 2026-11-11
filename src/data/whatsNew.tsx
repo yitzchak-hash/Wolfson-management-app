@@ -35,6 +35,11 @@ export const WHATS_NEW: WhatsNewEntry[] = [
     title: 'A standard plan for every floor, and a calmer Plan Finder',
     items: [
       {
+        title: 'An inspection is never approved by itself',
+        body: 'Ticking a later stage still ticks the earlier site work of the same trade, but it no longer marks an inspection Approved or an office task (like Sent plans back to contractor) as done. Those are done only by the inspection itself or by someone in the office.',
+        demo: 'tap',
+      },
+      {
         title: 'Upload a standard plan, and turn its pages',
         body: 'The Standard plan box now has Upload a PDF beside the Drive link: choose a file from the computer and it is saved to Drive and set as that floor\'s plan. A plan with several pages shows "1 / 3" on its bottom bar; the ‹ › buttons, the arrow keys and Page Up / Page Down turn the pages.',
         demo: 'tap',

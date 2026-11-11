@@ -255,6 +255,17 @@ export function isStartStage(st: Pick<Stage, 'id' | 'name'>): boolean {
   return st.id === 'skhtatb' || /^\s*sold(\s*\/?\s*start)?\s*$/i.test(st.name || '') || /^\s*sold\s*\/?\s*start\b/i.test(st.name || '');
 }
 
+/**
+ * Only SITE work is ever ticked by itself (owner's silent recording 2026-11-11 121720: ticking Framing marked
+ * Inspection 1 "Approved" and "Sent plans back to contractor" "Sent", and he took both back by hand). An inspection is
+ * approved only by its video and "Do you approve?"; an office task only by someone in the office. (stageHow.howOf, kept
+ * here by hand: stageHow imports this file.)
+ */
+function isSiteWork(st: Stage): boolean {
+  if (st.how) return st.how === 'site';
+  return !(/^\s*inspection\b/i.test(st.name ?? '') || /^\s*ביקורת/.test(st.nameHe ?? ''));
+}
+
 export function withImpliedDone(
   before: Record<string, StageMark> | undefined,
   marks: Record<string, StageMark> | undefined,
@@ -283,6 +294,7 @@ export function withImpliedDone(
     if (!isWorkStage(when) || isStartStage(when) || !ownStage(apt, when)) continue;
     for (const st of sortedStages) {
       if (st.order >= when.order || !st.active || !isWorkStage(st) || isStartStage(st) || !ownStage(apt, st)) continue;
+      if (!isSiteWork(st)) continue;
       if ((st.trade ?? null) !== (when.trade ?? null)) continue;
       const cur = out?.[st.id];
       if (cur === 'done' || cur === 'off') continue;
@@ -292,7 +304,7 @@ export function withImpliedDone(
   for (const [when, also] of IMPLIED_DONE) {
     if (out?.[when] !== 'done' || before?.[when] === 'done') continue;
     const st = sortedStages.find(s => s.id === also);
-    if (!st || !st.active || !ownStage(apt, st)) continue;
+    if (!st || !st.active || !ownStage(apt, st) || !isSiteWork(st)) continue;
     const cur = out[also];
     if (cur === 'done' || cur === 'off') continue;
     out = { ...out, [also]: 'done' };
