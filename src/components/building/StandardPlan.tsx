@@ -1,8 +1,11 @@
 import React, { Suspense, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { FileText, Loader2, X, Link2, FolderOpen, Trash2 } from 'lucide-react';
+import { FileText, Loader2, X, Link2, FolderOpen, Trash2, Upload } from 'lucide-react';
 import { useStore } from '../../data/store';
-import { extractFileId, extractFolderId, getDriveMetaViaBackend } from '../../data/driveApi';
+import {
+  extractFileId, extractFolderId, getDriveMetaViaBackend, findOrCreateFolderOnce, uploadFileViaResumableSession,
+  shareFileToDrive, isUploadBackendConfigured,
+} from '../../data/driveApi';
 import type { StandardPlan } from '../../types';
 import { sharePlanFile } from '../../data/sharePlan';
 import { PlanPicker } from '../plans/PlanPicker';
@@ -83,8 +86,18 @@ function PlanViewer({ plan, title, onClose, onChange, rtl }: { plan: StandardPla
     setSharing(false);
     setSaid(out === 'failed' ? (rtl ? 'השיתוף נכשל' : 'Sharing failed') : out === 'downloaded' ? (rtl ? 'הקובץ הורד' : 'Downloaded') : '');
   };
+  const rootRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    const key = (e: KeyboardEvent) => { if (e.key === 'Escape') { e.stopPropagation(); onClose(); } };
+    const key = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') { e.stopPropagation(); onClose(); return; }
+      // A plan of several pages (owner, 2026-11-11: "each PDF has a few pages … moving between the pages"): the
+      // arrows and Page Up / Down turn them, beside the bar's own buttons.
+      const next = e.key === 'ArrowRight' || e.key === 'PageDown';
+      const prev = e.key === 'ArrowLeft' || e.key === 'PageUp';
+      if (!next && !prev) return;
+      const btn = rootRef.current?.querySelector<HTMLButtonElement>(`button[title="${next ? 'Next page' : 'Previous page'}"]`);
+      if (btn && !btn.disabled) { e.preventDefault(); e.stopPropagation(); btn.click(); }
+    };
     window.addEventListener('keydown', key, { capture: true });
     return () => window.removeEventListener('keydown', key, { capture: true });
   }, [onClose]);
@@ -94,7 +107,7 @@ function PlanViewer({ plan, title, onClose, onChange, rtl }: { plan: StandardPla
     onContextMenu: (e: React.MouseEvent) => e.stopPropagation(),
   };
   return createPortal(
-    <div className="fixed inset-0 z-[240] flex flex-col" data-standard-plan-viewer {...seal} style={{ backgroundColor: 'rgba(10,16,28,.88)' }}>
+    <div ref={rootRef} className="fixed inset-0 z-[240] flex flex-col" data-standard-plan-viewer {...seal} style={{ backgroundColor: 'rgba(10,16,28,.88)' }}>
       <div className="flex items-center gap-2 px-3 md:px-5 py-2.5 flex-shrink-0" style={{ backgroundColor: '#1e3a5f' }}>
         <span className="text-white font-bold text-[14px] truncate">{title}</span>
         <span className="text-white/60 text-[12.5px] truncate flex-1" dir="auto">{plan.name}</span>
@@ -132,6 +145,45 @@ function PlanSetup({ buildingId, buildingTitle, floorKey, current, ownFloor, onC
   const [lit, setLit] = useState<string | null>(null);
   /** "Use for every floor of this building" — the building's own plan, under any floor without one. */
   const [allFloors, setAllFloors] = useState(false);
+  /** An upload going up: its percent. */
+  const [upPct, setUpPct] = useState<number | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  /**
+   * UPLOAD A PDF DIRECTLY (owner, 2026-11-11: "either choose by drive link or to upload a PDF directly"). It goes
+   * into the folder the standard plans were last chosen from; with none, into the office's general Drive folder
+   * (Settings → Backups) › Standard plans › <workspace>. With neither, it says so — never a silent drop.
+   */
+  const upload = async (file: File) => {
+    setErr('');
+    const st = useStore.getState();
+    if (!isUploadBackendConfigured()) { setErr(W('Uploading needs the Drive connection', 'להעלאה צריך חיבור ל-Drive')); return; }
+    const remembered = st.boardSettings[st.currentProjectId]?.standardPlansFolder;
+    const general = st.backupDriveFolderLink ? extractFolderId(st.backupDriveFolderLink) : null;
+    setUpPct(0);
+    try {
+      let folderId = remembered ? extractFolderId(remembered) : null;
+      if (!folderId && general) {
+        const root = await findOrCreateFolderOnce(general, 'Standard plans');
+        const ws = st.projects?.find?.((x: { id: string; name?: string }) => x.id === st.currentProjectId)?.name || st.currentProjectId;
+        folderId = await findOrCreateFolderOnce(root, String(ws).replace(/[\\/:*?"<>|]+/g, '-'));
+      }
+      if (!folderId) {
+        setUpPct(null);
+        setErr(W('No Drive folder to upload into yet: paste a folder link once, or set the general folder in Settings → Backups',
+          'אין עדיין תיקיית Drive להעלאה: הדביקו פעם אחת קישור לתיקייה, או הגדירו תיקייה כללית בהגדרות ← גיבויים'));
+        return;
+      }
+      const { fileId } = await uploadFileViaResumableSession(folderId, file, pct => setUpPct(pct));
+      void shareFileToDrive(fileId);
+      setUpPct(null);
+      save({ fileId, name: file.name, mimeType: file.type || undefined, by: me, at: new Date().toISOString() });
+      onOpen();
+    } catch {
+      setUpPct(null);
+      setErr(W('The upload failed — try again', 'ההעלאה נכשלה — נסו שוב'));
+    }
+  };
   const W = (en: string, he: string) => (rtl ? he : en);
   useEffect(() => {
     if (browse) return undefined;
@@ -214,6 +266,13 @@ function PlanSetup({ buildingId, buildingTitle, floorKey, current, ownFloor, onC
               <input type="checkbox" data-standard-plan-all checked={allFloors} onChange={e => setAllFloors(e.target.checked)} />
               {W('Use for every floor of this building', 'לכל הקומות בבניין הזה')}
             </label>
+            <input ref={fileRef} type="file" accept="application/pdf,image/*" className="hidden" data-standard-plan-file
+              onChange={e => { const f = e.target.files?.[0]; e.target.value = ''; if (f) void upload(f); }} />
+            <button type="button" data-standard-plan-upload disabled={upPct != null} onClick={() => fileRef.current?.click()}
+              className="w-full flex items-center justify-center gap-2 rounded-xl border border-gray-200 py-2.5 text-[13px] font-bold text-[#1e3a5f] hover:bg-gray-50 disabled:opacity-60">
+              {upPct != null ? <><Loader2 size={15} className="animate-spin" /> {W(`Uploading… ${Math.round(upPct)}%`, `מעלה… ${Math.round(upPct)}%`)}</>
+                : <><Upload size={15} /> {W('Upload a PDF', 'העלאת PDF')}</>}
+            </button>
             {startFolder && (
               <button type="button" data-standard-plan-browse onClick={() => setBrowse(startFolder)}
                 className="w-full flex items-center justify-center gap-2 rounded-xl border border-gray-200 py-2.5 text-[13px] font-bold text-[#1e3a5f] hover:bg-gray-50">

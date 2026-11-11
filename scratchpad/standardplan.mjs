@@ -8,12 +8,13 @@ import { realisticWolfson, applySeed } from './seed.mjs';
 const APP = process.env.APP || 'http://localhost:5173';
 const OUT = process.env.SHOTS || '/tmp';
 let ok = 0, bad = 0; const T = (c, m) => { c ? ok++ : bad++; console.log((c ? 'ok  ' : 'BAD ') + m); };
-const doc = await PDFDocument.create(); const pg = doc.addPage([1191, 842]);
-pg.drawRectangle({ x: 60, y: 60, width: 1071, height: 722, borderWidth: 4, borderColor: rgb(.1, .1, .2) });
+const doc = await PDFDocument.create();
+for (let i = 0; i < 3; i++) { const pg = doc.addPage([1191, 842]); pg.drawRectangle({ x: 60 + i * 40, y: 60, width: 1071 - i * 80, height: 722, borderWidth: 4, borderColor: rgb(.1, .1, .2) }); }
 const pdf = Buffer.from(await doc.save());
 const F = 'application/vnd.google-apps.folder';
 const TREE = { PLANSFOLDER1: [{ id: 'TYP-B1', name: 'Typical floor B1.pdf', mimeType: 'application/pdf', modifiedTime: new Date().toISOString() }, { id: 'TYP-B2', name: 'Typical floor B2.pdf', mimeType: 'application/pdf', modifiedTime: new Date().toISOString() }, { id: 'TYP-B3', name: 'Typical floor B3.pdf', mimeType: 'application/pdf', modifiedTime: new Date().toISOString() }] };
 
+const ups = [];
 const browser = await chromium.launch();
 const blob = await realisticWolfson(browser);
 async function open(project) {
@@ -34,6 +35,7 @@ async function open(project) {
   await ctx.route('**/api/**', async r => {
     const u = r.request().url(); const b = JSON.parse(r.request().postData() || '{}');
     if (u.includes('/api/drive-fetch')) return r.fulfill({ status: 200, contentType: 'application/pdf', body: pdf });
+    if (u.includes('/api/drive-session')) { ups.push(`session:${b.folderId ?? b.parentId ?? ''}:${b.name ?? b.fileName ?? ''}`); return r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ uploadUrl: 'https://upload.harness.test/put' }) }); }
     if (u.includes('/api/drive-files')) {
       if (b.metaOnly) return r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ folder: b.folderId === 'TYP-B1'
         ? { id: 'TYP-B1', name: 'Typical floor B1.pdf', mimeType: 'application/pdf', parents: ['PLANSFOLDER1'] }
@@ -42,6 +44,7 @@ async function open(project) {
     }
     return r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, files: [] }) });
   });
+  await ctx.route('https://upload.harness.test/**', r => { ups.push('put'); return r.fulfill({ status: 200, contentType: 'application/json', headers: { 'access-control-allow-origin': '*' }, body: JSON.stringify({ id: 'UPLOADED1', webViewLink: 'https://drive.google.com/file/d/UPLOADED1/view' }) }); });
   await ctx.route('**://drive.google.com/**', r => r.abort());
   const p = await ctx.newPage();
   await p.goto(`${APP}/project`); await p.waitForTimeout(2500);
@@ -88,6 +91,15 @@ T(await p.locator('[data-standard-plan-viewer]').count() === 1, 'and the plan op
 for (let i = 0; i < 30; i++) { await p.waitForTimeout(300); if (await p.locator('[data-standard-plan-viewer] canvas').count()) break; }
 T(await p.locator('[data-standard-plan-viewer] canvas').count() > 0, 'drawn by the plan viewer (zoom, pages)');
 T(await p.locator('[data-standard-plan-viewer] [data-plan-share]').count() > 0, 'with Share on its bar');
+// a plan of several pages (owner, 2026-11-11)
+const pageWord = () => p.locator('[data-standard-plan-viewer]').evaluate(el => [...el.querySelectorAll('span')].map(x => x.textContent.trim()).find(t => /^\d+ \/ \d+$/.test(t)) ?? '');
+T(await pageWord() === '1 / 3', `a 3-page plan says its pages (${await pageWord()})`);
+await p.locator('[data-standard-plan-viewer] button[title="Next page"]').click(); await p.waitForTimeout(700);
+T(await pageWord() === '2 / 3', 'the bar\'s › goes to the next page');
+await p.keyboard.press('ArrowRight'); await p.waitForTimeout(700);
+T(await pageWord() === '3 / 3', 'the right arrow key too');
+await p.keyboard.press('ArrowLeft'); await p.waitForTimeout(700);
+T(await pageWord() === '2 / 3', 'and the left arrow goes back');
 await p.waitForTimeout(800);
 await p.screenshot({ path: `${OUT}/sp-viewer.png` });
 await p.keyboard.press('Escape'); await p.waitForTimeout(400);
@@ -130,6 +142,19 @@ await p.locator(`[data-rail-floor="${other}"]`).click(); await p.waitForTimeout(
 T(await btns.nth(1).getAttribute('data-standard-plan-set') === '1', 'and every floor of that building shows it');
 const folderSaved = await p.evaluate(() => { const s = window.__store.getState(); return s.boardSettings[s.currentProjectId]?.standardPlansFolder; });
 T(/PLANSFOLDER1/.test(folderSaved ?? ''), 'the folder is remembered for the next building');
+
+// UPLOAD A PDF directly (owner, 2026-11-11)
+await btns.nth(2).click({ button: 'right' }); await p.waitForTimeout(500);
+T(await p.locator('[data-standard-plan-upload]').count() === 1, 'the box offers "Upload a PDF" beside the link');
+await p.screenshot({ path: `${OUT}/sp-setup.png` });
+await p.locator('[data-standard-plan-file]').setInputFiles({ name: 'Typical floor B3 new.pdf', mimeType: 'application/pdf', buffer: pdf });
+await p.waitForTimeout(2500);
+sp = await plans(p);
+const fNow = await btns.nth(2).getAttribute('data-standard-plan-floor');
+T(ups.includes('put') && sp.floor[ids[2]]?.[fNow]?.fileId === 'UPLOADED1' && sp.floor[ids[2]][fNow].name === 'Typical floor B3 new.pdf', `the PDF goes up to Drive and becomes that floor's plan (${ups.join(' ')})`);
+T(ups.some(u => u.startsWith('session:PLANSFOLDER1')), 'into the folder the plans were last chosen from');
+T(await p.locator('[data-standard-plan-viewer]').count() === 1, 'and it opens');
+await p.keyboard.press('Escape'); await p.waitForTimeout(400);
 
 // one building on its own: the bubble on top
 await p.locator('button:visible', { hasText: /^1$/ }).first().click(); await p.waitForTimeout(1200);

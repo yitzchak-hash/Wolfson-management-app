@@ -35,6 +35,11 @@ export const WHATS_NEW: WhatsNewEntry[] = [
     title: 'A standard plan for every floor, and a calmer Plan Finder',
     items: [
       {
+        title: 'Upload a standard plan, and turn its pages',
+        body: 'The Standard plan box now has Upload a PDF beside the Drive link: choose a file from the computer and it is saved to Drive and set as that floor\'s plan. A plan with several pages shows "1 / 3" on its bottom bar; the ‹ › buttons, the arrow keys and Page Up / Page Down turn the pages.',
+        demo: 'tap',
+      },
+      {
         title: 'Every floor its own standard plan',
         body: 'The Standard plan button in the Building view now speaks for the floor you are on: each floor of each building keeps its own plan. When you set one, tick "Use for every floor of this building" if the same plan serves them all.',
         demo: 'tap',
