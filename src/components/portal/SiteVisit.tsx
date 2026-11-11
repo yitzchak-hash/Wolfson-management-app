@@ -79,20 +79,21 @@ export function suggestedStage(apt: Apartment, sorted: Stage[], ctx: { tipusStag
 }
 
 /**
- * The top of the apartment's sheet on the map (step 1): one big green "I'm working here" and Cancel — or, when he is
- * already working here, "I'm done here" (big navy) and "Still working".
+ * The foot of the apartment's sheet on the map (step 1): one big green "I'm working here" — or, when he is already
+ * working here, the green "working here since" line and "I'm done here" (big navy). No Cancel and no "Still working"
+ * (owner, recording 2026-11-11 122535, 0:38 and 1:07 — "no need for a cancel button because we have an X button"); the
+ * green line has no outline (1:13 — "we don't need the outline … leave the green bubble").
  */
-export function SiteHereBlock({ apt, workerId, w, onStart, onDone, onCancel }: {
+export function SiteHereBlock({ apt, workerId, w, onStart, onDone }: {
   apt: Apartment; workerId: string; w: W;
-  onStart: () => void; onDone: () => void; onCancel: () => void;
+  onStart: () => void; onDone: () => void;
 }) {
   const mine = myOpenVisit(apt, workerId);
   const big = 'w-full py-4 rounded-2xl text-base font-bold text-white flex items-center justify-center gap-2 active:scale-[0.98]';
-  const ghost = 'w-full py-3 rounded-xl text-[14px] font-bold bg-white border border-gray-200 text-gray-800 active:scale-[0.98]';
   if (mine) return (
     <div data-site-here="working" className="space-y-2">
-      <div className="rounded-xl px-3 py-2.5 flex items-center gap-2.5 font-bold text-[13.5px]"
-        style={{ backgroundColor: '#ecfdf5', border: '1px solid #a7f3d0', color: '#065f46' }}>
+      <div data-site-working-line className="rounded-xl px-3 py-2.5 flex items-center gap-2.5 font-bold text-[13.5px]"
+        style={{ backgroundColor: '#ecfdf5', color: '#065f46' }}>
         <span className="w-2.5 h-2.5 rounded-full flex-shrink-0 apt-signal-work" style={{ backgroundColor: GREEN }} />
         {w(`You are working here since ${clockOf(mine.startedAt)}`, `אתה עובד כאן מאז ${clockOf(mine.startedAt)}`, `Вы работаете здесь с ${clockOf(mine.startedAt)}`)}
       </div>
@@ -100,7 +101,6 @@ export function SiteHereBlock({ apt, workerId, w, onStart, onDone, onCancel }: {
         onClick={() => { haptic('tap'); onDone(); }}>
         {w("I'm done here", 'סיימתי כאן', 'Я закончил здесь')}
       </button>
-      <button data-site-still className={ghost} onClick={onCancel}>{w('Still working', 'עדיין עובד', 'Ещё работаю')}</button>
     </div>
   );
   return (
@@ -109,7 +109,6 @@ export function SiteHereBlock({ apt, workerId, w, onStart, onDone, onCancel }: {
         onClick={() => { haptic('success'); onStart(); }}>
         {w("I'm working here", 'אני עובד כאן', 'Я работаю здесь')}
       </button>
-      <button data-site-cancel className={ghost} onClick={onCancel}>{w('Cancel', 'ביטול', 'Отмена')}</button>
     </div>
   );
 }
@@ -419,16 +418,16 @@ export function SiteVisitFlow({ aptId, visitId: vid, start, worker, user, lang, 
           {headSub && <div className="text-[12px] opacity-75 truncate">{headSub}</div>}
         </div>
         {(step === 'ask' || step === 'media') && (
-          <button data-site-close onClick={onClose} className="p-1.5 -m-1.5" aria-label={w('Close', 'סגירה', 'Закрыть')}><X size={20} /></button>
+          <button data-site-close onClick={onClose} className="p-2 -m-2" aria-label={w('Close', 'סגירה', 'Закрыть')}><X size={26} /></button>
         )}
       </div>
-      <div className="flex-1 overflow-y-auto px-4 py-4 flex flex-col gap-3">
+      <div className="flex-1 overflow-y-auto no-bar px-4 py-4 flex flex-col gap-3">
         {err && <div data-site-error className="rounded-xl px-3 py-2.5 text-[13px] font-semibold" style={{ backgroundColor: '#fef2f2', color: '#b91c1c', border: '1px solid #fecaca' }}>{err}</div>}
 
         {step === 'ask' && (
           <>
-            <div className="rounded-xl px-3 py-2.5 flex items-center gap-2.5 font-bold text-[13.5px]"
-              style={{ backgroundColor: '#ecfdf5', border: '1px solid #a7f3d0', color: '#065f46' }}>
+            <div data-site-working-line className="rounded-xl px-3 py-2.5 flex items-center gap-2.5 font-bold text-[13.5px]"
+              style={{ backgroundColor: '#ecfdf5', color: '#065f46' }}>
               <span className="w-2.5 h-2.5 rounded-full flex-shrink-0 apt-signal-work" style={{ backgroundColor: GREEN }} />
               {visit?.status === 'working'
                 ? w(`You are working here since ${clockOf(visit.startedAt)}`, `אתה עובד כאן מאז ${clockOf(visit.startedAt)}`, `Вы работаете здесь с ${clockOf(visit.startedAt)}`)
@@ -441,9 +440,6 @@ export function SiteVisitFlow({ aptId, visitId: vid, start, worker, user, lang, 
                 {w("I'm done here", 'סיימתי כאן', 'Я закончил здесь')}
               </button>
             )}
-            <button data-site-still onClick={onClose} className="w-full py-3 rounded-xl text-[14px] font-bold bg-white border border-gray-200 text-gray-800">
-              {w('Still working', 'עדיין עובד', 'Ещё работаю')}
-            </button>
           </>
         )}
 
@@ -512,12 +508,7 @@ export function SiteVisitFlow({ aptId, visitId: vid, start, worker, user, lang, 
 
         {step === 'question' && asked && (
           <div data-site-question={asked.id} className="rounded-xl bg-white border border-gray-200 p-4 space-y-3">
-            <div className="text-[12px] text-gray-500">{w('The next stage open here is', 'השלב הבא הפתוח כאן הוא', 'Следующий открытый этап здесь')}</div>
-            <div className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl border border-gray-200 font-bold text-[16px]" style={{ color: asked.color }}>
-              <span className="w-4 h-4 rounded-full flex-shrink-0" style={{ border: '2.5px solid currentColor' }} />
-              <span className="text-gray-900">{stageNameIn(asked, lang)}</span>
-            </div>
-            <div className="font-extrabold text-[18px] leading-tight text-gray-900">
+            <div data-site-question-words className="font-extrabold text-[20px] leading-tight text-gray-900 text-center py-1">
               {w(`Did you do ${stageNameIn(asked, lang)} here?`, `עשית כאן ${stageNameIn(asked, lang)}?`, `Вы сделали здесь: ${stageNameIn(asked, lang)}?`)}
             </div>
             <button data-site-yes onClick={answerYes}
@@ -543,12 +534,14 @@ export function SiteVisitFlow({ aptId, visitId: vid, start, worker, user, lang, 
             {sentCard}
             {nextHere && (
               <div data-site-next className="rounded-xl bg-white border border-gray-200 p-3 space-y-2">
-                <div className="text-[10.5px] font-semibold text-gray-500 tracking-wide">{w('NEXT HERE', 'הבא כאן', 'ДАЛЕЕ ЗДЕСЬ')}</div>
+                <div data-site-next-label className="text-[10.5px] font-semibold text-gray-500 tracking-wide">
+                  {nextHere.insp ? w('WAITING FOR INSPECTION', 'ממתין לביקורת', 'ЖДЁТ ПРОВЕРКИ') : w('NEXT HERE', 'הבא כאן', 'ДАЛЕЕ ЗДЕСЬ')}
+                </div>
                 <div className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl bg-white font-bold text-[14px]"
                   style={{ color: nextHere.color, border: `1px ${nextHere.insp ? 'dashed' : 'solid'} ${nextHere.insp ? nextHere.color : '#e5e7eb'}` }}>
                   {nextHere.insp ? <Search size={16} /> : <span className="w-4 h-4 rounded-full flex-shrink-0" style={{ border: '2.5px solid currentColor' }} />}
                   <span data-site-next-name={nextHere.insp ? 'inspection' : 'stage'}>
-                    {nextHere.insp ? w(`Waiting for ${nextHere.name}`, `ממתין ל${nextHere.name}`, `Ожидает: ${nextHere.name}`) : nextHere.name}
+                    {nextHere.name}
                   </span>
                 </div>
               </div>
@@ -562,7 +555,7 @@ export function SiteVisitFlow({ aptId, visitId: vid, start, worker, user, lang, 
             <div className="text-center grid gap-1.5">
               <div className="w-[54px] h-[54px] rounded-full mx-auto mt-1.5 flex items-center justify-center" style={{ backgroundColor: '#fef3c7', color: '#b45309' }}><Check size={30} strokeWidth={3} /></div>
               <div data-site-office-title className="font-extrabold text-[18px] text-gray-900">{w('Sent to the office', 'נשלח למשרד', 'Отправлено в офис')}</div>
-              <div className="text-[13px] text-gray-500">{w('They will be in touch with you.', 'הם ייצרו איתך קשר.', 'С вами свяжутся.')}</div>
+              <div data-site-office-words className="text-[14px] text-gray-600">{w('The office will figure it out.', 'המשרד יטפל בזה.', 'Офис разберётся.')}</div>
             </div>
             {sentCard}
             {back}

@@ -36,7 +36,8 @@ ask built or answered) · **not this app** (a recording of another project — r
 | 21 | Recording 2026-11-03 145621.mp4 | `1_zIfohBbNIsJlE3Ui1SyBM6_-q3yliO6` | 0:55 | open (built on preview) | [2026-11-03-145621.md](2026-11-03-145621.md) |
 | 24 | Recording 2026-11-10 144934.mp4 (41.6 MB, 1440×1302) | `1rkRy5GXJKZDXOPsYAWHqmqupbHWLBl9L` | 1:15 | done (live 2026-11-10) | [2026-11-10-144934.md](2026-11-10-144934.md) |
 | 25 | Recording 2026-11-11 094048.mp4 (33.3 MB, 1440×1246) | `161dv2cC81BfdzSEDjvbY3IhgDStqH0XK` | 1:21 | done (live 2026-11-11) | [2026-11-11-094048.md](2026-11-11-094048.md) |
-| 26 | Recording 2026-11-11 121720.mp4 (122.4 MB, 1920×1020, NO VOICE) | `1x9GSXKSaa9HKM3_nEF5XJSNKyGxJu-ig` | 2:55 | open (the fault shown is fixed and live; two silent moments asked) | [2026-11-11-121720.md](2026-11-11-121720.md) |
+| 26 | Recording 2026-11-11 121720.mp4 (122.4 MB, 1920×1020, NO VOICE) | `1x9GSXKSaa9HKM3_nEF5XJSNKyGxJu-ig` | 2:55 | open (the fault shown is fixed and live; he will record it again) | [2026-11-11-121720.md](2026-11-11-121720.md) |
+| 27 | Recording 2026-11-11 122535.mp4 (410×824 phone, Igor's worker link) | `1IsVdRosrgXFvPPlVWamCA3FNb0twSwWh` | 3:28 | done (live 2026-11-11) | [2026-11-11-122535.md](2026-11-11-122535.md) |
 Folder last listed: 2026-11-11 (later) — recording 26 at the top. Before: recording 25 at the top (24 is done and belongs in Processed). Earlier: 2026-11-10 — recording 24 at the top. Earlier: 2026-11-03 — recordings 18, 19 and 20 at the top (19 and 20 each twice). 1–18 are done and belong in Processed.
 
 ## The folder's two subfolders (owner, 2026-10-18)

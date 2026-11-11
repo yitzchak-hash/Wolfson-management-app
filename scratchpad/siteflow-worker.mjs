@@ -63,7 +63,11 @@ const tapFlat = async id => { await page.locator(`[data-apt-id="${id}"]`).first(
 await tapFlat('A1-23');
 const start = page.locator('[data-site-start]');
 check(await start.count() === 1 && /I'm working here/.test(await start.innerText()), '1 · the sheet has one big "I\'m working here"');
-check(await page.locator('[data-site-cancel]').count() === 1, '1 · and Cancel');
+// Re-encoded (owner, recording 2026-11-11 122535): no Cancel (the X closes), the plan ABOVE, the button at the foot.
+check(await page.locator('[data-site-cancel]').count() === 0, '1 · no Cancel — the X closes the sheet');
+check(await page.locator('[data-work-foot] [data-site-start]').count() === 1, '1 · the button stands in the sheet\'s foot, under the plan');
+const xSize = await page.locator('[data-work-sheet-close] svg').evaluate(e => e.getBoundingClientRect().width).catch(() => 0);
+check(xSize >= 24, '1 · the X is bigger', String(xSize));
 const bg = await start.evaluate(e => getComputedStyle(e).backgroundColor);
 check(bg === 'rgb(5, 150, 105)', '1 · the button is green', bg);
 check(await page.locator('[data-work-here]').count() === 0, '1 · the old "I started working here" is gone (owner, 2026-11-10: "remove the old one")');
@@ -89,14 +93,17 @@ check(a24.siteVisits?.[0]?.status === 'working' && (await aptOf('A1-23')).siteVi
 await shot('2b-two-bars');
 // a second tap on a working flat offers I'm done here / Still working, never a second visit
 await tapFlat('A1-23');
-check(await page.locator('[data-site-here="working"] [data-site-done-here]').count() === 1 && await page.locator('[data-site-still]').count() === 1, '2 · a working flat offers "I\'m done here" and "Still working"');
+check(await page.locator('[data-site-here="working"] [data-site-done-here]').count() === 1 && await page.locator('[data-site-still]').count() === 0, '2 · a working flat offers "I\'m done here" — no "Still working"');
+const lineBorder = await page.locator('[data-site-here="working"] [data-site-working-line]').evaluate(e => getComputedStyle(e).borderTopStyle + ' ' + getComputedStyle(e).borderTopWidth);
+check(/none|0px/.test(lineBorder), '2 · the green "working here" line has no outline', lineBorder);
 await shot('3-sheet-working');
-await page.locator('[data-site-still]').click(); await page.waitForTimeout(300);
-check((await aptOf('A1-23')).siteVisits.length === 1, '2 · "Still working" changes nothing');
+await page.locator('[data-work-sheet-close]').click(); await page.waitForTimeout(300);
+check((await aptOf('A1-23')).siteVisits.length === 1, '2 · the X changes nothing');
 
 // 3 · the bar → I'm done here → pictures and videos
 await page.locator('[data-working-bar="A1-23"]').click(); await page.waitForTimeout(400);
 check(await page.locator('[data-site-flow="ask"]').count() === 1, '3 · the bar opens "I\'m done here"');
+check(await page.locator('[data-site-flow] [data-site-still]').count() === 0, '3 · no "Still working" there either');
 await shot('3-done-ask');
 await page.locator('[data-site-flow] [data-site-done-here]').click(); await page.waitForTimeout(300);
 check(await page.locator('[data-site-flow="media"]').count() === 1, '4 · the pictures and videos screen');
@@ -118,7 +125,7 @@ await shot('4b-uploading');
 check(await waitFor('[data-site-flow="question"]', 15000), '5 · the question comes after the upload');
 check(sessions.length === 3 && folders.includes('Photos') && folders.includes('Site visits'), '4 · three files to Drive › Photos › Site visits', `${sessions.length} · ${folders.join(',')}`);
 const qText = await page.locator('[data-site-question]').innerText();
-check(/The next stage open here is/.test(qText) && /Did you do Framing here\?/.test(qText), '5 · "The next stage open here is Framing"', qText.replace(/\s+/g, ' '));
+check(!/The next stage open here is/.test(qText) && /Did you do Framing here\?/.test(qText), '5 · asked in plain words: "Did you do Framing here?"', qText.replace(/\s+/g, ' '));
 check(await page.locator('[data-site-yes]').innerText() === 'Yes, Framing' && /No, something else/.test(await page.locator('[data-site-no]').innerText()), '5 · Yes, Framing / No, something else');
 await shot('5-question');
 await page.locator('[data-site-yes]').click(); await page.waitForTimeout(700);
@@ -131,7 +138,9 @@ check(vd.files.every(f => /^DRV-/.test(f.driveFileId)), '5 · every file carries
 check(await page.locator('[data-site-flow="done"]').count() === 1 && /Done\. Framing is finished/.test(await page.locator('[data-site-done-title]').innerText()), '6 · "Done. Framing is finished"');
 check(await page.locator('[data-site-sent-thumb]').count() === 3 && /What you sent · 3/.test(await page.locator('[data-site-sent]').innerText()), '6 · "What you sent · 3" with three thumbnails');
 const nx = await page.locator('[data-site-next]').innerText().catch(() => '');
-check(/NEXT HERE/.test(nx) && /Waiting for Inspection 1/.test(nx), '6 · next here: waiting for Inspection 1', nx.replace(/\s+/g, ' '));
+check(/WAITING FOR INSPECTION/.test(nx) && /Inspection 1/.test(nx) && !/NEXT HERE/.test(nx), '6 · "Waiting for inspection: Inspection 1"', nx.replace(/\s+/g, ' '));
+const flowBar = await page.locator('[data-site-flow] .no-bar').evaluate(e => getComputedStyle(e).scrollbarWidth).catch(() => '');
+check(flowBar === 'none', '6 · no scrollbar on the side', flowBar);
 await shot('6-done');
 // a tap on the film plays it in the viewer
 await page.locator('[data-site-sent-thumb="2"] button').first().click(); await page.waitForTimeout(500);
@@ -167,12 +176,15 @@ const v24 = (await aptOf('A1-24')).siteVisits[0];
 check(v24.status === 'question' && v24.askedStageId === 's-framing' && !!v24.endedAt && v24.files?.length === 1, '6c · the visit is a question for the office', JSON.stringify({ ...v24, files: v24.files?.length }));
 check((await aptOf('A1-24')).stageMarks?.['s-framing'] !== 'done', '6c · nothing marked done');
 const off = await page.locator('[data-site-flow="office"]').innerText().catch(() => '');
-check(/Sent to the office/.test(off) && /They will be in touch with you\./.test(off) && /What you sent · 1/.test(off), '6c · "Sent to the office" with what he sent', off.replace(/\s+/g, ' '));
+check(/Sent to the office/.test(off) && /The office will figure it out\./.test(off) && /What you sent · 1/.test(off), '6c · "Sent to the office · The office will figure it out"', off.replace(/\s+/g, ' '));
 check(await page.locator('[data-site-select]').count() === 1 && await page.locator('[data-site-back]').count() === 1, '6c · Select and Back to the building');
 await shot('6c-office');
 await page.locator('[data-site-back]').click(); await page.waitForTimeout(400);
 check(await page.locator('[data-working-bar]').count() === 0, '6c · no bars left');
-check(await page.locator('[data-apt-id="A1-24"].apt-signal-ask').count() >= 1, '6c · flat 24 flashes for the office');
+// Re-encoded (3:16 — "what is this yellow?"): the office's amber flash is not on the WORKER's map; his finished flats wear a ✓.
+check(await page.locator('[data-apt-id="A1-24"].apt-signal-ask').count() === 0, '6c · the worker\'s map does not flash the office\'s yellow');
+check(await page.locator('[data-apt-id="A1-24"] [data-site-done-mark]').count() === 1 && await page.locator('[data-apt-id="A1-23"] [data-site-done-mark]').count() === 1,
+  '6c · both finished flats wear a green ✓');
 await shot('7-map-after');
 
 // the page never runs wider than the phone

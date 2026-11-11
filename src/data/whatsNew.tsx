@@ -31,6 +31,32 @@ export interface WhatsNewEntry {
 
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    date: '2027-03-10',
+    title: 'The worker\'s phone, simpler',
+    items: [
+      {
+        title: 'The plan on top, one button at the bottom',
+        body: 'Tapping an apartment on the building map shows its plan first, with the big green "I\'m working here" at the bottom. There is no Cancel or Still working any more — the bigger X closes it. A tap on the plan opens it, so the View button is gone.',
+        demo: 'tap',
+      },
+      {
+        title: 'A plain question when the work is done',
+        body: 'After the pictures go up, the worker is just asked "Did you do Installation here?". If he says no, the screen says the office will figure it out. When the next step is an inspection it says "Waiting for inspection".',
+        demo: 'tap',
+      },
+      {
+        title: 'A green ✓ where he finished',
+        body: 'On the worker\'s map, an apartment he finished today shows a green check mark. The yellow flash that means "a question for the office" is only shown in the office now.',
+        demo: 'sparkle',
+      },
+      {
+        title: 'My Tasks: a tidier top',
+        body: 'The day filter is one bubble that opens when tapped, with a new Dates choice for any days you pick. The Done section starts folded with a bigger check mark, "No new tasks" shows when there is nothing open, and the apartment you are working in shows at the top.',
+        demo: 'list',
+      },
+    ],
+  },
+  {
     date: '2027-03-09',
     title: 'A standard plan for every floor, and a calmer Plan Finder',
     items: [

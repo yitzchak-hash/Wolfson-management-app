@@ -1,31 +1,39 @@
-import { useLayoutEffect, useRef, useState } from 'react';
+import { useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import { ChevronDown } from 'lucide-react';
 
 export interface DayChip<K extends string> { key: K; label: string; color: string }
 
 /**
- * The worker's day chips (All · Yesterday · Today · Tomorrow · This Week).
+ * The worker's day filter (All · Yesterday · Today · Tomorrow · This Week · Dates).
  *
- * They WRAP, never scroll: as a sideways scroller "This Week" sat half past the
- * screen's edge on the iPhone 17 Pro and Pro Max and the Fold's cover screen,
- * and wholly off it on a 360px Galaxy (session #88's overlap sweep).
+ * FOLDED into one bubble by default (owner, recording 2026-11-11 122535, 0:16 — "turn it into a collapsible bubble
+ * where it's all, and then we can filter yesterday, today, this week, or specific dates"): the bubble says the
+ * choice in force; a tap opens the chips, and picking one folds it again. `extra` is drawn under the open chips —
+ * the from/to boxes when "Dates" is the choice.
  *
- * One line whenever the five fit (Hebrew on most phones, a Fold opened). When
- * they don't, plain wrapping left "This Week" alone on a second line stretched
- * across the screen, so the row splits as 3 + 2 instead — or as many lines as
- * Russian at the largest text size needs. A chip never shrinks below its own
- * word (whitespace-nowrap holds a flex item's floor at its full label).
+ * Open, the chips WRAP, never scroll: as a sideways scroller "This Week" sat half past the screen's edge on the
+ * iPhone 17 Pro and Pro Max and the Fold's cover screen, and wholly off it on a 360px Galaxy (session #88's overlap
+ * sweep). One line whenever they fit; when they don't the row splits three to a line. A chip never shrinks below its
+ * own word (whitespace-nowrap holds a flex item's floor at its full label).
  */
-export function DayFilterChips<K extends string>({ options, value, onPick }: {
+export function DayFilterChips<K extends string>({ options, value, onPick, summary, extra, keepOpen }: {
   options: DayChip<K>[];
   value: K;
   onPick: (k: K) => void;
+  /** The words on the folded bubble (defaults to the chosen chip's label). */
+  summary?: string;
+  extra?: ReactNode;
+  /** Picking this chip leaves the bubble open (the dates need their boxes). */
+  keepOpen?: K;
 }) {
   const row = useRef<HTMLDivElement>(null);
   const [split, setSplit] = useState(false);
+  const [open, setOpen] = useState(false);
+  const chosen = options.find(o => o.key === value) ?? options[0];
 
   useLayoutEffect(() => {
     const el = row.current;
-    if (!el) return;
+    if (!el || !open) return;
     const measure = () => {
       const words = [...el.querySelectorAll<HTMLElement>('[data-chip-word]')];
       const cs = getComputedStyle(el);
@@ -42,24 +50,35 @@ export function DayFilterChips<K extends string>({ options, value, onPick }: {
     const ro = new ResizeObserver(measure);
     ro.observe(el);
     return () => ro.disconnect();
-  }, [options.map(o => o.label).join('|')]);
+  }, [open, options.map(o => o.label).join('|')]);
 
   return (
-    <div ref={row} data-day-filters data-split={split || undefined}
-      className="bg-white border-b border-gray-100 px-3 py-2.5 flex flex-wrap gap-1.5 flex-shrink-0">
-      {options.map(({ key, label, color }) => (
-        <button
-          key={key}
-          onClick={() => onPick(key)}
-          // basis 30%: at most three to a line, so a split row is 3 + 2.
-          className={`${split ? 'basis-[30%]' : ''} flex-auto whitespace-nowrap px-3 py-1.5 rounded-full text-sm font-semibold transition-all ${
-            value === key ? 'text-white shadow-sm' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
-          }`}
-          style={value === key ? { backgroundColor: color } : {}}
-        >
-          <span data-chip-word>{label}</span>
-        </button>
-      ))}
+    <div data-day-filters data-open={open || undefined} className="bg-white border-b border-gray-100 px-3 py-2 flex-shrink-0">
+      <button data-day-filter-bubble aria-expanded={open} onClick={() => setOpen(o => !o)}
+        className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-sm font-bold text-white shadow-sm"
+        style={{ backgroundColor: chosen?.color ?? '#1e3a5f' }}>
+        <span data-day-filter-summary>{summary ?? chosen?.label}</span>
+        <ChevronDown size={15} className={`transition-transform ${open ? 'rotate-180' : ''}`} />
+      </button>
+      {open && (
+        <div ref={row} data-split={split || undefined} className="mt-2 flex flex-wrap gap-1.5">
+          {options.map(({ key, label, color }) => (
+            <button
+              key={key}
+              data-day-filter={key}
+              onClick={() => { onPick(key); if (key !== keepOpen) setOpen(false); }}
+              // basis 30%: at most three to a line, so a split row is 3 + 2.
+              className={`${split ? 'basis-[30%]' : ''} flex-auto whitespace-nowrap px-3 py-1.5 rounded-full text-sm font-semibold transition-all ${
+                value === key ? 'text-white shadow-sm' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+              }`}
+              style={value === key ? { backgroundColor: color } : {}}
+            >
+              <span data-chip-word>{label}</span>
+            </button>
+          ))}
+        </div>
+      )}
+      {open && extra}
     </div>
   );
 }

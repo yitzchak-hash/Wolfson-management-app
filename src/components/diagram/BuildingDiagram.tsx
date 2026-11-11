@@ -1,5 +1,5 @@
-import React, { useMemo, useState } from 'react';
-import { Link2, Lock, LockOpen } from 'lucide-react';
+import React, { createContext, useContext, useMemo, useState } from 'react';
+import { Link2, Lock, LockOpen, Check } from 'lucide-react';
 import { Apartment, BuildingId, Stage, relativeTime } from '../../types';
 import { useStore } from '../../data/store';
 import { PROBLEM_FILL } from '../../data/problems';
@@ -7,6 +7,14 @@ import { progressOf, StageProgress, isStartStage } from '../../data/stageMarks';
 import { signalOf } from '../../data/stageHow';
 import { realName, isSold } from '../../data/aptSale';
 import { driveThumbUrl } from '../../data/driveApi';
+
+/**
+ * WHO IS LOOKING AT THE MAP. The office reads every site signal; a WORKER's phone (the portal sets this to his id)
+ * never sees the office's amber "question" flash — he asked "what is this yellow? what am I supposed to do with it?"
+ * (owner, recording 2026-11-11 122535, 3:16) — and an apartment he finished a visit in today wears a green ✓ instead
+ * of looking pending (2:28 — "once it's done, it should show them as like a check mark").
+ */
+export const MapViewerContext = createContext<{ workerId?: string }>({});
 
 /** The board's sale filter (owner, 2026-10-28): one at a time, plus All. */
 export type SaleFilter = 'all' | 'sold' | 'unsold' | 'shinui' | 'standard';
@@ -244,8 +252,14 @@ function AptCell({
    */
   const allStages = useStore(state => state.stages);
   const tipusStages = useStore(state => state.boardSettings[state.currentProjectId]?.tipusStages);
-  const signal = useMemo(() => (apt ? signalOf(apt, [...allStages].sort((a, b) => a.order - b.order), { tipusStages }) : null),
+  const viewer = useContext(MapViewerContext);
+  const rawSignal = useMemo(() => (apt ? signalOf(apt, [...allStages].sort((a, b) => a.order - b.order), { tipusStages }) : null),
     [apt, allStages, tipusStages]);
+  const signal = viewer.workerId && rawSignal === 'ask' ? null : rawSignal;
+  const today = new Date().toDateString();
+  const finishedHere = !!viewer.workerId && !!apt?.siteVisits?.some(v => v.byId === viewer.workerId && v.status !== 'working'
+    && !!v.endedAt && new Date(v.endedAt).toDateString() === today)
+    && !apt.siteVisits.some(v => v.byId === viewer.workerId && v.status === 'working');
   const hasStage = !!stage;
   /**
    * PROJECT TILES (owner, 2026-11-01 — "Wolfson Diagram Preview", option A):
@@ -375,6 +389,13 @@ function AptCell({
         ? `${rowFloorType === 'basement' ? ui.basement : ui.aptShort} ${displayLabel}${nameLabel && numberLabel ? ` — ${nameLabel}` : ''}`
         : ''}
     >
+      {finishedHere && !isDimmed && (
+        <span data-site-done-mark aria-label="done"
+          className="absolute top-0.5 end-0.5 z-10 w-[18px] h-[18px] rounded-full flex items-center justify-center text-white shadow-sm"
+          style={{ backgroundColor: '#059669' }}>
+          <Check size={12} strokeWidth={3.5} />
+        </span>
+      )}
       {problem && !isDimmed && (
         <span data-problem-bang
           className="absolute rounded-full bg-white flex items-center justify-center font-black leading-none"

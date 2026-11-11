@@ -24,7 +24,7 @@ import {
   ChevronsRight, HelpCircle,
   Share2,
 } from 'lucide-react';
-import { BuildingDiagram } from '../components/diagram/BuildingDiagram';
+import { BuildingDiagram, MapViewerContext } from '../components/diagram/BuildingDiagram';
 import { permsOf } from '../data/workerLevels';
 import { PlannerWidget } from '../components/board/PlannerWidget';
 import { TaskCalendar, CalendarEvent, CalendarWords, dayItems } from '../components/tasks/TaskCalendar';
@@ -772,7 +772,12 @@ export function ContractorPortal() {
   const [uploadError, setUploadError] = useState('');
   // ALL is the opening pill (owner, 2026-09-16) — Today hid tomorrow's work
   // behind an empty list on every open.
-  const [mapFilter, setMapFilter] = useState<'yesterday' | 'today' | 'tomorrow' | 'week' | 'all'>('all');
+  const [mapFilter, setMapFilter] = useState<'yesterday' | 'today' | 'tomorrow' | 'week' | 'dates' | 'all'>('all');
+  /** "Specific dates" (owner, recording 2026-11-11 122535, 0:20): the from/to of the Dates choice, as yyyy-MM-dd. */
+  const [dateRange, setDateRange] = useState<{ from: string; to: string }>(() => {
+    const t = format(new Date(), 'yyyy-MM-dd');
+    return { from: t, to: t };
+  });
   /**
    * Today is the opening filter and stays it (owner, 2026-09-03 — the
    * once-per-visit widening to All is gone). An empty Today says so in words
@@ -1181,13 +1186,17 @@ export function ContractorPortal() {
   /**
    * What the map lights: his open tasks, plus every flat where HIS site visit is open or waiting on the office — a
    * flat he is working in with no task in it was drawn grey, and a grey tile never shows the glow (the diagram leaves
-   * the signal off a dimmed tile).
+   * the signal off a dimmed tile). A flat he FINISHED a visit in today stays lit too, so its green ✓ shows.
    */
   const mapLitIds = useMemo(() => {
     const ids = new Set(openAptIds);
-    for (const a of apartments) if ((a.siteVisits ?? []).some(v => v.byId === contractorId && (v.status === 'working' || v.status === 'question'))) ids.add(a.id);
+    const today = new Date().toDateString();
+    for (const a of apartments) if ((a.siteVisits ?? []).some(v => v.byId === contractorId && (v.status === 'working' || v.status === 'question'
+      || (!!v.endedAt && new Date(v.endedAt).toDateString() === today)))) ids.add(a.id);
     return ids;
   }, [openAptIds, apartments, contractorId]);
+  /** The worker map reads the site signals as HIS (BuildingDiagram.MapViewerContext): no office flash, a ✓ where he finished. */
+  const mapViewer = useMemo(() => ({ workerId: contractorId }), [contractorId]);
   /** Work he began himself on the map ("I'm going to work here") — his to move, no permission needed. */
   const startedByHim = (a: ContractorAssignment) => !!a.stageReport && a.createdBy === contractorId;
   /**
@@ -1352,6 +1361,20 @@ export function ContractorPortal() {
     const today = startOfDay(new Date());
     return daysOf(a).map(d => differenceInCalendarDays(parseISO(d), today));
   };
+  /** Whether an open, dated task falls inside the chosen day filter (not 'all' — the callers handle that). */
+  const inDayFilter = (a: ContractorAssignment): boolean => {
+    if (mapFilter === 'dates') {
+      const lo = dateRange.from <= dateRange.to ? dateRange.from : dateRange.to;
+      const hi = dateRange.from <= dateRange.to ? dateRange.to : dateRange.from;
+      return daysOf(a).some(d => d >= lo && d <= hi);
+    }
+    const offs = dayOffsets(a);
+    if (mapFilter === 'yesterday') return offs.includes(-1);
+    if (mapFilter === 'today') return offs.includes(0);
+    if (mapFilter === 'tomorrow') return offs.includes(1);
+    if (mapFilter === 'week') return offs.some(d => d >= 0 && d <= 7);
+    return true;
+  };
 
   const aptSubLabels = useMemo(() => {
     const m = new Map<string, string>();
@@ -1382,15 +1405,11 @@ export function ContractorPortal() {
       if (a.completedAt || !a.dueDate) return;
       // A problem has no day: it is on every day's filter until it is closed.
       if (isLiveProblem(a)) { matching.add(a.apartmentId); return; }
-      const offs = dayOffsets(a);
-      if (mapFilter === 'yesterday' && offs.includes(-1)) matching.add(a.apartmentId);
-      else if (mapFilter === 'today' && offs.includes(0)) matching.add(a.apartmentId);
-      else if (mapFilter === 'tomorrow' && offs.includes(1)) matching.add(a.apartmentId);
-      else if (mapFilter === 'week' && offs.some(d => d >= 0 && d <= 7)) matching.add(a.apartmentId);
+      if (inDayFilter(a)) matching.add(a.apartmentId);
     });
     return matching;
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mapFilter, assignments]);
+  }, [mapFilter, dateRange, assignments]);
 
   const filteredAssignments = useMemo(() => {
     if (mapFilter === 'all') return assignments;
@@ -1398,33 +1417,23 @@ export function ContractorPortal() {
       if (a.completedAt) return false;
       if (!a.dueDate) return false;
       if (isLiveProblem(a)) return true;
-      const offs = dayOffsets(a);
-      if (mapFilter === 'yesterday') return offs.includes(-1);
-      if (mapFilter === 'today') return offs.includes(0);
-      if (mapFilter === 'tomorrow') return offs.includes(1);
-      if (mapFilter === 'week') return offs.some(d => d >= 0 && d <= 7);
-      return true;
+      return inDayFilter(a);
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mapFilter, assignments]);
+  }, [mapFilter, dateRange, assignments]);
   type ListRow = { a: ContractorAssignment; apt?: Apartment; projectId: string; projectName: string; live: boolean };
   const listRows: ListRow[] = useMemo(() => {
     const passes = (a: ContractorAssignment) => {
       if (mapFilter === 'all') return true;
       if (a.completedAt || !a.dueDate) return false;
       if (isLiveProblem(a)) return true;
-      const offs = dayOffsets(a);
-      if (mapFilter === 'yesterday') return offs.includes(-1);
-      if (mapFilter === 'today') return offs.includes(0);
-      if (mapFilter === 'tomorrow') return offs.includes(1);
-      if (mapFilter === 'week') return offs.some(d => d >= 0 && d <= 7);
-      return true;
+      return inDayFilter(a);
     };
     const live: ListRow[] = filteredAssignments.map(a => ({ a, apt: getApt(a.apartmentId), projectId: currentProjectId, projectName: currentWsName, live: true }));
     const foreign: ListRow[] = otherTasks.filter(r => passes(r.a)).map(r => ({ ...r, live: false }));
     return orderTaskRows([...live, ...foreign], isoToday());
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filteredAssignments, otherTasks, mapFilter, currentProjectId, currentWsName, apartments]);
+  }, [filteredAssignments, otherTasks, mapFilter, dateRange, currentProjectId, currentWsName, apartments]);
   /**
    * THE DONE LINE (owner, 2026-10-18 — "The Done Line" page, look C): the line
    * between the open work and the finished work folds away with a tiny arrow
@@ -1438,9 +1447,10 @@ export function ContractorPortal() {
   const [doneView, setDoneView] = useState<{ open: boolean; sort: DoneSort }>(() => {
     try {
       const v = JSON.parse(prefGet(`portal_done_${token ?? ''}`) || 'null');
-      if (v && typeof v === 'object') return { open: v.open !== false, sort: (v.sort as DoneSort) || 'latest' };
+      if (v && typeof v === 'object') return { open: v.open === true, sort: (v.sort as DoneSort) || 'latest' };
     } catch { /* private window */ }
-    return { open: true, sort: 'latest' };
+    // Folded until he opens it (owner, recording 2026-11-11 122535, 0:11 — "by default, it should be folded up").
+    return { open: false, sort: 'latest' };
   });
   const setDone = (patch: Partial<{ open: boolean; sort: DoneSort }>) => {
     const next = { ...doneView, ...patch };
@@ -1488,8 +1498,8 @@ export function ContractorPortal() {
   };
   const doneLine = (
     <div data-list-divider data-done-line className="relative flex items-center gap-2 pt-3 pb-1">
-      <span className="flex items-center gap-1.5 text-[13px] font-extrabold text-gray-500 whitespace-nowrap">
-        <CheckCircle2 size={15} className="text-green-500" />
+      <span className="flex items-center gap-2 text-[15px] font-extrabold text-gray-600 whitespace-nowrap">
+        <CheckCircle2 size={22} className="text-green-500" />
         {s.doneDividerLabel || w('Done', 'בוצע', 'Готово')} · {doneView.open ? doneRowCount : doneAll.length}
       </span>
       <span className="flex-1 h-px bg-gray-300 min-w-[8px]" />
@@ -2318,7 +2328,7 @@ export function ContractorPortal() {
     && !uploading
     && !selectedAssignment?.completedAt && selProblem?.status !== 'waiting';
 
-  type FilterKey = 'yesterday' | 'today' | 'tomorrow' | 'week' | 'all';
+  type FilterKey = 'yesterday' | 'today' | 'tomorrow' | 'week' | 'dates' | 'all';
   // ALL leads, per the owner — the everything view is the anchor the eye
   // returns to, and at the end of the row it kept being hunted for.
   const filterOptions: { key: FilterKey; label: string; color: string }[] = [
@@ -2327,7 +2337,11 @@ export function ContractorPortal() {
     { key: 'today',     label: s.filterToday,     color: '#f97316' },
     { key: 'tomorrow',  label: s.filterTomorrow,  color: '#f59e0b' },
     { key: 'week',      label: s.filterThisWeek,  color: '#3b82f6' },
+    { key: 'dates',     label: w('Dates', 'תאריכים', 'Даты'), color: '#7c3aed' },
   ];
+  const shortDay = (d: string) => { try { return format(parseISO(d), 'd MMM'); } catch { return d; } };
+  const datesSummary = dateRange.from === dateRange.to
+    ? shortDay(dateRange.from) : `${shortDay(dateRange.from)} – ${shortDay(dateRange.to)}`;
 
   if (notFound || !contractor) {
     return (
@@ -2374,10 +2388,14 @@ plansPdfFileId && (
                           </span>
                         )}
                       </h3>
-                      <button data-plan-toggle onClick={() => setShowPlansPdf(v => !v)}
-                        className="text-xs px-2.5 py-1 rounded-lg bg-[#1e3a5f] text-white font-medium">
-                        {showPlansPdf ? s.hide : s.view}
-                      </button>
+                      {/* No "View" (owner, recording 2026-11-11 122535, 1:26 — "tap to expand … there's no need for
+                          the view button"): the picture opens itself; only Hide stands once it is open. */}
+                      {showPlansPdf && (
+                        <button data-plan-toggle onClick={() => setShowPlansPdf(false)}
+                          className="text-xs px-2.5 py-1 rounded-lg bg-[#1e3a5f] text-white font-medium">
+                          {s.hide}
+                        </button>
+                      )}
                     </div>
 
                     {/* The office's markup, when there is one.
@@ -2768,12 +2786,36 @@ plansPdfFileId && (
       })()}
       {activeTab === 'tasks' && (
         // Wraps, never scrolls past the screen's edge — see DayFilterChips.
-        <DayFilterChips options={filterOptions} value={mapFilter} onPick={setMapFilter} />
+        <DayFilterChips options={filterOptions} value={mapFilter} onPick={setMapFilter} keepOpen="dates"
+          summary={mapFilter === 'dates' ? datesSummary : undefined}
+          extra={mapFilter === 'dates' ? (
+            <div data-day-range className="mt-2 flex items-center gap-2 text-[13px] font-semibold text-gray-600">
+              <label className="flex-1 min-w-0 flex flex-col gap-0.5">
+                {w('From', 'מ-', 'С')}
+                <input type="date" data-day-from value={dateRange.from}
+                  onChange={e => e.target.value && setDateRange(r => ({ ...r, from: e.target.value }))}
+                  className="w-full rounded-lg border border-gray-200 px-2 py-1.5 text-[14px] text-gray-900" />
+              </label>
+              <label className="flex-1 min-w-0 flex flex-col gap-0.5">
+                {w('To', 'עד', 'По')}
+                <input type="date" data-day-to value={dateRange.to}
+                  onChange={e => e.target.value && setDateRange(r => ({ ...r, to: e.target.value }))}
+                  className="w-full rounded-lg border border-gray-200 px-2 py-1.5 text-[14px] text-gray-900" />
+              </label>
+            </div>
+          ) : undefined} />
       )}
 
       {/* Tasks tab */}
       {activeTab === 'tasks' && (
         <main className="flex-1 p-4 max-w-2xl mx-auto w-full">
+          {/* Where he is working now, in My Tasks too (owner, recording 2026-11-11 122535, 0:51 — "working in apartment
+              55 … why doesn't it show up in the tasks?"): the same green bars as on the map, a tap goes to "I'm done here". */}
+          <div data-tasks-working className="-mx-2.5 -mt-2 mb-1">
+            <WorkingBars apartments={apartments} workerId={contractorId} w={w}
+              label={a => a.apartmentNumber?.trim() || aptLabel(a)}
+              onOpen={(aptId, visitId) => setSiteFlow({ aptId, visitId, start: 'ask' })} />
+          </div>
           {/*
             Writing yourself a task.
 
@@ -3145,6 +3187,11 @@ plansPdfFileId && (
                   </React.Fragment>
                 );
               })}
+              {openRows.length === 0 && (
+                <div data-no-new-tasks className="text-center text-[15px] font-bold text-gray-500 py-6">
+                  {w('No new tasks', 'אין משימות חדשות', 'Новых задач нет')}
+                </div>
+              )}
               {doneAll.length > 0 && shownRows.length === openRows.length && doneLine}
               {doneAll.length > 0 && doneView.open && doneRows.length === 0 && (
                 <div data-done-none className="text-center text-[13px] text-gray-400 py-2">
@@ -3638,6 +3685,7 @@ plansPdfFileId && (
                     <path d="M45 100 V95 H55 V100" fill="#f3f4f6" stroke="#1e3a5f" strokeOpacity=".28" strokeWidth="2" vectorEffect="non-scaling-stroke" />
                   </svg>
                   <div className="relative">
+                    <MapViewerContext.Provider value={mapViewer}>
                     <BuildingDiagram
                       apartments={visible}
                       stages={stages}
@@ -3653,6 +3701,7 @@ plansPdfFileId && (
                       compact={!phonePortal}
                       phone={phonePortal}
                     />
+                    </MapViewerContext.Provider>
                   </div>
                 </div>
                 <div className="sticky bottom-0 h-20 pointer-events-none -mt-20" data-map-fade
@@ -5198,23 +5247,14 @@ plansPdfFileId && (
                     </p>
                   )}
                 </div>
-                <button onClick={closeSheet} className="p-1.5 text-gray-400 flex-shrink-0"><X size={18} /></button>
+                {/* Bigger (owner, recording 2026-11-11 122535, 0:41 — "you can make the X a little bigger"): it is
+                    the one way out of the sheet now that Cancel is gone. */}
+                <button data-work-sheet-close onClick={closeSheet} aria-label={w('Close', 'סגירה', 'Закрыть')}
+                  className="-m-1 p-2 rounded-full text-gray-500 hover:bg-gray-100 flex-shrink-0"><X size={26} /></button>
               </div>
-              <div className="flex-1 overflow-y-auto px-5 py-4 space-y-3">
+              <div className="flex-1 overflow-y-auto no-bar px-5 py-4 space-y-3">
                 {workHere.step === 'view' && (
                   <>
-                    {/* THE SITE FLOW first (owner, 2026-11-10): one big green "I'm working here" — or, when he is
-                        already working here, "I'm done here" and "Still working". Everything below stays as it was. */}
-                    {perms.workHere && (
-                      <SiteHereBlock apt={apt} workerId={contractorId} w={w}
-                        onStart={() => { startSiteVisit(apt.id, siteWorker, workerUser()); closeSheet(); }}
-                        onDone={() => {
-                          const v = myOpenVisit(useStore.getState().apartments.find(x => x.id === apt.id), contractorId);
-                          closeSheet();
-                          if (v) setSiteFlow({ aptId: apt.id, visitId: v.id, start: 'media' });
-                        }}
-                        onCancel={closeSheet} />
-                    )}
                     {/* The unit's plan, before the work starts (owner,
                         2026-10-18): any unit with "Open any engineered plan",
                         or a unit he has a task in with the ordinary plan
@@ -5261,7 +5301,7 @@ plansPdfFileId && (
                       </div>
                     )}
                     {/* The old "I started working here" is gone (owner, 2026-11-10: "remove the old one"): the green "I'm
-                        working here" above (SiteVisit) is the one way in; his tasks still open from the list above. */}
+                        working here" below (SiteVisit) is the one way in; his tasks still open from the list above. */}
                   </>
                 )}
                 {workHere.step === 'part' && (
@@ -5451,6 +5491,21 @@ plansPdfFileId && (
                   );
                 })()}
               </div>
+              {/* THE SITE FLOW at the FOOT of the sheet (owner, recording 2026-11-11 122535, 0:35 — "flip the plan. The
+                  plan should be on top. I'm working here should be on the bottom"): the plan and the notes scroll above,
+                  the one big button stays in reach under the thumb. No Cancel or Still working — the X closes. */}
+              {workHere.step === 'view' && perms.workHere && (
+                <div data-work-foot className="flex-shrink-0 px-5 pt-2 border-t border-gray-100"
+                  style={{ paddingBottom: 'max(14px, env(safe-area-inset-bottom))' }}>
+                  <SiteHereBlock apt={apt} workerId={contractorId} w={w}
+                    onStart={() => { startSiteVisit(apt.id, siteWorker, workerUser()); closeSheet(); }}
+                    onDone={() => {
+                      const v = myOpenVisit(useStore.getState().apartments.find(x => x.id === apt.id), contractorId);
+                      closeSheet();
+                      if (v) setSiteFlow({ aptId: apt.id, visitId: v.id, start: 'media' });
+                    }} />
+                </div>
+              )}
             </div>
           </>
         );
