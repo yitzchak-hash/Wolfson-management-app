@@ -1,7 +1,8 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import {
   ChevronDown, Search, Folder, Loader2, X, CornerDownRight, Star, Maximize2, ExternalLink,
-  FileText, Image as ImageIcon, Clock, Check,
+  FileText, Image as ImageIcon, Clock, Check, ChevronRight, ArrowLeft,
 } from 'lucide-react';
 import {
   DriveFile, PlanEntry, driveThumbUrl, ensureDriveShared, extractFolderId, isDriveFolder,
@@ -70,6 +71,9 @@ interface Card {
 }
 
 /** The last few plans opened from the finder in THIS browser (deviceOnly.ts). */
+// The look-first preview draws the sheet with the studio itself, read-only (loaded only when a card is pressed).
+const PlanAnnotatorLazy = React.lazy(() => import('./PlanAnnotator').then(m => ({ default: m.PlanAnnotator })));
+
 const RECENT_KEY = 'plan_finder_recent';
 interface Recent {
   job: string; id: string; name: string; folderId: string; folderName: string;
@@ -436,6 +440,16 @@ export function PlanPicker({
   const [filter, setFilter] = useState<Filter>('all');
   const [sort, setSort] = useState<'new' | 'az'>('new');
   const [sel, setSel] = useState(-1);
+  /**
+   * Recording 2026-11-11 094048: the side list's subfolders are COLLAPSED and open on request; the folders of the
+   * one on screen stand as cards beside its files; the bar shows the path with a Back like Windows Explorer; and a
+   * press on a plan LOOKS at it full screen first (Star / Open on top) — never straight into the pane.
+   */
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const [backStack, setBackStack] = useState<string[]>([]);
+  const [preview, setPreview] = useState<Card | null>(null);
+  const previewRef = useRef<Card | null>(null);
+  previewRef.current = preview;
   const [recents] = useState(() => readRecents().filter(r => r.job === jobKey).slice(0, 4));
   const searchRef = useRef<HTMLInputElement>(null);
   const gridRef = useRef<HTMLDivElement>(null);
@@ -526,6 +540,7 @@ export function PlanPicker({
       if (e.key !== 'Escape') return;
       e.stopImmediatePropagation();
       e.preventDefault();
+      if (previewRef.current) { setPreview(null); return; }
       onClose();
     }
     window.addEventListener('keydown', key, true);
@@ -551,8 +566,25 @@ export function PlanPicker({
     return out;
   }, [lists, rootId, plansId, plansName]);
 
-  const nameOf = useCallback((id: string) => tree.find(r => r.id === id)?.name
-    ?? (id === plansId ? plansName : ''), [tree, plansId, plansName]);
+  const folderMeta = useMemo(() => {
+    const m = new Map<string, { name: string; parent: string }>();
+    for (const [pid, l] of Object.entries(lists)) for (const f of l?.folders ?? []) m.set(f.id, { name: f.name, parent: pid });
+    return m;
+  }, [lists]);
+  const rootWord = he ? 'תיקיית העבודה' : 'Job folder';
+  const nameOf = useCallback((id: string) => tree.find(r => r.id === id)?.name ?? folderMeta.get(id)?.name
+    ?? (id === plansId ? plansName : id === rootId ? rootWord : ''), [tree, folderMeta, plansId, plansName, rootId, rootWord]);
+  /** The path of the folder on screen, the job's folder first. */
+  const crumbs = useMemo(() => {
+    const out: { id: string; name: string }[] = [];
+    let id: string | null = openId;
+    for (let guard = 0; id && guard < 12; guard++) {
+      out.unshift({ id, name: nameOf(id) || plansName });
+      if (id === rootId) break;
+      id = folderMeta.get(id)?.parent ?? (rootId && id !== rootId && tree.some(r => r.id === id && !r.sub) ? rootId : null);
+    }
+    return out;
+  }, [openId, nameOf, plansName, rootId, folderMeta, tree]);
   const pathOf = useCallback((id: string) => {
     const row = tree.find(r => r.id === id);
     if (row?.parent) return `${nameOf(row.parent)} › ${row.name}`;
@@ -665,6 +697,13 @@ export function PlanPicker({
   /** Choose a card — the old chooser's rules for which folder it lands on. */
   function choose(card: Card) {
     if (!card.pick) return;
+    setPreview(card);
+  }
+
+  /** Open it for real — the old chooser's rules for which folder it lands on. */
+  function openCard(card: Card) {
+    if (!card.pick) return;
+    setPreview(null);
     const folder = card.folder;
     noteRecent({
       job: jobKey, id: card.pick.id, name: card.pick.name, folderId: folder.id, folderName: folder.name,
@@ -686,7 +725,16 @@ export function PlanPicker({
     onPick(card.pick, folder);
   }
 
+  function goBack() {
+    const prev = backStack[backStack.length - 1];
+    if (!prev) return;
+    setBackStack(st => st.slice(0, -1));
+    setOpenId(prev); setQ(''); setFilter('all');
+    void load(prev);
+  }
+
   function chooseFolder(id: string) {
+    if (openId && openId !== id) setBackStack(st => [...st, openId]);
     setOpenId(id);
     setQ('');
     setFilter('all');
@@ -737,6 +785,8 @@ export function PlanPicker({
   }
 
   const openListing = openId ? lists[openId] : undefined;
+  /** The folders inside the one on screen (the marked-up child is already shown as cards of its own). */
+  const subFolders = (openListing?.folders ?? []).filter(f => !isAnnotFolder(f.name));
   const openName = openId ? nameOf(openId) || plansName : plansName;
   const loadingView = !searching && base === undefined;
   const chips: { id: Filter; label: string; n: number }[] = [
@@ -769,12 +819,28 @@ export function PlanPicker({
         {/* The bar: what this is, the folder on screen, the X. */}
         <div className="flex items-center gap-2 px-3.5 py-2.5 flex-shrink-0" style={{ backgroundColor: '#1e3a5f' }}>
           <span className="text-white font-bold text-[14px] flex-shrink-0">{w.title}</span>
-          <button data-folder-button type="button" title={w.chooseFolder}
-            onClick={() => { if (phone) document.querySelector<HTMLSelectElement>('[data-folder-select]')?.focus(); }}
-            className={`flex items-center gap-1.5 min-w-0 text-white/75 text-[12px] ${searching ? 'invisible' : ''}`}>
-            <Folder size={13} className="flex-shrink-0 text-[#4aa8d8]" />
-            <span className="truncate">{openName}</span>
+          <button type="button" data-finder-back disabled={!backStack.length || searching} onClick={goBack}
+            title={he ? 'חזרה' : 'Back'} aria-label={he ? 'חזרה' : 'Back'}
+            className="p-1.5 rounded-lg text-white/85 hover:bg-white/15 disabled:opacity-30 flex-shrink-0">
+            <ArrowLeft size={15} className={he ? '-scale-x-100' : ''} />
           </button>
+          <nav data-finder-crumbs className={`flex items-center gap-1 min-w-0 overflow-hidden text-[12px] ${searching ? 'invisible' : ''}`}>
+            <Folder size={13} className="flex-shrink-0 text-[#4aa8d8]" />
+            {crumbs.map((c, i) => {
+              const last = i === crumbs.length - 1;
+              return (
+                <React.Fragment key={c.id}>
+                  {i > 0 && <ChevronRight size={11} className={`text-white/40 flex-shrink-0 ${he ? '-scale-x-100' : ''}`} />}
+                  <button type="button" data-finder-crumb={c.id} {...(last ? { 'data-folder-button': '' } : {})}
+                    title={last ? w.chooseFolder : c.name}
+                    onClick={() => { if (!last) chooseFolder(c.id); else if (phone) document.querySelector<HTMLSelectElement>('[data-folder-select]')?.focus(); }}
+                    className={`truncate ${last ? 'text-white font-semibold min-w-0' : 'text-white/70 hover:text-white hover:underline flex-shrink-0 max-w-[140px]'}`}>
+                    {c.name}
+                  </button>
+                </React.Fragment>
+              );
+            })}
+          </nav>
           <span className="flex-1" />
           <button type="button" onClick={onClose} title={w.close} aria-label={w.close}
             className="p-1.5 rounded-lg text-white/80 hover:bg-white/15">
@@ -859,8 +925,10 @@ export function PlanPicker({
                 </div>
               ))}
               {!tree.length && !sweeping && <p className="px-2 py-2 text-[12px] text-slate-400">{w.noFolders}</p>}
-              {tree.map(r => {
+              {tree.filter(r => !r.sub || expanded.has(r.parent!) || r.id === openId).map(r => {
                 const on = !searching && r.id === openId;
+                const kids = !r.sub && (lists[r.id]?.folders.length ?? 0) > 0;
+                const isOpen = expanded.has(r.id);
                 const n = fileCount(r.id);
                 return (
                   <button key={r.id} type="button" data-folder-row={r.id} data-folder-sub={r.sub ? '1' : undefined}
@@ -869,6 +937,13 @@ export function PlanPicker({
                     title={r.name}
                     className={`w-full flex items-center gap-1.5 py-1.5 rounded-lg text-start ${
                       r.sub ? 'ps-6 pe-2' : 'px-2'} ${on ? 'bg-[#e6f1fa] text-[#1e3a5f] font-bold' : 'text-slate-700 hover:bg-slate-100'}`}>
+                    {!r.sub && (kids ? (
+                      <span role="button" data-folder-toggle={r.id} aria-expanded={isOpen}
+                        onClick={e => { e.stopPropagation(); setExpanded(st => { const n = new Set(st); if (n.has(r.id)) n.delete(r.id); else n.add(r.id); return n; }); }}
+                        className="flex-shrink-0 p-0.5 -ms-1 rounded hover:bg-slate-200 text-slate-400">
+                        <ChevronRight size={12} className={`transition-transform ${isOpen ? 'rotate-90' : he ? '-scale-x-100' : ''}`} />
+                      </span>
+                    ) : <span className="w-3.5 flex-shrink-0" />)}
                     {r.sub && <CornerDownRight size={11} className={`text-slate-300 flex-shrink-0 ${he ? '-scale-x-100' : ''}`} />}
                     <Folder size={14} className="text-[#4aa8d8] flex-shrink-0" fill={on ? '#cfe6f5' : 'none'} />
                     <span className="flex-1 min-w-0 truncate text-[12.5px]">{r.name}</span>
@@ -919,7 +994,20 @@ export function PlanPicker({
             {openListing === null && !searching && (
               <p data-finder-unreachable className="px-1 py-6 text-center text-[12.5px] text-slate-500">{w.unreachable}</p>
             )}
-            {!loadingView && shown.length === 0 && openListing !== null && (
+            {!searching && filter === 'all' && subFolders.length > 0 && (
+              <div data-folder-cards className="grid gap-2.5 mb-2.5"
+                style={{ gridTemplateColumns: `repeat(auto-fill, minmax(${phone ? 140 : 170}px, 1fr))` }}>
+                {subFolders.map(f => (
+                  <button key={f.id} type="button" data-folder-card={f.id} onClick={() => chooseFolder(f.id)} title={f.name}
+                    className="flex flex-col items-center justify-center gap-1.5 h-[96px] rounded-xl border-2 border-gray-200 bg-[#f8fafc] hover:border-[#4aa8d8] hover:shadow-sm text-slate-700">
+                    <Folder size={30} className="text-[#4aa8d8]" fill="#cfe6f5" />
+                    <span className="max-w-full px-2 truncate text-[12.5px] font-semibold" dir="auto">{f.name}</span>
+                    {fileCount(f.id) != null && <span className="text-[10.5px] text-slate-400 tabular-nums">{fileCount(f.id)}</span>}
+                  </button>
+                ))}
+              </div>
+            )}
+            {!loadingView && shown.length === 0 && openListing !== null && !(subFolders.length > 0 && !searching) && (
               <p data-finder-empty className="px-1 py-6 text-center text-[12.5px] text-slate-400">
                 {searching ? (sweeping ? w.stillLooking : w.nothing) : w.empty}
               </p>
@@ -937,7 +1025,7 @@ export function PlanPicker({
                   onHover={() => { if (sel >= 0 && sel !== i) setSel(i); }}
                   onChoose={() => choose(c)}
                   onStar={onStar && c.pick ? () => onStar(c.pick!) : undefined}
-                  onPreview={onPreview && c.pick ? () => onPreview(c.pick!, c.folder) : undefined}
+                  onPreview={c.pick ? () => setPreview(c) : undefined}
                   onOpenNewTab={onOpenNewTab && c.pick ? () => onOpenNewTab(c.pick!) : undefined}
                 />
               ))}
@@ -950,6 +1038,60 @@ export function PlanPicker({
           </div>
         </div>
       </div>
+      {preview?.pick && (
+        <FinderPreview card={preview} he={he} canStar={!!onStar}
+          starred={!!starredId && starredId === preview.pick.id}
+          onBack={() => setPreview(null)}
+          onStar={() => onStar?.(preview.pick!)}
+          onOpen={() => openCard(preview)} />
+      )}
     </>
+  );
+}
+
+/**
+ * LOOK FIRST (owner, recording 2026-11-11: "it should first show in full screen and then ask me … the preview with
+ * the star button on top … not directly"). The sheet full screen in the read-only studio; on top, Back to the list,
+ * the Star (where the host has one) and Open.
+ */
+function FinderPreview({ card, he, canStar, starred, onBack, onStar, onOpen }: {
+  card: Card; he: boolean; canStar: boolean; starred: boolean; onBack: () => void; onStar: () => void; onOpen: () => void;
+}) {
+  const me = useStore(st => st.currentUser?.name ?? '');
+  const p = card.pick!;
+  const seal = {
+    onPointerDown: (e: React.PointerEvent) => e.stopPropagation(),
+    onWheel: (e: React.WheelEvent) => e.stopPropagation(),
+    onClick: (e: React.MouseEvent) => e.stopPropagation(),
+    onKeyDown: (e: React.KeyboardEvent) => e.stopPropagation(),
+  };
+  // On the page itself: the job window is a transformed box, and a fixed layer inside one is only as big as it is.
+  return createPortal(
+    <div data-finder-preview={p.id} className="fixed inset-0 z-[240] flex flex-col" style={{ backgroundColor: 'rgba(10,16,28,.9)' }} dir={he ? 'rtl' : 'ltr'} {...seal}>
+      <div className="flex items-center gap-2 px-3 md:px-5 py-2.5 flex-shrink-0" style={{ backgroundColor: '#1e3a5f' }}>
+        <button type="button" data-preview-back onClick={onBack}
+          className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-white/85 text-[12.5px] font-semibold hover:bg-white/10">
+          <ArrowLeft size={15} className={he ? '-scale-x-100' : ''} /> {he ? 'חזרה' : 'Back'}
+        </button>
+        <span className="flex-1 min-w-0 truncate text-white font-bold text-[14px]" dir="auto">{p.name}</span>
+        {canStar && (
+          <button type="button" data-preview-star data-starred={starred ? '1' : '0'} onClick={onStar}
+            className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-[13px] font-bold ${starred ? 'bg-amber-400 text-[#1e3a5f]' : 'bg-white/12 text-white hover:bg-white/20 border border-white/25'}`}>
+            <Star size={14} fill={starred ? '#1e3a5f' : 'none'} /> {starred ? (he ? 'מסומן בכוכב' : 'Starred') : (he ? 'לסמן בכוכב' : 'Star this plan')}
+          </button>
+        )}
+        <button type="button" data-preview-open onClick={onOpen}
+          className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#4aa8d8] text-white text-[13px] font-bold hover:bg-[#3d95c2]">
+          {he ? 'לפתוח את התוכנית' : 'Open this plan'}
+        </button>
+      </div>
+      <div className="flex-1 min-h-0 relative">
+        <Suspense fallback={<div className="absolute inset-0 flex items-center justify-center gap-2 text-white/80 text-sm"><Loader2 size={16} className="animate-spin" /> {he ? 'פותח…' : 'Opening…'}</div>}>
+          <PlanAnnotatorLazy planFileId={p.id} planName={p.name} apartmentId={`PF-${p.id}`} apartmentLabel={p.name}
+            authorName={me} plans={[p]} embedded readOnly onClose={onBack} />
+        </Suspense>
+      </div>
+    </div>,
+    document.body,
   );
 }

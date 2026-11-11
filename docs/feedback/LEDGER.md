@@ -35,7 +35,8 @@ ask built or answered) · **not this app** (a recording of another project — r
 | 23 | Screen_Recording_20261104_145647_Samsung Browser.mp4 (no sound) | `1aXrXbRTRNHdoZvBIL6WJPJ4JW_K-Aa5b` | 1:53 | open (built on preview) | [2026-11-04-fold.md](2026-11-04-fold.md) |
 | 21 | Recording 2026-11-03 145621.mp4 | `1_zIfohBbNIsJlE3Ui1SyBM6_-q3yliO6` | 0:55 | open (built on preview) | [2026-11-03-145621.md](2026-11-03-145621.md) |
 | 24 | Recording 2026-11-10 144934.mp4 (41.6 MB, 1440×1302) | `1rkRy5GXJKZDXOPsYAWHqmqupbHWLBl9L` | 1:15 | done (live 2026-11-10) | [2026-11-10-144934.md](2026-11-10-144934.md) |
-Folder last listed: 2026-11-10 — recording 24 at the top. Earlier: 2026-11-03 — recordings 18, 19 and 20 at the top (19 and 20 each twice). 1–18 are done and belong in Processed.
+| 25 | Recording 2026-11-11 094048.mp4 (33.3 MB, 1440×1246) | `161dv2cC81BfdzSEDjvbY3IhgDStqH0XK` | 1:21 | open (built on preview) | [2026-11-11-094048.md](2026-11-11-094048.md) |
+Folder last listed: 2026-11-11 — recording 25 at the top (24 is done and belongs in Processed). Earlier: 2026-11-10 — recording 24 at the top. Earlier: 2026-11-03 — recordings 18, 19 and 20 at the top (19 and 20 each twice). 1–18 are done and belong in Processed.
 
 ## The folder's two subfolders (owner, 2026-10-18)
 After every new video a helper sorts the folder: **Processed**

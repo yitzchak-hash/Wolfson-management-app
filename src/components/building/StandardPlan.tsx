@@ -2,7 +2,7 @@ import React, { Suspense, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { FileText, Loader2, X, Link2, FolderOpen, Trash2 } from 'lucide-react';
 import { useStore } from '../../data/store';
-import { extractFileId, extractFolderId, getFolderNameViaBackend } from '../../data/driveApi';
+import { extractFileId, extractFolderId, getDriveMetaViaBackend } from '../../data/driveApi';
 import type { StandardPlan } from '../../types';
 import { sharePlanFile } from '../../data/sharePlan';
 import { PlanPicker } from '../plans/PlanPicker';
@@ -17,16 +17,27 @@ const PlanAnnotator = React.lazy(() =>
  * RIGHT-click (a long press on a phone) opens the box that sets it — paste a Drive link, or browse the Drive with the
  * plan picker and choose the plan with the star. Kept per workspace and building (BoardSetting.standardPlans), so
  * Wolfson, Netiv and every workspace after them each have their own.
+ *
+ * PER FLOOR (owner, 2026-11-11: "the plan changes every floor. So every floor has to have its own"): the button
+ * speaks for the floor the building view stands on — its plan is that floor's (standardPlansByFloor), and a floor
+ * with none falls back to the building's. Pasting a link opens the Plan Finder on that folder (a file link: the
+ * folder it lives in, the file lit), "so I can search the exact file" (recording 2026-11-11 094048).
  */
-export function StandardPlanButton({ buildingId, buildingTitle, bubble }: {
+export function StandardPlanButton({ buildingId, buildingTitle, bubble, floorKey, floorLabel }: {
   buildingId: string;
+  /** The floor the view stands on — the plan is kept per floor. */
+  floorKey: string;
+  floorLabel: string;
   /** "1", "B2" — said in the viewer's and the box's title. */
   buildingTitle: string;
   /** The single-building view's small round bubble, rather than the trio's label-width button. */
   bubble?: boolean;
 }) {
   const rtl = useStore(st => !!st.mainUiStrings.isRtl);
-  const plan = useStore(st => st.boardSettings[st.currentProjectId]?.standardPlans?.[buildingId]);
+  const own = useStore(st => st.boardSettings[st.currentProjectId]?.standardPlansByFloor?.[buildingId]?.[floorKey]);
+  const whole = useStore(st => st.boardSettings[st.currentProjectId]?.standardPlans?.[buildingId]);
+  const plan = own ?? whole;
+  const where = `${buildingTitle} · ${rtl ? 'קומה' : 'Floor'} ${floorLabel}`;
   const [view, setView] = useState(false);
   const [setup, setSetup] = useState(false);
   const press = useRef<{ t: number; timer: number } | null>(null);
@@ -35,8 +46,8 @@ export function StandardPlanButton({ buildingId, buildingTitle, bubble }: {
   const openSetup = () => { setView(false); setSetup(true); };
   return (
     <>
-      <button type="button" data-standard-plan={buildingId} data-standard-plan-set={plan ? '1' : '0'}
-        title={plan ? `${word} — ${plan.name}` : word}
+      <button type="button" data-standard-plan={buildingId} data-standard-plan-floor={floorKey} data-standard-plan-set={plan ? '1' : '0'}
+        title={plan ? `${word} · ${where} — ${plan.name}` : `${word} · ${where}`}
         onClick={e => { e.stopPropagation(); if (press.current?.t === -1) { press.current = null; return; } if (plan) setView(true); else openSetup(); }}
         onContextMenu={e => { e.preventDefault(); e.stopPropagation(); openSetup(); }}
         // A finger has no right-click: a long press opens the box.
@@ -52,8 +63,8 @@ export function StandardPlanButton({ buildingId, buildingTitle, bubble }: {
         <span>{word}</span>
         {!plan && <span className="bv-plan-dot" aria-hidden />}
       </button>
-      {view && plan && <PlanViewer plan={plan} title={`${word} · ${buildingTitle}`} onClose={() => setView(false)} onChange={openSetup} rtl={rtl} />}
-      {setup && <PlanSetup buildingId={buildingId} buildingTitle={buildingTitle} current={plan} onClose={() => setSetup(false)} rtl={rtl}
+      {view && plan && <PlanViewer plan={plan} title={`${word} · ${where}`} onClose={() => setView(false)} onChange={openSetup} rtl={rtl} />}
+      {setup && <PlanSetup buildingId={buildingId} buildingTitle={where} floorKey={floorKey} current={plan} ownFloor={!!own} onClose={() => setSetup(false)} rtl={rtl}
         onOpen={() => { setSetup(false); setView(true); }} />}
     </>
   );
@@ -106,8 +117,9 @@ function PlanViewer({ plan, title, onClose, onChange, rtl }: { plan: StandardPla
 }
 
 /** The box that sets it: paste a Drive link (a file is the plan; a folder opens the picker), or browse, or remove. */
-function PlanSetup({ buildingId, buildingTitle, current, onClose, onOpen, rtl }: {
-  buildingId: string; buildingTitle: string; current?: StandardPlan; onClose: () => void; onOpen: () => void; rtl: boolean;
+function PlanSetup({ buildingId, buildingTitle, floorKey, current, ownFloor, onClose, onOpen, rtl }: {
+  buildingId: string; buildingTitle: string; floorKey: string; current?: StandardPlan; ownFloor: boolean;
+  onClose: () => void; onOpen: () => void; rtl: boolean;
 }) {
   const setting = useStore(st => st.boardSettings[st.currentProjectId]);
   const setBoardSetting = useStore(st => st.setBoardSetting);
@@ -116,6 +128,10 @@ function PlanSetup({ buildingId, buildingTitle, current, onClose, onOpen, rtl }:
   const [err, setErr] = useState('');
   const [busy, setBusy] = useState(false);
   const [browse, setBrowse] = useState<string | null>(null);   // a folder link to browse
+  /** A pasted FILE: lit in the finder, in the folder it lives in. */
+  const [lit, setLit] = useState<string | null>(null);
+  /** "Use for every floor of this building" — the building's own plan, under any floor without one. */
+  const [allFloors, setAllFloors] = useState(false);
   const W = (en: string, he: string) => (rtl ? he : en);
   useEffect(() => {
     if (browse) return undefined;
@@ -126,15 +142,22 @@ function PlanSetup({ buildingId, buildingTitle, current, onClose, onOpen, rtl }:
 
   const save = (p: StandardPlan | null, folderLink?: string) => {
     const fresh = useStore.getState().boardSettings[useStore.getState().currentProjectId] ?? {};
-    const plans = { ...(fresh.standardPlans ?? {}) };
-    if (p) plans[buildingId] = p; else delete plans[buildingId];
-    setBoardSetting('standardPlans', plans);
+    const byFloor = { ...(fresh.standardPlansByFloor ?? {}) };
+    const mine = { ...(byFloor[buildingId] ?? {}) };
+    const whole = { ...(fresh.standardPlans ?? {}) };
+    if (p && allFloors) { whole[buildingId] = p; delete mine[floorKey]; }
+    else if (p) mine[floorKey] = p;
+    else if (ownFloor) delete mine[floorKey];
+    else delete whole[buildingId];
+    byFloor[buildingId] = mine;
+    setBoardSetting('standardPlansByFloor', byFloor);
+    setBoardSetting('standardPlans', whole);
     if (folderLink) setBoardSetting('standardPlansFolder', folderLink);
   };
 
-  const useLink = async () => {
+  const useLink = async (pasted?: string) => {
     setErr('');
-    const raw = link.trim();
+    const raw = (pasted ?? link).trim();
     if (!raw) return;
     // A folder link (…/folders/…) opens the picker inside it; anything else is read as a file.
     const folder = /\/folders\//.test(raw) ? extractFolderId(raw) : null;
@@ -142,9 +165,12 @@ function PlanSetup({ buildingId, buildingTitle, current, onClose, onOpen, rtl }:
     const fileId = extractFileId(raw) ?? (/^[\w-]{20,}$/.test(raw) ? raw : null);
     if (!fileId) { setErr(W('That is not a Google Drive link', 'זה לא קישור של Google Drive')); return; }
     setBusy(true);
-    const name = (await getFolderNameViaBackend(fileId)) ?? W('Standard plan', 'תוכנית טיפוסית');
+    const meta = await getDriveMetaViaBackend(fileId);
     setBusy(false);
-    save({ fileId, name, by: me, at: new Date().toISOString() });
+    // A link to a folder that does not say /folders/ — and a file opens the folder it lives in, the file lit.
+    if (meta?.mimeType === 'application/vnd.google-apps.folder') { setBrowse(`https://drive.google.com/drive/folders/${fileId}`); return; }
+    if (meta?.parent) { setLit(fileId); setBrowse(`https://drive.google.com/drive/folders/${meta.parent}`); return; }
+    save({ fileId, name: meta?.name ?? W('Standard plan', 'תוכנית טיפוסית'), by: me, at: new Date().toISOString() });
     onOpen();
   };
 
@@ -173,6 +199,8 @@ function PlanSetup({ buildingId, buildingTitle, current, onClose, onOpen, rtl }:
               <div className="flex-1 flex items-center gap-2 border border-gray-200 rounded-xl px-3 focus-within:ring-2 focus-within:ring-[#1e3a5f]/30">
                 <Link2 size={14} className="text-gray-400 flex-shrink-0" />
                 <input data-standard-plan-link autoFocus value={link} onChange={e => setLink(e.target.value)} dir="ltr"
+                  // "Once I paste the drive link, it should open up that folder" — no second press.
+                  onPaste={e => { const t = e.clipboardData.getData('text'); if (t.trim()) { e.preventDefault(); setLink(t.trim()); void useLink(t); } }}
                   onKeyDown={e => { if (e.key === 'Enter') void useLink(); }}
                   placeholder="https://drive.google.com/…" className="flex-1 min-w-0 py-2.5 text-[13px] outline-none bg-transparent" />
               </div>
@@ -182,6 +210,10 @@ function PlanSetup({ buildingId, buildingTitle, current, onClose, onOpen, rtl }:
               </button>
             </div>
             {err && <div className="text-[12.5px] text-red-600" data-standard-plan-err>{err}</div>}
+            <label className="flex items-center gap-2 text-[12.5px] font-medium text-gray-700">
+              <input type="checkbox" data-standard-plan-all checked={allFloors} onChange={e => setAllFloors(e.target.checked)} />
+              {W('Use for every floor of this building', 'לכל הקומות בבניין הזה')}
+            </label>
             {startFolder && (
               <button type="button" data-standard-plan-browse onClick={() => setBrowse(startFolder)}
                 className="w-full flex items-center justify-center gap-2 rounded-xl border border-gray-200 py-2.5 text-[13px] font-bold text-[#1e3a5f] hover:bg-gray-50">
@@ -198,9 +230,9 @@ function PlanSetup({ buildingId, buildingTitle, current, onClose, onOpen, rtl }:
             plansFolderId={extractFolderId(browse)}
             plansFolderName={W('Drive folder', 'תיקיית Drive')}
             plans={[]}
-            current={current?.fileId}
+            current={lit ?? current?.fileId}
             starredId={current?.fileId ?? null}
-            onClose={() => setBrowse(null)}
+            onClose={() => { setBrowse(null); setLit(null); }}
             // "Choose the plan with the star" (S9) — and a plain press chooses it too.
             onStar={p => { save({ fileId: p.id, name: p.name, by: me, at: new Date().toISOString() }, browse); onOpen(); }}
             onPick={p => { save({ fileId: p.id, name: p.name, by: me, at: new Date().toISOString() }, browse); onOpen(); }}

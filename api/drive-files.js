@@ -149,7 +149,7 @@ export default async function handler(req, res) {
     if (metaOnly) {
       const meta = await drive.files.get({
         fileId: folderId,
-        fields: 'id,name,mimeType,shortcutDetails',
+        fields: 'id,name,mimeType,shortcutDetails,parents',
         supportsAllDrives: true,
       });
       return res.json({ folder: meta.data, files: [] });

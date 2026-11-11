@@ -31,6 +31,32 @@ export interface WhatsNewEntry {
 
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    date: '2027-03-09',
+    title: 'A standard plan for every floor, and a calmer Plan Finder',
+    items: [
+      {
+        title: 'Every floor its own standard plan',
+        body: 'The Standard plan button in the Building view now speaks for the floor you are on: each floor of each building keeps its own plan. When you set one, tick "Use for every floor of this building" if the same plan serves them all.',
+        demo: 'tap',
+      },
+      {
+        title: 'Paste a link, land in the folder',
+        body: 'In the Standard plan box, pasting a Drive link opens the Plan Finder right away: a folder link opens that folder, a file link opens the folder the file is in with the file lit, so you can find the exact one.',
+        demo: 'tap',
+      },
+      {
+        title: 'Look before you open',
+        body: 'In the Plan Finder, pressing a plan (or its expand arrow) shows it full screen first, with Star and Open on top. Nothing changes in the plan pane until you press Open.',
+        demo: 'tap',
+      },
+      {
+        title: 'Folders like in Windows',
+        body: 'The Plan Finder\'s side list opens with its subfolders folded; press a folder\'s arrow to open them. A folder that holds folders shows them as cards. The bar shows the path you are in, with a Back arrow that goes one step back.',
+        demo: 'tap',
+      },
+    ],
+  },
+  {
     date: '2027-03-08',
     title: 'A standard plan for every building',
     items: [

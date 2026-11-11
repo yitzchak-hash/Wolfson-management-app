@@ -87,6 +87,9 @@ check(/marked up/i.test(await page.locator('[data-plan-row="ANN1"] [data-annot-c
   'the version wears the marked-up chip');
 
 await page.locator('[data-folder-button]').click();
+// Recording 2026-11-11 (re-encoded): subfolders are collapsed and open on request — open every arrow first.
+await page.waitForTimeout(2500);
+for (const t of await page.locator('[data-folder-toggle]').all()) await t.click();
 await page.waitForTimeout(2500);
 
 const rows = await page.evaluate(() =>

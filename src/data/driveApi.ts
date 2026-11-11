@@ -338,6 +338,23 @@ export async function getFolderNameViaBackend(folderId: string): Promise<string 
   }
 }
 
+/** A Drive file's or folder's own name, kind and parent folder (null when it cannot be read). */
+export async function getDriveMetaViaBackend(id: string): Promise<{ name: string; mimeType: string; parent: string | null } | null> {
+  try {
+    const resp = await fetch('/api/drive-files', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-api-key': DRIVE_API_KEY },
+      body: JSON.stringify({ folderId: id, metaOnly: true }),
+    });
+    if (!resp.ok) return null;
+    const f = (await resp.json()).folder as { name?: string; mimeType?: string; parents?: string[] } | undefined;
+    if (!f?.name) return null;
+    return { name: f.name, mimeType: f.mimeType ?? '', parent: f.parents?.[0] ?? null };
+  } catch {
+    return null;
+  }
+}
+
 export async function findPlansPdfViaBackend(driveLink: string): Promise<DriveFile | null> {
   const pdfs = await findAllPlansPdfsViaBackend(driveLink);
   return pdfs[0] ?? null;

@@ -19,7 +19,7 @@ export default function BuildingTrio({ buildings, stages, onOpen, words, interio
   /** The project's plan (Wolfson's when absent). */
   plan?: BuildingPlan;
   /** Each building's standard-plan button, under its number. */
-  planSlot?: (b: TrioBuilding) => React.ReactNode;
+  planSlot?: (b: TrioBuilding, floor: { key: string; label: string }) => React.ReactNode;
 }) {
   // The floors every building has, bottom first — the rail and the bus count them.
   const floors = useMemo(() => {
@@ -61,7 +61,7 @@ export default function BuildingTrio({ buildings, stages, onOpen, words, interio
         {buildings.map((b, i) => (
           <BuildingView key={b.id} compact title={b.title} bus={bus} apartments={b.apartments} stages={stages}
             onOpen={onOpen} words={words} floorLabels={b.floorLabels} interiorSrc={interiorSrc}
-            lower={lower} tower={i} hideLower customButtons={customButtons} plan={plan} planSlot={planSlot?.(b)} />
+            lower={lower} tower={i} hideLower customButtons={customButtons} plan={plan} planSlot={planSlot ? f => planSlot(b, f) : undefined} />
         ))}
       </div>
       <nav className="bv-rail" aria-label={words?.floor ?? 'Floor'}>

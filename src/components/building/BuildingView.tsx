@@ -68,7 +68,7 @@ export interface BuildingViewProps {
   /** The building's name, drawn over it when compact. */
   title?: string;
   /** The standard-plan button (owner, 2026-11-10): under the title in the trio, a bubble on top of one building. */
-  planSlot?: React.ReactNode;
+  planSlot?: (floor: { key: string; label: string }) => React.ReactNode;
   /** The shared levels under the towers, bottom first; this tower's own slice is lit, the rest grey. */
   lower?: LowerLevel[];
   /**
@@ -355,7 +355,9 @@ export default function BuildingView({ apartments, stages, onOpen, words, initia
   return (
     <div className={`bv-root${compact ? ' bv-compact' : ''}`} data-building-view={title ?? ''}>
       {compact && title && <div className="bv-title">{title}</div>}
-      {planSlot && <div className={compact ? "bv-plan-slot" : "bv-plan-slot bv-plan-slot-top"}>{planSlot}</div>}
+      {planSlot && floors[landed] && <div className={compact ? "bv-plan-slot" : "bv-plan-slot bv-plan-slot-top"}>
+        {planSlot({ key: floors[landed].lower ? floors[landed].lower!.key : String(floors[landed].floor), label: lab(floors[landed].floor, floors[landed]) })}
+      </div>}
       <div
         ref={stageRef}
         className="bv-stage"

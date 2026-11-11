@@ -125,6 +125,12 @@ const noSideways = p => p.evaluate(() => {
   check(box && box.width >= 880 && box.height >= 600, 'a bigger window', `${Math.round(box?.width)}×${Math.round(box?.height)}`);
   check(await p.locator('[data-finder-folders]').isVisible(), 'the folders stand down the side');
   await p.waitForTimeout(2500);
+  // Recording 2026-11-11 094048 (re-encoded): subfolders are collapsed; a folder with folders wears an arrow.
+  const closed = await p.evaluate(() => [...document.querySelectorAll('[data-folder-row]')].map(b => b.getAttribute('data-folder-row')));
+  check(JSON.stringify(closed) === JSON.stringify(['EP', 'AR', 'PH', 'PR', 'APR']), 'the side list opens with its subfolders collapsed', JSON.stringify(closed));
+  check(await p.locator('[data-folder-toggle]').count() === 2, 'a folder that has folders wears an arrow');
+  await p.locator('[data-folder-toggle="EP"]').click(); await p.locator('[data-folder-toggle="PH"]').click(); await p.waitForTimeout(300);
+  check(await p.locator('[data-folder-row="EP"][data-folder-open="1"]').count() === 1, 'opening the arrow does not change the folder on screen');
   const fold = await p.evaluate(() => [...document.querySelectorAll('[data-folder-row]')].map(b => ({
     id: b.getAttribute('data-folder-row'), sub: b.getAttribute('data-folder-sub') === '1',
     n: b.querySelector('[data-folder-count]')?.textContent, open: b.getAttribute('data-folder-open') === '1',
@@ -239,8 +245,16 @@ const noSideways = p => p.evaluate(() => {
   // host to stay up (stayOpen, as the old chooser did), but the plan pane
   // re-mounts its editor on the new sheet (key = tab:file), which takes the
   // finder down with it — exactly what the old chooser did too.
-  await p.keyboard.press('Enter'); await p.waitForTimeout(1500);
-  check(seen.picks.some(u => u.includes('R1')), 'Enter opens the first hit, from another folder', seen.picks.slice(-2).join(' '));
+  const before = seen.picks.length;
+  await p.keyboard.press('Enter'); await p.waitForTimeout(1200);
+  check(await p.locator('[data-finder-preview="R1"]').count() === 1 && await p.locator('[data-plan-finder]').count() === 1 && before >= 0, 'Enter LOOKS at the first hit full screen — it is not opened in the pane yet');
+  check(await p.locator('[data-preview-star]').count() === 1 && await p.locator('[data-preview-open]').count() === 1, 'the preview has Star and Open on top');
+  await p.screenshot({ path: `${OUT}/pf-6-preview.png` });
+  await p.keyboard.press('Escape'); await p.waitForTimeout(300);
+  check(await p.locator('[data-finder-preview]').count() === 0 && await p.locator('[data-plan-finder]').count() === 1, 'Escape closes the preview and leaves the finder up');
+  await p.keyboard.press('Enter'); await p.waitForTimeout(800);
+  await p.locator('[data-preview-open]').click(); await p.waitForTimeout(1500);
+  check(seen.picks.some(u => u.includes('R1')), 'Open opens it, from another folder', seen.picks.slice(-2).join(' '));
   // Back in: the Architect folder is a press away, newest first.
   await openButton(p);
   await p.waitForTimeout(1200);
@@ -250,8 +264,29 @@ const noSideways = p => p.evaluate(() => {
   const ar = await rows(p);
   check(JSON.stringify(ar) === '["R1","J1","R2"]', 'the Architect folder newest first, the picture among them', JSON.stringify(ar));
   // A card in the folder on screen opens and closes the finder.
-  await p.locator('[data-plan-row="R2"]').click(); await p.waitForTimeout(1200);
-  check(await p.locator('[data-plan-finder]').count() === 0 && seen.picks.some(u => u.includes('R2')), 'picking a card opens it and closes the finder');
+  // the path and Back, like Windows Explorer
+  const path = await p.locator('[data-finder-crumb]').allTextContents();
+  check(path.length === 2 && path[1] === 'Architect', `the bar shows the path (${path.join(' › ')})`);
+  check(await p.locator('[data-finder-back]').isEnabled(), 'Back is lit after stepping into a folder');
+  await p.locator('[data-finder-back]').click(); await p.waitForTimeout(400);
+  check(await p.locator('[data-folder-row="EP"][data-folder-open="1"]').count() === 1, 'Back goes one step back, to the folder we were in');
+  // the folders of a folder stand as cards
+  await p.locator('[data-folder-row="PH"]').click(); await p.waitForTimeout(500);
+  check(await p.locator('[data-folder-card="BEF"]').count() === 1 && await p.locator('[data-finder-empty]').count() === 0, 'a folder that has folders shows them as cards');
+  await p.locator('[data-folder-card="BEF"]').click(); await p.waitForTimeout(600);
+  const deep = await p.locator('[data-finder-crumb]').allTextContents();
+  check(deep.join('>') .endsWith('Photos>Before works'), `a folder card steps in, and the path follows (${deep.join(' › ')})`);
+  await p.locator('[data-finder-crumb]').nth(deep.length - 2).click(); await p.waitForTimeout(400);
+  check(await p.locator('[data-folder-row="PH"][data-folder-open="1"]').count() === 1, 'a press on the path goes to that folder');
+  await p.locator('[data-folder-row="AR"]').click(); await p.waitForTimeout(500);
+  // A card: look first, then Open opens it and closes the finder.
+  await p.locator('[data-plan-row="R2"]').click(); await p.waitForTimeout(900);
+  check(await p.locator('[data-finder-preview="R2"]').count() === 1 && await p.locator('[data-plan-finder]').count() === 1, 'a press on a card looks at it first');
+  await p.locator('[data-preview-back]').click(); await p.waitForTimeout(300);
+  await p.locator('[data-plan-row="R2"] [data-tile-preview]').click({ force: true }); await p.waitForTimeout(900);
+  check(await p.locator('[data-finder-preview="R2"]').count() === 1, 'the expand arrow opens the same preview');
+  await p.locator('[data-preview-open]').click(); await p.waitForTimeout(1200);
+  check(await p.locator('[data-plan-finder]').count() === 0 && seen.picks.some(u => u.includes('R2')), 'Open opens it and closes the finder');
 
   // Opened recently
   await openButton(p);

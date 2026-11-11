@@ -109,6 +109,11 @@ export interface BoardSetting {
    * button under its number in the Building view. By building id.
    */
   standardPlans?: Record<string, StandardPlan>;
+  /**
+   * …and per FLOOR (owner, 2026-11-11: "the plan changes every floor. So every floor has to have its own"):
+   * building id → floor key → plan. A floor with none of its own falls back to the building's (above).
+   */
+  standardPlansByFloor?: Record<string, Record<string, StandardPlan>>;
   /** The Drive folder last browsed for a standard plan, so the next building opens there. */
   standardPlansFolder?: string;
   /** The Drive intake sweep — Job Board only. */
