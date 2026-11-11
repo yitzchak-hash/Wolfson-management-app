@@ -14,7 +14,7 @@
  * landed floor changes.
  */
 import { isStartStage } from '../../data/stageMarks';
-import { crewOf, acCompanyOf, isCompanyButton, isWallButton } from '../../data/aptCrew';
+import { crewOf, acCompanyOf, isCompanyButton, isWallButton, DEFAULT_AC_COMPANY } from '../../data/aptCrew';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Apartment, Stage, CustomButton } from '../../types';
 import { realName } from '../../data/aptSale';
@@ -148,7 +148,8 @@ export default function BuildingView({ apartments, stages, onOpen, words, initia
   const wallOn = (a: Apartment) => customButtons.some(cb => isWallButton(cb) && a.customAnswers?.[cb.id] === 'yes');
   /** The contractor and the AC company, as chips under the answers (owner, recording 2026-11-11 123621, 1:42 — "you
    *  also want to see the contractor name and the AC company name"). */
-  const factsOf = (a: Apartment) => [crewOf(a, stages).name, acCompanyOf(a, customButtons)].filter(Boolean);
+  // The company is said only when it is NOT the default (LG): the default on every flat would cover the plan in chips.
+  const factsOf = (a: Apartment) => { const co = acCompanyOf(a, customButtons); return [crewOf(a, stages).name, co === DEFAULT_AC_COMPANY ? '' : co].filter(Boolean); };
   const lab = (f: number, row?: FloorRow) => row?.lower ? row.lower.label : floorLabels?.[f] || String(f);
   const w = { ...EN, ...words };
   const stageById = useMemo(() => new Map(stages.map(s => [s.id, s])), [stages]);

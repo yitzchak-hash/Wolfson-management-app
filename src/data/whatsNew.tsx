@@ -51,7 +51,7 @@ export const WHATS_NEW: WhatsNewEntry[] = [
       },
       {
         title: 'AC company',
-        body: 'A new AC company dropdown sits beside the contractor. It replaces the Hisense and Mitsubishi yes/no buttons, and apartments already answered keep their company. The building view shows the contractor and the company on each apartment.',
+        body: 'A new AC company dropdown sits beside the contractor. It replaces the Hisense and Mitsubishi yes/no buttons, and apartments already answered keep their company. Every other apartment is LG until you change it. The building view shows the contractor and the company on each apartment.',
         demo: 'list',
       },
       {

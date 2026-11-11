@@ -2259,7 +2259,6 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                         onChange={e => trackUndo(null, () => updateApartment(apartment.id, { acCompany: e.target.value || undefined }, currentUser))}
                         className="border border-gray-200 rounded-lg px-2 py-2 text-sm font-bold bg-white focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30"
                       >
-                        <option value="">—</option>
                         {[...AC_COMPANIES, ...(cur && !(AC_COMPANIES as readonly string[]).includes(cur) ? [cur] : [])].map(c => <option key={c} value={c}>{c}</option>)}
                       </select>
                     );

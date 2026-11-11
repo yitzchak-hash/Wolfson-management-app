@@ -65,6 +65,14 @@ T(opts.includes('Mitsubishi') && opts.includes('Electra') && opts.length >= 8, '
 await co.selectOption('Mitsubishi'); await p.waitForTimeout(400);
 T(await p.evaluate(() => window.__store.getState().apartments.find(a => a.id === 'A1-53').acCompany) === 'Mitsubishi', 'choosing one saves it');
 
+// 2b · LG is the default (owner, 2026-11-11: "make the default AC company LG unless changed")
+T(await p.evaluate(() => { const st = window.__store.getState(); return !st.apartments.find(a => a.id === 'A1-54').acCompany; }), 'another flat has no company chosen');
+await p.keyboard.press('Escape'); await p.waitForTimeout(400);
+await p.locator('[data-apt-id="A1-54"]').first().click(); await p.waitForTimeout(1200);
+T(await p.locator('[data-ac-company]').inputValue() === 'LG', 'its AC company reads LG by default');
+await p.keyboard.press('Escape'); await p.waitForTimeout(400);
+await p.locator('[data-apt-id="A1-53"]').first().click(); await p.waitForTimeout(1200);
+
 // 3 · buttons
 const names = await p.locator('[data-custom-button]').allInnerTexts();
 T(names.length === 1 && /Wall/.test(names[0]), 'only Wall is left as a button (no Hisense, Mitsubishi, Inspected by Tzvi)', names.join(' | ').replace(/\s+/g, ' '));

@@ -34,7 +34,10 @@ export const isCompanyButton = (cb: Pick<CustomButton, 'name'>) => !!companyOfNa
 /** The old "Inspected by Tzvi" yes/no button — the Inspection stages say it now (0:44 — "get rid of inspected by Tzvi"). */
 export const isInspectedButton = (cb: Pick<CustomButton, 'name'>) => /^\s*inspected\s+by\b/i.test(cb.name) || /^\s*נבדק\s+ע/.test(cb.name);
 
-/** The apartment's AC company: the chosen one, else an old company button answered Yes. */
+/** The company every apartment has until someone chooses another (owner, 2026-11-11: "make the default AC company LG unless changed"). */
+export const DEFAULT_AC_COMPANY = 'LG';
+
+/** The apartment's AC company: the chosen one, else an old company button answered Yes, else the default (LG). */
 export function acCompanyOf(apt: Pick<Apartment, 'acCompany' | 'customAnswers'>, buttons: CustomButton[]): string {
   const own = (apt.acCompany ?? '').trim();
   if (own) return own;
@@ -42,7 +45,7 @@ export function acCompanyOf(apt: Pick<Apartment, 'acCompany' | 'customAnswers'>,
     const c = companyOfName(cb.name);
     if (c && apt.customAnswers?.[cb.id] === 'yes') return c;
   }
-  return '';
+  return DEFAULT_AC_COMPANY;
 }
 
 /** The project's "Wall Yes/No" button — where the plan has the wall marked, the building view draws it instead. */
