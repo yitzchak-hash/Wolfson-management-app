@@ -11,7 +11,8 @@ import BuildingView, { makeFloorBus, shortFloor, slotName, slotsOn, SlotChip, ty
 import { STRIP, CORES_X, zoneFor, type LowerLevel } from './wolfsonPlan';
 import type { BuildingPlan } from './buildingPlan';
 
-export interface TrioBuilding { id: string; title: string; apartments: Apartment[]; floorLabels?: Record<number, string> }
+/** `plan`: this building's own plan when it differs from its neighbours' (Netiv's Building 1 is Building 2 mirrored). */
+export interface TrioBuilding { id: string; title: string; apartments: Apartment[]; floorLabels?: Record<number, string>; plan?: BuildingPlan }
 
 export default function BuildingTrio({ buildings, stages, onOpen, words, interiorSrc, lower = [], customButtons, plan, planSlot }: {
   buildings: TrioBuilding[]; stages: Stage[]; onOpen: (apt: Apartment) => void;
@@ -61,7 +62,7 @@ export default function BuildingTrio({ buildings, stages, onOpen, words, interio
         {buildings.map((b, i) => (
           <BuildingView key={b.id} compact title={b.title} bus={bus} apartments={b.apartments} stages={stages}
             onOpen={onOpen} words={words} floorLabels={b.floorLabels} interiorSrc={interiorSrc}
-            lower={lower} tower={i} hideLower customButtons={customButtons} plan={plan} planSlot={planSlot ? f => planSlot(b, f) : undefined} />
+            lower={lower} tower={i} hideLower customButtons={customButtons} plan={b.plan ?? plan} planSlot={planSlot ? f => planSlot(b, f) : undefined} />
         ))}
       </div>
       <nav className="bv-rail" aria-label={words?.floor ?? 'Floor'}>

@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import { StandardPlanButton } from '../components/building/StandardPlan';
 import { WOLFSON_PLAN, type BuildingPlan } from '../components/building/buildingPlan';
-import { NETIV_PLAN } from '../components/building/netivPlan';
+import { NETIV_PLAN, NETIV_PLAN_B1 } from '../components/building/netivPlan';
 import { haptic } from '../data/haptics';
 import { Search, X, CheckSquare, Printer, ChevronDown, SlidersHorizontal } from 'lucide-react';
 import { Navigate, useNavigate } from 'react-router-dom';
@@ -23,7 +23,9 @@ const WOLFSON_INTERIOR = '/building/wolfson-typical.png';
  */
 function planFor(projectId: string, buildingId: string): BuildingPlan | null {
   if (/^A\d/.test(buildingId)) return WOLFSON_PLAN;
-  if (projectId === 'netiv' && /^B[12]$/.test(buildingId)) return NETIV_PLAN;
+  // Netiv's two buildings are mirror images (the AC engineer's sheets, 2026-11-17): each has its own plan.
+  if (projectId === 'netiv' && buildingId === 'B1') return NETIV_PLAN_B1;
+  if (projectId === 'netiv' && buildingId === 'B2') return NETIV_PLAN;
   return null;
 }
 import { buildFloorRows, rowLabelText } from '../data/floorRows';
@@ -277,7 +279,8 @@ export function ProjectDiagramPage() {
   /** The switch shows on All too (owner, 2026-11-03: he looked for it there twice); Building on All opens the first building. */
   const firstWolfson = buildings.find(b => !!planFor(currentProjectId, b.id))?.id;
   /** The plan the building view draws with — Wolfson's or Netiv's. */
-  const bvPlan = (firstWolfson ? planFor(currentProjectId, firstWolfson) : null) ?? WOLFSON_PLAN;
+  const bvPlan = (canBuildingView ? planFor(currentProjectId, bvBuilding) : null)
+    ?? (firstWolfson ? planFor(currentProjectId, firstWolfson) : null) ?? WOLFSON_PLAN;
   const isWolfsonPlan = bvPlan.id === 'wolfson';
   const showSwitch = !isNarrow && !!firstWolfson;
   const showNarrowSwitch = isNarrow && canBuildingView;
@@ -295,7 +298,7 @@ export function ProjectDiagramPage() {
   const trioBuildings = useMemo(() => (showTrio
     ? buildings.filter(b => !!planFor(currentProjectId, b.id))
       // Netiv: Building 2 on the left, Building 1 on the right (owner, 2026-11-09)
-      .sort((a, b) => (currentProjectId === 'netiv' ? (b.id === 'B2' ? 1 : 0) - (a.id === 'B2' ? 1 : 0) : 0)).map(b => ({ id: b.id, title: buildingShort(b.id), apartments: apartments.filter(a => a.buildingId === b.id), floorLabels: floorLabelsOf(b.id) }))
+      .sort((a, b) => (currentProjectId === 'netiv' ? (b.id === 'B2' ? 1 : 0) - (a.id === 'B2' ? 1 : 0) : 0)).map(b => ({ id: b.id, title: buildingShort(b.id), apartments: apartments.filter(a => a.buildingId === b.id), floorLabels: floorLabelsOf(b.id), plan: planFor(currentProjectId, b.id) ?? undefined }))
     : []), [showTrio, buildings, apartments, floorLabelsOf]);
   const lookValue = useMemo(() => ({
     big: !isNarrow && selectedBuilding !== 'all',

@@ -130,7 +130,10 @@ function planRow(row: FloorRow) {
 }
 /** A sheet drawn turned half round about its own centre (Netiv, owner 2026-11-17), else as it is. */
 function turnOf(d: NonNullable<FloorSpec['drawing']>): string | undefined {
-  return d.rotate ? `rotate(180 ${d.box.x + d.box.w / 2} ${d.box.y + d.box.h / 2})` : undefined;
+  const cx = d.box.x + d.box.w / 2, cy = d.box.y + d.box.h / 2;
+  // Mirrored AND turned comes to a top-to-bottom flip (Netiv's Building 1); mirrored alone, a left-to-right one.
+  if (d.mirror) return d.rotate ? `translate(0 ${2 * cy}) scale(1 -1)` : `translate(${2 * cx} 0) scale(-1 1)`;
+  return d.rotate ? `rotate(180 ${cx} ${cy})` : undefined;
 }
 /** Every outline of the floor (rooms, then their terraces) and its core, as one path. */
 function slabPath(plan: BuildingPlan, spec: FloorSpec): string {
@@ -494,9 +497,9 @@ export default function BuildingView({ apartments, stages, onOpen, words, initia
                 )}
                 {spec!.drawing?.clip && (
                   <g className="bv-interior" pointerEvents="none">
-                    <clipPath id={`bv-clip-${plan.id}-${row.floor}`}><path d={spec!.slab.map(k => pathOf(plan.shapes[k])).join(' ') + ' ' + pathOf(spec!.core)} /></clipPath>
+                    <clipPath id={`bv-clip-${plan.id}-${tower}-${row.floor}`}><path d={spec!.slab.map(k => pathOf(plan.shapes[k])).join(' ') + ' ' + pathOf(spec!.core)} /></clipPath>
                     {/* The clip sits on a wrapper: on the picture itself a turn (Netiv, 2026-11-17) would turn the clip too. */}
-                    <g clipPath={`url(#bv-clip-${plan.id}-${row.floor})`}>
+                    <g clipPath={`url(#bv-clip-${plan.id}-${tower}-${row.floor})`}>
                       <image href={spec!.drawing.src} x={spec!.drawing.box.x} y={spec!.drawing.box.y} width={spec!.drawing.box.w} height={spec!.drawing.box.h}
                         preserveAspectRatio="none" transform={turnOf(spec!.drawing)} />
                     </g>
