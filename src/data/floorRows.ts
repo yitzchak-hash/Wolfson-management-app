@@ -131,7 +131,17 @@ export function rowNumOf(buildingId: string, floor: number): string {
     return String(floor);
   }
   if (floor === -1 || floor === 0) return '';
+  // NETIV prints the engineer's floors: Ground, 1, 2 … 9 (owner, 2026-11-17: "Why there is floor 1 and then it jumps
+  // to 3?" — he chose "Ground, 1, 2 … 9"). The records keep the board's first numbering, where a spare row 2 holds
+  // only the upper halves of the garden duplexes (which really stand on Ground + 1), so every floor above printed
+  // one too high. Row 2 itself carries no number: it is the top of the row under it.
+  if (isNetivBuilding(buildingId)) return floor >= 3 ? String(floor - 1) : floor === 2 ? '' : String(floor);
   return String(floor);
+}
+
+/** Netiv's two buildings (the only ones called B1 / B2). */
+export function isNetivBuilding(buildingId: string): boolean {
+  return buildingId === 'B1' || buildingId === 'B2';
 }
 
 /**
