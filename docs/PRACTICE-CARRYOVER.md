@@ -70,6 +70,7 @@ change after that commit belongs in this list.
 | 2026-11-11 | The AC company defaults to LG unless chosen (`DEFAULT_AC_COMPANY`); the building view's company chip shows only a non-default company | `aptCrew.ts` · `ApartmentDetailDrawer.tsx` · `BuildingView.tsx` | ″ |
 | 2026-11-11 | Building view: the "inspected" label reads the Inspection stages (the furthest one done, "Inspection 1: Approved"), never the old "Inspected by Tzvi" button's answer | `BuildingView.tsx` | ″ |
 | 2026-11-17 | Reports page: 20 green AI report tiles above everything; a tile opens an AI chat (the message box, so the mic dictates) that builds the report from what he says and saves it on that tile (`ReportDef.tile` + `ReportDef.chat`, in the cloud's `savedReports`); the AI gets only the list of report parts, never a record; the answer is checked against that list and run by the app's own engine; "Open the full report" loads it in the builder below | `ReportsPage.tsx` · `components/reports/ReportAiChat.tsx` (new) · `data/reportAi.ts` (new) · `reportModel.ts` · `api/geocode.js` (`reportAi` branch, no new function) | branch `claude/gallant-pasteur-gkumpq` |
+| 2026-11-17 | Reports: new subject "Who worked where" (one row per worker per apartment, Started / Finished / Status / days, from his tasks, site visits, stages done in his name and the job's Contractor); job fields Contractor, Worked on by (ever), Work started, Work finished | `reportModel.ts` (`WORK`, `allWorkSpans`, `jobFields`) | ″ |
 
 ## Already brought across
 (nothing yet)

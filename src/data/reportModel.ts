@@ -4,6 +4,7 @@ import {
 } from '../types';
 import { progressOf } from './stageMarks';
 import { describeLog } from './activityWords';
+import { crewOf } from './aptCrew';
 
 /**
  * Reports, as a thing you BUILD rather than a table somebody wrote once.
@@ -76,7 +77,7 @@ export interface ReportField {
   sum?: boolean;
 }
 
-export type SubjectId = 'jobs' | 'tasks' | 'workers' | 'notes' | 'activity' | 'problems';
+export type SubjectId = 'jobs' | 'tasks' | 'workers' | 'notes' | 'activity' | 'problems' | 'work';
 
 export interface ReportSubject {
   id: SubjectId;
@@ -212,6 +213,21 @@ function jobFields(prefix: string, group: string, pick: (row: any, d: ReportData
     f('doneCount', 'Stages done', 'number', (j, d) => progressFor(j, d).done),
     f('stagesDone', 'Done stages', 'text', (j, d) => progressFor(j, d).rows.filter(r => r.state === 'done').map(r => r.stage.name).join(', ')),
     f('stagesLeft', 'Stages still to do', 'text', (j, d) => progressFor(j, d).rows.filter(r => r.state !== 'done').map(r => r.stage.name).join(', ')),
+    // The contractor on the job (Yaakov / Daniel / Igor), typed or read off who finished Installation.
+    f('crew', 'Contractor', 'text', (j, d) => crewOf(j, d.stages).name,
+      d => [...new Set(liveJobs(d).map(j => crewOf(j, d.stages).name).filter(Boolean))].sort()
+        .map(n => ({ value: n, label: n }))),
+    // Everyone who ever worked on it — finished tasks and site visits too, unlike "Workers on it" (open tasks).
+    f('workedBy', 'Worked on by (ever)', 'text', (j, d) => [...workSpans(d, j)].map(s => s.worker).join(', ')),
+    f('workStart', 'Work started', 'date', (j, d) => {
+      const all = [...workSpans(d, j)].flatMap(s => s.starts).sort();
+      return all[0] ?? '';
+    }),
+    f('workEnd', 'Work finished', 'date', (j, d) => {
+      const spans = [...workSpans(d, j)];
+      if (!spans.length || spans.some(s => s.open)) return '';
+      return spans.flatMap(s => s.ends).sort().pop() ?? '';
+    }),
     f('class', 'Type', 'text', j => (j.classification === 'shinui' ? 'Changes' : 'Standard'),
       () => [{ value: 'Standard', label: 'Standard' }, { value: 'Changes', label: 'Changes' }]),
     f('address', 'Address', 'text', j => j.address ?? ''),
@@ -417,6 +433,119 @@ const PROBLEMS: ReportSubject = {
   ],
 };
 
+/**
+ * WHO WORKED WHERE, AND FROM WHEN TO WHEN (owner, 2026-11-17, first AI tile: "a final report of all the jobs that
+ * Igor did — show me the building, apartments and the dates he started and finished … I don't need every separate
+ * thing he did in this apartment").
+ *
+ * One span per worker per apartment, gathered from everything that says a person worked there: his tasks (the first
+ * working day, else the due day, else the day it was given out → the day it was finished), his site visits
+ * ("I'm working here" → "I'm done here"), the stages finished in his name, and the job's Contractor (Yaakov / Daniel /
+ * Igor), which carries no dates of its own. A span is OPEN while any task of his there is unfinished or he is still
+ * "working here" — then it has no finish date, because it has not finished.
+ */
+export interface WorkSpan {
+  id: string;
+  aptId: string;
+  worker: string;
+  starts: string[];
+  ends: string[];
+  tasks: number;
+  openTasks: number;
+  open: boolean;
+}
+
+const spanCache = new WeakMap<ReportData, Map<string, WorkSpan[]>>();
+
+function allWorkSpans(d: ReportData): Map<string, WorkSpan[]> {
+  const hit = spanCache.get(d);
+  if (hit) return hit;
+  const live = new Set(liveJobs(d).map(j => j.id));
+  const spans = new Map<string, WorkSpan>();
+  const span = (aptId: string, worker: string): WorkSpan | null => {
+    const name = worker.trim();
+    if (!name || !live.has(aptId)) return null;
+    const key = `${aptId}|${name.toLowerCase()}`;
+    let s = spans.get(key);
+    if (!s) { s = { id: key, aptId, worker: name, starts: [], ends: [], tasks: 0, openTasks: 0, open: false }; spans.set(key, s); }
+    return s;
+  };
+  d.assignments.forEach(t => {
+    const s = span(t.apartmentId, workerOf(d, t.contractorId)?.name ?? '');
+    if (!s) return;
+    s.tasks++;
+    const start = dateOnly(t.days?.[0] ?? t.dueDate ?? t.createdAt);
+    if (start) s.starts.push(start);
+    if (t.completedAt) s.ends.push(dateOnly(t.completedAt));
+    else { s.openTasks++; s.open = true; }
+  });
+  d.apartments.forEach(j => {
+    (j.siteVisits ?? []).forEach(v => {
+      const s = span(j.id, v.byName ?? '');
+      if (!s) return;
+      if (v.startedAt) s.starts.push(dateOnly(v.startedAt));
+      if (v.endedAt) s.ends.push(dateOnly(v.endedAt));
+      if (v.status === 'working') s.open = true;
+    });
+    Object.values(j.stageDone ?? {}).forEach(sd => {
+      const s = span(j.id, sd?.by ?? '');
+      if (!s || !sd.at) return;
+      s.starts.push(dateOnly(sd.at));
+      s.ends.push(dateOnly(sd.at));
+    });
+    // The job's Contractor, unless he is already here under his full name ("Igor" and "Igor Petrov" are one man).
+    const crew = live.has(j.id) ? crewOf(j, d.stages).name.trim().toLowerCase() : '';
+    if (crew && ![...spans.values()].some(s => s.aptId === j.id
+      && (s.worker.toLowerCase().startsWith(crew) || crew.startsWith(s.worker.toLowerCase())))) {
+      span(j.id, crewOf(j, d.stages).name);
+    }
+  });
+  const byApt = new Map<string, WorkSpan[]>();
+  spans.forEach(s => {
+    s.starts.sort(); s.ends.sort();
+    const list = byApt.get(s.aptId) ?? [];
+    list.push(s);
+    byApt.set(s.aptId, list);
+  });
+  spanCache.set(d, byApt);
+  return byApt;
+}
+
+const workSpans = (d: ReportData, j: Apartment): WorkSpan[] => allWorkSpans(d).get(j.id) ?? [];
+
+const spanStart = (s: WorkSpan) => s.starts[0] ?? '';
+const spanEnd = (s: WorkSpan) => (s.open ? '' : s.ends[s.ends.length - 1] ?? '');
+
+const WORK: ReportSubject = {
+  id: 'work',
+  label: 'Who worked where',
+  noun: 'apartment worked', nounPlural: 'apartments worked',
+  blurb: 'One row per worker per apartment: the day he started there and the day he finished — not every separate task.',
+  rows: d => [...allWorkSpans(d).values()].flat(),
+  fields: [
+    {
+      key: 'worker', label: 'Worker', type: 'text', group: 'The work',
+      get: (s: WorkSpan) => s.worker,
+      choices: d => [...new Set([...allWorkSpans(d).values()].flat().map(s => s.worker))].sort()
+        .map(n => ({ value: n, label: n })),
+    },
+    { key: 'started', label: 'Started', type: 'date', group: 'The work', get: (s: WorkSpan) => spanStart(s) },
+    { key: 'finished', label: 'Finished', type: 'date', group: 'The work', get: (s: WorkSpan) => spanEnd(s) },
+    {
+      key: 'workStatus', label: 'Status', type: 'text', group: 'The work',
+      get: (s: WorkSpan) => (s.open ? 'Still working' : s.ends.length ? 'Finished' : 'No dates'),
+      choices: () => ['Finished', 'Still working', 'No dates'].map(v => ({ value: v, label: v })),
+    },
+    {
+      key: 'workDays', sum: true, label: 'Days from start to finish', type: 'number', group: 'The work',
+      get: (s: WorkSpan) => (spanStart(s) && spanEnd(s) ? daysBetween(spanStart(s), spanEnd(s)) + 1 : null),
+    },
+    { key: 'workTasks', sum: true, label: 'His tasks there', type: 'number', group: 'The work', get: (s: WorkSpan) => s.tasks },
+    { key: 'workOpen', sum: true, label: 'His open tasks there', type: 'number', group: 'The work', get: (s: WorkSpan) => s.openTasks },
+    ...jobFields('job.', 'The job', (s: WorkSpan, d) => jobOf(d, s.aptId)),
+  ],
+};
+
 const WORKERS: ReportSubject = {
   id: 'workers',
   label: 'Workers',
@@ -506,7 +635,7 @@ const ACTIVITY: ReportSubject = {
   ],
 };
 
-export const SUBJECTS: ReportSubject[] = [JOBS, TASKS, PROBLEMS, WORKERS, NOTES, ACTIVITY];
+export const SUBJECTS: ReportSubject[] = [JOBS, TASKS, PROBLEMS, WORK, WORKERS, NOTES, ACTIVITY];
 
 export const subjectOf = (id: SubjectId): ReportSubject =>
   SUBJECTS.find(s => s.id === id) ?? JOBS;
