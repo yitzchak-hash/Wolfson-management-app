@@ -19,7 +19,11 @@ Vercel serverless functions in `/api`.
   our live data base and mix up data with the practice one."). So: never read, write, seed, fetch or open anything
   of Practice (the `claude/practice` branch, the `wolfson-practice` Firebase project, its preview address, its
   scripts); never bring Practice code into this branch; never write to the live database except through the app's
-  normal saving, and never without his say-so. He checks the work on the LIVE link, so a finished round goes live.
+  normal saving, and never without his say-so. **Direct record changes are allowed only with his SECOND approval**
+  (owner, 2026-11-17: "You can go into the live database to change stuff if I ask for it upon my second approval.
+  And upon making sure you're not messing everything up."): he asks → you read the records and show him exactly
+  what will change (before → after, how many) and back up those records first → he approves a second time → only
+  then write, touching only those fields (`fsPatch`-style, never whole records), then check the result. He checks the work on the LIVE link, so a finished round goes live.
 - **Build on the PREVIEW branch first, push live only on his word** (owner, 2026-11-03: "only build in this preview branch
   before you push live"). The preview branch is `claude/magical-darwin-6py813`; Vercel builds it at its own preview address.
   He looks there, and when the day's round is done it is merged into production (`claude/blissful-cray-spTFY`) in ONE push.
