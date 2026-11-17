@@ -128,6 +128,10 @@ export function shortFloor(full: string): string {
 function planRow(row: FloorRow) {
   return { floor: row.floor, keys: row.flats.flatMap(f => f.shapes), nums: row.flats.map(f => Number(f.apt.apartmentNumber)) };
 }
+/** A sheet drawn turned half round about its own centre (Netiv, owner 2026-11-17), else as it is. */
+function turnOf(d: NonNullable<FloorSpec['drawing']>): string | undefined {
+  return d.rotate ? `rotate(180 ${d.box.x + d.box.w / 2} ${d.box.y + d.box.h / 2})` : undefined;
+}
 /** Every outline of the floor (rooms, then their terraces) and its core, as one path. */
 function slabPath(plan: BuildingPlan, spec: FloorSpec): string {
   return spec.slab.flatMap(k => [plan.shapes[k], ...(plan.terraces[k] ?? [])]).filter(Boolean).map(pathOf).join(' ') + ' ' + pathOf(spec.core);
@@ -485,14 +489,17 @@ export default function BuildingView({ apartments, stages, onOpen, words, initia
                 {spec!.drawing && !spec!.drawing.clip && (
                   <g className="bv-interior" pointerEvents="none">
                     {/* Cut to the building and its terraces when it was drawn (the sheet also carries the floors below). */}
-                    <image href={spec!.drawing.src} x={spec!.drawing.box.x} y={spec!.drawing.box.y} width={spec!.drawing.box.w} height={spec!.drawing.box.h} preserveAspectRatio="none" />
+                    <image href={spec!.drawing.src} x={spec!.drawing.box.x} y={spec!.drawing.box.y} width={spec!.drawing.box.w} height={spec!.drawing.box.h} preserveAspectRatio="none" transform={turnOf(spec!.drawing)} />
                   </g>
                 )}
                 {spec!.drawing?.clip && (
                   <g className="bv-interior" pointerEvents="none">
                     <clipPath id={`bv-clip-${plan.id}-${row.floor}`}><path d={spec!.slab.map(k => pathOf(plan.shapes[k])).join(' ') + ' ' + pathOf(spec!.core)} /></clipPath>
-                    <image href={spec!.drawing.src} x={spec!.drawing.box.x} y={spec!.drawing.box.y} width={spec!.drawing.box.w} height={spec!.drawing.box.h}
-                      clipPath={`url(#bv-clip-${plan.id}-${row.floor})`} preserveAspectRatio="none" />
+                    {/* The clip sits on a wrapper: on the picture itself a turn (Netiv, 2026-11-17) would turn the clip too. */}
+                    <g clipPath={`url(#bv-clip-${plan.id}-${row.floor})`}>
+                      <image href={spec!.drawing.src} x={spec!.drawing.box.x} y={spec!.drawing.box.y} width={spec!.drawing.box.w} height={spec!.drawing.box.h}
+                        preserveAspectRatio="none" transform={turnOf(spec!.drawing)} />
+                    </g>
                   </g>
                 )}
                 {/* The wall, lit green, on every flat answered "Wall: Yes" — above the drawing, under the labels. */}

@@ -33,7 +33,7 @@ export interface FloorSpec {
   /** Every shape of the floor's slab, sold or not (so an empty flat still has its outline). */
   slab: string[];
   /** The plan's own drawing (walls, doors, furniture) laid on the floor; `clip` cuts it to the slab. */
-  drawing?: { src: string; box: Box; clip: boolean };
+  drawing?: { src: string; box: Box; clip: boolean; rotate?: boolean };
   /** Where the floor's number stands. */
   floorNoAt: Pt;
   /** Drawn from the floors round it because no plan of this floor has been handed in yet. */

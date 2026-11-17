@@ -69,6 +69,32 @@ const BOX = { x: 330, y: 190, w: 945, h: 815 };
 const FLOOR_NO: Pt = [825, 612];
 const FLOOR_NO_G: Pt = [702, 380];
 
+/**
+ * TURNED 180° ON SCREEN (owner, 2026-11-17: "flip the buildings 180 degrees so that apartment 13 and 12 go on the
+ * bottom and apartment 14 and 15 go on the top", and his sketch of the ground floor: apartment 1 bottom left, the
+ * garden duplexes 2 · 3 · 4 · 5 along the top, the street below). Everything above stays as traced off the sheets;
+ * this turns every outline, label, core and card corner about the drawing's centre, and the sheets' own pictures
+ * are turned with them (`drawing.rotate`), so the walls still lie on the outlines.
+ */
+const CX = BOX.x + BOX.w / 2, CY = BOX.y + BOX.h / 2;
+const turn = ([x, y]: Pt): Pt => [2 * CX - x, 2 * CY - y];
+const turnAll = (pts: Pt[]): Pt[] => pts.map(turn);
+const turnRect = ([x, y, w, h]: [number, number, number, number]): [number, number, number, number] =>
+  [2 * CX - x - w, 2 * CY - y - h, w, h];
+const mapValues = <T, U>(o: Record<string, T>, f: (v: T) => U): Record<string, U> =>
+  Object.fromEntries(Object.entries(o).map(([k, v]) => [k, f(v)]));
+const OPPOSITE: Record<CardSpot, CardSpot> = { tl: 'br', tr: 'bl', bl: 'tr', br: 'tl', ml: 'mr', mr: 'ml' };
+
+const T_SHAPES = mapValues(SHAPES, turnAll);
+const T_TERRACES = mapValues(TERRACES, list => list.map(turnAll));
+const T_LABEL = mapValues(LABEL, turn);
+const T_SPOT = mapValues(SPOT, s => OPPOSITE[s]);
+const T_CORE = turnAll(CORE), T_CORE_G = turnAll(CORE_G);
+const T_STAIRS = STAIRS.map(turnRect), T_LIFTS = LIFTS.map(turnRect);
+const T_STAIRS_G = STAIRS_G.map(turnRect), T_LIFTS_G = LIFTS_G.map(turnRect);
+const T_FLOOR_NO = turn(FLOOR_NO), T_FLOOR_NO_G = turn(FLOOR_NO_G);
+const sheet = (src: string) => ({ src, box: BOX, clip: true, rotate: true });
+
 /** The typical floor's four flats, clockwise from the top left. */
 const RING = ['TL', 'TR', 'BR', 'BL'] as const;
 
@@ -77,10 +103,10 @@ function num(apt: Apartment): number { return Number((apt.apartmentNumber ?? '')
 export const NETIV_PLAN: BuildingPlan = {
   id: 'netiv',
   box: BOX,
-  shapes: SHAPES,
-  terraces: TERRACES,
-  labelAt: LABEL,
-  cardSpot: SPOT,
+  shapes: T_SHAPES,
+  terraces: T_TERRACES,
+  labelAt: T_LABEL,
+  cardSpot: T_SPOT,
   /** By the apartment's NUMBER, as the sheets number them — whatever row or column the board gives it. */
   shapesOf(apt, rowFloor) {
     const n = num(apt);
@@ -103,16 +129,16 @@ export const NETIV_PLAN: BuildingPlan = {
   },
   floorOf(row): FloorSpec {
     const has = (re: RegExp) => row.keys.some(k => re.test(k));
-    const base = { core: CORE, stairs: STAIRS, lifts: LIFTS, floorNoAt: FLOOR_NO };
+    const base = { core: T_CORE, stairs: T_STAIRS, lifts: T_LIFTS, floorNoAt: T_FLOOR_NO };
     if (has(/^(G1|D\d)$/) && !has(/^(F\d|U\d)$/)) {
-      return { core: CORE_G, stairs: STAIRS_G, lifts: LIFTS_G, floorNoAt: FLOOR_NO_G,
-        slab: ['G1', 'D5', 'D4', 'D3', 'D2'], drawing: { src: '/building/netiv-ground.png', box: BOX, clip: true } };
+      return { core: T_CORE_G, stairs: T_STAIRS_G, lifts: T_LIFTS_G, floorNoAt: T_FLOOR_NO_G,
+        slab: ['G1', 'D5', 'D4', 'D3', 'D2'], drawing: sheet('/building/netiv-ground.png') };
     }
     if (has(/^(F\d|U\d)$/)) return { ...base, slab: ['F6', 'F7', 'U5', 'U4', 'U3', 'U2'], estimated: true };
-    if (has(/^(TL8|TR8|P34)$/)) return { ...base, slab: ['TL8', 'TR8', 'P34'], drawing: { src: '/building/netiv-f8.png', box: BOX, clip: true } };
+    if (has(/^(TL8|TR8|P34)$/)) return { ...base, slab: ['TL8', 'TR8', 'P34'], drawing: sheet('/building/netiv-f8.png') };
     if (has(/^(TL10|TR10)$/)) return { ...base, slab: ['TL10', 'TR10'], estimated: true };
     // the architect's floor 7 (the app's 8, flats 28–31) has its own sheet; 2–7 share the typical one
     const src = row.nums.some(n => n >= 28 && n <= 31) ? '/building/netiv-f7.png' : '/building/netiv-typical.png';
-    return { ...base, slab: ['TL', 'TR', 'BR', 'BL'], drawing: { src, box: BOX, clip: true } };
+    return { ...base, slab: ['TL', 'TR', 'BR', 'BL'], drawing: sheet(src) };
   },
 };
