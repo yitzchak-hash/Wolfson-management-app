@@ -22,6 +22,7 @@ import { realName } from '../../data/aptSale';
 import { haptic, hapticOnLift } from '../../data/haptics';
 import { LEVEL_FLOORS, STRIP, zoneFor, PLAN_BOX, pathOf, stripFor, type LowerLevel } from './wolfsonPlan';
 import { WOLFSON_PLAN, type BuildingPlan, type FloorSpec } from './buildingPlan';
+import StreetStrip from './StreetStrip';
 import './buildingView.css';
 
 export interface BuildingViewWords {
@@ -406,6 +407,9 @@ export default function BuildingView({ apartments, stages, onOpen, words, initia
         onPointerUp={onPointerUp}
         onPointerCancel={onPointerUp}
       >
+        {/* One building on its own carries its own stretch of street (inside the stage, so it stops at the floor
+            rail); side by side, the trio lays one street under all of them. */}
+        {!compact && <StreetStrip entrances={[0.5]} />}
         <div className="bv-world">
           {floors.map((row, i) => { const spec = row.lower ? null : plan.floorOf(planRow(row), interiorSrc); return (
             <div

@@ -238,3 +238,24 @@
   /* a white rim first, so green reads on a yellow or orange flat too */
   filter: drop-shadow(0 0 3px #ffffff) drop-shadow(0 0 3px #ffffff) drop-shadow(0 0 12px rgba(16,185,129,.95)); }
 .bv-plate[data-solid='0'] .bv-wall { display: none; }
+
+/* THE STREET under the building labels (StreetStrip.tsx; owner, 2026-11-17). It lies flat in the same tilt as the
+   floors, behind them, and never takes a press. */
+.bv-street { position: absolute; left: 0; right: 0; top: 78px; z-index: 0; pointer-events: none; overflow: hidden;
+  perspective: 1700px; perspective-origin: 50% 0; }
+.bv-street svg { display: block; width: max(100%, 760px); margin-left: min(0px, calc((100% - 760px) / 2)); height: auto;
+  transform: rotateX(54deg); transform-origin: 50% 0; }
+/* one building on its own: the street runs between the two top cards */
+.bv-root:not(.bv-compact) .bv-stage > .bv-street { top: 46px; left: 26%; right: 26%; }
+@media (max-width: 899px) { .bv-root:not(.bv-compact) .bv-stage > .bv-street { left: 0; right: 0; } }
+.bv-street-moving { display: none; }
+/* cars drive only on a wide screen with a mouse, and only for people who have not asked for less motion */
+@media (hover: hover) and (pointer: fine) and (min-width: 900px) and (prefers-reduced-motion: no-preference) {
+  .bv-street-moving { display: inline; }
+  .bv-street-still { display: none; }
+  .bv-street-drive { animation: bv-street-drive 18s linear infinite; }
+  .bv-street-back { animation: bv-street-back 23s linear infinite; }
+}
+@keyframes bv-street-drive { from { transform: translateX(-140px); } to { transform: translateX(1540px); } }
+@keyframes bv-street-back { from { transform: translateX(1540px); } to { transform: translateX(-140px); } }
+@media print { .bv-street { display: none; } }
