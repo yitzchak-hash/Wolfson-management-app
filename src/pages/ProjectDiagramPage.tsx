@@ -95,7 +95,10 @@ export function ProjectDiagramPage() {
   const isNarrow = useNarrow();
   const roomForAll = useRoomForAll();
   const [filtersOpen, setFiltersOpen] = useState(false);
-  const [selectedBuilding, setSelectedBuilding] = useState<BuildingId | 'all'>('all');
+  const [pickedBuilding, setSelectedBuilding] = useState<BuildingId | 'all'>('all');
+  // A building picked in ONE project means nothing in another (owner's picture, 2026-11-17: after switching from
+  // Wolfson to Netiv the view drew Wolfson's tower "1" with no flats and no tab lit). Then it is All again.
+  const selectedBuilding: BuildingId | 'all' = pickedBuilding !== 'all' && buildings.some(b => b.id === pickedBuilding) ? pickedBuilding : 'all';
   /** Board or the see-through building (owner, recording 2026-11-02), for one Wolfson building. */
   // The Building view is what opens first, on every device (owner, 2026-11-05: "everywhere it should be the building
   // view as the default. Also on the computer"). A workspace with no Building view shows its board as before.
