@@ -391,8 +391,9 @@ export default function BuildingView({ apartments, stages, onOpen, words, initia
 
   return (
     <div className={`bv-root${compact ? ' bv-compact' : ''}`} data-building-view={title ?? ''} data-plan={plan.id}>
-      {compact && title && <div className="bv-title">{title}</div>}
-      {planSlot && floors[landed] && <div className={compact ? "bv-plan-slot" : "bv-plan-slot bv-plan-slot-top"}>
+      {/* The building's name over it — on one building too, as on his approved sample (2026-11-17). */}
+      {title && <div className="bv-title">{title}</div>}
+      {planSlot && floors[landed] && <div className={compact || title ? "bv-plan-slot" : "bv-plan-slot bv-plan-slot-top"}>
         {planSlot({ key: floors[landed].lower ? floors[landed].lower!.key : String(floors[landed].floor), label: lab(floors[landed].floor, floors[landed]) })}
       </div>}
       <div

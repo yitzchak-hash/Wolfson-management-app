@@ -63,16 +63,24 @@ function usePhone(): boolean {
  * drawer's 800px plan line; on a sideways Fold (829) the plan sits beside
  * the details while this page shows one building. That is correct.
  */
-function useNarrow(): boolean {
-  const [narrow, setNarrow] = useState(() => window.matchMedia('(max-width: 899px)').matches);
+function useMedia(query: string): boolean {
+  const [on, setOn] = useState(() => window.matchMedia(query).matches);
   useEffect(() => {
-    const mq = window.matchMedia('(max-width: 899px)');
-    const onChange = () => setNarrow(mq.matches);
+    const mq = window.matchMedia(query);
+    const onChange = () => setOn(mq.matches);
+    onChange();
     mq.addEventListener('change', onChange);
     return () => mq.removeEventListener('change', onChange);
-  }, []);
-  return narrow;
+  }, [query]);
+  return on;
 }
+const useNarrow = () => useMedia('(max-width: 899px)');
+/**
+ * The opened Fold and an upright iPad (600–899 wide) keep the narrow page, but have the room for ALL the buildings
+ * side by side in the Building view (owner, 2026-11-17: "I'm missing that all buildings option … I used to have it,
+ * especially on a Galaxy Fold"). A real phone (under 600) stays one building at a time.
+ */
+const useRoomForAll = () => useMedia('(min-width: 600px)');
 
 const EMPTY_LIST: string[] = [];
 
@@ -85,6 +93,7 @@ export function ProjectDiagramPage() {
 
   const isPhone = usePhone();
   const isNarrow = useNarrow();
+  const roomForAll = useRoomForAll();
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [selectedBuilding, setSelectedBuilding] = useState<BuildingId | 'all'>('all');
   /** Board or the see-through building (owner, recording 2026-11-02), for one Wolfson building. */
@@ -285,7 +294,7 @@ export function ProjectDiagramPage() {
   const showSwitch = !isNarrow && !!firstWolfson;
   const showNarrowSwitch = isNarrow && canBuildingView;
   /** On All, Building shows the three side by side, moving together. */
-  const showTrio = !isNarrow && view === 'building' && selectedBuilding === 'all' && !!firstWolfson;
+  const showTrio = (!isNarrow || roomForAll) && view === 'building' && selectedBuilding === 'all' && !!firstWolfson;
     const boardSet = useStore(st => st.boardSettings[st.currentProjectId]);
   const lowerLevels = useMemo(() => WOLFSON_LOWER.map(l => (l.key === 'spa' ? { ...l, label: s.bvSpa } : l)), [s.bvSpa]);
   /** The board's own floor numbers, so the building view and the board say the same floor. */
@@ -508,12 +517,24 @@ export function ProjectDiagramPage() {
             full row of its own between the bar and the diagram.
           */}
           <div className="flex items-center gap-1.5">
+            {/* All the buildings side by side, in the Building view — only where there is the room (the opened Fold) */}
+            {roomForAll && !!firstWolfson && buildings.length > 1 && (
+              <button
+                data-narrow-all
+                onClick={() => { setSelectedBuilding('all'); setView('building'); }}
+                className={`flex-1 min-w-[44px] py-1 rounded-md text-[13px] font-bold transition-all ${
+                  showTrio ? 'bg-[#1e3a5f] text-white shadow-sm' : 'bg-gray-100 text-gray-600 active:bg-gray-200'
+                }`}
+              >
+                {s.all}
+              </button>
+            )}
             {buildings.map(b => (
               <button
                 key={b.id}
                 onClick={() => setSelectedBuilding(b.id)}
                 className={`flex-1 min-w-[44px] py-1 rounded-md text-[13px] font-bold transition-all ${
-                  effectiveBuilding === b.id
+                  effectiveBuilding === b.id && !showTrio
                     ? 'bg-[#1e3a5f] text-white shadow-sm'
                     : 'bg-gray-100 text-gray-600 active:bg-gray-200'
                 }`}
@@ -729,6 +750,7 @@ export function ProjectDiagramPage() {
                 floorLabels={buildingFloorLabels}
                 interiorSrc={isWolfsonPlan ? WOLFSON_INTERIOR : undefined}
                 plan={bvPlan}
+                title={buildingShort(bvBuilding as BuildingId)}
                 planSlot={f => <StandardPlanButton bubble buildingId={bvBuilding} buildingTitle={buildingShort(bvBuilding)} floorKey={f.key} floorLabel={f.label} />}
                 lower={isWolfsonPlan ? lowerLevels : undefined} customButtons={boardSet?.customButtons}
                 tower={Math.max(0, buildings.filter(b => !!planFor(currentProjectId, b.id)).findIndex(b => b.id === bvBuilding))}

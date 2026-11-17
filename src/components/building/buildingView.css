@@ -274,10 +274,10 @@
 /* computer */
 .bv-root:not(.bv-compact) .bv-world { width: min(54cqw, 96cqh); top: 60%; }
 .bv-root[data-plan='netiv']:not(.bv-compact) .bv-world { width: min(54cqw, 112cqh); top: 62%; }
-.bv-root:not(.bv-compact) .bv-stage > .bv-street { top: 10cqh; left: 2cqw; right: 2cqw; }
+.bv-root:not(.bv-compact) .bv-stage > .bv-street { top: max(10cqh, 80px); left: 2cqw; right: 2cqw; }
 .bv-root[data-plan='netiv']:not(.bv-compact) .bv-stage > .bv-street { left: 9.5cqw; right: 9.5cqw; }
 .bv-root:not(.bv-compact) .bv-card { width: 19cqw; min-height: 17cqh; justify-content: center; }
-.bv-root:not(.bv-compact) .bv-tl, .bv-root:not(.bv-compact) .bv-tr { top: 27cqh; }
+.bv-root:not(.bv-compact) .bv-tl, .bv-root:not(.bv-compact) .bv-tr { top: max(28cqh, 214px); }
 .bv-root:not(.bv-compact) .bv-bl, .bv-root:not(.bv-compact) .bv-br { bottom: 2.5cqh; }
 .bv-root:not(.bv-compact) .bv-tl, .bv-root:not(.bv-compact) .bv-bl, .bv-root:not(.bv-compact) .bv-ml { left: 1cqw; }
 .bv-root:not(.bv-compact) .bv-tr, .bv-root:not(.bv-compact) .bv-br, .bv-root:not(.bv-compact) .bv-mr { right: 1cqw; }
@@ -304,11 +304,11 @@
   .bv-root:not(.bv-compact) .bv-world { width: min(95cqw, 100cqh); top: 53%; }
   .bv-root[data-plan='netiv']:not(.bv-compact) .bv-world { width: min(96cqw, 100cqh); top: 58%; }
   .bv-root:not(.bv-compact) .bv-stage > .bv-street,
-  .bv-root[data-plan='netiv']:not(.bv-compact) .bv-stage > .bv-street { top: 11cqh; left: 2cqw; right: 2cqw; }
+  .bv-root[data-plan='netiv']:not(.bv-compact) .bv-stage > .bv-street { top: max(11cqh, 80px); left: 2cqw; right: 2cqw; }
   .bv-root:not(.bv-compact) .bv-stage > .bv-street svg { width: max(100%, 520px); margin-left: min(0px, calc((100% - 520px) / 2)); }
   .bv-root:not(.bv-compact) .bv-card { width: 41cqw; min-height: 11cqh; padding: 7px 9px; gap: 3px; }
   .bv-root[data-plan='netiv']:not(.bv-compact) .bv-card { min-height: 15cqh; }
-  .bv-root:not(.bv-compact) .bv-tl, .bv-root:not(.bv-compact) .bv-tr { top: 21cqh; }
+  .bv-root:not(.bv-compact) .bv-tl, .bv-root:not(.bv-compact) .bv-tr { top: max(21cqh, 146px); }
   .bv-root:not(.bv-compact) .bv-tl, .bv-root:not(.bv-compact) .bv-bl, .bv-root:not(.bv-compact) .bv-ml { left: 2cqw; }
   .bv-root:not(.bv-compact) .bv-tr, .bv-root:not(.bv-compact) .bv-br, .bv-root:not(.bv-compact) .bv-mr { right: 2cqw; }
   .bv-root:not(.bv-compact) .bv-card-open { display: none; }
