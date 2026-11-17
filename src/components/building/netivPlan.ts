@@ -21,11 +21,11 @@
  * PUBLIC BUILDING (מבנה ציבור, about 100 m², its own fan-coil), on the footprint apartment 1 has in Building 2.
  * So everything is traced once, in Building 2's frame, and Building 1's plan is that, mirrored.
  *
- * TURNED 180° ON SCREEN (owner, 2026-11-17: "flip the buildings 180 degrees so that apartment 13 and 12 go on the
- * bottom and apartment 14 and 15 go on the top", and his sketch of the ground floor: apartment 1 bottom left, the
- * duplexes 2 · 3 · 4 · 5 along the top, the street below). The sheets' pictures are mirrored and turned with the
- * outlines (`drawing.mirror`, `drawing.rotate`), so the walls still lie on them. The pictures carry no lettering
- * (it was taken out of the sheets), so nothing reads upside down or backwards.
+ * ON SCREEN AS ON THE SHEETS (owner, 2026-11-17, after seeing each floor's sheet: "the direction of the building
+ * diagram inside the plans, the exact way they are, that's the exact direction I want it on the software" — this
+ * took back the half turn he had asked for earlier the same day). Building 2 is drawn as traced; Building 1's
+ * outlines and pictures are mirrored (`drawing.mirror`), which is how its own sheets draw it. The pictures carry no
+ * lettering (it was taken out of the sheets), so nothing reads backwards in Building 1.
  */
 import type { Apartment } from '../../types';
 import type { BuildingPlan, CardSpot, FloorSpec, Pt } from './buildingPlan';
@@ -106,20 +106,16 @@ function num(apt: Apartment): number { return Number((apt.apartmentNumber ?? '')
 
 const mapValues = <T, U>(o: Record<string, T>, f: (v: T) => U): Record<string, U> =>
   Object.fromEntries(Object.entries(o).map(([k, v]) => [k, f(v)]));
-const TURNED: Record<CardSpot, CardSpot> = { tl: 'br', tr: 'bl', bl: 'tr', br: 'tl', ml: 'mr', mr: 'ml' };
 const MIRRORED: Record<CardSpot, CardSpot> = { tl: 'tr', tr: 'tl', bl: 'br', br: 'bl', ml: 'mr', mr: 'ml' };
 
-/**
- * One building's plan: the traced frame, mirrored for Building 1, then turned half round for the screen.
- * A mirror and a half turn together are a top-to-bottom flip, which is what Building 1 comes to.
- */
+/** One building's plan: the traced frame as it is for Building 2, mirrored left to right for Building 1. */
 function netivPlan(mirror: boolean): BuildingPlan {
-  const CX = BOX.x + BOX.w / 2, CY = BOX.y + BOX.h / 2;
-  const at = ([x, y]: Pt): Pt => [mirror ? x : 2 * CX - x, 2 * CY - y];
+  const CX = BOX.x + BOX.w / 2;
+  const at = ([x, y]: Pt): Pt => [mirror ? 2 * CX - x : x, y];
   const all = (pts: Pt[]): Pt[] => pts.map(at);
-  const rect = ([x, y, w, h]: Rect): Rect => [mirror ? x : 2 * CX - x - w, 2 * CY - y - h, w, h];
-  const spot = (s: CardSpot): CardSpot => TURNED[mirror ? MIRRORED[s] : s];
-  const sheet = (name: string) => ({ src: `/building/${name}.png`, box: BOX, clip: true, rotate: true, mirror });
+  const rect = ([x, y, w, h]: Rect): Rect => [mirror ? 2 * CX - x - w : x, y, w, h];
+  const spot = (s: CardSpot): CardSpot => (mirror ? MIRRORED[s] : s);
+  const sheet = (name: string) => ({ src: `/building/${name}.png`, box: BOX, clip: true, mirror });
   const upper = { core: all(CORE), stairs: STAIRS.map(rect), lifts: LIFTS.map(rect), floorNoAt: at(FLOOR_NO) };
   const unit1 = mirror ? 'PUB' : 'G1';
 

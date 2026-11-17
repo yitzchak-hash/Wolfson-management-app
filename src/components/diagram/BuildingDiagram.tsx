@@ -1190,9 +1190,9 @@ export function BuildingDiagram({
 }: BuildingDiagramProps) {
   const { isRtl } = useStore(state => state.mainUiStrings);
   const buildings = useStore(state => state.buildings);
-  // Netiv stands Building 2 on the left, Building 1 on the right (owner, 2026-11-09), as on the site.
-  const netivSide = useStore(state => state.currentProjectId) === 'netiv';
-  const leftToRight = netivSide ? [...buildings].sort((a, b) => (b.id === 'B2' ? 1 : 0) - (a.id === 'B2' ? 1 : 0)) : buildings;
+  // Netiv stands Building 1 on the left, Building 2 on the right, like every project (owner, 2026-11-17: "building 1
+  // is on the left, building 2 is on the right. That's the way I want it" — this replaces his 2026-11-09 order).
+  const leftToRight = buildings;
   const buildingOrder: BuildingId[] = isRtl ? [...leftToRight].reverse().map(b => b.id) : leftToRight.map(b => b.id);
   const visibleBuildings = selectedBuilding === 'all' ? buildingOrder : [selectedBuilding];
   const single = selectedBuilding !== 'all';

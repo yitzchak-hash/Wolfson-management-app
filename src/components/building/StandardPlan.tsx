@@ -7,6 +7,7 @@ import {
   shareFileToDrive, isUploadBackendConfigured,
 } from '../../data/driveApi';
 import type { StandardPlan } from '../../types';
+import { builtInStandardPlan } from './netivStandardPlans';
 import { sharePlanFile } from '../../data/sharePlan';
 import { PlanPicker } from '../plans/PlanPicker';
 
@@ -39,7 +40,9 @@ export function StandardPlanButton({ buildingId, buildingTitle, bubble, floorKey
   const rtl = useStore(st => !!st.mainUiStrings.isRtl);
   const own = useStore(st => st.boardSettings[st.currentProjectId]?.standardPlansByFloor?.[buildingId]?.[floorKey]);
   const whole = useStore(st => st.boardSettings[st.currentProjectId]?.standardPlans?.[buildingId]);
-  const plan = own ?? whole;
+  const projectId = useStore(st => st.currentProjectId);
+  // The office's own choice first; else the plan built in for this floor (Netiv's approved sheets, 2026-11-17).
+  const plan = own ?? whole ?? builtInStandardPlan(projectId, buildingId, floorKey);
   const where = `${buildingTitle} · ${rtl ? 'קומה' : 'Floor'} ${floorLabel}`;
   const [view, setView] = useState(false);
   const [setup, setSetup] = useState(false);

@@ -297,8 +297,8 @@ export function ProjectDiagramPage() {
     [showBuilding, bvBuilding, floorLabelsOf]);
   const trioBuildings = useMemo(() => (showTrio
     ? buildings.filter(b => !!planFor(currentProjectId, b.id))
-      // Netiv: Building 2 on the left, Building 1 on the right (owner, 2026-11-09)
-      .sort((a, b) => (currentProjectId === 'netiv' ? (b.id === 'B2' ? 1 : 0) - (a.id === 'B2' ? 1 : 0) : 0)).map(b => ({ id: b.id, title: buildingShort(b.id), apartments: apartments.filter(a => a.buildingId === b.id), floorLabels: floorLabelsOf(b.id), plan: planFor(currentProjectId, b.id) ?? undefined }))
+      // In the buildings' own order — Netiv too: Building 1 on the left, Building 2 on the right (owner, 2026-11-17)
+      .map(b => ({ id: b.id, title: buildingShort(b.id), apartments: apartments.filter(a => a.buildingId === b.id), floorLabels: floorLabelsOf(b.id), plan: planFor(currentProjectId, b.id) ?? undefined }))
     : []), [showTrio, buildings, apartments, floorLabelsOf]);
   const lookValue = useMemo(() => ({
     big: !isNarrow && selectedBuilding !== 'all',
@@ -560,9 +560,9 @@ export function ProjectDiagramPage() {
           <div className="flex items-center gap-3 flex-wrap">
             {/* Building selector */}
             <div className="flex items-center gap-1 bg-gray-100 rounded-xl p-1">
-              {/* In the order the buildings stand on screen: Wolfson 1 · 2 · 3 (owner, 2026-11-17: "flip it to be
-                  all 1, 2, 3"), Netiv 2 · 1 (owner, 2026-11-09). */}
-              {(['all', ...(currentProjectId === 'netiv' ? [...buildings].reverse() : buildings).map(b => b.id)]).map(b => (
+              {/* In the order the buildings stand on screen: 1 · 2 · 3 (owner, 2026-11-17: "flip it to be all 1, 2, 3";
+                  Netiv the same, Building 1 first). */}
+              {(['all', ...buildings.map(b => b.id)]).map(b => (
                 <button
                   key={b}
                   onClick={() => setSelectedBuilding(b)}
