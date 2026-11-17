@@ -10,7 +10,7 @@ import type { Apartment, Stage } from '../../types';
 import BuildingView, { makeFloorBus, shortFloor, slotName, slotsOn, SlotChip, type BuildingViewWords, type FloorBus } from './BuildingView';
 import { STRIP, CORES_X, zoneFor, type LowerLevel } from './wolfsonPlan';
 import type { BuildingPlan } from './buildingPlan';
-import StreetStrip from './StreetStrip';
+import StreetStrip, { hasStreet } from './StreetStrip';
 
 /** `plan`: this building's own plan when it differs from its neighbours' (Netiv's Building 1 is Building 2 mirrored). */
 export interface TrioBuilding { id: string; title: string; apartments: Apartment[]; floorLabels?: Record<number, string>; plan?: BuildingPlan }
@@ -60,7 +60,7 @@ export default function BuildingTrio({ buildings, stages, onOpen, words, interio
     <div className="bv-trio" data-building-trio data-low={low ? '1' : '0'} ref={rootRef}>
       <div className="bv-trio-row" data-cols={buildings.length}>
         {/* The street under the labels, a crossing at each building's middle. */}
-        <StreetStrip entrances={buildings.map((_, i) => (i + 0.5) / buildings.length)} />
+        {hasStreet(buildings[0]?.plan ?? plan) && <StreetStrip entrances={buildings.map((_, i) => (i + 0.5) / buildings.length)} />}
         {lower.length > 0 && <LowerWide lower={lower} bus={bus} buildings={buildings} onOpen={onOpen} />}
         {buildings.map((b, i) => (
           <BuildingView key={b.id} compact title={b.title} bus={bus} apartments={b.apartments} stages={stages}

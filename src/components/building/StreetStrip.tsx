@@ -10,6 +10,12 @@
  *
  * `entrances`: where each building's door meets the street, as a share of the width (0..1), left to right.
  */
+/**
+ * Which projects have the street: W Residence (Wolfson) only — the one he approved on the placement page
+ * (2026-11-17); he left Netiv unticked. A view given no plan draws Wolfson's.
+ */
+export const hasStreet = (plan?: { id: string }): boolean => !plan || plan.id === 'wolfson';
+
 const W = 1400, H = 250, R0 = 40, R1 = 172, MID = (R0 + R1) / 2;
 const C = {
   road0: '#3a3340', road1: '#2b2733', walk: '#d9c7b8', walkLine: '#bfa893', curb: '#f2e6da', line: '#ffd9a0', dash: '#fff3df',
