@@ -322,7 +322,7 @@ async function reportAi(req, res, body) {
     if (last && last.role === l.role) last.content += '\n' + l.content;
     else turns.push({ ...l });
   }
-  const catalog = JSON.stringify(body.catalog || []).slice(0, 60000);
+  const catalog = JSON.stringify(body.catalog || []).slice(0, 200000);
   const current = JSON.stringify(body.current || {}).slice(0, 6000);
   const lang = body.lang === 'he' ? 'Hebrew' : 'English';
 
@@ -338,6 +338,12 @@ async function reportAi(req, res, body) {
     'text: has, hasnot, is, isnot, empty, notempty. bool: is (value "Yes" or "No"). number: is, gt, lt, between. ' +
     'date: is, before, after, between, empty (not set), notempty (set); dates are yyyy-MM-dd. ' +
     'For a field with a "choices" list, use one of those labels exactly as the value with "is"/"isnot", or "has" with part of it.\n' +
+    'Every stage of the workspace has three columns: "st.<id>" (labelled with the stage name) = its status on that apartment, one of: ' +
+    '"Done" or "Done (<its own word>)" e.g. "Done (Sent)", Waiting (waiting for this inspection), Working, Part of it, Booked, Problem, ' +
+    'To do, Not in this flat; "stBy.<id>" = who finished it; "stAt.<id>" = the day it was finished (may be blank on old records). ' +
+    'For "the stage is done" use op "has" value "Done" on "st.<id>"; for "not done yet" use "hasnot" "Done". The workspace\'s own buttons (e.g. Wall Yes/No) are "btn.<id>" with Yes / No / Don\'t know. ' +
+    'Fields reached through the job are prefixed "job." on every subject except jobs.\n' +
+    'A worker\'s apartments with start and finish dates, or "which apartments did X touch", is the "work" subject (one row per worker per apartment).\n' +
     `Today is ${String(body.today || '').slice(0, 10)}. Work out "this week", "last month", "late" and so on into real dates.\n\n` +
     'Use ONLY subjects and field keys from this list:\n' + catalog + '\n\n' +
     'The report as it stands now (change it when he asks for changes; start over when he asks for something new):\n' + current + '\n\n' +

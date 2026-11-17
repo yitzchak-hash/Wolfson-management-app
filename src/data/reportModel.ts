@@ -1,10 +1,11 @@
 import {
-  Apartment, Building, Contractor, ContractorAssignment, Stage, StageNote, ActivityLog, ContractorPhoto,
+  Apartment, Building, Contractor, ContractorAssignment, Stage, StageNote, ActivityLog, ContractorPhoto, CustomButton,
   aptLabel, isCountableApartment, getStageName,
 } from '../types';
-import { progressOf } from './stageMarks';
+import { progressOf, StageState } from './stageMarks';
 import { describeLog } from './activityWords';
-import { crewOf } from './aptCrew';
+import { crewOf, acCompanyOf, isCompanyButton, isInspectedButton } from './aptCrew';
+import { waitingInspection, doneWordOf, workingVisits } from './stageHow';
 
 /**
  * Reports, as a thing you BUILD rather than a table somebody wrote once.
@@ -46,6 +47,8 @@ export interface ReportData {
   photos?: ContractorPhoto[];
   /** The set model's tipus sets, so a job's fraction counts the stages IT carries. */
   tipusStages?: Record<string, string[]>;
+  /** The workspace's own information buttons ("Wall Yes/No") — each becomes a column of its own. */
+  customButtons?: CustomButton[];
   isRtl: boolean;
   /**
    * Today, as yyyy-MM-dd. Passed in, never read from a clock in here — a report
@@ -88,6 +91,16 @@ export interface ReportSubject {
   blurb: string;
   rows: (d: ReportData) => any[];
   fields: ReportField[];
+  /**
+   * Columns that come from the workspace's OWN lists — one per stage, one per custom button (owner, 2026-11-17:
+   * "every time I add something new, it should go into here as well"). Read with `fieldsOf`, never `fields` alone.
+   */
+  more?: (d: ReportData) => ReportField[];
+}
+
+/** Every column a subject has for this workspace right now: the fixed ones plus its stages and buttons. */
+export function fieldsOf(subject: ReportSubject, d: ReportData): ReportField[] {
+  return subject.more ? [...subject.fields, ...subject.more(d)] : subject.fields;
 }
 
 export type Op =
@@ -186,9 +199,80 @@ const stageChoices = (d: ReportData) =>
  * against it. Two copies drift, and a report is where that shows up as two
  * different answers to the same question.
  */
+const progressCache = new WeakMap<ReportData, { sorted: Stage[]; byApt: Map<string, ReturnType<typeof progressOf>> }>();
+function sortedStagesOf(d: ReportData): Stage[] {
+  let c = progressCache.get(d);
+  if (!c) { c = { sorted: [...d.stages].sort((a, b) => a.order - b.order), byApt: new Map() }; progressCache.set(d, c); }
+  return c.sorted;
+}
+/** Worked out once per apartment per report run — a stage column per stage would otherwise redo it every cell. */
 function progressFor(j: Apartment, d: ReportData) {
-  const sorted = [...d.stages].sort((a, b) => a.order - b.order);
-  return progressOf(j, sorted, { tipusStages: d.tipusStages }, d.assignments);
+  const sorted = sortedStagesOf(d);
+  const c = progressCache.get(d)!;
+  let p = c.byApt.get(j.id);
+  if (!p) { p = progressOf(j, sorted, { tipusStages: d.tipusStages }, d.assignments); c.byApt.set(j.id, p); }
+  return p;
+}
+
+/** The word the apartment window shows on a stage's row: Done (or its own word, "Sent"), Waiting, To do … */
+const STATE_WORD: Record<StageState, string> = {
+  done: 'Done', doing: 'Working', pending: 'Part of it', booked: 'Booked', problem: 'Problem', off: 'Not in this flat', todo: 'To do',
+};
+function stageWordOn(j: Apartment, st: Stage, d: ReportData): string {
+  const row = progressFor(j, d).rows.find(r => r.stage.id === st.id);
+  if (!row) return STATE_WORD.off;
+  // Always starts with "Done", so "contains Done" finds every finished stage whatever its own word is.
+  if (row.state === 'done') return doneLabel(st);
+  const waiting = waitingInspection(j, sortedStagesOf(d), { tipusStages: d.tipusStages });
+  if (waiting?.id === st.id) return 'Waiting';
+  return STATE_WORD[row.state];
+}
+
+function doneLabel(st: Stage): string {
+  const own = (doneWordOf(st, false) || '').trim();
+  return own && own.toLowerCase() !== 'done' ? `Done (${own})` : 'Done';
+}
+
+const ANSWER_WORD: Record<string, string> = { yes: 'Yes', no: 'No', unknown: "Don't know" };
+
+/**
+ * THE APARTMENT WINDOW'S OWN LISTS AS COLUMNS (owner, 2026-11-17: "make sure that those items I have in the report
+ * screen as well … every time I add something new, it should go into here as well"): for every stage of the
+ * workspace its status, who finished it and when; for every custom button ("Wall Yes/No") its answer. Built from the
+ * workspace's lists each time, so a stage or button added tomorrow is a column tomorrow with nothing to change here.
+ */
+function jobMore(prefix: string, group: string, pick: (row: any, d: ReportData) => Apartment | undefined) {
+  return (d: ReportData): ReportField[] => {
+    const at = (get: (j: Apartment) => Cell) => (row: any, dd: ReportData) => { const j = pick(row, dd); return j ? get(j) : null; };
+    const out: ReportField[] = [];
+    (d.customButtons ?? []).filter(cb => !isCompanyButton(cb) && !isInspectedButton(cb)).forEach(cb => {
+      out.push({
+        key: `${prefix}btn.${cb.id}`, label: cb.name, type: 'text', group: `${group} — buttons`,
+        get: at(j => ANSWER_WORD[j.customAnswers?.[cb.id] ?? ''] ?? ''),
+        choices: () => ['Yes', 'No', "Don't know"].map(v => ({ value: v, label: v })),
+      });
+    });
+    sortedStagesOf(d).forEach(st => {
+      const name = getStageName(st, d.isRtl);
+      const g = `${group} — stages`;
+      out.push({
+        key: `${prefix}st.${st.id}`, label: `${name}`, type: 'text', group: g,
+        get: (row, dd) => { const j = pick(row, dd); return j ? stageWordOn(j, st, dd) : null; },
+        choices: () => [...new Set([doneLabel(st), 'Waiting', 'Working', 'Part of it', 'Booked',
+          'Problem', 'To do', 'Not in this flat'])].map(v => ({ value: v, label: v })),
+      });
+      out.push({
+        key: `${prefix}stBy.${st.id}`, label: `${name} — done by`, type: 'text', group: g,
+        get: at(j => (progressFor(j, d).rows.find(r => r.stage.id === st.id)?.state === 'done' ? j.stageDone?.[st.id]?.by ?? '' : '')),
+      });
+      out.push({
+        key: `${prefix}stAt.${st.id}`, label: `${name} — done on`, type: 'date', group: g,
+        get: at(j => (progressFor(j, d).rows.find(r => r.stage.id === st.id)?.state === 'done'
+          ? dateOnly(j.stageDone?.[st.id]?.at ?? j.stageDates?.[st.id] ?? '') : '')),
+      });
+    });
+    return out;
+  };
 }
 
 function jobFields(prefix: string, group: string, pick: (row: any, d: ReportData) => Apartment | undefined): ReportField[] {
@@ -201,6 +285,8 @@ function jobFields(prefix: string, group: string, pick: (row: any, d: ReportData
 
   return [
     f('name', 'Job', 'text', j => aptLabel(j) || j.displayName || ''),
+    f('aptNo', 'Apartment number', 'text', j => j.apartmentNumber ?? ''),
+    f('family', 'Family name', 'text', j => (j.isUnnamed ? '' : j.displayName ?? '')),
     f('tipus', 'Tipus', 'text', j => j.tipus ?? '',
       d => [...new Set(d.apartments.map(a => a.tipus).filter((t): t is string => !!t))].sort()
         .map(t => ({ value: t, label: t }))),
@@ -228,8 +314,15 @@ function jobFields(prefix: string, group: string, pick: (row: any, d: ReportData
       if (!spans.length || spans.some(s => s.open)) return '';
       return spans.flatMap(s => s.ends).sort().pop() ?? '';
     }),
-    f('class', 'Type', 'text', j => (j.classification === 'shinui' ? 'Changes' : 'Standard'),
-      () => [{ value: 'Standard', label: 'Standard' }, { value: 'Changes', label: 'Changes' }]),
+    f('class', 'Standard / Upgraded', 'text', j => (j.classification === 'shinui' ? 'Upgraded' : 'Standard'),
+      () => [{ value: 'Standard', label: 'Standard' }, { value: 'Upgraded', label: 'Upgraded' }]),
+    f('acCompany', 'AC company', 'text', (j, d) => acCompanyOf(j, d.customButtons ?? []),
+      d => [...new Set(liveJobs(d).map(j => acCompanyOf(j, d.customButtons ?? [])).filter(Boolean))].sort()
+        .map(n => ({ value: n, label: n }))),
+    f('waitingFor', 'Waiting for inspection', 'text', (j, d) =>
+      { const w = waitingInspection(j, sortedStagesOf(d), { tipusStages: d.tipusStages }); return w ? getStageName(w, d.isRtl) : ''; }),
+    f('workingNow', 'Working here now', 'text', j => workingVisits(j).map(v => v.byName).join(', ')),
+    f('inspections', 'Inspections done', 'number', j => (j.inspections ?? []).length),
     f('address', 'Address', 'text', j => j.address ?? ''),
     f('notes', 'Notes', 'text', j => j.generalNotes ?? ''),
     f('drive', 'Has a Drive folder', 'bool', j => (j.driveLink ? 'Yes' : 'No')),
@@ -283,7 +376,12 @@ const JOBS: ReportSubject = {
         return [...names].join(', ');
       },
     },
+    {
+      key: 'openProblems', sum: true, label: 'Open problems', type: 'number', group: 'Its tasks',
+      get: (j: Apartment, d) => d.assignments.filter(a => a.apartmentId === j.id && !!a.problem && !a.completedAt).length,
+    },
   ],
+  more: jobMore('', 'The job', (row: Apartment) => row),
 };
 
 const TASKS: ReportSubject = {
@@ -353,6 +451,7 @@ const TASKS: ReportSubject = {
     },
     ...jobFields('job.', 'The job', (t: ContractorAssignment, d) => jobOf(d, t.apartmentId)),
   ],
+  more: jobMore('job.', 'The job', (t: ContractorAssignment, d) => jobOf(d, t.apartmentId)),
 };
 
 /**
@@ -431,6 +530,7 @@ const PROBLEMS: ReportSubject = {
     },
     ...jobFields('job.', 'The job', (t: ContractorAssignment, d) => jobOf(d, t.apartmentId)),
   ],
+  more: jobMore('job.', 'The job', (t: ContractorAssignment, d) => jobOf(d, t.apartmentId)),
 };
 
 /**
@@ -544,6 +644,7 @@ const WORK: ReportSubject = {
     { key: 'workOpen', sum: true, label: 'His open tasks there', type: 'number', group: 'The work', get: (s: WorkSpan) => s.openTasks },
     ...jobFields('job.', 'The job', (s: WorkSpan, d) => jobOf(d, s.aptId)),
   ],
+  more: jobMore('job.', 'The job', (s: WorkSpan, d) => jobOf(d, s.aptId)),
 };
 
 const WORKERS: ReportSubject = {
@@ -613,6 +714,7 @@ const NOTES: ReportSubject = {
       get: (n: StageNote) => n.attachments?.length ?? (n.attachmentFilename ? 1 : 0) },
     ...jobFields('job.', 'The job', (n: StageNote, d) => jobOf(d, n.apartmentId)),
   ],
+  more: jobMore('job.', 'The job', (n: StageNote, d) => jobOf(d, n.apartmentId)),
 };
 
 const ACTIVITY: ReportSubject = {
@@ -633,6 +735,7 @@ const ACTIVITY: ReportSubject = {
     { key: 'to', label: 'To', type: 'text', group: 'The change', get: (l: ActivityLog) => l.newValue },
     ...jobFields('job.', 'The job', (l: ActivityLog, d) => jobOf(d, l.apartmentId)),
   ],
+  more: jobMore('job.', 'The job', (l: ActivityLog, d) => jobOf(d, l.apartmentId)),
 };
 
 export const SUBJECTS: ReportSubject[] = [JOBS, TASKS, PROBLEMS, WORK, WORKERS, NOTES, ACTIVITY];
@@ -722,7 +825,7 @@ export interface ReportResult {
  */
 export function runReport(def: ReportDef, d: ReportData): ReportResult {
   const subject = subjectOf(def.subject);
-  const byKey = new Map(subject.fields.map(f => [f.key, f]));
+  const byKey = new Map(fieldsOf(subject, d).map(f => [f.key, f]));
   const columns = def.columns.map(k => byKey.get(k)).filter(Boolean) as ReportField[];
 
   const all = subject.rows(d);

@@ -12,7 +12,7 @@ import { isCountableApartment, ContractorAssignment } from '../types';
 import { driveThumbUrl } from '../data/driveApi';
 import {
   SUBJECTS, SubjectId, ReportDef, ReportField, Rule, Op, OPS_FOR,
-  runReport, subjectOf, newReport, ReportData, Cell, problemPhotos,
+  runReport, subjectOf, newReport, ReportData, Cell, problemPhotos, fieldsOf,
 } from '../data/reportModel';
 import { ReportAiChat } from '../components/reports/ReportAiChat';
 
@@ -66,12 +66,14 @@ export function ReportsPage() {
     ? allStages.filter(st => st.projectId === 'general')
     : allStages.filter(st => !st.projectId);
   const tipusStagesRep = useStore(st => st.boardSettings[st.currentProjectId]?.tipusStages);
+  const customButtonsRep = useStore(st => st.boardSettings[st.currentProjectId]?.customButtons);
 
   const data: ReportData = useMemo(() => ({
     apartments, assignments: contractorAssignments, contractors, stages, buildings,
     stageNotes, activity: activityLogs, photos: contractorPhotos, isRtl: !!s.isRtl, today: asOf, tipusStages: tipusStagesRep,
+    customButtons: customButtonsRep,
   }), [apartments, contractorAssignments, contractors, stages, buildings,
-    stageNotes, activityLogs, contractorPhotos, s.isRtl, asOf, refreshedAt, tipusStagesRep]);
+    stageNotes, activityLogs, contractorPhotos, s.isRtl, asOf, refreshedAt, tipusStagesRep, customButtonsRep]);
   /**
    * PROBLEMS print with the pictures the worker sent when this is on (owner,
    * 2026-09-06): thumbnails in the row on paper, the picture links in Excel
@@ -98,6 +100,8 @@ export function ReportsPage() {
   const [colSearch, setColSearch] = useState('');
 
   const subject = subjectOf(def.subject);
+  // The fixed columns plus one per stage and per custom button of this workspace.
+  const subjectFields = useMemo(() => fieldsOf(subject, data), [subject, data]);
   const result = useMemo(() => runReport(def, data), [def, data]);
 
   const patch = (p: Partial<ReportDef>) => { setDef(d => ({ ...d, ...p })); setDirty(true); };
@@ -379,7 +383,7 @@ export function ReportsPage() {
                   className="w-full pl-8 pr-3 py-1.5 text-sm border border-gray-200 rounded-lg outline-none
                              focus:border-[#4aa8d8]" />
               </div>
-              {groupFields(subject.fields).map(([group, fields]) => {
+              {groupFields(subjectFields).map(([group, fields]) => {
                 const shown = fields.filter(f =>
                   !colSearch.trim() || f.label.toLowerCase().includes(colSearch.trim().toLowerCase()));
                 if (!shown.length) return null;
@@ -416,7 +420,7 @@ export function ReportsPage() {
                   </div>
                   <div className="flex flex-wrap gap-1.5">
                     {def.columns.map((k, i) => {
-                      const f = subject.fields.find(x => x.key === k);
+                      const f = subjectFields.find(x => x.key === k);
                       if (!f) return null;
                       return (
                         <span key={k} className="flex items-center gap-1 pl-2.5 pr-1 py-1 rounded-full
@@ -455,7 +459,7 @@ export function ReportsPage() {
               )}
               <div className="space-y-2">
                 {def.rules.map((rule, i) => (
-                  <RuleRow key={i} rule={rule} fields={subject.fields} data={data}
+                  <RuleRow key={i} rule={rule} fields={subjectFields} data={data}
                     onChange={r => patch({ rules: def.rules.map((x, j) => (j === i ? r : x)) })}
                     onRemove={() => patch({ rules: def.rules.filter((_, j) => j !== i) })} />
                 ))}
@@ -463,7 +467,7 @@ export function ReportsPage() {
               <button
                 onClick={() => patch({
                   rules: [...def.rules,
-                    { field: subject.fields[0].key, op: OPS_FOR[subject.fields[0].type][0].op, value: '' }],
+                    { field: subjectFields[0].key, op: OPS_FOR[subjectFields[0].type][0].op, value: '' }],
                 })}
                 className="mt-3 flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-dashed
                            border-gray-300 text-[12.5px] font-semibold text-gray-500 hover:border-[#4aa8d8]
@@ -476,7 +480,7 @@ export function ReportsPage() {
             <Panel
               title="Group &amp; show"
               summary={def.groupBy
-                ? `by ${subject.fields.find(f => f.key === def.groupBy)?.label ?? '…'}`
+                ? `by ${subjectFields.find(f => f.key === def.groupBy)?.label ?? '…'}`
                 : def.show}
               open={openPanel === 'shape'}
               onToggle={() => setOpenPanel(p => (p === 'shape' ? null : 'shape'))}
@@ -487,7 +491,7 @@ export function ReportsPage() {
                     onChange={e => patch({ groupBy: e.target.value || undefined })}
                     className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-sm min-w-[10rem]">
                     <option value="">Nothing — a flat list</option>
-                    {subject.fields.filter(f => f.type !== 'number').map(f =>
+                    {subjectFields.filter(f => f.type !== 'number').map(f =>
                       <option key={f.key} value={f.key}>{f.label}</option>)}
                   </select>
                 </Field>
@@ -496,7 +500,7 @@ export function ReportsPage() {
                   <select value={def.metric ?? 'count'} onChange={e => patch({ metric: e.target.value })}
                     className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-sm min-w-[10rem]">
                     <option value="count">How many {subject.nounPlural}</option>
-                    {subject.fields.filter(f => f.type === 'number').map(f =>
+                    {subjectFields.filter(f => f.type === 'number').map(f =>
                       <option key={f.key} value={f.key}>Total {f.label.toLowerCase()}</option>)}
                   </select>
                 </Field>
@@ -506,7 +510,7 @@ export function ReportsPage() {
                     <select value={def.sortBy ?? ''} onChange={e => patch({ sortBy: e.target.value || undefined })}
                       className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-sm min-w-[9rem]">
                       <option value="">However they come</option>
-                      {subject.fields.map(f => <option key={f.key} value={f.key}>{f.label}</option>)}
+                      {subjectFields.map(f => <option key={f.key} value={f.key}>{f.label}</option>)}
                     </select>
                     <select value={def.sortDir} onChange={e => patch({ sortDir: e.target.value as 'asc' | 'desc' })}
                       className="border border-gray-200 rounded-lg px-2 py-1.5 text-sm">

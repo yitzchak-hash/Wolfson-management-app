@@ -49,6 +49,10 @@ Vercel serverless functions in `/api`.
   GLOBAL_COLLECTIONS). Nothing a person would expect on a new computer is kept only in the browser; the only
   browser keys allowed are in `src/data/deviceOnly.ts`, each with its reason. `npm run build` runs
   `scripts/check-backup-coverage.mjs` first and FAILS if a collection or a browser key breaks this rule.
+- **Everything on the apartment window is a report column** (owner, 2026-11-17: "I want to have all those items …
+  and every time I add something new, it should go into here as well"). Stages and custom buttons become columns by
+  themselves (`jobMore` in `src/data/reportModel.ts`). Any NEW thing a feature stores on an apartment (a new box,
+  selector, date, answer) gets a column in `jobFields` in the same round, so the AI report tiles can use it.
 - The history of every past round is in `docs/archive/` if you need it.
 - **Never make him press "Allow" (owner, 2026-11-03: "why does this keep asking me?!?! … im on auto already").**
   Auto mode still stops on a shell command that holds a heredoc (`<<'EOF'`), quotes inside braces, or several

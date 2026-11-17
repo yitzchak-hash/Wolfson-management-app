@@ -10,7 +10,7 @@
  * own report engine, so the numbers on the tile are the app's arithmetic, not the AI's.
  */
 import {
-  SUBJECTS, SubjectId, ReportDef, Rule, Op, OPS_FOR, subjectOf, newReport, ReportData,
+  SUBJECTS, SubjectId, ReportDef, Rule, Op, OPS_FOR, subjectOf, newReport, ReportData, fieldsOf,
 } from './reportModel';
 
 const API_KEY = (import.meta.env.VITE_DRIVE_API_KEY as string | undefined) ?? '';
@@ -23,11 +23,14 @@ export function reportCatalog(data: ReportData) {
     id: s.id,
     label: s.label,
     about: s.blurb,
-    fields: s.fields.map(f => {
+    fields: fieldsOf(s, data).map(f => {
+      // A stage's status words are the same for every stage and are spelled out in the instructions instead —
+      // repeated per stage per subject they would be most of the list.
+      const stageStatus = /(^|\.)st\./.test(f.key);
       let choices: string[] | undefined;
-      try { choices = f.choices?.(data).map(c => c.label).filter(Boolean).slice(0, 60); } catch { choices = undefined; }
+      try { choices = stageStatus ? undefined : f.choices?.(data).map(c => c.label).filter(Boolean).slice(0, 60); } catch { choices = undefined; }
       return {
-        key: f.key, label: f.label, type: f.type, group: f.group,
+        key: f.key, label: f.label, type: f.type,
         ...(f.sum ? { totalable: true } : {}),
         ...(choices && choices.length ? { choices } : {}),
       };
@@ -45,11 +48,11 @@ function shapeOf(def: ReportDef) {
  * Whatever came back, made safe: a subject that exists, columns and rules on fields that exist, operators that fit
  * the field's type. Anything else is quietly dropped, so a confused answer gives a smaller report, never a broken one.
  */
-export function cleanReport(raw: unknown, base: ReportDef): ReportDef {
+export function cleanReport(raw: unknown, base: ReportDef, data: ReportData): ReportDef {
   const r = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
   const subjectId = SUBJECTS.some(s => s.id === r.subject) ? (r.subject as SubjectId) : base.subject;
   const subject = subjectOf(subjectId);
-  const fields = new Map(subject.fields.map(f => [f.key, f]));
+  const fields = new Map(fieldsOf(subject, data).map(f => [f.key, f]));
   const fresh = subjectId === base.subject ? base : { ...newReport(subjectId), id: base.id };
 
   const columns = Array.isArray(r.columns)
@@ -123,7 +126,7 @@ export async function askReportAi(
       return {
         ok: true,
         reply: String(got.reply ?? '').trim(),
-        report: got.report ? cleanReport(got.report, current) : null,
+        report: got.report ? cleanReport(got.report, current, data) : null,
       };
     } catch (e) {
       if (attempt === 0) { await new Promise(res => setTimeout(res, 800)); continue; }
