@@ -560,7 +560,9 @@ export function ProjectDiagramPage() {
           <div className="flex items-center gap-3 flex-wrap">
             {/* Building selector */}
             <div className="flex items-center gap-1 bg-gray-100 rounded-xl p-1">
-              {(['all', ...[...buildings].reverse().map(b => b.id)]).map(b => (
+              {/* In the order the buildings stand on screen: Wolfson 1 · 2 · 3 (owner, 2026-11-17: "flip it to be
+                  all 1, 2, 3"), Netiv 2 · 1 (owner, 2026-11-09). */}
+              {(['all', ...(currentProjectId === 'netiv' ? [...buildings].reverse() : buildings).map(b => b.id)]).map(b => (
                 <button
                   key={b}
                   onClick={() => setSelectedBuilding(b)}
