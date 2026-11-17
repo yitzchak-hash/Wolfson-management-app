@@ -293,6 +293,100 @@ async function searchAi(req, res, body) {
 }
 
 /**
+ * THE REPORT TILES' AI — POST /api/geocode with a `reportAi` body (owner, 2026-11-17: twenty green tiles on the
+ * reports page, each opening an AI chat that builds a report from what he says). Folded in here for the 12-function
+ * ceiling, key-guarded like the others.
+ *
+ * It receives the LIST of what a report can be made of (subjects, columns, operators, the filter boxes' choice
+ * lists), the report as it stands and the conversation — never a record — and answers
+ * `{ reply, report }`: a short answer in the person's language and a report definition, which the browser checks
+ * against the same list and runs through its own engine.
+ */
+async function reportAi(req, res, body) {
+  if (!process.env.API_KEY || req.headers['x-api-key'] !== process.env.API_KEY) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+  const viaAnthropic = !!process.env.ANTHROPIC_API_KEY;
+  if (!viaAnthropic && !process.env.OPENAI_API_KEY) {
+    return res.status(501).json({ error: 'Report AI is not configured (ANTHROPIC_API_KEY or OPENAI_API_KEY missing)' });
+  }
+  const chat = (Array.isArray(body.chat) ? body.chat : []).slice(-16)
+    .map(l => ({ role: l && l.role === 'ai' ? 'assistant' : 'user', content: String((l && l.text) || '').slice(0, 2000) }))
+    .filter(l => l.content.trim());
+  if (!chat.length || chat[chat.length - 1].role !== 'user') return res.status(400).json({ error: 'Nothing asked' });
+  // The model wants the conversation to start with the person and to alternate.
+  while (chat.length && chat[0].role !== 'user') chat.shift();
+  const turns = [];
+  for (const l of chat) {
+    const last = turns[turns.length - 1];
+    if (last && last.role === l.role) last.content += '\n' + l.content;
+    else turns.push({ ...l });
+  }
+  const catalog = JSON.stringify(body.catalog || []).slice(0, 60000);
+  const current = JSON.stringify(body.current || {}).slice(0, 6000);
+  const lang = body.lang === 'he' ? 'Hebrew' : 'English';
+
+  const system =
+    'You build reports inside the office app of TzviAir, an HVAC (air-conditioning) installation company in Israel. ' +
+    'The owner tells you, often by voice dictation (expect transcription mistakes, Hebrew and English mixed), what report ' +
+    'he wants. You answer with a report DEFINITION that the app runs itself; you never see the records.\n\n' +
+    'A report is: subject (what one row is), columns (field keys, in order), rules (filters), match ("all" or "any" rule), ' +
+    'groupBy (a non-number field key, optional), metric ("count" or a number field key to total per group), sortBy (field key, ' +
+    'optional), sortDir ("asc"/"desc"), show ("table", "summary" = grouped list, "chart" = bar chart; summary and chart need groupBy), ' +
+    'and a short clear name.\n' +
+    'A rule is {"field": key, "op": op, "value": text, "value2": text only for "between"}. Operators by field type: ' +
+    'text: has, hasnot, is, isnot, empty, notempty. bool: is (value "Yes" or "No"). number: is, gt, lt, between. ' +
+    'date: is, before, after, between, empty (not set), notempty (set); dates are yyyy-MM-dd. ' +
+    'For a field with a "choices" list, use one of those labels exactly as the value with "is"/"isnot", or "has" with part of it.\n' +
+    `Today is ${String(body.today || '').slice(0, 10)}. Work out "this week", "last month", "late" and so on into real dates.\n\n` +
+    'Use ONLY subjects and field keys from this list:\n' + catalog + '\n\n' +
+    'The report as it stands now (change it when he asks for changes; start over when he asks for something new):\n' + current + '\n\n' +
+    `Reply in ${lang}, in one to three short plain sentences for someone who does not code: say what the report shows. ` +
+    'If something cannot be done with these fields, say so plainly and build the closest report. Ask a question only when ' +
+    'the request truly cannot be understood; then return "report": null.\n' +
+    'Answer with JSON only, exactly: {"reply":"…","report":{"name":"…","subject":"…","columns":["…"],"rules":[],"match":"all",' +
+    '"groupBy":null,"metric":"count","sortBy":null,"sortDir":"asc","show":"table"}}';
+
+  try {
+    let text = '';
+    if (viaAnthropic) {
+      const resp = await client().messages.create({
+        model: process.env.REPORT_AI_MODEL || 'claude-opus-5-5',
+        max_tokens: 8000,
+        thinking: { type: 'adaptive' },
+        output_config: { effort: 'low' },
+        system,
+        messages: turns,
+      });
+      for (const block of resp.content) if (block.type === 'text') text += block.text;
+    } else {
+      const r = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${process.env.OPENAI_API_KEY}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: process.env.REPORT_AI_MODEL_OPENAI || 'gpt-4o-mini',
+          temperature: 0,
+          response_format: { type: 'json_object' },
+          messages: [{ role: 'system', content: system }, ...turns],
+        }),
+      });
+      if (!r.ok) throw new Error(`OpenAI ${r.status}: ${(await r.text()).slice(0, 200)}`);
+      const data = await r.json();
+      text = data?.choices?.[0]?.message?.content ?? '';
+    }
+    const start = text.indexOf('{'), end = text.lastIndexOf('}');
+    const parsed = JSON.parse(start >= 0 && end > start ? text.slice(start, end + 1) : text);
+    return res.status(200).json({
+      reply: String(parsed?.reply ?? '').slice(0, 1500),
+      report: parsed?.report && typeof parsed.report === 'object' ? parsed.report : null,
+      by: viaAnthropic ? 'anthropic' : 'openai',
+    });
+  } catch (e) {
+    return res.status(502).json({ error: String(e?.message || e) });
+  }
+}
+
+/**
  * THE PLAN READER — POST /api/geocode with a `planRead` body (owner,
  * 2026-09-07: "I want to add an AI API key for the feature that pulls out the
  * client address and phone number, so AI can do it").
@@ -700,6 +794,7 @@ export default async function handler(req, res) {
   if (body.transcribe) return transcribe(req, res, body.transcribe);
   if (body.planRead) return planRead(req, res, body.planRead);
   if (body.searchAi) return searchAi(req, res, body.searchAi);
+  if (body.reportAi) return reportAi(req, res, body.reportAi);
   if (body.push) return push(req, res, body.push);
   const raw = String(body.address || '').trim();
   if (!raw) return res.status(400).json({ error: 'Missing address' });

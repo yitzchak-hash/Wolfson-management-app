@@ -118,6 +118,14 @@ export interface ReportDef {
   metric?: string;
   updatedAt?: string;
   updatedBy?: string;
+  /**
+   * Which of the green tiles at the top of the reports page holds it, 0..19 (owner, 2026-11-17: "add like 20 green
+   * little tiles … when I click on the tile, a window opens up with an AI chat … it will create the report and save
+   * it on that green tile"). Absent → a report saved the old way, listed only in "Saved reports".
+   */
+  tile?: number;
+  /** The conversation that made it, so reopening the tile carries on where it left off (kept short). */
+  chat?: { role: 'user' | 'ai'; text: string }[];
 }
 
 // ── small shared helpers ─────────────────────────────────────────────────────

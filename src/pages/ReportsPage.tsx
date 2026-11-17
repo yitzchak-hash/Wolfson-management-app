@@ -14,6 +14,11 @@ import {
   SUBJECTS, SubjectId, ReportDef, ReportField, Rule, Op, OPS_FOR,
   runReport, subjectOf, newReport, ReportData, Cell, problemPhotos,
 } from '../data/reportModel';
+import { ReportAiChat } from '../components/reports/ReportAiChat';
+
+/** How many green AI report tiles sit at the top of the page (owner, 2026-11-17: "like 20"). */
+const TILE_COUNT = 20;
+const GREEN = '#16a34a';
 
 /**
  * The report builder.
@@ -76,6 +81,17 @@ export function ReportsPage() {
 
   const mine = savedReports[currentProjectId] ?? [];
 
+  // ── the green AI tiles ──
+  const [chatTile, setChatTile] = useState<number | null>(null);
+  const builderRef = React.useRef<HTMLDivElement>(null);
+  const tiles = useMemo(() => Array.from({ length: TILE_COUNT }, (_, i) => {
+    const rep = mine.find(r => r.tile === i);
+    if (!rep) return { i, rep: undefined, count: 0 };
+    let count = 0;
+    try { count = runReport(rep, data).rows.length; } catch { count = 0; }
+    return { i, rep, count };
+  }), [mine, data]);
+
   const [def, setDef] = useState<ReportDef>(() => newReport('jobs'));
   const [dirty, setDirty] = useState(false);
   const [openPanel, setOpenPanel] = useState<'columns' | 'filters' | 'shape' | null>('columns');
@@ -106,6 +122,8 @@ export function ReportsPage() {
       ...def,
       id: asNew ? `R-${Math.random().toString(36).slice(2, 10)}` : def.id,
       name: asNew ? `${def.name} (copy)` : def.name,
+      // A copy is a plain saved report — it must not land on the same green tile as the original.
+      ...(asNew ? { tile: undefined, chat: undefined } : {}),
       updatedAt: new Date().toISOString(),
       updatedBy: currentUser?.name ?? '',
     };
@@ -174,7 +192,72 @@ export function ReportsPage() {
 
   return (
     <div className="p-4 md:p-6 max-w-[1500px] mx-auto">
-      <div className="flex flex-wrap items-center gap-1.5 md:gap-2 mb-3 md:mb-5">
+      {/* ── the green AI report tiles, above everything (owner, 2026-11-17) ── */}
+      <div data-report-tiles className="mb-5 md:mb-7">
+        <div className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-2">
+          AI reports — tap a tile and say what you want
+        </div>
+        <div className="grid grid-cols-4 sm:grid-cols-5 lg:grid-cols-10 gap-2">
+          {tiles.map(({ i, rep, count }) => (
+            <div key={i} className="relative group">
+              <button
+                data-report-tile={i}
+                onClick={() => setChatTile(i)}
+                title={rep ? rep.name : 'Empty — tap to make a report with AI'}
+                className="w-full h-[72px] md:h-[78px] rounded-xl p-2 flex flex-col items-start justify-between text-left
+                           transition-transform active:scale-95 hover:shadow-md overflow-hidden"
+                style={rep
+                  ? { backgroundColor: GREEN, color: '#fff' }
+                  : { backgroundColor: '#ecfdf3', color: GREEN, border: `1.5px dashed #86efac` }}>
+                {rep ? (
+                  <>
+                    <span className="text-[11px] md:text-[12px] font-bold leading-tight line-clamp-2 w-full">{rep.name}</span>
+                    <span className="text-lg font-extrabold leading-none">{count}</span>
+                  </>
+                ) : (
+                  <>
+                    <span className="text-[10px] font-semibold opacity-70">{i + 1}</span>
+                    <span className="self-center -mt-3"><Plus size={20} /></span>
+                    <span />
+                  </>
+                )}
+              </button>
+              {rep && (
+                <button
+                  onClick={() => {
+                    if (!window.confirm(`Clear tile ${i + 1} and delete the report “${rep.name}”?`)) return;
+                    deleteReport(rep.id);
+                    if (rep.id === def.id) { setDef(newReport('jobs')); setDirty(false); }
+                  }}
+                  title="Clear this tile"
+                  className="absolute top-1 right-1 p-0.5 rounded bg-white/25 text-white
+                             opacity-100 md:opacity-0 md:group-hover:opacity-100">
+                  <X size={11} />
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+      {chatTile !== null && (
+        <ReportAiChat
+          key={chatTile}
+          tile={chatTile}
+          existing={mine.find(r => r.tile === chatTile)}
+          data={data}
+          isRtl={!!s.isRtl}
+          onSave={next => saveReport({
+            ...next, updatedAt: new Date().toISOString(), updatedBy: currentUser?.name ?? '',
+          })}
+          onOpen={next => {
+            setDef(next); setDirty(false); setChatTile(null);
+            window.setTimeout(() => builderRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
+          }}
+          onClose={() => setChatTile(null)}
+        />
+      )}
+
+      <div ref={builderRef} className="flex flex-wrap items-center gap-1.5 md:gap-2 mb-3 md:mb-5">
         <input
           value={def.name}
           onChange={e => patch({ name: e.target.value })}
