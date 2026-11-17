@@ -390,7 +390,7 @@ export default function BuildingView({ apartments, stages, onOpen, words, initia
   if (!floors.length) return null;
 
   return (
-    <div className={`bv-root${compact ? ' bv-compact' : ''}`} data-building-view={title ?? ''}>
+    <div className={`bv-root${compact ? ' bv-compact' : ''}`} data-building-view={title ?? ''} data-plan={plan.id}>
       {compact && title && <div className="bv-title">{title}</div>}
       {planSlot && floors[landed] && <div className={compact ? "bv-plan-slot" : "bv-plan-slot bv-plan-slot-top"}>
         {planSlot({ key: floors[landed].lower ? floors[landed].lower!.key : String(floors[landed].floor), label: lab(floors[landed].floor, floors[landed]) })}
@@ -605,7 +605,9 @@ export default function BuildingView({ apartments, stages, onOpen, words, initia
         </div>
 
         {/* His red boxes: one card per flat of the landed floor, in its corner. */}
-        {here && here.flats.filter(f => !compact || lit(f.apt.id)).map(({ apt, shapes }) => {
+        {/* Only when ONE building is on screen (owner, 2026-11-17: "when it comes to three buildings, we don't need
+            any of those white boxes"). */}
+        {here && !compact && here.flats.map(({ apt, shapes }) => {
           const { st, name } = flatInfo(apt);
           const on = lit(apt.id);
           const mate = partner.get(apt.id);

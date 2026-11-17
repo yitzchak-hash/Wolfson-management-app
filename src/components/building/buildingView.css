@@ -259,3 +259,66 @@
 @keyframes bv-street-drive { from { transform: translateX(-140px); } to { transform: translateX(1540px); } }
 @keyframes bv-street-back { from { transform: translateX(1540px); } to { transform: translateX(-140px); } }
 @media print { .bv-street { display: none; } }
+
+/* ── THE OWNER'S OWN LAYOUT for ONE building (his studio page, approved 2026-11-17) ──────────────────────────────
+   He arranged every piece on every device; this is that arrangement made straight. Sizes are in the stage's own
+   units (cqw / cqh), so they follow the room the view really has, not the whole window:
+     · the floor plate is BIG and may run past the bottom edge
+     · the floor list is a slim strip, every floor in view
+     · the street is right under the building's name, centred
+     · the white boxes are all one size, in the corners, equal gaps
+   Four widths of stage: computer (1100+), iPad (800–1099), the opened Fold (560–799), a phone (under 560).
+   Netiv is Rubik and has its own plate sizes (its building is narrower and deeper); W Residence stays Inter. */
+.bv-root[data-plan='netiv'] { font-family: 'Rubik', 'Heebo', system-ui, sans-serif; }
+
+/* computer */
+.bv-root:not(.bv-compact) .bv-world { width: min(54cqw, 96cqh); top: 60%; }
+.bv-root[data-plan='netiv']:not(.bv-compact) .bv-world { width: min(54cqw, 112cqh); top: 62%; }
+.bv-root:not(.bv-compact) .bv-stage > .bv-street { top: 10cqh; left: 2cqw; right: 2cqw; }
+.bv-root[data-plan='netiv']:not(.bv-compact) .bv-stage > .bv-street { left: 9.5cqw; right: 9.5cqw; }
+.bv-root:not(.bv-compact) .bv-card { width: 19cqw; min-height: 17cqh; justify-content: center; }
+.bv-root:not(.bv-compact) .bv-tl, .bv-root:not(.bv-compact) .bv-tr { top: 27cqh; }
+.bv-root:not(.bv-compact) .bv-bl, .bv-root:not(.bv-compact) .bv-br { bottom: 2.5cqh; }
+.bv-root:not(.bv-compact) .bv-tl, .bv-root:not(.bv-compact) .bv-bl, .bv-root:not(.bv-compact) .bv-ml { left: 1cqw; }
+.bv-root:not(.bv-compact) .bv-tr, .bv-root:not(.bv-compact) .bv-br, .bv-root:not(.bv-compact) .bv-mr { right: 1cqw; }
+
+/* iPad: the two upper boxes in the top corners, the street between them */
+@container (max-width: 1099px) {
+  .bv-root:not(.bv-compact) .bv-world { width: min(68cqw, 112cqh); top: 54%; }
+  .bv-root[data-plan='netiv']:not(.bv-compact) .bv-world { width: min(62cqw, 104cqh); top: 57%; }
+  .bv-root:not(.bv-compact) .bv-stage > .bv-street,
+  .bv-root[data-plan='netiv']:not(.bv-compact) .bv-stage > .bv-street { left: 21.5cqw; right: 21.5cqw; }
+  .bv-root:not(.bv-compact) .bv-card { width: 18cqw; min-height: 16cqh; padding: 9px 11px; }
+  .bv-root:not(.bv-compact) .bv-tl, .bv-root:not(.bv-compact) .bv-tr { top: 2cqh; }
+}
+/* the opened Fold */
+@container (max-width: 799px) {
+  .bv-root:not(.bv-compact) .bv-world { width: min(92cqw, 112cqh); top: 50%; }
+  .bv-root[data-plan='netiv']:not(.bv-compact) .bv-world { width: min(76cqw, 100cqh); top: 54%; }
+  .bv-root:not(.bv-compact) .bv-stage > .bv-street,
+  .bv-root[data-plan='netiv']:not(.bv-compact) .bv-stage > .bv-street { left: 28cqw; right: 28cqw; }
+  .bv-root:not(.bv-compact) .bv-card { width: 25cqw; min-height: 19cqh; }
+}
+/* a phone: the street across, the two upper boxes right under it */
+@container (max-width: 559px) {
+  .bv-root:not(.bv-compact) .bv-world { width: min(95cqw, 100cqh); top: 53%; }
+  .bv-root[data-plan='netiv']:not(.bv-compact) .bv-world { width: min(96cqw, 100cqh); top: 58%; }
+  .bv-root:not(.bv-compact) .bv-stage > .bv-street,
+  .bv-root[data-plan='netiv']:not(.bv-compact) .bv-stage > .bv-street { top: 11cqh; left: 2cqw; right: 2cqw; }
+  .bv-root:not(.bv-compact) .bv-stage > .bv-street svg { width: max(100%, 520px); margin-left: min(0px, calc((100% - 520px) / 2)); }
+  .bv-root:not(.bv-compact) .bv-card { width: 41cqw; min-height: 11cqh; padding: 7px 9px; gap: 3px; }
+  .bv-root[data-plan='netiv']:not(.bv-compact) .bv-card { min-height: 15cqh; }
+  .bv-root:not(.bv-compact) .bv-tl, .bv-root:not(.bv-compact) .bv-tr { top: 21cqh; }
+  .bv-root:not(.bv-compact) .bv-tl, .bv-root:not(.bv-compact) .bv-bl, .bv-root:not(.bv-compact) .bv-ml { left: 2cqw; }
+  .bv-root:not(.bv-compact) .bv-tr, .bv-root:not(.bv-compact) .bv-br, .bv-root:not(.bv-compact) .bv-mr { right: 2cqw; }
+  .bv-root:not(.bv-compact) .bv-card-open { display: none; }
+}
+
+/* the floor list: every floor in view, sharing the height; slim on a narrow screen */
+.bv-rail { justify-content: space-evenly; }
+.bv-rail-btn { flex: 0 1 32px; min-height: 24px; }
+@media (pointer: coarse) { .bv-rail-btn { flex-basis: 40px; min-height: 28px; } }
+@media (max-width: 899px) {
+  .bv-rail { padding: 8px 3px; gap: 1px; }
+  .bv-rail-btn { min-width: 34px; font-size: 12.5px; padding: 0 2px; }
+}
