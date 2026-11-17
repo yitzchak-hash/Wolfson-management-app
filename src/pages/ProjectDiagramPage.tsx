@@ -296,17 +296,10 @@ export function ProjectDiagramPage() {
   const buildingFloorLabels = useMemo(() => (showBuilding ? floorLabelsOf(bvBuilding as BuildingId) : undefined),
     [showBuilding, bvBuilding, floorLabelsOf]);
   const trioBuildings = useMemo(() => (showTrio
-    ? (() => {
-      // `tower` is the building's own place in the lower levels' strip, whatever order the towers stand in on screen.
-      const list = buildings.filter(b => !!planFor(currentProjectId, b.id))
-        .map((b, tower) => ({ id: b.id, title: buildingShort(b.id), apartments: apartments.filter(a => a.buildingId === b.id), floorLabels: floorLabelsOf(b.id), plan: planFor(currentProjectId, b.id) ?? undefined, tower }));
+    ? buildings.filter(b => !!planFor(currentProjectId, b.id))
       // Netiv: Building 2 on the left, Building 1 on the right (owner, 2026-11-09)
-      if (currentProjectId === 'netiv') return list.sort((a, b) => (b.id === 'B2' ? 1 : 0) - (a.id === 'B2' ? 1 : 0));
-      // Wolfson: 3 · 2 · 1 from left to right, as on the board and the building buttons (owner's sketch, 2026-11-17);
-      // the flats stay where they are (41 top left, 42 top right, 44 bottom left, 43 bottom right).
-      return isWolfsonPlan ? list.reverse() : list;
-    })()
-    : []), [showTrio, buildings, apartments, floorLabelsOf, currentProjectId, isWolfsonPlan]);
+      .sort((a, b) => (currentProjectId === 'netiv' ? (b.id === 'B2' ? 1 : 0) - (a.id === 'B2' ? 1 : 0) : 0)).map(b => ({ id: b.id, title: buildingShort(b.id), apartments: apartments.filter(a => a.buildingId === b.id), floorLabels: floorLabelsOf(b.id), plan: planFor(currentProjectId, b.id) ?? undefined }))
+    : []), [showTrio, buildings, apartments, floorLabelsOf]);
   const lookValue = useMemo(() => ({
     big: !isNarrow && selectedBuilding !== 'all',
     onFloorClick: !isNarrow && selectedBuilding === 'all' && !bulkMode
