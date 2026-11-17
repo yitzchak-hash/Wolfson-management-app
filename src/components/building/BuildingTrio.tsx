@@ -12,7 +12,9 @@ import { STRIP, CORES_X, zoneFor, type LowerLevel } from './wolfsonPlan';
 import type { BuildingPlan } from './buildingPlan';
 
 /** `plan`: this building's own plan when it differs from its neighbours' (Netiv's Building 1 is Building 2 mirrored). */
-export interface TrioBuilding { id: string; title: string; apartments: Apartment[]; floorLabels?: Record<number, string>; plan?: BuildingPlan }
+export interface TrioBuilding { id: string; title: string; apartments: Apartment[]; floorLabels?: Record<number, string>; plan?: BuildingPlan;
+  /** The building's place in the lower levels' strip (0 = the strip's left end); its place on screen when absent. */
+  tower?: number }
 
 export default function BuildingTrio({ buildings, stages, onOpen, words, interiorSrc, lower = [], customButtons, plan, planSlot }: {
   buildings: TrioBuilding[]; stages: Stage[]; onOpen: (apt: Apartment) => void;
@@ -62,7 +64,7 @@ export default function BuildingTrio({ buildings, stages, onOpen, words, interio
         {buildings.map((b, i) => (
           <BuildingView key={b.id} compact title={b.title} bus={bus} apartments={b.apartments} stages={stages}
             onOpen={onOpen} words={words} floorLabels={b.floorLabels} interiorSrc={interiorSrc}
-            lower={lower} tower={i} hideLower customButtons={customButtons} plan={b.plan ?? plan} planSlot={planSlot ? f => planSlot(b, f) : undefined} />
+            lower={lower} tower={b.tower ?? i} hideLower customButtons={customButtons} plan={b.plan ?? plan} planSlot={planSlot ? f => planSlot(b, f) : undefined} />
         ))}
       </div>
       <nav className="bv-rail" aria-label={words?.floor ?? 'Floor'}>
@@ -83,6 +85,11 @@ function LowerWide({ lower, bus, buildings, onOpen }: { lower: LowerLevel[]; bus
   const [hov, setHov] = useState<string | null>(null);
   const [v, setV] = useState(bus.get());
   useEffect(() => bus.subscribe(setV), [bus]);
+  // The towers stand 3 · 2 · 1 on screen (owner, 2026-11-17) while the strip is drawn 1 · 2 · 3: the long plate is
+  // laid the other way round, so each building's part lies under its own tower.
+  const flip = buildings.length > 1 && (buildings[0].tower ?? 0) > (buildings[buildings.length - 1].tower ?? buildings.length - 1);
+  const mid = STRIP.x + STRIP.w / 2;
+  const mx = (x: number) => (flip ? 2 * mid - x : x);
   return (
     <div className="bv-wide" aria-hidden>
       <div className="bv-wide-world">
@@ -94,10 +101,13 @@ function LowerWide({ lower, bus, buildings, onOpen }: { lower: LowerLevel[]; bus
               style={{ transform: `translate3d(0,0,${o * 70}px)`, opacity: op, visibility: op < 0.01 ? 'hidden' : 'visible' }}>
               <svg viewBox={`${STRIP.x} ${STRIP.y} ${STRIP.w} ${STRIP.h}`} preserveAspectRatio="xMidYMid meet">
                 <rect className="bv-lower-mine" x={STRIP.x} y={STRIP.y} width={STRIP.w} height={STRIP.h} />
-                <image href={l.src} x={STRIP.x} y={STRIP.y} width={STRIP.w} height={STRIP.h} preserveAspectRatio="none" />
-                {buildings.flatMap((b, ti) => slotsOn(b.apartments, l.key).map((a, j) => {
-                  const z = zoneFor(l.key, slotName(a), ti);
-                  const cx = z ? (z[0] + z[2]) / 2 : CORES_X[ti] ?? CORES_X[0];
+                <image href={l.src} x={STRIP.x} y={STRIP.y} width={STRIP.w} height={STRIP.h} preserveAspectRatio="none"
+                  transform={flip ? `translate(${2 * mid} 0) scale(-1 1)` : undefined} />
+                {buildings.flatMap((b, at) => slotsOn(b.apartments, l.key).map((a, j) => {
+                  const ti = b.tower ?? at;
+                  const z0 = zoneFor(l.key, slotName(a), ti);
+                  const z = z0 && flip ? [2 * mid - z0[2], z0[1], 2 * mid - z0[0], z0[3]] : z0;
+                  const cx = z ? (z[0] + z[2]) / 2 : mx(CORES_X[ti] ?? CORES_X[0]);
                   const cy = z ? (z[1] + z[3]) / 2 : 1100 + j * 110;
                   return (
                     <g key={a.id} className="bv-slot" data-slot={a.id} data-on={hov === a.id ? '1' : '0'} data-zone={z ? '1' : '0'}
