@@ -24,9 +24,10 @@ Vercel serverless functions in `/api`.
   And upon making sure you're not messing everything up."): he asks → you read the records and show him exactly
   what will change (before → after, how many) and back up those records first → he approves a second time → only
   then write, touching only those fields (`fsPatch`-style, never whole records), then check the result. He checks the work on the LIVE link, so a finished round goes live.
-- **Build on the PREVIEW branch first, push live only on his word** (owner, 2026-11-03: "only build in this preview branch
-  before you push live"). The preview branch is `claude/magical-darwin-6py813`; Vercel builds it at its own preview address.
-  He looks there, and when the day's round is done it is merged into production (`claude/blissful-cray-spTFY`) in ONE push.
+- **Finished work goes LIVE, every time** (owner, 2026-11-17: "Always push live when you finish work." — this
+  replaces the 2026-11-03 "preview first, live on his word" rule). When everything he asked for is built, checked
+  (`npm run build`) and tested, it is pushed straight to production (`claude/blissful-cray-spTFY`) in ONE push — no
+  asking first. The old preview branch `claude/magical-darwin-6py813` is no longer a step.
   **ONE push per finished chunk of work** (owner, 2026-11-03: "Why did you do five builds in the past 40 minutes? Why
   don't you finish one chunk of work and then send it to build?"): commit locally as you go, test locally, and push only
   when everything he asked for in that round is done. Every push is a Vercel build. Never a third branch.
