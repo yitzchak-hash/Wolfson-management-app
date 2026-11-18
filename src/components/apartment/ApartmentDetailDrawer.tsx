@@ -151,8 +151,6 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
   // Who approved the plan, read LIVE — the board hands the drawer the record
   // captured at open, so an approval pressed a moment ago would not show.
   const plansApprovedBy = useStore(st => st.apartments.find(a => a.id === apartment?.id)?.plansApprovedBy);
-  // The plan is picked but waits for a NEW approval (planApprovalPending): the star reads off until it is pressed.
-  const planApprovalPending = useStore(st => !!st.apartments.find(a => a.id === apartment?.id)?.planApprovalPending);
   const backendConfigured = isUploadBackendConfigured();
 
   /**
@@ -803,9 +801,7 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
     else if (out === 'again') onToast(ui.planShareAgain);
     else if (out === 'failed') onToast(ui.planShareFailed, 'error');
   }
-  /** The plan picked for this job — still the one shown while it waits for a new approval. */
-  const pickedPlanId = plansPdfLink ? extractFileId(plansPdfLink) : null;
-  const starredPlanId = planApprovalPending ? null : pickedPlanId;
+  const starredPlanId = plansPdfLink ? extractFileId(plansPdfLink) : null;
   /** The shown plan is the app's latest-activity GUESS — nobody starred one. */
   // Read the LOCAL link state, not the prop: the board hands the drawer the
   // record captured at open, so a star pressed a moment ago would not clear it.
@@ -1475,8 +1471,7 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
     if (!currentUser) return;
     const link = `https://drive.google.com/file/d/${file.id}/view`;
     setPlansPdfLink(link);
-    // Pressing the star IS the approval, so it also clears "waiting for approval" (the field is removed on purpose).
-    updateApartment(apartment!.id, { plansPdfLink: link, plansApprovedBy: currentUser.name, plansApprovedAt: new Date().toISOString(), planApprovalPending: undefined }, currentUser);
+    updateApartment(apartment!.id, { plansPdfLink: link, plansApprovedBy: currentUser.name, plansApprovedAt: new Date().toISOString() }, currentUser);
     onToast(ui.planStarredToast);
   }
 
@@ -1779,12 +1774,10 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
               onStarPlan={starPlan}
               starredPlanId={shownStarId}
               starAuto={autoPlan && !starredPlanId}
-              autoPlanNote={autoPlan ? ui.planAutoAsk
-                : (planApprovalPending && pickedPlanId && fileId === pickedPlanId ? ui.planPendingAsk : undefined)}
+              autoPlanNote={autoPlan ? ui.planAutoAsk : undefined}
               autoPlanYesLabel={ui.planAutoYes}
               autoPlanOtherLabel={ui.planAutoOther}
-              onConfirmAutoPlan={autoPlan && detectedPdfId ? () => starPlan({ id: detectedPdfId })
-                : (planApprovalPending && pickedPlanId && fileId === pickedPlanId ? () => starPlan({ id: pickedPlanId }) : undefined)}
+              onConfirmAutoPlan={autoPlan && detectedPdfId ? () => starPlan({ id: detectedPdfId }) : undefined}
               approvedNote={!autoPlan && starredPlanId && fileId === starredPlanId && plansApprovedBy
                 ? ui.planApprovedBy.replace('{who}', plansApprovedBy) : undefined}
               /*
