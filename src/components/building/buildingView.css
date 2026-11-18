@@ -285,7 +285,7 @@
 /* iPad: the two upper boxes in the top corners, the street between them */
 @container (max-width: 1099px) {
   .bv-root:not(.bv-compact) .bv-world { width: min(68cqw, 112cqh); top: 54%; }
-  .bv-root[data-plan='netiv']:not(.bv-compact) .bv-world { width: min(62cqw, 104cqh); top: 57%; }
+  .bv-root[data-plan='netiv']:not(.bv-compact) .bv-world { width: min(62cqw, 121cqh); top: 57%; }
   .bv-root:not(.bv-compact) .bv-stage > .bv-street,
   .bv-root[data-plan='netiv']:not(.bv-compact) .bv-stage > .bv-street { left: 21.5cqw; right: 21.5cqw; }
   .bv-root:not(.bv-compact) .bv-card { width: 18cqw; min-height: 16cqh; padding: 9px 11px; }
@@ -294,7 +294,10 @@
 /* the opened Fold */
 @container (max-width: 799px) {
   .bv-root:not(.bv-compact) .bv-world { width: min(92cqw, 112cqh); top: 50%; }
-  .bv-root[data-plan='netiv']:not(.bv-compact) .bv-world { width: min(76cqw, 100cqh); top: 54%; }
+  /* His real opened Fold is wide and SHORT (about 735 x 390): capped at the stage's height Netiv's deep building
+     came out very small. He set it 1.21x bigger on the studio's "Fold 8" screen (2026-11-18) — it may run past the
+     bottom edge. */
+  .bv-root[data-plan='netiv']:not(.bv-compact) .bv-world { width: min(76cqw, 121cqh); top: 55%; }
   .bv-root:not(.bv-compact) .bv-stage > .bv-street,
   .bv-root[data-plan='netiv']:not(.bv-compact) .bv-stage > .bv-street { left: 28cqw; right: 28cqw; }
   .bv-root:not(.bv-compact) .bv-card { width: 25cqw; min-height: 19cqh; }
