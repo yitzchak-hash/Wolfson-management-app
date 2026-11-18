@@ -1306,6 +1306,8 @@ export function ContractorPortal() {
   const sheetPlanId = (() => {
     if (!planAptId) return null;
     const ap = apartments.find(x => x.id === planAptId);
+    // A plan waiting for a new approval is not shown at all — not even the folder's newest sheet in its place.
+    if (ap?.planApprovalPending) return null;
     return (ap?.plansPdfLink ? extractFileId(ap.plansPdfLink) : null) ?? (ap ? autoPlanFor[ap.id] ?? null : null);
   })();
   useEffect(() => {
@@ -1322,7 +1324,7 @@ export function ContractorPortal() {
   useEffect(() => {
     if (!planAptId) return;
     const apt = apartments.find(x => x.id === planAptId);
-    if (!apt || apt.plansPdfLink || !apt.driveLink || !isUploadBackendConfigured()) return;
+    if (!apt || apt.plansPdfLink || apt.planApprovalPending || !apt.driveLink || !isUploadBackendConfigured()) return;
     if (apt.id in autoPlanFor) return;
     let dead = false;
     findAllPlansPdfsViaBackend(apt.driveLink)
@@ -1334,6 +1336,7 @@ export function ContractorPortal() {
   useEffect(() => {
     if (!planAptId) return;
     const apt = apartments.find(x => x.id === planAptId);
+    if (apt?.planApprovalPending) return;
     const planId = (apt?.plansPdfLink ? extractFileId(apt.plansPdfLink) : null) ?? (apt ? autoPlanFor[apt.id] ?? null : null);
     ensureDriveShared(planId);
     if (apt && planId) {
@@ -3792,8 +3795,10 @@ plansPdfFileId && (
         const dueBadge = getDueBadge(effectiveDue(a), dueWords);
         // The starred plan — or, when nobody starred one, the app's guess:
         // the plans folder's latest-activity sheet, marked in red as a guess.
-        const starredFileId = apt?.plansPdfLink ? extractFileId(apt.plansPdfLink) : null;
-        const plansPdfFileId = starredFileId ?? (apt ? autoPlanFor[apt.id] ?? null : null);
+        // Waiting for a new approval → no plan at all on the phone (not the guess either).
+        const pending = !!apt?.planApprovalPending;
+        const starredFileId = !pending && apt?.plansPdfLink ? extractFileId(apt.plansPdfLink) : null;
+        const plansPdfFileId = pending ? null : starredFileId ?? (apt ? autoPlanFor[apt.id] ?? null : null);
         const planIsGuess = !starredFileId && !!plansPdfFileId;
         const notePreview = (
           <>
@@ -5272,6 +5277,7 @@ plansPdfFileId && (
                         switch. The same block as the task sheet — preview,
                         tap to open big, pins, Download, Mark up. */}
                     {(() => {
+                      if (apt.planApprovalPending) return null;
                       const starred = apt.plansPdfLink ? extractFileId(apt.plansPdfLink) : null;
                       const planId = starred ?? autoPlanFor[apt.id] ?? null;
                       const hisWork = assignments.some(t => t.apartmentId === apt.id);

@@ -1058,6 +1058,13 @@ export interface Apartment {
   plansApprovedBy?: string;
   plansApprovedAt?: string;
   /**
+   * The plan is still the one picked (plansPdfLink is untouched) but it must be APPROVED again before a worker
+   * sees it (owner, 2026-11-18: "unstar all the plans on Netiv so they have to approve it again from scratch —
+   * but don't change the plans that are selected and viewed on the screen"). The star reads off while this is
+   * set; pressing the star clears it. The worker's phone shows no plan while it is set.
+   */
+  planApprovalPending?: boolean;
+  /**
    * The ONE punch-list PDF the background pin filer keeps in Drive
    * (Annotated Plans/Pins) — remembered so every later filing updates it in
    * place instead of creating another. Bookkeeping, not content: it lives in
@@ -2722,6 +2729,8 @@ export interface MainUiStrings {
   planAutoPicked: string;
   /** The calm question over a guessed plan, its answers, and the line once somebody said yes. */
   planAutoAsk: string;
+  /** The picked plan waits for a new approval (planApprovalPending) — workers don't see it until Yes. */
+  planPendingAsk: string;
   planAutoYes: string;
   planAutoOther: string;
   planApprovedBy: string;
@@ -3777,6 +3786,7 @@ export const DEFAULT_MAIN_UI_STRINGS: MainUiStrings = {
   stageLeaveAlone: 'Leave the stage alone',
   planAutoPicked: 'Latest-activity plan, auto-selected — star the right one',
   planAutoAsk: 'Is this the right plan?',
+  planPendingAsk: 'Waiting for approval: workers don\'t see this plan yet. Approve it?',
   planAutoYes: 'Yes',
   planAutoOther: 'Choose another',
   planApprovedBy: 'Plan approved by {who}',
@@ -4790,6 +4800,7 @@ export const HEBREW_MAIN_UI_STRINGS: MainUiStrings = {
   stageLeaveAlone: 'להשאיר את השלב',
   planAutoPicked: 'תוכנית עם הפעילות האחרונה נבחרה אוטומטית — סמנו בכוכב את הנכונה',
   planAutoAsk: 'זו התוכנית הנכונה?',
+  planPendingAsk: 'ממתינה לאישור: העובדים עוד לא רואים את התוכנית. לאשר?',
   planAutoYes: 'כן',
   planAutoOther: 'לבחור אחרת',
   planApprovedBy: 'התוכנית אושרה על ידי {who}',

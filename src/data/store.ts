@@ -1919,7 +1919,7 @@ export const useStore = create<AppState>((set, get) => ({
     // one family name. Each cell still shows its own apartment number.
     // stageMarks syncs like currentStageId — a merged pair is one home, and
     // its stage bookkeeping (done / pending per stage) is one record too.
-    const syncedFields = ['currentStageId', 'classification', 'driveLink', 'plansPdfLink', 'displayName', 'stageMarks', 'bubbles'] as const;
+    const syncedFields = ['currentStageId', 'classification', 'driveLink', 'plansPdfLink', 'planApprovalPending', 'displayName', 'stageMarks', 'bubbles'] as const;
     const changesHaveSync = syncedFields.some(f => f in changes);
     if (changesHaveSync && updated.mergedWith) {
       const partner = get().apartments.find(a => a.id === updated.mergedWith);
@@ -1930,6 +1930,8 @@ export const useStore = create<AppState>((set, get) => ({
         if ('classification' in changes) partnerPatch.classification = updated.classification;
         if ('driveLink' in changes) partnerPatch.driveLink = updated.driveLink;
         if ('plansPdfLink' in changes) partnerPatch.plansPdfLink = updated.plansPdfLink;
+        // A linked pair shares one plan, so it shares its approval too (approving one approves both).
+        if ('planApprovalPending' in changes) partnerPatch.planApprovalPending = updated.planApprovalPending;
         if ('stageMarks' in changes) partnerPatch.stageMarks = updated.stageMarks;
         if ('bubbles' in changes) partnerPatch.bubbles = updated.bubbles;
         // Never copy a name that is just the source apartment's own number

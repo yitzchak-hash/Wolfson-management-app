@@ -327,6 +327,7 @@ function jobFields(prefix: string, group: string, pick: (row: any, d: ReportData
     f('notes', 'Notes', 'text', j => j.generalNotes ?? ''),
     f('drive', 'Has a Drive folder', 'bool', j => (j.driveLink ? 'Yes' : 'No')),
     f('plans', 'Has plans', 'bool', j => (j.plansPdfLink ? 'Yes' : 'No')),
+    f('planApproved', 'Plan approved', 'bool', j => (j.plansPdfLink && !j.planApprovalPending ? 'Yes' : 'No')),
     f('updated', 'Last edited', 'date', j => dateOnly(j.contentUpdatedAt ?? j.updatedAt)),
     f('updatedBy', 'Edited by', 'text', j => j.updatedByName ?? ''),
     f('created', 'Created', 'date', j => dateOnly(j.createdAt)),
