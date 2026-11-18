@@ -113,6 +113,8 @@ function DriveImg({ src, alt, className }: { src: string; alt: string; className
 
 const EMPTY_TIPUSIM: string[] = [];
 const EMPTY_BUTTONS: CustomButton[] = [];
+/** Workspaces whose apartment window shows no address and no phone (the shared view never shows them anywhere). */
+const NO_CONTACT_PROJECTS = ['wolfson', 'netiv'];
 /** A stage colour with an alpha suffix — only for a six-digit hex, which can take one. */
 function tintHex(c: string | undefined, alpha: string): string {
   return c && /^#[0-9a-f]{6}$/i.test(c) ? c + alpha : (c || '#94a3b8');
@@ -138,6 +140,8 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
     contractorNotes, addContractorNote } = useStore();
   const isGeneralProject = currentProjectId === 'general';
   const isWolfsonProject = currentProjectId === 'wolfson';
+  /** No address or phone on the window — Wolfson (video 2026-11-03) and Netiv too (owner, 2026-11-18), for everyone. */
+  const hidesContact = NO_CONTACT_PROJECTS.includes(currentProjectId);
   const tipusim = useStore(st => st.boardSettings[st.currentProjectId]?.tipusim ?? EMPTY_TIPUSIM);
   const customButtons = useStore(st => st.boardSettings[st.currentProjectId]?.customButtons ?? EMPTY_BUTTONS);
   // The company buttons became the AC company dropdown, and "Inspected by Tzvi" is the Inspection stages' business
@@ -2393,7 +2397,7 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                 </div>
               )}
 
-              {!isWolfsonProject && (<>
+              {!hidesContact && (<>
               {/* Address and phone — one row on desktop, stacked on a phone.
                   The same block for apartments and General jobs on purpose. */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">

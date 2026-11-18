@@ -12,6 +12,54 @@ import {
 } from '../../data/driveApi';
 import { notePins, onPinsFiled } from '../../data/pinPush';
 import { DriveIcon } from '../ui/BrandIcons';
+import { useSharedPins } from '../../data/sharedLinks';
+
+/**
+ * The pins people OUTSIDE the office put on this plan through a shared link (Project settings → Shared, owner
+ * 2026-11-18). The office sees them here, in blue, each with the link's name — read only: they are the outside
+ * person's, they are never filed to Drive, and they never mix with the office's own punch list.
+ */
+function OutsidePins({ apartmentId, planFileId }: { apartmentId: string; planFileId?: string | null }) {
+  const projectId = useStore(st => st.currentProjectId);
+  const all = useSharedPins(projectId, apartmentId);
+  const pins = useMemo(() => all.filter(p => !planFileId || p.planFileId === planFileId)
+    .sort((a, b) => (a.createdAt ?? '').localeCompare(b.createdAt ?? '')), [all, planFileId]);
+  const [open, setOpen] = useState<string | null>(null);
+  if (!pins.length) return null;
+  return (
+    <>
+      {pins.map((p, i) => (
+        <button key={p.id} type="button" data-outside-pin={p.id}
+          onClick={e => { e.stopPropagation(); setOpen(open === p.id ? null : p.id); }}
+          title={`${p.linkName}: ${p.text}`}
+          className="absolute -translate-x-1/2 -translate-y-full flex flex-col items-center"
+          style={{ left: `${p.xPct}%`, top: `${p.yPct}%`, pointerEvents: 'auto' }}>
+          <span className="flex items-center justify-center min-w-6 h-6 px-1 rounded-md text-[10px] font-black text-white shadow-md"
+            style={{ backgroundColor: '#2563eb' }}>S{i + 1}</span>
+          <span className="w-px h-2" style={{ backgroundColor: '#2563eb' }} />
+        </button>
+      ))}
+      {open && (() => {
+        const p = pins.find(x => x.id === open);
+        if (!p) return null;
+        return (
+          <div onClick={e => e.stopPropagation()} data-outside-pin-note
+            className="absolute z-20 bg-white rounded-xl shadow-2xl border border-blue-200 p-2.5"
+            style={{ left: `min(${p.xPct}%, calc(100% - 252px))`, top: `calc(${p.yPct}% + 8px)`, width: 244, pointerEvents: 'auto' }}>
+            <div className="flex items-center gap-1.5 mb-1">
+              <span className="text-[10px] font-black text-blue-700 truncate flex-1">Shared · {p.linkName || 'link'}</span>
+              <button onClick={() => setOpen(null)} title="Close" className="p-1 rounded-md text-gray-400 hover:text-gray-600"><X size={13} /></button>
+            </div>
+            <p className="text-[12px] text-gray-800 whitespace-pre-wrap m-0">{p.text}</p>
+            <p className="text-[10px] text-gray-400 m-0 mt-1">
+              {new Date(p.createdAt).toLocaleDateString()}{p.page > 0 ? ` · page ${p.page + 1}` : ''}
+            </p>
+          </div>
+        );
+      })()}
+    </>
+  );
+}
 
 /**
  * Punch-list pins drawn OVER the engineering plan.
@@ -312,6 +360,7 @@ export function PlanPinOverlay({
             <span className="w-px h-2" style={{ backgroundColor: p.resolvedAt ? '#94a3b8' : '#dc2626' }} />
           </button>
         ))}
+        {!workerMode && <OutsidePins apartmentId={apartmentId} planFileId={planFileId} />}
 
         {/* Note bubble for the selected pin.
 

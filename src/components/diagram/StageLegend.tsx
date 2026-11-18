@@ -1,6 +1,7 @@
 import React from 'react';
 import { Stage, getStageName } from '../../types';
-import { useStore } from '../../data/store';
+// The bridge, not the store — the outside shared view draws this legend too (data/viewState.ts).
+import { useViewState } from '../../data/viewState';
 
 interface StageLegendProps {
   stages: Stage[];
@@ -9,7 +10,7 @@ interface StageLegendProps {
 }
 
 export function StageLegend({ stages, activeStageIds, onToggle }: StageLegendProps) {
-  const isRtl = useStore(state => state.mainUiStrings.isRtl);
+  const isRtl = useViewState(state => state.mainUiStrings.isRtl);
   const sorted = [...stages].filter(s => s.active).sort((a, b) => a.order - b.order);
 
   return (

@@ -7,6 +7,8 @@ import type { BoardSides, Side } from './undoBoard';
 import { describeUndo, BOOKKEEPING } from './undoWords';
 import type { UndoDiff, UndoWorld } from './undoWords';
 import { create } from 'zustand';
+import { provideViewState } from './viewState';
+import type { ViewState } from './viewState';
 import { Apartment, CanvasElement, ActivityLog, Project, Stage, StageNote, StageNoteEntry, StageNoteAttachment, StageNoteVersion, GeneralNoteVersion, User, Building, Contractor, ContractorAssignment, ContractorNote, ContractorPhoto, BackupSnapshot, DataSummary, OfficeNoteFile, BackupFrequency, DriveExportFrequency, BackupLogEntry, ContractorUiStrings, DEFAULT_CONTRACTOR_UI_STRINGS, MainUiStrings, DEFAULT_MAIN_UI_STRINGS, HEBREW_MAIN_UI_STRINGS, BoardSetting, BoardSettingKey, BoardLayout, PlanPin, PlanAnnotation, BoardView, Employee, TimePunch, TimeClockSettings, WorkerLevel, StageSuggestion, FocusIntent, StageMark } from '../types';
 import { ReportDef } from './reportModel';
 /** How often the full backup runs during the day (Settings → Backups). The night one always runs. */
@@ -4701,6 +4703,12 @@ async function loadUndoFromCloud(pid: string) {
     console.warn('undo list could not be read from the cloud:', e);
   }
 }
+
+/**
+ * The board reads through data/viewState.ts (so the outside shared view can draw it without this store); in the
+ * office app the store IS that data. Plugged in here, when this module loads — before anything renders.
+ */
+provideViewState(<T,>(selector: (s: ViewState) => T): T => useStore(st => selector(st)));
 
 /**
  * Has THIS workspace's data arrived from the cloud? Every automatic writer —
