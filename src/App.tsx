@@ -15,6 +15,7 @@ import { TasksPage } from './pages/TasksPage';
 import { GeneralJobsPage } from './pages/GeneralJobsPage';
 import { JobListPage } from './pages/JobListPage';
 import GoalsPage from './pages/GoalsPage';
+import { SharedPage } from './pages/SharedPage';
 import { CalendarPage } from './pages/CalendarPage';
 import { TvPresentationPage } from './pages/TvPresentationPage';
 import { armWorkspaceHistoryRestore } from './data/workspaceHistory';
@@ -232,6 +233,7 @@ export default function App() {
           <Route path="tv-view" element={<TvViewPage />} />
           <Route path="settings" element={<SettingsPage scope="project" />} />
           <Route path="app-settings" element={<SettingsPage scope="app" />} />
+          <Route path="shared" element={<SharedPage />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
