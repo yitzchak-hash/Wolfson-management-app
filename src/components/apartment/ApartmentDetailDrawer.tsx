@@ -76,6 +76,7 @@ const PlanAnnotator = lazy(() =>
   import('../plans/PlanAnnotator').then(m => ({ default: m.PlanAnnotator })));
 import { ContractorStatusPanel } from './ContractorStatusPanel';
 import { StageSection } from './StageSection';
+import { drawerSizes, drawerPanelClass, drawerPanelStyle, drawerTabClass, DrawerTitleChips } from './drawerParts';
 import { openInSketcher } from '../../data/sketcherLink';
 import { buildingShort, realName } from '../../data/aptSale';
 import { OffListQuestion } from '../tasks/OffListQuestion';
@@ -427,7 +428,6 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
    * Landscape √2 stands in for the moment before the measurement lands.
    */
   const [planRatio, setPlanRatio] = useState<number | null>(null);
-  const maxModalH = Math.min(980, window.innerHeight * 0.93);
   const sheetRatio = planRatio ?? Math.SQRT2;
   /**
    * ...but never wider than the screen LEAVES beside the 560px fields column
@@ -445,10 +445,7 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
    */
   // The plan gets at least HALF the window (owner, 2026-11-08, the Fold on its side: "make the details side smaller
   // and the plan side bigger … at least half"): the fields never take more than half, nor more than 560.
-  const availW = Math.round(window.innerWidth * 0.96);
-  const fieldsW = Math.max(340, Math.min(560, availW - 340, Math.round(availW / 2)));
-  const fitW = Math.max(280, Math.round(window.innerWidth * 0.96) - fieldsW);
-  const planW = Math.min(Math.round((maxModalH - 56) * sheetRatio), fitW);
+  // The arithmetic lives in drawerParts.ts, shared with the outside view's window so both are the same size.
   /**
    * When the width cap bit, the sheet needs less height too — the whole
    * window shrinks so the plan sits in a smaller square, instead of floating
@@ -456,8 +453,8 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
    * own two bars (47 + 38, measured); floored so the fields column stays a
    * usable height on a very wide, very short screen.
    */
-  const modalH = Math.min(maxModalH,
-    Math.max(Math.round(planW / sheetRatio) + 141, Math.min(640, maxModalH)));
+  const drawerSize = drawerSizes(window.innerWidth, window.innerHeight, sheetRatio);
+  const { fieldsW } = drawerSize;
 
   /** The plan pane beside the fields — off when there is no plan to show. */
   const [planWanted, setPlanWanted] = useState(true);
@@ -1978,8 +1975,7 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
       <div className="drawer-overlay fixed inset-0 bg-black/50 z-[110]" onClick={closeDrawer} />
 
       <div
-        className={`drawer-panel fixed bg-white shadow-2xl z-[120] flex flex-col overflow-hidden ${
-          isPhone ? '' : 'rounded-2xl'}`}
+        className={drawerPanelClass(isPhone)}
         /**
          * The tap that OPENED this window is not aimed at it.
          *
@@ -1997,23 +1993,10 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
         onClickCapture={e => {
           if (Date.now() - bornAt.current < 400) { e.preventDefault(); e.stopPropagation(); }
         }}
-        style={isPhone
-          // On a phone it is a FULL SCREEN, not a shrunken desktop window.
-          // Centred at 94vw × 93vh it left a useless margin all round while the
-          // content inside it was still too cramped to read — the worst of both.
-          // A phone has one thing on screen at a time; this is that thing.
-          ? { inset: 0, width: '100%', height: '100%' }
-          : {
-              left: '50%',
-              top: '50%',
-              transform: 'translate(-50%, -50%)',
-              // Wide enough to hold the fields AND the plan side by side, but still
-              // inset on every edge so it reads as a window over the board rather
-              // than as a page you have navigated to.
-              width: planSideOn ? `min(${fieldsW + planW}px, 96vw)` : 'min(1020px, 94vw)',
-              height: planSideOn ? `${modalH}px` : 'min(980px, 93vh)',
-              transition: 'width 180ms ease',
-            }}
+        // On a phone it is a FULL SCREEN, not a shrunken desktop window (centred at 94vw × 93vh it left a useless
+        // margin all round while the content was still too cramped). Elsewhere: wide enough to hold the fields AND
+        // the plan side by side, but inset on every edge so it reads as a window over the board.
+        style={drawerPanelStyle(isPhone, planSideOn, drawerSize)}
       >
         {/* Header — wraps on a narrow screen. Unwrapped, the Drive/Print/Worker
             row ran off the right edge and finished UNDERNEATH the close button,
@@ -2024,15 +2007,8 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
             <Building2 size={16} className="text-[#4aa8d8] flex-shrink-0" />
             {isGeneralProject
               ? <span className="text-[#4aa8d8] font-semibold text-sm flex-shrink-0">{ui.jobLabel}</span>
-              : <>
-                  <span data-drawer-building className="text-[#4aa8d8] font-semibold text-sm flex-shrink-0">{ui.buildingWord} {buildingShort(apartment.buildingId)}</span>
-                  {/* The floor as the building diagram LABELS it — Wolfson's
-                      towers print one lower than the stored floor, and the
-                      window said "Floor 4" over a unit the diagram shows on 3. */}
-                  {rowNumOf(apartment.buildingId, apartment.floor) && <span data-drawer-floor className="text-white/50 text-xs flex-shrink-0">· {ui.floorPrefix} {rowNumOf(apartment.buildingId, apartment.floor)}</span>}
-                  {apartment.apartmentNumber && <span data-drawer-aptno className="text-white/50 text-xs flex-shrink-0">· {ui.aptPrefix} {apartment.apartmentNumber}</span>}
-                  {apartment.tipus && <span data-tipus-chip className="text-white/85 text-xs font-bold flex-shrink-0 px-1.5 rounded bg-white/15">{apartment.tipus}</span>}
-                </>
+              : <DrawerTitleChips buildingId={apartment.buildingId} floor={apartment.floor}
+                  apartmentNumber={apartment.apartmentNumber} tipus={apartment.tipus} ui={ui} />
             }
             {mergedPartner && (
               <span className="text-white/60 text-xs flex-shrink-0">
@@ -2151,11 +2127,7 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                   .finally(() => setLoadingPhotos(false));
               }
             }}
-              className={`flex-1 whitespace-nowrap font-medium transition-colors relative ${
-                isPhone ? 'py-2 px-1 text-[12px]' : 'py-2.5 text-sm'
-              } ${
-                activeTab === tab ? 'border-b-2 border-[#1e3a5f] text-[#1e3a5f]' : 'text-gray-500 hover:text-gray-700'
-              }`}>
+              className={drawerTabClass(activeTab === tab, isPhone)}>
               {/* "Plan", not ui.engineeringPlans — the full label is two words
                   wide and squeezed the other five tabs off the row. */}
               {tab === 'plan' ? (ui.isRtl ? 'תוכנית' : 'Plan')

@@ -6,8 +6,8 @@
  * and the only thing it can write is its own plan pins, through the same server.
  *
  * It draws the office's own board (BuildingDiagram) and building views (BuildingView / BuildingTrio) — they read
- * their data through data/viewState.ts, which this file feeds from a small read-only store — and its own apartment
- * window (SharedApartmentWindow) with Details, Plan, Stages and Photos only.
+ * their data through data/viewState.ts, which this file feeds from a small read-only store — and the office's
+ * apartment window, read-only and with only the shared parts (SharedApartmentWindow: details + stages, plan, photos).
  */
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { create } from 'zustand';

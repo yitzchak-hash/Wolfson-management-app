@@ -10,7 +10,7 @@ import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useSta
 import '../components/plans/pdfCompat';   // must come before pdf.js
 import * as pdfjs from 'pdfjs-dist';
 import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
-import { Layers, Maximize2, Minimize2, Printer, Download, Share2, MapPin, Plus, Minus, X, Trash2, Loader2, ChevronLeft, ChevronRight, Scan } from 'lucide-react';
+import { Layers, Layers2, Maximize2, Minimize2, Printer, Download, Share2, MapPin, Plus, Minus, X, Trash2, Loader2, ChevronRight, Square } from 'lucide-react';
 import type { SharedApi, ViewerPin } from './sharedApi';
 import { SharedError } from './sharedApi';
 
@@ -57,15 +57,21 @@ export interface PlanWords {
   layers: string; allOn: string; allOff: string; fullScreen: string; exitFullScreen: string; print: string; download: string;
   share: string; addPin: string; tapPlan: string; pinPlaceholder: string; save: string; cancel: string; remove: string;
   reallyRemove: string; loading: string; failed: string; page: string; fit: string; shareFallback: string; pinFailed: string;
-  noLayers: string; yourPins: string;
+  noLayers: string; yourPins: string; hide: string;
 }
 
-export default function SharedPlanViewer({ api, planRef, apartmentId, label, pins, onPinsChange, words: w, rtl }: {
+export default function SharedPlanViewer({ api, planRef, apartmentId, heading, label, pins, onPinsChange, words: w, rtl, onHide, onAspect }: {
   api: SharedApi;
   planRef: string;
   apartmentId: string;
+  /** The first bar's title ("Plan"). */
+  heading: string;
   /** "Apt 12 — Cohen", for file names and the printed sheet. */
   label: string;
+  /** Beside the details: puts the pane away (the office's "Hide the plan"). */
+  onHide?: () => void;
+  /** The first page's shape (width / height), so the window can size itself to the sheet as the office's does. */
+  onAspect?: (ratio: number) => void;
   /** This link's pins on this apartment's plan. */
   pins: ViewerPin[];
   onPinsChange: (next: ViewerPin[]) => void;
@@ -94,6 +100,8 @@ export default function SharedPlanViewer({ api, planRef, apartmentId, label, pin
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const ocRef = useRef<OcConfig | null>(null);
   const [drawTick, setDrawTick] = useState(0);
+  const onAspectRef = useRef(onAspect);
+  onAspectRef.current = onAspect;
   const isImage = !!blob && blob.type.startsWith('image/');
 
   // ── load ──
@@ -145,7 +153,12 @@ export default function SharedPlanViewer({ api, planRef, apartmentId, label, pin
   useEffect(() => {
     if (!doc) return;
     let dead = false;
-    doc.getPage(page + 1).then(p => { if (!dead) { const v = p.getViewport({ scale: 1 }); setNat({ w: v.width, h: v.height }); } });
+    doc.getPage(page + 1).then(p => {
+      if (dead) return;
+      const v = p.getViewport({ scale: 1 });
+      setNat({ w: v.width, h: v.height });
+      if (page === 0 && v.width > 0 && v.height > 0) onAspectRef.current?.(v.width / v.height);
+    });
     return () => { dead = true; };
   }, [doc, page]);
   const fitScale = useCallback(() => {
@@ -326,60 +339,112 @@ export default function SharedPlanViewer({ api, planRef, apartmentId, label, pin
     } finally { setBusy(false); }
   };
 
-  const btn = 'inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[12px] font-semibold bg-white/10 hover:bg-white/20 text-white disabled:opacity-40';
   const sheetW = nat ? nat.w * scale : 0, sheetH = nat ? nat.h * scale : 0;
+  // The office plan pane's own button looks (ApartmentDetailDrawer's two bars, PlanAnnotator's buttons in them,
+  // PlanPinOverlay's pin button and the floating zoom pill) — same window, same style.
+  const barBtn = 'flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[12px] font-semibold text-white/85 hover:bg-white/10 disabled:opacity-40 flex-shrink-0';
+  const iconBtn = 'p-1.5 rounded-lg text-white/70 hover:bg-white/15 flex-shrink-0';
+  const pill = 'px-2.5 py-1 rounded-full hover:bg-white/10 disabled:opacity-30';
 
   return (
-    <div ref={rootRef} data-shared-plan className={`${full ? 'fixed inset-0 z-[400]' : 'relative h-full'} flex flex-col bg-gray-200`} dir={rtl ? 'rtl' : 'ltr'}>
-      <div className="flex flex-wrap items-center gap-1.5 px-2 py-1.5 bg-[#1e3a5f] flex-shrink-0">
-        <button type="button" className={btn} data-plan-pin-add disabled={!doc}
-          onClick={() => { setPlacing(v => !v); setDraft(null); setOpen(null); }}
-          style={placing ? { backgroundColor: '#2563eb' } : undefined}>
-          {placing ? <MapPin size={14} /> : <Plus size={14} />} {placing ? w.tapPlan : w.addPin}
-        </button>
-        <div className="relative">
-          <button type="button" className={btn} data-plan-layers disabled={!doc || isImage} onClick={() => setShowLayers(v => !v)}>
-            <Layers size={14} /> {w.layers}{layers.length ? ` (${layers.filter(l => l.on).length}/${layers.length})` : ''}
-          </button>
-          {showLayers && (
-            <div className="absolute z-30 mt-1 w-64 max-h-[60vh] overflow-auto bg-white rounded-xl shadow-xl border border-gray-200 p-2" style={{ insetInlineStart: 0 }}>
-              {layers.length === 0 ? <div className="text-xs text-gray-500 p-1">{w.noLayers}</div> : (
-                <>
-                  <div className="flex gap-1.5 mb-1.5">
-                    <button type="button" className="text-[11px] font-semibold px-2 py-1 rounded-md bg-gray-100" onClick={() => setLayer(null, true)}>{w.allOn}</button>
-                    <button type="button" className="text-[11px] font-semibold px-2 py-1 rounded-md bg-gray-100" onClick={() => setLayer(null, false)}>{w.allOff}</button>
-                  </div>
-                  {layers.map(l => (
-                    <label key={l.id} className="flex items-center gap-2 px-1 py-1 text-[12.5px] text-gray-800 cursor-pointer">
-                      <input type="checkbox" checked={l.on} onChange={e => setLayer(l.id, e.target.checked)} />
-                      <span className="truncate">{l.name}</span>
-                    </label>
-                  ))}
-                </>
-              )}
-            </div>
-          )}
+    <div ref={rootRef} data-shared-plan className={`${full ? 'fixed inset-0 z-[400]' : 'relative h-full'} flex flex-col min-h-0`}
+      style={{ backgroundColor: '#f8fafc' }} dir={rtl ? 'rtl' : 'ltr'}>
+      {/* The first bar: the plan's name, and Share. */}
+      <div className="flex items-center gap-1.5 min-w-0 px-2.5 py-1.5 flex-shrink-0" style={{ backgroundColor: '#1e3a5f' }}>
+        <Layers size={16} className="text-[#4aa8d8] flex-shrink-0" />
+        <div className="min-w-0">
+          <div className="text-[13px] font-bold text-white truncate">{heading}</div>
+          <div className="text-[10.5px] text-gray-400 truncate">{label}</div>
         </div>
-        <span className="flex-1" />
-        {doc && doc.numPages > 1 && (
-          <span className="inline-flex items-center gap-1 text-white text-[12px]">
-            <button type="button" className={btn} disabled={page <= 0} onClick={() => { setPage(p => p - 1); setFit(true); }} aria-label="previous page"><ChevronLeft size={14} className="rtl:rotate-180" /></button>
-            {w.page} {page + 1}/{doc.numPages}
-            <button type="button" className={btn} disabled={page >= doc.numPages - 1} onClick={() => { setPage(p => p + 1); setFit(true); }} aria-label="next page"><ChevronRight size={14} className="rtl:rotate-180" /></button>
+        <div className="flex-1" />
+        <button type="button" data-plan-share disabled={!blob} onClick={() => void share()} title={w.share}
+          className="flex items-center gap-1.5 px-2.5 py-1 min-h-[30px] rounded-lg text-[11px] font-bold text-white bg-white/15 hover:bg-white/25 disabled:opacity-60 flex-shrink-0">
+          <Share2 size={11} /> {w.share}
+        </button>
+      </div>
+
+      {/* The second bar, a lighter navy: the pins, then layers, download, print and full screen. */}
+      <div className="relative flex items-center gap-1.5 min-w-0 px-2.5 py-1 flex-shrink-0" style={{ backgroundColor: '#2c4f78' }}>
+        <button type="button" data-plan-pin-add disabled={!doc}
+          onClick={() => { setPlacing(v => !v); setDraft(null); setOpen(null); }}
+          title={placing ? w.tapPlan : w.addPin}
+          className="flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-bold shadow-sm border transition-colors flex-shrink-0 disabled:opacity-50"
+          style={placing
+            ? { backgroundColor: '#dc2626', color: '#fff', borderColor: '#dc2626' }
+            : { backgroundColor: 'rgba(255,255,255,.94)', color: '#374151', borderColor: '#e5e7eb' }}>
+          {placing ? <MapPin size={12} /> : <Plus size={12} />}
+          {placing ? w.tapPlan : w.addPin}
+        </button>
+        {pins.length > 0 && (
+          <span data-plan-pin-count className="px-2 py-1 rounded-lg text-[11px] font-bold shadow-sm border border-gray-200 flex-shrink-0"
+            style={{ backgroundColor: 'rgba(255,255,255,.94)', color: '#1d4ed8' }}>
+            {pins.length} {w.yourPins}
           </span>
         )}
-        <button type="button" className={btn} disabled={!doc} onClick={() => zoom(1 / 1.25)} aria-label="zoom out"><Minus size={14} /></button>
-        <button type="button" className={btn} disabled={!doc} onClick={() => setFit(true)} title={w.fit}><Scan size={14} /></button>
-        <button type="button" className={btn} disabled={!doc} onClick={() => zoom(1.25)} aria-label="zoom in"><Plus size={14} /></button>
-        <button type="button" className={btn} onClick={() => void toggleFull()} title={full ? w.exitFullScreen : w.fullScreen}>
+        <div className="flex-1" />
+        {layers.length > 0 && (
+          <button type="button" data-plan-layers disabled={!doc || isImage} onClick={() => setShowLayers(v => !v)} title={w.layers}
+            className={`${barBtn} ${showLayers ? '!bg-white/15 !text-white' : ''}`}>
+            <Layers2 size={13} /> <span className="max-sm:hidden">{w.layers}</span>
+            <span className="text-[9.5px] font-bold px-1 rounded-full bg-white/20">{layers.length}</span>
+          </button>
+        )}
+        <button type="button" data-plan-download className={barBtn} disabled={!blob} onClick={download} title={w.download}>
+          <Download size={14} /> <span className="max-sm:hidden">{w.download}</span>
+        </button>
+        <button type="button" data-plan-print className={barBtn} disabled={!doc || busy} onClick={() => void print()} title={w.print}>
+          {busy ? <Loader2 size={14} className="animate-spin" /> : <Printer size={14} />} <span className="max-sm:hidden">{w.print}</span>
+        </button>
+        <button type="button" className={iconBtn} onClick={() => void toggleFull()} title={full ? w.exitFullScreen : w.fullScreen}>
           {full ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
         </button>
-        <button type="button" className={btn} disabled={!doc || busy} onClick={() => void print()} title={w.print}>
-          {busy ? <Loader2 size={14} className="animate-spin" /> : <Printer size={14} />}<span className="hidden sm:inline">{w.print}</span>
-        </button>
-        <button type="button" className={btn} disabled={!blob} onClick={download} title={w.download}><Download size={14} /><span className="hidden sm:inline">{w.download}</span></button>
-        <button type="button" className={btn} disabled={!blob} onClick={() => void share()} title={w.share}><Share2 size={14} /><span className="hidden sm:inline">{w.share}</span></button>
+        {onHide && !full && (
+          <button type="button" className={iconBtn} onClick={onHide} title={w.hide}><ChevronRight size={15} className="rtl:rotate-180" /></button>
+        )}
+        {showLayers && (
+          <div className="absolute z-30 top-full mt-1 w-64 max-h-[60vh] overflow-auto bg-white rounded-xl shadow-xl border border-gray-200 p-2" style={{ insetInlineEnd: 8 }}>
+            <div className="flex gap-1.5 mb-1.5">
+              <button type="button" className="text-[11px] font-semibold px-2 py-1 rounded-md bg-gray-100" onClick={() => setLayer(null, true)}>{w.allOn}</button>
+              <button type="button" className="text-[11px] font-semibold px-2 py-1 rounded-md bg-gray-100" onClick={() => setLayer(null, false)}>{w.allOff}</button>
+            </div>
+            {layers.map(l => (
+              <label key={l.id} className="flex items-center gap-2 px-1 py-1 text-[12.5px] text-gray-800 cursor-pointer">
+                <input type="checkbox" checked={l.on} onChange={e => setLayer(l.id, e.target.checked)} />
+                <span className="truncate">{l.name}</span>
+              </label>
+            ))}
+          </div>
+        )}
       </div>
+
+      {/* Drive's floating bar over the sheet — the page count and the zoom, where the office reads them. */}
+      {doc && nat && !err && (
+        <div data-plan-zoombar className="absolute bottom-4 left-1/2 -translate-x-1/2 z-20 flex items-center gap-0.5 rounded-full px-1.5 py-1 shadow-lg backdrop-blur whitespace-nowrap max-w-[calc(100%-16px)]"
+          style={{ backgroundColor: 'rgba(32,33,36,.92)', color: '#e8eaed' }} dir="ltr">
+          {doc.numPages > 1 && (<>
+            <button type="button" disabled={page <= 0} onClick={() => { setPage(p => p - 1); setFit(true); }} title={w.page}
+              className="px-2 py-1 rounded-full hover:bg-white/10 disabled:opacity-30">‹</button>
+            <span className="px-1.5 text-[12px] font-semibold tabular-nums select-none">{page + 1} / {doc.numPages}</span>
+            <button type="button" disabled={page >= doc.numPages - 1} onClick={() => { setPage(p => p + 1); setFit(true); }} title={w.page}
+              className="px-2 py-1 rounded-full hover:bg-white/10 disabled:opacity-30">›</button>
+            <span className="mx-1 w-px self-stretch bg-white/20" />
+          </>)}
+          <button type="button" className={pill} onClick={() => zoom(1 / 1.15)} aria-label="zoom out"><Minus size={14} /></button>
+          <button type="button" className="px-2 py-1 rounded-full text-[12px] font-semibold tabular-nums hover:bg-white/10" onClick={() => setFit(true)} title={w.fit}>
+            {Math.round(scale * 100)}%
+          </button>
+          <button type="button" className={pill} onClick={() => zoom(1.15)} aria-label="zoom in"><Plus size={14} /></button>
+          <button type="button" className={pill} onClick={() => void toggleFull()} title={full ? w.exitFullScreen : w.fullScreen}>
+            {full ? <Minimize2 size={13} /> : <Maximize2 size={13} />}
+          </button>
+          <button type="button" className={pill} onClick={() => setFit(true)} title={w.fit}><Square size={12} /></button>
+          <span className="mx-1 w-px self-stretch bg-white/20" />
+          <button type="button" disabled={!blob} onClick={() => void share()} title={w.share}
+            className="flex items-center gap-1 px-2.5 max-[420px]:px-2 py-1 rounded-full text-[12px] font-semibold hover:bg-white/10 disabled:opacity-50">
+            <Share2 size={13} /><span className="max-[420px]:hidden">{w.share}</span>
+          </button>
+        </div>
+      )}
 
       <div ref={stageRef} className="flex-1 min-h-0 overflow-auto" onWheel={onWheel} onClick={() => setShowLayers(false)}>
         {err ? (
@@ -446,7 +511,7 @@ export default function SharedPlanViewer({ api, planRef, apartmentId, label, pin
           </div>
         )}
       </div>
-      {note && <div className="absolute bottom-3 inset-x-3 mx-auto max-w-md text-center text-[12.5px] bg-gray-900 text-white rounded-lg px-3 py-2 shadow-lg">{note}</div>}
+      {note && <div className="absolute bottom-16 z-30 inset-x-3 mx-auto max-w-md text-center text-[12.5px] bg-gray-900 text-white rounded-lg px-3 py-2 shadow-lg">{note}</div>}
     </div>
   );
 }
