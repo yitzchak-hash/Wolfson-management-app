@@ -7,7 +7,7 @@ import {
   stageSetOf, liveStateOf, cycleMark, tapMark, isOneTapStage, setMark, isWorkStage, taskStageIds, markerRole, isStartStage,
   StageState, SetContext,
 } from '../../data/stageMarks';
-import { driveThumbUrl } from '../../data/driveApi';
+import { driveThumbUrl } from '../../data/driveThumb';
 import type { CustomWhere } from './StagePicker';
 import { includeIn } from '../../data/stageIncludes';
 import { howOf, doneWordOf, waitingInspection, workingVisits, openQuestions, inspectionsOf } from '../../data/stageHow';
@@ -98,6 +98,7 @@ function InspectionRow({ ins, rtl, day, onOpenPhotos }: {
 
 export function StageSection({
   apartment, stages, tasks, ctx, workers, photos, onMarks, onMarker, onAddCustom, ui, onReportProblem, onOpenPhotos, onInspect, inspecting, onOneTapDone, canInspect, onAnswer, onCloseVisit,
+  readOnly = false,
 }: {
   apartment: Apartment;
   stages: Stage[];
@@ -105,9 +106,15 @@ export function StageSection({
   ctx: SetContext;
   workers: Contractor[];
   photos: ContractorPhoto[];
-  onMarks: (next: Record<string, StageMark> | undefined) => void;
-  onMarker: (stageId: string) => void;
-  onAddCustom: (input: { name: string; color: string; where: CustomWhere }) => void;
+  /**
+   * The three writers. ABSENT in the outside shared view (/s/<token>, owner 2026-11-18), which passes `readOnly`:
+   * the stages are drawn exactly as the office sees them, and nothing on them can be pressed.
+   */
+  onMarks?: (next: Record<string, StageMark> | undefined) => void;
+  onMarker?: (stageId: string) => void;
+  onAddCustom?: (input: { name: string; color: string; where: CustomWhere }) => void;
+  /** Look, don't touch: no marking, no adding, no answering — and no names of who did what. */
+  readOnly?: boolean;
   ui: MainUiStrings;
   onReportProblem?: () => void;
   onOpenPhotos: (items: StagePhotoItem[], index: number) => void;
@@ -130,6 +137,10 @@ export function StageSection({
   /** Which question's stage the office picked. */
   const [answerPick, setAnswerPick] = useState<Record<string, string>>({});
   const rtl = !!ui.isRtl;
+  // Read-only: the writers are dropped here, once, so no press below can reach one.
+  const marksW = readOnly ? undefined : onMarks;
+  const markerW = readOnly ? undefined : onMarker;
+  const customW = readOnly ? undefined : onAddCustom;
   const marks = apartment.stageMarks;
   const set = stageSetOf(apartment, stages, ctx).filter(st => !isStartStage(st));
   const workStages = stages.filter(st => isWorkStage(st) && st.active && !isStartStage(st));
@@ -280,14 +291,16 @@ export function StageSection({
       {working.map(v => (
         <div key={v.id} data-visit-working={v.id} className="flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-[13px] font-semibold text-emerald-900">
           <span className="w-2.5 h-2.5 rounded-full bg-emerald-600 apt-signal-work flex-shrink-0" />
-          <span className="flex-1 min-w-0 truncate">{W(`Working here · ${v.byName} since ${hm(v.startedAt)}`, `עובד כאן · ${v.byName} מ-${hm(v.startedAt)}`)}</span>
+          <span className="flex-1 min-w-0 truncate">{v.byName
+            ? W(`Working here · ${v.byName} since ${hm(v.startedAt)}`, `עובד כאן · ${v.byName} מ-${hm(v.startedAt)}`)
+            : W(`Someone is working here · since ${hm(v.startedAt)}`, `עובדים כאן · מ-${hm(v.startedAt)}`)}</span>
           {onCloseVisit && <button type="button" data-visit-close={v.id} onClick={() => onCloseVisit(v.id)}
             className="text-[12px] font-bold text-emerald-900 rounded-md border border-emerald-300 bg-white px-2 py-0.5">{W('Close', 'סגירה')}</button>}
         </div>
       ))}
 
       {/* A worker's "No, something else": his pictures, then the stage he really did, picked by the office. */}
-      {questions.map(v => {
+      {!readOnly && questions.map(v => {
         const asked = stages.find(x => x.id === v.askedStageId);
         const files = v.files ?? [];
         const items: StagePhotoItem[] = files.map(f => ({
@@ -337,14 +350,15 @@ export function StageSection({
       <div data-stage-flow className="space-y-2">
       {lead.map(ins => <InspectionRow key={ins.id} ins={ins} rtl={rtl} day={day} onOpenPhotos={onOpenPhotos} />)}
       {rows.map(({ stage: st, state }) => {
-        const pics = photos.filter(p => p.apartmentId === apartment.id && p.stageId === st.id && aptTaskIds.has(p.assignmentId)
+        // Read-only (the shared view): the server already kept only this apartment's own tasks' pictures.
+        const pics = photos.filter(p => p.apartmentId === apartment.id && p.stageId === st.id && (readOnly || aptTaskIds.has(p.assignmentId))
           && (p.fileType ?? 'image') === 'image');
         const items: StagePhotoItem[] = pics.map(p => ({
           fileId: p.driveFileId ?? '', filename: p.filename, mimeType: p.mimeType ?? 'image/jpeg',
           thumbSrc: photoSrc(p, 1600), downloadHref: p.driveFileId ? `https://drive.google.com/uc?export=download&id=${p.driveFileId}` : (p.storageUrl || p.dataUrl),
         }));
         const doneBy = apartment.stageDone?.[st.id];
-        const who = state === 'done' ? (finishedLine(st) || (doneBy ? `${doneBy.by} · ${day(doneBy.at)} ${hm(doneBy.at)}` : ''))
+        const who = state === 'done' ? (finishedLine(st) || (doneBy ? [doneBy.by, `${day(doneBy.at)} ${hm(doneBy.at)}`].filter(Boolean).join(' · ') : ''))
           : state === 'doing' || state === 'booked' ? openLine(st, state) : '';
         const waiting = waitingFor?.id === st.id && state !== 'done';
         const part = state === 'pending' || state === 'done' ? partLine(st) : '';
@@ -355,11 +369,11 @@ export function StageSection({
             className={`group/st rounded-xl border px-3 py-2.5 ${isOff ? 'border-dashed border-gray-300 bg-gray-50' : 'border-gray-200 bg-white'}`}
             style={!isOff ? { borderInlineStartWidth: 4, borderInlineStartColor: st.color } : undefined}>
             <div className="flex items-center gap-2.5">
-              {isOff ? ring(st, state) : (
+              {isOff || !marksW ? <span className="flex-shrink-0" data-stage-bubble-static={st.id}>{ring(st, state)}</span> : (
                 <button type="button" data-stage-bubble={st.id} data-stage-state={state}
                   title={ui.setTapHint}
-                  onClick={() => { const nx = tapMark(marks, st, state); if (nx?.[st.id] === 'done') haptic('success'); onMarks(nx); if (isOneTapStage(st) && nx?.[st.id] === 'done') onOneTapDone?.(st.id); }}
-                  onContextMenu={e => { e.preventDefault(); const nx = cycleMark(marks, st.id, 'right', state); if (nx?.[st.id] === 'done') haptic('success'); onMarks(nx); }}
+                  onClick={() => { const nx = tapMark(marks, st, state); if (nx?.[st.id] === 'done') haptic('success'); marksW(nx); if (isOneTapStage(st) && nx?.[st.id] === 'done') onOneTapDone?.(st.id); }}
+                  onContextMenu={e => { e.preventDefault(); const nx = cycleMark(marks, st.id, 'right', state); if (nx?.[st.id] === 'done') haptic('success'); marksW(nx); }}
                   className="flex-shrink-0 rounded-full hover:scale-110 transition-transform">
                   {ring(st, state)}
                 </button>
@@ -373,11 +387,11 @@ export function StageSection({
               {state === 'booked' && <CalendarDays size={12} className="flex-shrink-0 text-gray-400" />}
               {state === 'pending' && <Clock size={12} className="flex-shrink-0" style={{ color: '#f97316' }} />}
               <span className="flex-1" />
-              {isOff ? (
-                <button type="button" data-stage-putback={st.id} onClick={() => onMarks(setMark(marks, st.id, 'todo'))}
+              {!marksW ? null : isOff ? (
+                <button type="button" data-stage-putback={st.id} onClick={() => marksW(setMark(marks, st.id, 'todo'))}
                   className="text-[11px] font-semibold text-[#1e3a5f] px-2 py-0.5 rounded-full hover:bg-[#1e3a5f]/10">{ui.setPutBack}</button>
               ) : state !== 'done' && (
-                <button type="button" data-stage-off={st.id} onClick={() => onMarks(setMark(marks, st.id, 'off'))}
+                <button type="button" data-stage-off={st.id} onClick={() => marksW(setMark(marks, st.id, 'off'))}
                   title={ui.setNotNeededAct} aria-label={ui.setNotNeededAct}
                   className="w-6 h-6 rounded-full flex items-center justify-center text-gray-300 hover:text-red-500 hover:bg-red-50 opacity-0 group-hover/st:opacity-100 focus:opacity-100">
                   <X size={13} />
@@ -409,8 +423,8 @@ export function StageSection({
       })}
       </div>
 
-      {/* + add a stage — from the workspace's list, or a new one. */}
-      <div>
+      {/* + add a stage — from the workspace's list, or a new one. Never in the read-only view. */}
+      {marksW && <div>
         {!adding ? (
           <button type="button" data-stage-add onClick={() => setAdding(true)}
             className="text-xs font-semibold text-gray-500 border border-dashed border-gray-300 rounded-full px-3 py-1 hover:border-[#1e3a5f] hover:text-[#1e3a5f]">
@@ -420,7 +434,7 @@ export function StageSection({
           <div data-stage-custom-form className="rounded-xl border border-dashed border-gray-400 bg-white p-2.5 space-y-2">
             <input data-stage-custom-name autoFocus value={custom.name} placeholder={ui.setCustomName}
               onChange={e => setCustom({ ...custom, name: e.target.value })}
-              onKeyDown={e => { if (e.key === 'Enter' && custom.name.trim()) { onAddCustom({ ...custom, name: custom.name.trim() }); setCustom(null); setAdding(false); } }}
+              onKeyDown={e => { if (e.key === 'Enter' && custom.name.trim()) { customW?.({ ...custom, name: custom.name.trim() }); setCustom(null); setAdding(false); } }}
               className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30" />
             <div className="flex gap-1.5">
               {CUSTOM_COLORS.map(c => (
@@ -447,7 +461,7 @@ export function StageSection({
             </div>
             <div className="flex gap-1.5">
               <button type="button" data-stage-custom-add disabled={!custom.name.trim()}
-                onClick={() => { onAddCustom({ ...custom, name: custom.name.trim() }); setCustom(null); setAdding(false); }}
+                onClick={() => { customW?.({ ...custom, name: custom.name.trim() }); setCustom(null); setAdding(false); }}
                 className="px-3 py-1.5 rounded-lg text-xs font-semibold text-white bg-[#1e3a5f] disabled:opacity-40">{ui.add}</button>
               <button type="button" onClick={() => setCustom(null)} className="px-3 py-1.5 rounded-lg text-xs text-gray-500 hover:bg-gray-50">{ui.cancel}</button>
             </div>
@@ -459,7 +473,7 @@ export function StageSection({
               <div className="flex flex-wrap gap-1.5 mb-2">
                 {notOnApt.map(st => (
                   <button key={st.id} type="button" data-stage-add-pick={st.id}
-                    onClick={() => { onMarks(setMark(marks, st.id, 'todo')); setAdding(false); }}
+                    onClick={() => { marksW(setMark(marks, st.id, 'todo')); setAdding(false); }}
                     className="inline-flex items-center gap-1.5 rounded-full border bg-white pl-1.5 pr-2.5 py-1 text-xs font-semibold text-gray-700 hover:border-[#1e3a5f]"
                     style={{ borderColor: `${st.color}88` }}>
                     <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: st.color }} />
@@ -477,16 +491,21 @@ export function StageSection({
             </div>
           </div>
         )}
-      </div>
+      </div>}
 
       {markers.length > 0 && (
         <div className="flex items-center gap-1.5 flex-wrap">
           <span className="text-xs font-semibold text-gray-500">{apartment.buildingId === 'G' ? ui.setJobIs : ui.setFlatIs}</span>
           {markers.map(m => {
             const on = apartment.currentStageId === m.id;
+            // Read-only: only the marker the flat stands on, as a label.
+            if (!markerW) return on ? (
+              <span key={m.id} data-stage-marker={m.id} data-on="1" className="text-[11px] font-semibold px-2 py-0.5 rounded-full border"
+                style={{ borderColor: m.color, backgroundColor: m.color, color: '#fff' }}>{getStageName(m, rtl)}</span>
+            ) : null;
             return (
               <button key={m.id} type="button" data-stage-marker={m.id} data-on={on ? '1' : undefined}
-                onClick={() => onMarker(m.id)}
+                onClick={() => markerW(m.id)}
                 className="text-[11px] font-semibold px-2 py-0.5 rounded-full border"
                 style={on ? { borderColor: m.color, backgroundColor: m.color, color: '#fff' } : { borderColor: '#e5e7eb', color: '#64748b', backgroundColor: '#fff' }}>
                 {getStageName(m, rtl)}

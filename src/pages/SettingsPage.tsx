@@ -29,7 +29,8 @@ import { NewWorkspace } from '../components/settings/NewWorkspace';
 import { ToolbarEditor } from '../components/settings/ToolbarEditor';
 import { SettingsShell, SettingBox, SettingRow, type SettingsGroup } from '../components/settings/SettingsShell';
 import { BackupsPage } from '../components/settings/BackupsPage';
-import { ShieldCheck, HardHat, FolderKanban, Monitor, Cloud, ListChecks, FileInput, FileSpreadsheet } from 'lucide-react';
+import { ShieldCheck, HardHat, FolderKanban, Monitor, Cloud, ListChecks, FileInput, FileSpreadsheet, Share2 } from 'lucide-react';
+import { SharedLinksSettings } from '../components/settings/SharedLinksSettings';
 import { WorkerLevelsPanel, WorkerLevelPicker, WorkerPermissionOverrides } from '../components/settings/WorkerLevels';
 import { DEFAULT_NEW_WORKER_LEVEL, permsOf, overrideCount, WORKER_PERMISSIONS, levelAnswer } from '../data/workerLevels';
 import { getDriveRoot, setDriveRoot, guessRoot } from '../data/drivePath';
@@ -407,6 +408,8 @@ export function SettingsPage({ scope = 'project' }: { scope?: SettingsScope }) {
       ] : [
         { id: 'buildings', label: s.settingsBuildings, icon: Building2, tile: 'slate', render: () => <BuildingsBuilderTab onToast={showToast} /> },
         { id: 'sheet', label: s.contractorSheetLabel, icon: FileSpreadsheet, tile: 'green-deep', render: () => <ContractorSheetSettings onToast={showToast} /> },
+        // Read-only links for people outside the office (owner, 2026-11-18) — see data/sharedLinks.ts.
+        { id: 'shared', label: 'Shared', icon: Share2, tile: 'teal', render: () => <SharedLinksSettings onToast={showToast} /> },
       ]),
     ] },
   ];
