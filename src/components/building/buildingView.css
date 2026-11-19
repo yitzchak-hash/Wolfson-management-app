@@ -184,7 +184,14 @@
 .bv-flat-tip text { font-size: 32px; font-weight: 700; fill: #1e3a5f; text-anchor: middle; dominant-baseline: central; }
 .bv-flat-u rect { fill: #f59e0b; stroke: #ffffff; stroke-width: 4; }
 .bv-flat-u text { font-size: 34px; font-weight: 800; font-family: Inter, Arial, sans-serif; fill: #ffffff; text-anchor: middle; dominant-baseline: central; }
-.bv-flat-tip, .bv-flat-u { pointer-events: none; }
+/* The plan ✓ (green) and the waiting-for-inspection clock (the board's purple) — owner, 2026-11-19. */
+.bv-flat-plan circle { fill: #16a34a; stroke: #ffffff; stroke-width: 4; }
+.bv-flat-plan path { fill: none; stroke: #ffffff; stroke-width: 6; stroke-linecap: round; stroke-linejoin: round; }
+.bv-flat-wait > circle:first-of-type { fill: #7c3aed; stroke: #ffffff; stroke-width: 4; }
+.bv-flat-wait .bv-flat-wait-face { fill: none; stroke: #ffffff; stroke-width: 4; }
+.bv-flat-wait path { fill: none; stroke: #ffffff; stroke-width: 4; stroke-linecap: round; }
+.bv-flat-tip, .bv-flat-u, .bv-flat-plan, .bv-flat-wait { pointer-events: none; }
+.bv-plate[data-solid='0'] .bv-flat-plan, .bv-plate[data-solid='0'] .bv-flat-wait { display: none; }
 .bv-plate[data-solid='0'] .bv-flat-tip, .bv-plate[data-solid='0'] .bv-flat-u { display: none; }
 
 /* The project's own answers ("Wall ✓") beside the number, and on the card. */

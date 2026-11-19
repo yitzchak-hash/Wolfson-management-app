@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo, useEffect } from 'react';
+import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import { StandardPlanButton } from '../components/building/StandardPlan';
 import { WOLFSON_PLAN, type BuildingPlan } from '../components/building/buildingPlan';
 import { NETIV_PLAN, NETIV_PLAN_B1 } from '../components/building/netivPlan';
@@ -7,7 +7,7 @@ import { Search, X, CheckSquare, Printer, ChevronDown, SlidersHorizontal } from 
 import { Navigate, useNavigate } from 'react-router-dom';
 import { redeemReturn } from '../data/unitTravel';
 import { Tooltip } from '../components/ui/Tooltip';
-import { useStore, trackUndo } from '../data/store';
+import { useStore, trackUndo, cloudReady as cloudReadyNow } from '../data/store';
 import { Apartment, BuildingId, isCountableApartment } from '../types';
 import { setMark, isWorkStage } from '../data/stageMarks';
 import { problemStates } from '../data/problems';
@@ -114,6 +114,38 @@ export function ProjectDiagramPage() {
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
   const [namingApt, setNamingApt] = useState<Apartment | null>(null);
   const [namingInput, setNamingInput] = useState('');
+
+  /**
+   * THE APARTMENT IN THE ADDRESS (owner, 2026-11-19: "a lot of times I just want to share the URL so people can go
+   * into a specific apartment"). Opening a window writes ?p=<project>&apt=<id> into the address bar (replaceState —
+   * no new history step, no reload); closing it takes them off. Opening such an address switches to that project if
+   * needed and opens the window once the flat is there. Only for people logged in; outsiders use a Shared link.
+   */
+  const urlAsk = useRef<{ p: string; apt: string } | null>((() => {
+    try {
+      const q = new URLSearchParams(window.location.search);
+      const apt = q.get('apt'); const p = q.get('p');
+      return apt ? { apt, p: p || '' } : null;
+    } catch { return null; }
+  })());
+  useEffect(() => {
+    const ask = urlAsk.current;
+    if (!ask) return;
+    if (ask.p && ask.p !== currentProjectId && projects.some(pr => pr.id === ask.p)) { setCurrentProject(ask.p); return; }
+    const apt = apartments.find(a => a.id === ask.apt);
+    if (apt) { urlAsk.current = null; setSelectedApt(apt); }
+    else if (apartments.length && cloudReadyNow()) urlAsk.current = null;   // a flat that no longer exists: let it go
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [apartments, currentProjectId]);
+  useEffect(() => {
+    if (urlAsk.current) return;            // still on its way in — do not wipe the address it came with
+    try {
+      const url = new URL(window.location.href);
+      if (selectedApt) { url.searchParams.set('p', currentProjectId); url.searchParams.set('apt', selectedApt.id); }
+      else { url.searchParams.delete('p'); url.searchParams.delete('apt'); }
+      if (url.href !== window.location.href) window.history.replaceState(window.history.state, '', url.href);
+    } catch { /* an old browser keeps the plain address */ }
+  }, [selectedApt, currentProjectId]);
 
   // Open a specific apartment drawer — navigated here from the dashboard, or
   // asked for WHILE standing here (the header's pending list): the effect

@@ -15,7 +15,7 @@
  */
 import { isStartStage } from '../../data/stageMarks';
 import { crewOf, acCompanyOf, isCompanyButton, isInspectedButton, isWallButton, DEFAULT_AC_COMPANY } from '../../data/aptCrew';
-import { inspectionsOf, doneWordOf } from '../../data/stageHow';
+import { inspectionsOf, doneWordOf, waitingInspection } from '../../data/stageHow';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Apartment, Stage, CustomButton } from '../../types';
 import { realName } from '../../data/aptSale';
@@ -26,6 +26,9 @@ import StreetStrip, { hasStreet } from './StreetStrip';
 import './buildingView.css';
 
 export interface BuildingViewWords {
+  /** Tooltips of the plan ✓ and the waiting-for-inspection clock. */
+  planOk?: string;
+  waitingInsp?: string;
   floor: string;
   notSold: string;
   notStarted: string;
@@ -41,6 +44,7 @@ export interface BuildingViewWords {
 const EN: BuildingViewWords = {
   floor: 'Floor', notSold: 'Not sold', notStarted: 'Not started', upgraded: 'Upgraded',
   open: 'Open', floorsHint: 'Scroll to move between floors', apt: 'Apt', joinedWith: 'Joined with', yes: 'Yes', no: 'No', unknown: "Don't know",
+  planOk: 'Plan approved', waitingInsp: 'Waiting for inspection',
 };
 
 export interface BuildingViewProps {
@@ -548,11 +552,35 @@ export default function BuildingView({ apartments, stages, onOpen, words, initia
                             </g>);
                           x += w2 + 10;
                         }
-                        if (up) parts.push(
-                          <g key="u" className="bv-flat-u" data-flat-upgraded>
-                            <rect x={x} y={ly - 24} width={56} height={48} rx={14} />
-                            <text x={x + 28} y={ly + 1}>U</text>
-                          </g>);
+                        if (up) {
+                          parts.push(
+                            <g key="u" className="bv-flat-u" data-flat-upgraded>
+                              <rect x={x} y={ly - 24} width={56} height={48} rx={14} />
+                              <text x={x + 28} y={ly + 1}>U</text>
+                            </g>);
+                          x += 56 + 10;
+                        }
+                        // The plan is starred (approved): a green ✓; no plan, nothing at all (owner, 2026-11-19).
+                        if (apt.plansPdfLink) {
+                          parts.push(
+                            <g key="p" className="bv-flat-plan" data-flat-plan-ok>
+                              <title>{w.planOk}</title>
+                              <circle cx={x + 24} cy={ly} r={24} />
+                              <path d={`M${x + 12} ${ly + 1} l8 8 l16 -18`} />
+                            </g>);
+                          x += 48 + 10;
+                        }
+                        // Waiting for an inspection: a small purple clock (owner: "a little icon that tells him we're
+                        // waiting for inspection").
+                        if (waitingInspection(apt, sortedStages)) {
+                          parts.push(
+                            <g key="w" className="bv-flat-wait" data-flat-waiting>
+                              <title>{w.waitingInsp}</title>
+                              <circle cx={x + 24} cy={ly} r={24} />
+                              <circle cx={x + 24} cy={ly} r={12} className="bv-flat-wait-face" />
+                              <path d={`M${x + 24} ${ly - 7} v8 l6 4`} />
+                            </g>);
+                        }
                         let y2 = ly + 58;
                         for (const an of answersOf(apt)) {
                           const label = `${an.name}: ${an.v === 'yes' ? w.yes : an.v === 'no' ? w.no : '?'}`;
