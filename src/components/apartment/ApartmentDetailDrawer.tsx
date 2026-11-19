@@ -24,7 +24,7 @@ const isTzvi = (name?: string | null) => { const n = (name ?? '').trim(); return
 const CREW = ['Yaakov', 'Daniel', 'Igor'];
 import { TaskThread } from '../tasks/TaskThread';
 import { Translated } from '../ui/Translated';
-import { Send, CheckSquare, Square as SquareIcon, Sparkles } from 'lucide-react';
+import { Send, CheckSquare, Square as SquareIcon, Sparkles, Check } from 'lucide-react';
 import { AC_COMPANIES, crewOf, acCompanyOf, isCompanyButton, isInspectedButton } from '../../data/aptCrew';
 import { trashDriveFiles } from '../../data/driveTrash';
 import { haptic } from '../../data/haptics';
@@ -1571,7 +1571,70 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
           </Tooltip>
         )}
       </div>
+      {approvalStrip()}
       </>
+    );
+  }
+
+  /**
+   * THE APPROVAL STRIP (owner, 2026-11-19, Option A on the Z Fold 8 page): full width, right above the drawing, never
+   * squeezed out of a bar. Yellow while the starred plan is not approved by Tzvi — "Approved by Hodaya, not by you
+   * yet" with a big green Approve (Tzvi's user only); a slim green "Approved by Tzvi" once he has. The ★ at the end
+   * unstars. Shown only while the starred plan itself is on screen.
+   */
+  function approvalStrip() {
+    if (autoPlan || !starredPlanId || paneFileId !== starredPlanId) return null;
+    const byTzvi = isTzvi(plansApprovedBy);
+    const iAmTzvi = !!currentUser && isTzvi(currentUser.name);
+    const he = !!ui.isRtl;
+    const approve = () => {
+      if (!currentUser) return;
+      updateApartment(apartment!.id, { plansApprovedBy: currentUser.name, plansApprovedAt: new Date().toISOString() }, currentUser);
+      haptic('success');
+      onToast(he ? 'התוכנית אושרה על ידך' : 'Approved by you');
+    };
+    const unstar = () => {
+      if (!currentUser) return;
+      setPlansPdfLink('');
+      updateApartment(apartment!.id, { plansPdfLink: undefined, plansApprovedBy: undefined, plansApprovedAt: undefined }, currentUser);
+      onToast(he ? 'הכוכב הוסר — התוכנית לא מאושרת' : 'Unstarred — the plan is no longer approved');
+    };
+    const star = currentUser && (
+      <button type="button" data-plan-unstar onClick={unstar} title={he ? 'להסיר כוכב' : 'Unstar this plan'}
+        aria-label={he ? 'להסיר כוכב' : 'Unstar this plan'} className="p-1 rounded-full hover:bg-black/5 flex-shrink-0">
+        <Star size={17} fill="#f59e0b" color="#f59e0b" />
+      </button>
+    );
+    if (byTzvi) {
+      return (
+        <div data-plan-approval="tzvi" className="flex items-center gap-2 px-3 py-1 flex-shrink-0 text-[12.5px] font-bold"
+          style={{ backgroundColor: '#dcfce7', color: '#166534', borderBottom: '1px solid #86efac' }}>
+          <Check size={14} className="flex-shrink-0" />
+          <span className="truncate">{he ? 'אושר ע״י צבי' : 'Approved by Tzvi'}</span>
+          <span className="flex-1" />
+          {star}
+        </div>
+      );
+    }
+    const who = plansApprovedBy?.trim();
+    const words = who
+      ? (iAmTzvi ? (he ? `אושר ע״י ${who}, עוד לא על ידך` : `Approved by ${who}, not by you yet`) : (he ? `אושר ע״י ${who}, עוד לא ע״י צבי` : `Approved by ${who}, not by Tzvi yet`))
+      : (iAmTzvi ? (he ? 'מסומנת בכוכב, עוד לא אושרה על ידך' : 'Starred, not approved by you yet') : (he ? 'מסומנת בכוכב, עוד לא אושרה ע״י צבי' : 'Starred, not approved by Tzvi yet'));
+    return (
+      <div data-plan-approval="not-tzvi" className="flex items-center gap-2 px-3 py-1.5 flex-shrink-0 text-[13px] font-bold"
+        style={{ backgroundColor: '#fef3c7', color: '#92400e', borderBottom: '2px solid #f59e0b' }}>
+        <AlertTriangle size={15} className="flex-shrink-0" />
+        <span className="min-w-0 truncate">{words}</span>
+        <span className="flex-1" />
+        {iAmTzvi && (
+          <button type="button" data-plan-approve-me onClick={approve}
+            className="flex items-center gap-1 rounded-lg px-3 py-1.5 text-[13px] font-extrabold text-white flex-shrink-0 active:scale-[0.98]"
+            style={{ backgroundColor: '#16a34a' }}>
+            <Check size={14} /> {he ? 'לאשר' : 'Approve'}
+          </button>
+        )}
+        {star}
+      </div>
     );
   }
 
@@ -1775,22 +1838,8 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
               autoPlanYesLabel={ui.planAutoYes}
               autoPlanOtherLabel={ui.planAutoOther}
               onConfirmAutoPlan={autoPlan && detectedPdfId ? () => starPlan({ id: detectedPdfId }) : undefined}
-              approvedNote={!autoPlan && starredPlanId && fileId === starredPlanId && plansApprovedBy
-                ? ui.planApprovedBy.replace('{who}', plansApprovedBy) : undefined}
-              // Tzvi presses "Plan approved by Hodaya" → it becomes approved by him (owner, 2026-11-19); the building view's
-              // green ✓ shows only for his approvals.
-              onApproveAsMe={currentUser && isTzvi(currentUser.name) && plansApprovedBy && !isTzvi(plansApprovedBy) ? () => {
-                updateApartment(apartment!.id, { plansApprovedBy: currentUser.name, plansApprovedAt: new Date().toISOString() }, currentUser);
-                haptic('success');
-                onToast(ui.isRtl ? 'התוכנית אושרה על ידך' : 'Approved by you');
-              } : undefined}
-              approveAsMeLabel={ui.isRtl ? 'לאשר בעצמי' : 'Approve it myself'}
-              // Unstar right beside "Plan approved by …" (owner, 2026-11-19): the plan is no longer the job's, nor approved.
-              onUnstarPlan={currentUser ? () => {
-                setPlansPdfLink('');
-                updateApartment(apartment!.id, { plansPdfLink: undefined, plansApprovedBy: undefined, plansApprovedAt: undefined }, currentUser);
-                onToast(ui.isRtl ? 'הכוכב הוסר — התוכנית לא מאושרת' : 'Unstarred — the plan is no longer approved');
-              } : undefined}
+              /* "Plan approved by …", its Approve and its ★ live in the approval strip above the plan now (Option A,
+                 owner 2026-11-19) — not as a small pill in the bar. */
               /*
                 Plans is the chooser now, so what it picks has to land back
                 here. The rule the chip row carried is kept exactly: only an
