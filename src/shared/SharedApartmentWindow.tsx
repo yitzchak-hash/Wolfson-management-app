@@ -85,7 +85,9 @@ export function SharedApartmentWindow({ apartment, apartments, api, stages, boar
   const family = realName(apartment);
   const label = `${ui.aptPrefix} ${number}${family ? ` — ${family}` : ''}`;
   const myPins = pins.filter(p => p.apartmentId === apartment.id && p.planRef === apartment.planRef);
-  const planSideOn = planWide && planWanted && !!apartment.planRef;
+  // The plan pane is ALWAYS there on a wide screen — with or without a plan (owner, 2026-11-19: "the plan window should
+  // always be visible … if we didn't approve a plan yet, it should say in the middle, just in small, no approved plan yet").
+  const planSideOn = planWide;
   const size = drawerSizes(window.innerWidth, window.innerHeight, planRatio ?? Math.SQRT2);
 
   const planWords: PlanWords = {
@@ -104,9 +106,9 @@ export function SharedApartmentWindow({ apartment, apartments, api, stages, boar
     const asTab = variant === 'tab';
     if (!apartment.planRef) {
       return (
-        <div className="h-full flex flex-col items-center justify-center gap-2.5 p-6 text-center">
-          <BookOpen size={22} className="text-gray-300" />
-          <p className="text-[12.5px] text-gray-500">{W('No plan has been shared for this apartment yet.', 'עדיין לא שותפה תוכנית לדירה הזו.')}</p>
+        <div data-plan-pane={variant} data-no-plan className={`flex items-center justify-center p-6 text-center ${asTab ? 'h-full' : 'border-l border-gray-200'}`}
+          style={asTab ? { backgroundColor: '#f8fafc' } : { flex: '1 1 54%', minWidth: 0, backgroundColor: '#f8fafc' }}>
+          <p className="text-[12px] text-gray-400">{W('No approved plan yet', 'אין עדיין תוכנית מאושרת')}</p>
         </div>
       );
     }
@@ -119,7 +121,6 @@ export function SharedApartmentWindow({ apartment, apartments, api, stages, boar
           <SharedPlanViewer api={api} planRef={apartment.planRef} apartmentId={apartment.id}
             heading={ui.engineeringPlans || W('Plan', 'תוכנית')} label={label}
             pins={myPins} rtl={rtl} words={planWords}
-            onHide={asTab ? undefined : () => setPlanWanted(false)}
             onAspect={r => setPlanRatio(r)}
             onPinsChange={next => onPinsChange([...pins.filter(p => !(p.apartmentId === apartment.id && p.planRef === apartment.planRef)), ...next])} />
         </Suspense>
@@ -133,7 +134,8 @@ export function SharedApartmentWindow({ apartment, apartments, api, stages, boar
   const settle = (e: React.SyntheticEvent) => { if (Date.now() - bornAt.current < 400) { e.preventDefault(); e.stopPropagation(); } };
 
   return (
-    <div dir={rtl ? 'rtl' : 'ltr'} data-shared-window-root>
+    // Always left-to-right: Hebrew changes the WORDS, never the layout (the office's design language).
+    <div dir="ltr" data-shared-window-root>
       <div className="drawer-overlay fixed inset-0 bg-black/50 z-[110]" onClick={onClose} />
       <div role="dialog" aria-label={label} data-shared-window
         className={drawerPanelClass(isPhone)} style={drawerPanelStyle(isPhone, planSideOn, size)}
@@ -180,14 +182,6 @@ export function SharedApartmentWindow({ apartment, apartments, api, stages, boar
           {planSideOn && planPane('side')}
         </div>
 
-        {/* Bring it back — the side pane only. */}
-        {planWide && !planWanted && !!apartment.planRef && (
-          <button type="button" onClick={() => setPlanWanted(true)} title={W('Show the plan beside the details', 'הצגת התוכנית ליד הפרטים')}
-            className="absolute right-0 top-1/2 -translate-y-1/2 z-10 flex items-center gap-1 px-1.5 py-4 rounded-l-lg text-white text-[10px] font-bold"
-            style={{ backgroundColor: '#1e3a5f', writingMode: 'vertical-rl' }}>
-            <ChevronLeft size={12} style={{ transform: 'rotate(90deg)' }} /> PLAN
-          </button>
-        )}
       </div>
       {lightbox && <Lightbox api={api} {...lightbox} onIndex={i => setLightbox({ ...lightbox, index: i })} onClose={() => setLightbox(null)} />}
     </div>

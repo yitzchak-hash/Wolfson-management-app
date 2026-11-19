@@ -26,6 +26,8 @@ export interface SharedLink {
   projectId: string;
   /** SHA-256 of the token, hex. The token itself is never stored. */
   tokenHash: string;
+  /** The link's key itself, so it can be copied again (absent on links made before 2026-11-19). */
+  token?: string;
   createdAt: string;
   createdBy: string;
   revokedAt: string | null;
@@ -83,6 +85,9 @@ export async function createSharedLink(projectId: string, name: string, byName: 
     name: name.trim().slice(0, 80),
     projectId,
     tokenHash: await sha256Hex(token),
+    // Kept so the office can copy the link again any time (owner, 2026-11-19: "you should always have a copy link
+    // button"). The server still finds a link only by its hash.
+    token,
     createdAt: new Date().toISOString(),
     createdBy: byName,
     revokedAt: null,
@@ -112,6 +117,19 @@ export function useSharedLinks(projectId: string): SharedLink[] | null {
     });
   }, [projectId]);
   return links;
+}
+
+/** One line of a link's log, written by the server (lib/sharedView.js) — what the outside person did, from where. */
+export interface SharedLogEntry {
+  id: string; linkId: string; at: string;
+  action: 'open' | 'apartment' | 'plan' | 'photo' | 'pin-add' | 'pin-remove';
+  apartmentId?: string; ip?: string; city?: string; country?: string; device?: string;
+}
+const LOGS = 'sharedLinkLogs';
+/** A link's log, newest first (read when the office opens it — not live). */
+export async function loadSharedLog(linkId: string): Promise<SharedLogEntry[]> {
+  const rows = (await fsGetWhere(LOGS, { linkId })) as unknown as SharedLogEntry[];
+  return rows.sort((a, b) => (b.at ?? '').localeCompare(a.at ?? ''));
 }
 
 /** The outside pins on one apartment, live (only while its plan is on screen). */

@@ -348,7 +348,7 @@ export default function SharedPlanViewer({ api, planRef, apartmentId, heading, l
 
   return (
     <div ref={rootRef} data-shared-plan className={`${full ? 'fixed inset-0 z-[400]' : 'relative h-full'} flex flex-col min-h-0`}
-      style={{ backgroundColor: '#f8fafc' }} dir={rtl ? 'rtl' : 'ltr'}>
+      style={{ backgroundColor: '#f8fafc' }} dir="ltr">
       {/* The first bar: the plan's name, and Share. */}
       <div className="flex items-center gap-1.5 min-w-0 px-2.5 py-1.5 flex-shrink-0" style={{ backgroundColor: '#1e3a5f' }}>
         <Layers size={16} className="text-[#4aa8d8] flex-shrink-0" />

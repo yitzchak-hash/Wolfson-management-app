@@ -125,7 +125,7 @@ export default function SharedViewerApp({ token }: { token: string | null }) {
 
   if (fail && !data) {
     return (
-      <div className="min-h-[100dvh] flex items-center justify-center bg-gray-100 p-6" dir={s.isRtl ? 'rtl' : 'ltr'}>
+      <div className="min-h-[100dvh] flex items-center justify-center bg-gray-100 p-6" dir="ltr">
         <div className="bg-white rounded-2xl shadow-lg p-6 max-w-sm text-center space-y-3">
           <img src="/tzviair-logo.png" alt="TzviAir" className="h-10 mx-auto" />
           <h1 className="text-lg font-bold text-gray-900">
@@ -213,7 +213,7 @@ function ProjectView({ data, api, pins, setPins, s, W, lang, setLang, loading, o
   const pill = (on: boolean) => `px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${on ? 'bg-[#1e3a5f] text-white shadow-sm' : 'text-gray-600 hover:text-gray-900'}`;
 
   return (
-    <div className="h-[100dvh] flex flex-col bg-gray-100" dir={s.isRtl ? 'rtl' : 'ltr'} data-shared-view>
+    <div className="h-[100dvh] flex flex-col bg-gray-100" dir="ltr" data-shared-view>
       <header className="flex items-center gap-3 px-3 py-2 text-white flex-shrink-0" style={{ backgroundColor: '#1e3a5f' }}>
         <img src="/tzviair-logo.png" alt="TzviAir" className="h-8 w-auto rounded bg-white p-0.5" />
         <div className="min-w-0 flex-1">

@@ -334,7 +334,7 @@ let myPin;
 {
   // The write audit: everything this route ever wrote.
   const touched = writes.map(w => (w.update?.name ?? w.delete).split('/documents/')[1].split('/')[0]);
-  ok(touched.every(c => c === 'sharedPins' || c === 'sharedLinks'), `writes only to sharedPins / sharedLinks (saw: ${[...new Set(touched)].join(', ')})`);
+  ok(touched.every(c => c === 'sharedPins' || c === 'sharedLinks' || c === 'sharedLinkLogs'), `writes only to sharedPins / sharedLinks / sharedLinkLogs (saw: ${[...new Set(touched)].join(', ')})`);
   const linkWrites = writes.filter(w => w.update?.name?.includes('/sharedLinks/'));
   ok(linkWrites.every(w => JSON.stringify(w.updateMask.fieldPaths) === '["lastOpenedAt"]'
     && w.updateTransforms.every(t => ['openCount', '_updatedAt'].includes(t.fieldPath))), 'a link is only ever touched in lastOpenedAt / openCount');
