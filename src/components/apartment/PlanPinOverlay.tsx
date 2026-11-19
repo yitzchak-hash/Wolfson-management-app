@@ -1,25 +1,48 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { MapPin, Check, X, Printer, Plus, Trash2, RotateCcw, Paperclip, Loader2, FileText } from 'lucide-react';
+import { MapPin, Check, X, Printer, Plus, Trash2, RotateCcw } from 'lucide-react';
 import { useStore } from '../../data/store';
-import { PinFile } from '../../types';
+import { PinFile, SharedPinFile } from '../../types';
 import { storeVoiceMemo, RecordedMemo, LOCAL_MEMO_LIMIT } from '../../data/voiceMemo';
 import { VoiceMemoPlayer } from '../ui/VoiceMemo';
-import { MessageBox } from '../ui/MessageBox';
+import { MessageBox, memoFile } from '../ui/MessageBox';
 import {
-  isUploadBackendConfigured, extractFolderId, findOrCreateFolderViaBackend,
+  isUploadBackendConfigured, extractFolderId, extractFileId, findOrCreateFolderViaBackend,
   uploadFileViaBackend, shareFileToDrive,
 } from '../../data/driveApi';
+import { driveThumbUrl, driveOpenUrl } from '../../data/driveThumb';
 import { notePins, onPinsFiled } from '../../data/pinPush';
 import { DriveIcon } from '../ui/BrandIcons';
 import { useSharedPins } from '../../data/sharedLinks';
+import { PinAttachments, isAudio, isImage, type PinAttachmentView } from '../ui/PinAttachments';
+
+/** An office pin's files as the shared attachment strip draws them: thumbnails, players, chips. */
+function officeViews(files: PinFile[], lang: 'he' | 'en'): PinAttachmentView[] {
+  return files.map(f => {
+    const driveId = f.url.startsWith('data:') ? null : extractFileId(f.url);
+    return {
+      id: f.id, name: f.filename, mimeType: f.mimeType, href: f.url, download: f.url.startsWith('data:'),
+      thumb: isImage(f.mimeType) ? (driveId ? driveThumbUrl(driveId, 200) : f.url.startsWith('data:') ? f.url : undefined) : undefined,
+      player: isAudio(f.mimeType) ? <VoiceMemoPlayer src={f.url} lang={lang} /> : undefined,
+    };
+  });
+}
+
+/** An outside pin's files (the office reads their Drive ids off the record; the outside only ever had sealed refs). */
+function outsideViews(files: SharedPinFile[] | undefined, lang: 'he' | 'en'): PinAttachmentView[] {
+  return (files ?? []).filter(f => f.driveFileId).map(f => ({
+    id: f.id, name: f.name, mimeType: f.mimeType, href: driveOpenUrl(f.driveFileId!),
+    thumb: isImage(f.mimeType) ? driveThumbUrl(f.driveFileId!, 200) : undefined,
+    player: isAudio(f.mimeType) ? <VoiceMemoPlayer src={driveOpenUrl(f.driveFileId!)} lang={lang} /> : undefined,
+  }));
+}
 
 /**
  * The pins people OUTSIDE the office put on this plan through a shared link (Project settings → Shared, owner
  * 2026-11-18). The office sees them here, in blue, each with the link's name — read only: they are the outside
  * person's, they are never filed to Drive, and they never mix with the office's own punch list.
  */
-function OutsidePins({ apartmentId, planFileId }: { apartmentId: string; planFileId?: string | null }) {
+function OutsidePins({ apartmentId, planFileId, lang }: { apartmentId: string; planFileId?: string | null; lang: 'he' | 'en' }) {
   const projectId = useStore(st => st.currentProjectId);
   const all = useSharedPins(projectId, apartmentId);
   const pins = useMemo(() => all.filter(p => !planFileId || p.planFileId === planFileId)
@@ -50,7 +73,8 @@ function OutsidePins({ apartmentId, planFileId }: { apartmentId: string; planFil
               <span className="text-[10px] font-black text-blue-700 truncate flex-1">Shared · {p.linkName || 'link'}</span>
               <button onClick={() => setOpen(null)} title="Close" className="p-1 rounded-md text-gray-400 hover:text-gray-600"><X size={13} /></button>
             </div>
-            <p className="text-[12px] text-gray-800 whitespace-pre-wrap m-0">{p.text}</p>
+            {p.text && <p className="text-[12px] text-gray-800 whitespace-pre-wrap m-0" dir="auto">{p.text}</p>}
+            <PinAttachments className="mt-1.5" items={outsideViews(p.files, lang)} />
             <p className="text-[10px] text-gray-400 m-0 mt-1">
               {new Date(p.createdAt).toLocaleDateString()}{p.page > 0 ? ` · page ${p.page + 1}` : ''}
             </p>
@@ -127,7 +151,14 @@ export function PlanPinOverlay({
    * That is what lets the fields ride the synced `planPins` record with no
    * strip-and-merge machinery.
    */
+  /**
+   * A recording. The pin's FIRST one is its voice memo (the player with its words, as before); every one after it
+   * is kept as an audio attachment beside it — a second recording used to replace the first (owner, 2026-11-19:
+   * "allow me to also add a recording, and attachments").
+   */
   async function saveMemo(pinId: string, memo: RecordedMemo) {
+    const pin = planPins.find(x => x.id === pinId);
+    if (pin?.audioUrl) { await attachFiles(pinId, [memoFile(memo)]); return; }
     setBusy('audio'); setAttachError('');
     const res = await storeVoiceMemo(memo.blob, memo.seconds, driveFolderLink, 'Punch List');
     setBusy('');
@@ -135,39 +166,47 @@ export function PlanPinOverlay({
     updatePlanPin(pinId, { audioUrl: res.url, audioSeconds: Math.round(memo.seconds) });
   }
 
-  async function attachFile(pinId: string, f: File, existing: PinFile[]) {
-    setBusy('file'); setAttachError('');
+  /** One file to the job's Drive "Punch List" folder (or a small data URL with no backend) — its address, or null. */
+  async function storeFile(f: File): Promise<string | null> {
     const parent = driveFolderLink ? extractFolderId(driveFolderLink) : null;
-    let url: string | null = null;
     if (isUploadBackendConfigured() && parent) {
       try {
         const folderId = await findOrCreateFolderViaBackend(parent, 'Punch List');
         const res = await uploadFileViaBackend(folderId, f);
         if (res?.fileId) void shareFileToDrive(res.fileId);
-        if (res?.webViewLink) url = res.webViewLink;
+        if (res?.webViewLink) return res.webViewLink;
       } catch { /* fall through to the local path */ }
     }
-    if (!url) {
-      if (f.size > LOCAL_MEMO_LIMIT) {
-        setBusy('');
-        setAttachError('Too big to keep on this device — set the job\'s Drive folder and it will upload instead.');
-        return;
-      }
-      url = await new Promise<string | null>(resolve => {
-        const fr = new FileReader();
-        fr.onload = () => resolve(String(fr.result));
-        fr.onerror = () => resolve(null);
-        fr.readAsDataURL(f);
-      });
+    if (f.size > LOCAL_MEMO_LIMIT) {
+      setAttachError('Too big to keep on this device — set the job\'s Drive folder and it will upload instead.');
+      return null;
     }
-    setBusy('');
-    if (!url) { setAttachError('That file could not be saved.'); return; }
-    updatePlanPin(pinId, {
-      files: [...existing, {
-        id: 'PF-' + Date.now().toString(36),
-        filename: f.name, mimeType: f.type || 'application/octet-stream', url,
-      }],
+    return new Promise<string | null>(resolve => {
+      const fr = new FileReader();
+      fr.onload = () => resolve(String(fr.result));
+      fr.onerror = () => resolve(null);
+      fr.readAsDataURL(f);
     });
+  }
+
+  /** Every picked file, one after another; the pin's list is re-read after each so none overwrites another. */
+  async function attachFiles(pinId: string, files: File[]) {
+    setBusy('file'); setAttachError('');
+    try {
+      for (const f of files) {
+        const url = await storeFile(f);
+        if (!url) { setAttachError(e => e || 'That file could not be saved.'); continue; }
+        const existing: PinFile[] = useStore.getState().planPins.find(x => x.id === pinId)?.files ?? [];
+        updatePlanPin(pinId, {
+          files: [...existing, {
+            id: 'PF-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5),
+            filename: f.name, mimeType: f.type || 'application/octet-stream', url,
+          }],
+        });
+      }
+    } finally {
+      setBusy('');
+    }
   }
 
   const pins = useMemo(
@@ -360,7 +399,7 @@ export function PlanPinOverlay({
             <span className="w-px h-2" style={{ backgroundColor: p.resolvedAt ? '#94a3b8' : '#dc2626' }} />
           </button>
         ))}
-        {!workerMode && <OutsidePins apartmentId={apartmentId} planFileId={planFileId} />}
+        {!workerMode && <OutsidePins apartmentId={apartmentId} planFileId={planFileId} lang={cs.isRtl ? 'he' : 'en'} />}
 
         {/* Note bubble for the selected pin.
 
@@ -414,7 +453,7 @@ export function PlanPinOverlay({
                   placeholder={L.placeholder}
                   lang={cs.isRtl ? 'he' : 'en'}
                   busy={busy !== ''}
-                  onAttach={files => { const f = files[0]; return f ? Promise.resolve(attachFile(p.id, f, p.files ?? [])).then(() => {}) : undefined; }}
+                  onAttach={files => attachFiles(p.id, files)}
                   onMemo={memo => saveMemo(p.id, memo)}
                 />
               )}
@@ -435,34 +474,18 @@ export function PlanPinOverlay({
                 />
               )}
 
-              {/* Attached files, as small chips that open the file. */}
+              {/* Attached files — pictures as thumbnails, recordings as players, PDFs and the rest as chips; the
+                  same strip the outside link draws (PinAttachments). */}
               {(p.files ?? []).length > 0 && (
-                <div className="flex flex-wrap gap-1 mt-1.5" data-pin-files>
-                  {(p.files ?? []).map(f => (
-                    <span key={f.id}
-                      className="flex items-center gap-1 max-w-full pl-1.5 pr-1 py-0.5 rounded-lg border border-gray-200 bg-gray-50 text-[10px] text-gray-600">
-                      <FileText size={10} className="flex-shrink-0 text-[#1e3a5f]" />
-                      <a
-                        href={f.url}
-                        {...(f.url.startsWith('data:')
-                          ? { download: f.filename }
-                          : { target: '_blank', rel: 'noreferrer' })}
-                        className="truncate max-w-[150px] hover:underline"
-                        title={f.filename}>
-                        {f.filename}
-                      </a>
-                      {!readOnly && (
-                        <button
-                          onClick={() => updatePlanPin(p.id, {
-                            files: (p.files ?? []).filter(x => x.id !== f.id),
-                          })}
-                          title="Remove this file"
-                          className="p-0.5 rounded text-gray-400 hover:text-red-500">
-                          <X size={9} />
-                        </button>
-                      )}
-                    </span>
-                  ))}
+                <div data-pin-files>
+                  <PinAttachments
+                    className="mt-1.5"
+                    items={officeViews(p.files ?? [], cs.isRtl ? 'he' : 'en')}
+                    removeLabel="Remove this file"
+                    onRemove={readOnly ? undefined : id => updatePlanPin(p.id, {
+                      files: (p.files ?? []).filter(x => x.id !== id),
+                    })}
+                  />
                 </div>
               )}
 

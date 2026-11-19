@@ -10,9 +10,17 @@ import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useSta
 import '../components/plans/pdfCompat';   // must come before pdf.js
 import * as pdfjs from 'pdfjs-dist';
 import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
-import { Layers, Layers2, Maximize2, Minimize2, Printer, Download, Share2, MapPin, Plus, Minus, X, Trash2, Loader2, ChevronRight, Square } from 'lucide-react';
-import type { SharedApi, ViewerPin } from './sharedApi';
-import { SharedError } from './sharedApi';
+import { Layers, Layers2, Maximize2, Minimize2, Printer, Download, Share2, MapPin, Plus, Minus, X, Trash2, Loader2, ChevronRight, Square, Paperclip } from 'lucide-react';
+import type { SharedApi, ViewerPin, PinFileFailure } from './sharedApi';
+import { SharedError, PinFileError } from './sharedApi';
+import type { SharedPinFile } from '../types';
+import { PinComposer, pinAttachType, recordingFile, shrinkPhoto, PIN_ATTACH_MAX_BYTES, PIN_ATTACH_ACCEPT } from '../components/ui/PinComposer';
+import { PinAttachments, isAudio, isImage as isImageType, type PinAttachmentView } from '../components/ui/PinAttachments';
+import { VoiceRecorderButton } from '../components/ui/VoiceRecorderButton';
+
+/** A file picked (or recorded) for a pin that is not saved yet. */
+interface Pending { id: string; file: File; type: string; url: string }
+const MAX_FILES = 10;
 
 pdfjs.GlobalWorkerOptions.workerSrc = workerUrl;
 
@@ -58,6 +66,9 @@ export interface PlanWords {
   share: string; addPin: string; tapPlan: string; pinPlaceholder: string; save: string; cancel: string; remove: string;
   reallyRemove: string; loading: string; failed: string; page: string; fit: string; shareFallback: string; pinFailed: string;
   noLayers: string; yourPins: string; hide: string;
+  /** A pin's attachments and voice (owner, 2026-11-19). `uploading` has {n} and {total}. */
+  attach: string; dictate: string; record: string; stop: string; uploading: string; fileTooBig: string; fileType: string;
+  fileFailed: string; noFolder: string; tooMany: string; voiceNote: string;
 }
 
 export default function SharedPlanViewer({ api, planRef, apartmentId, heading, label, pins, onPinsChange, words: w, rtl, onHide, onAspect }: {
@@ -90,7 +101,9 @@ export default function SharedPlanViewer({ api, planRef, apartmentId, heading, l
   const [showLayers, setShowLayers] = useState(false);
   const [full, setFull] = useState(false);
   const [placing, setPlacing] = useState(false);
-  const [draft, setDraft] = useState<{ xPct: number; yPct: number; text: string } | null>(null);
+  const [draft, setDraft] = useState<{ xPct: number; yPct: number; text: string; files: Pending[] } | null>(null);
+  const [upMsg, setUpMsg] = useState('');
+  const addRef = useRef<HTMLInputElement>(null);
   const [open, setOpen] = useState<string | null>(null);
   const [armDelete, setArmDelete] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -287,7 +300,7 @@ export default function SharedPlanViewer({ api, planRef, apartmentId, heading, l
       }
       const esc = (t: string) => t.replace(/[&<>"]/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch]!));
       const list = pins.length
-        ? `<h2>${esc(w.yourPins)}</h2><ol>${pins.map(p => `<li>${esc(p.text)}${p.page ? ` <small>(${esc(w.page)} ${p.page + 1})</small>` : ''}</li>`).join('')}</ol>`
+        ? `<h2>${esc(w.yourPins)}</h2><ol>${pins.map(p => `<li>${esc(p.text || w.voiceNote)}${p.files?.length ? ` <small>(📎 ${p.files.length})</small>` : ''}${p.page ? ` <small>(${esc(w.page)} ${p.page + 1})</small>` : ''}</li>`).join('')}</ol>`
         : '';
       const html = `<!doctype html><html dir="${rtl ? 'rtl' : 'ltr'}"><head><meta charset="utf-8"><title>${esc(fileName)}</title>
         <style>body{margin:0;font:13px system-ui,sans-serif}img{display:block;width:100%;page-break-after:always}h1{font-size:15px;margin:8px}h2{font-size:14px;margin:12px 8px 4px}ol{margin:0 8px 0 28px}</style>
@@ -313,18 +326,118 @@ export default function SharedPlanViewer({ api, planRef, apartmentId, heading, l
     const r = e.currentTarget.getBoundingClientRect();
     const xPct = Math.max(0, Math.min(100, ((e.clientX - r.left) / r.width) * 100));
     const yPct = Math.max(0, Math.min(100, ((e.clientY - r.top) / r.height) * 100));
-    setDraft({ xPct, yPct, text: '' });
+    setDraft({ xPct, yPct, text: '', files: [] });
     setPlacing(false);
   };
-  const saveDraft = async () => {
-    if (!draft || !draft.text.trim() || busy) return;
+
+  // ── a pin's attachments: photos, PDFs and voice notes (owner, 2026-11-19) ──
+  const flash = (m: string) => { setNote(m); setTimeout(() => setNote(''), 5000); };
+  const failWord = (r: PinFileFailure) => (r === 'too_big' ? w.fileTooBig : r === 'type' ? w.fileType
+    : r === 'no_folder' ? w.noFolder : r === 'too_many' ? w.tooMany : w.fileFailed);
+  /** Only the kinds a pin may carry; big photos made smaller; nothing over 4 MB (the server's limit). */
+  const prepare = async (files: File[]): Promise<Pending[]> => {
+    const out: Pending[] = [];
+    for (const f0 of files) {
+      if (!pinAttachType(f0)) { flash(w.fileType); continue; }
+      const f = await shrinkPhoto(f0);
+      const type = pinAttachType(f);
+      if (!type) { flash(w.fileType); continue; }
+      if (f.size > PIN_ATTACH_MAX_BYTES) { flash(w.fileTooBig); continue; }
+      out.push({ id: `p${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`, file: f, type, url: URL.createObjectURL(f) });
+    }
+    return out;
+  };
+  const addToDraft = async (files: File[]) => {
+    const list = await prepare(files);
+    setDraft(d => {
+      if (!d) { list.forEach(p => URL.revokeObjectURL(p.url)); return d; }
+      const room = MAX_FILES - d.files.length;
+      if (list.length > room) { flash(w.tooMany); list.slice(room).forEach(p => URL.revokeObjectURL(p.url)); }
+      return { ...d, files: [...d.files, ...list.slice(0, Math.max(0, room))] };
+    });
+  };
+  const dropDraft = () => {
+    draft?.files.forEach(p => URL.revokeObjectURL(p.url));
+    setDraft(null);
+  };
+  /** One after another (the server keeps them in order), saying how far it got. */
+  const uploadAll = async (pinId: string, list: Pending[]): Promise<SharedPinFile[]> => {
+    const done: SharedPinFile[] = [];
+    for (let i = 0; i < list.length; i++) {
+      setUpMsg(w.uploading.replace('{n}', String(i + 1)).replace('{total}', String(list.length)));
+      try { done.push(await api.addPinFile(pinId, list[i].file, list[i].type, list[i].file.name)); }
+      catch (e) { flash(e instanceof PinFileError ? failWord(e.reason) : w.fileFailed); if (e instanceof PinFileError && e.reason === 'no_folder') break; }
+    }
+    setUpMsg('');
+    return done;
+  };
+  const addToPin = async (p: ViewerPin, files: File[]) => {
+    const room = MAX_FILES - (p.files?.length ?? 0);
+    if (room <= 0) { flash(w.tooMany); return; }
+    const list = await prepare(files);
+    if (!list.length) return;
+    if (list.length > room) flash(w.tooMany);
     setBusy(true);
     try {
-      const pin = await api.addPin({ apartmentId, planRef, page, xPct: draft.xPct, yPct: draft.yPct, text: draft.text.trim().slice(0, 500) });
-      onPinsChange([...pins, pin]);
-      setDraft(null);
+      const got = await uploadAll(p.id, list.slice(0, room));
+      if (got.length) onPinsChange(pins.map(x => (x.id === p.id ? { ...x, files: [...(x.files ?? []), ...got] } : x)));
+    } finally {
+      list.forEach(x => URL.revokeObjectURL(x.url));
+      setBusy(false);
+    }
+  };
+  const removeFile = async (p: ViewerPin, fileId: string) => {
+    setBusy(true);
+    try {
+      await api.deletePinFile(p.id, fileId);
+      onPinsChange(pins.map(x => (x.id === p.id ? { ...x, files: (x.files ?? []).filter(f => f.id !== fileId) } : x)));
+    } catch { flash(w.pinFailed); } finally { setBusy(false); }
+  };
+  /** Open a picture or a PDF — its bytes fetched with the key in a header, never in a new tab's address bar. */
+  const openFile = async (f: SharedPinFile) => {
+    if (!f.ref) return;
+    const win = window.open('', '_blank');
+    try {
+      const b = await api.fileBytes(f.ref);
+      const url = URL.createObjectURL(b.type && b.type !== 'application/octet-stream' ? b : new Blob([b], { type: f.mimeType }));
+      if (win) win.location.href = url;
+      else {
+        const a = document.createElement('a');
+        a.href = url; a.download = f.name; document.body.appendChild(a); a.click(); a.remove();
+      }
+      setTimeout(() => URL.revokeObjectURL(url), 120_000);
     } catch {
-      setNote(w.pinFailed); setTimeout(() => setNote(''), 5000);
+      win?.close();
+      flash(w.fileFailed);
+    }
+  };
+  const savedViews = (files: SharedPinFile[] | undefined): PinAttachmentView[] => (files ?? []).filter(f => f.ref).map(f => ({
+    id: f.id, name: f.name, mimeType: f.mimeType,
+    thumb: isImageType(f.mimeType) ? api.fileUrl(f.ref!, 240) : undefined,
+    onOpen: () => void openFile(f),
+    player: isAudio(f.mimeType)
+      ? <audio controls preload="none" src={api.fileUrl(f.ref!)} className="w-full h-9" data-pin-audio />
+      : undefined,
+  }));
+  const pendingViews = (list: Pending[]): PinAttachmentView[] => list.map(p => ({
+    id: p.id, name: p.file.name, mimeType: p.type, pending: busy,
+    thumb: isImageType(p.type) && !/heic|heif/.test(p.type) ? p.url : undefined,
+    player: isAudio(p.type) ? <audio controls preload="metadata" src={p.url} className="w-full h-9" /> : undefined,
+  }));
+
+  const saveDraft = async () => {
+    if (!draft || (!draft.text.trim() && !draft.files.length) || busy) return;
+    setBusy(true);
+    try {
+      const pin = await api.addPin({
+        apartmentId, planRef, page, xPct: draft.xPct, yPct: draft.yPct, text: draft.text.trim().slice(0, 500),
+        attachments: draft.files.length > 0,
+      });
+      const files = draft.files.length ? await uploadAll(pin.id, draft.files) : [];
+      onPinsChange([...pins, { ...pin, files: [...(pin.files ?? []), ...files] }]);
+      dropDraft();
+    } catch {
+      flash(w.pinFailed);
     } finally { setBusy(false); }
   };
   const removePin = async (id: string) => {
@@ -366,7 +479,7 @@ export default function SharedPlanViewer({ api, planRef, apartmentId, heading, l
       {/* The second bar, a lighter navy: the pins, then layers, download, print and full screen. */}
       <div className="relative flex items-center gap-1.5 min-w-0 px-2.5 py-1 flex-shrink-0" style={{ backgroundColor: '#2c4f78' }}>
         <button type="button" data-plan-pin-add disabled={!doc}
-          onClick={() => { setPlacing(v => !v); setDraft(null); setOpen(null); }}
+          onClick={() => { setPlacing(v => !v); dropDraft(); setOpen(null); }}
           title={placing ? w.tapPlan : w.addPin}
           className="flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-bold shadow-sm border transition-colors flex-shrink-0 disabled:opacity-50"
           style={placing
@@ -461,7 +574,7 @@ export default function SharedPlanViewer({ api, planRef, apartmentId, heading, l
               <div className="absolute inset-0" onClick={placeAt} style={{ cursor: placing ? 'crosshair' : undefined }} data-plan-sheet>
                 {pagePins.map(p => (
                   <button key={p.id} type="button" data-viewer-pin={p.id}
-                    onClick={e => { e.stopPropagation(); setOpen(open === p.id ? null : p.id); setArmDelete(false); setDraft(null); }}
+                    onClick={e => { e.stopPropagation(); setOpen(open === p.id ? null : p.id); setArmDelete(false); dropDraft(); }}
                     className="absolute -translate-x-1/2 -translate-y-full flex flex-col items-center" style={{ left: `${p.xPct}%`, top: `${p.yPct}%` }}>
                     <span className="flex items-center justify-center w-6 h-6 rounded-full text-[11px] font-black text-white shadow-md" style={{ backgroundColor: '#2563eb' }}>
                       {pins.indexOf(p) + 1}
@@ -472,15 +585,29 @@ export default function SharedPlanViewer({ api, planRef, apartmentId, heading, l
                 {open && (() => {
                   const p = pagePins.find(x => x.id === open);
                   if (!p) return null;
+                  const nFiles = p.files?.length ?? 0;
                   return (
-                    <div onClick={e => e.stopPropagation()} className="absolute z-20 bg-white rounded-xl shadow-2xl border border-gray-200 p-2.5"
-                      style={{ left: `min(${p.xPct}%, calc(100% - 252px))`, top: `calc(${p.yPct}% + 8px)`, width: 244 }}>
+                    <div onClick={e => e.stopPropagation()} data-viewer-pin-note className="absolute z-20 bg-white rounded-xl shadow-2xl border border-gray-200 p-2.5"
+                      style={{ left: `min(${p.xPct}%, calc(100% - 288px))`, top: `calc(${p.yPct}% + 8px)`, width: 280 }}>
                       <div className="flex items-center gap-1.5 mb-1">
                         <span className="text-[10px] font-black text-blue-700 flex-1">#{pins.indexOf(p) + 1} · {new Date(p.createdAt).toLocaleDateString()}</span>
                         <button type="button" onClick={() => setOpen(null)} className="p-1 text-gray-400" aria-label={w.cancel}><X size={13} /></button>
                       </div>
-                      <p className="text-[12.5px] text-gray-800 whitespace-pre-wrap m-0">{p.text}</p>
-                      <div className="flex justify-end mt-1.5">
+                      {p.text && <p className="text-[12.5px] text-gray-800 whitespace-pre-wrap m-0" dir="auto">{p.text}</p>}
+                      <PinAttachments className="mt-1.5" items={savedViews(p.files)} removeLabel={w.remove}
+                        onRemove={busy ? undefined : id => void removeFile(p, id)} />
+                      {upMsg && <p className="flex items-center gap-1 text-[11px] text-gray-500 mt-1 m-0"><Loader2 size={11} className="animate-spin" />{upMsg}</p>}
+                      <div className="flex items-center gap-1 mt-1.5">
+                        {nFiles < MAX_FILES && (<>
+                          <button type="button" data-viewer-pin-attach disabled={busy} onClick={() => addRef.current?.click()} title={w.attach} aria-label={w.attach}
+                            className="w-8 h-8 flex items-center justify-center rounded-full text-gray-500 hover:text-[#1e3a5f] hover:bg-gray-100 disabled:opacity-40">
+                            <Paperclip size={15} />
+                          </button>
+                          <input ref={addRef} type="file" multiple className="hidden" accept={PIN_ATTACH_ACCEPT}
+                            onChange={e => { const fs = [...(e.target.files ?? [])]; e.target.value = ''; if (fs.length) void addToPin(p, fs); }} />
+                          <VoiceRecorderButton compact busy={busy} title={w.record} onRecorded={memo => void addToPin(p, [recordingFile(memo)])} />
+                        </>)}
+                        <div className="flex-1" />
                         <button type="button" disabled={busy} onClick={() => void removePin(p.id)}
                           className={armDelete ? 'px-2 py-1 rounded-lg text-[11px] font-bold bg-red-600 text-white' : 'inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] text-gray-500 hover:text-red-600'}>
                           {armDelete ? w.reallyRemove : <><Trash2 size={12} /> {w.remove}</>}
@@ -491,15 +618,24 @@ export default function SharedPlanViewer({ api, planRef, apartmentId, heading, l
                 })()}
                 {draft && (
                   <div onClick={e => e.stopPropagation()} className="absolute z-20 bg-white rounded-xl shadow-2xl border border-blue-200 p-2.5"
-                    style={{ left: `min(${draft.xPct}%, calc(100% - 260px))`, top: `calc(${draft.yPct}% + 4px)`, width: 252 }}>
+                    style={{ left: `min(${draft.xPct}%, calc(100% - 318px))`, top: `calc(${draft.yPct}% + 4px)`, width: 310, maxWidth: 'calc(100% - 8px)' }}>
                     <span className="absolute w-3 h-3 rounded-full" style={{ backgroundColor: '#2563eb', left: -6, top: -10 }} />
-                    <textarea autoFocus rows={3} maxLength={500} value={draft.text} data-viewer-pin-text
-                      onChange={e => setDraft({ ...draft, text: e.target.value })}
-                      placeholder={w.pinPlaceholder}
-                      className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-300" />
+                    <PinComposer hook="viewer-pin-text" autoFocus rows={2} maxLength={500} value={draft.text}
+                      onChange={t => setDraft(d => (d ? { ...d, text: t } : d))}
+                      onFiles={fs => void addToDraft(fs)}
+                      onMemo={memo => void addToDraft([recordingFile(memo)])}
+                      lang={rtl ? 'he' : 'en'} placeholder={w.pinPlaceholder} busy={busy}
+                      words={{ attach: w.attach, dictate: w.dictate, record: w.record, stop: w.stop }} />
+                    <PinAttachments className="mt-1.5" items={pendingViews(draft.files)} removeLabel={w.remove}
+                      onRemove={busy ? undefined : id => setDraft(d => {
+                        if (!d) return d;
+                        d.files.filter(p => p.id === id).forEach(p => URL.revokeObjectURL(p.url));
+                        return { ...d, files: d.files.filter(p => p.id !== id) };
+                      })} />
+                    {upMsg && <p className="flex items-center gap-1 text-[11px] text-gray-500 mt-1 m-0"><Loader2 size={11} className="animate-spin" />{upMsg}</p>}
                     <div className="flex justify-end gap-1.5 mt-1.5">
-                      <button type="button" onClick={() => setDraft(null)} className="px-2.5 py-1 rounded-lg text-[12px] text-gray-500">{w.cancel}</button>
-                      <button type="button" disabled={!draft.text.trim() || busy} onClick={() => void saveDraft()} data-viewer-pin-save
+                      <button type="button" disabled={busy} onClick={dropDraft} className="px-2.5 py-1 rounded-lg text-[12px] text-gray-500">{w.cancel}</button>
+                      <button type="button" disabled={(!draft.text.trim() && !draft.files.length) || busy} onClick={() => void saveDraft()} data-viewer-pin-save
                         className="px-3 py-1 rounded-lg text-[12px] font-bold text-white bg-blue-600 disabled:opacity-40">
                         {busy ? <Loader2 size={12} className="animate-spin" /> : w.save}
                       </button>

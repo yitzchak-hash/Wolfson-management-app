@@ -122,6 +122,18 @@ const drive = {
   async media(id) { driveCalls.push(['media', id]); return { status: 200, stream: Readable.from([Buffer.from(`BYTES:${id}`)]) }; },
   async thumb() { return new Response(Buffer.from('THUMB'), { status: 200, headers: { 'content-type': 'image/jpeg' } }); },
 };
+// The one writing door (an outside pin's attachments): folders found / made, files put.
+const driveWrites = [];
+let uploaded = 0;
+const driveWriter = {
+  async ensureFolder(parent, name) { driveWrites.push(['folder', parent, name]); return `${parent}_${name.replace(/ /g, '')}`; },
+  async create(parent, name, type, bytes) {
+    const id = `UPLOADED_PINFILE_${++uploaded}`;
+    driveWrites.push(['create', parent, name, type, bytes.length]);
+    driveMeta[id] = { mimeType: type, size: bytes.length };
+    return id;
+  },
+};
 
 // ── fake request / response ──────────────────────────────────────────────────
 class Res extends Writable {
@@ -137,7 +149,7 @@ async function call({ method = 'GET', query = {}, token, headers = {}, body, ip 
   const req = { method, query, headers: { ...headers, 'x-forwarded-for': ip ?? `10.0.0.${(ipSeq++ % 200) + 1}` }, body };
   if (token !== undefined) req.headers['x-share-token'] = token;
   const res = new Res();
-  await handleShared(req, res, { env, fetchImpl: fakeFetch, drive });
+  await handleShared(req, res, { env, fetchImpl: fakeFetch, drive, driveWriter });
   await new Promise(r => setTimeout(r, 5));
   return res;
 }
@@ -323,6 +335,84 @@ let myPin;
   ok((await call({ method: 'DELETE', query: { sv: 'pin', id: '../apartments/A1-1' }, token: TOKEN_A })).statusCode === 400, 'delete with a path in the id → 400');
   const mine = await call({ method: 'DELETE', query: { sv: 'pin', id: myPin.id }, token: TOKEN_A });
   ok(mine.statusCode === 200 && !db.get('sharedPins').has(myPin.id), 'deleting its own pin works');
+}
+
+{
+  // A pin's attachments (photos, PDFs, recordings) — the second write, into Drive and onto the link's own pin.
+  _resetForTests();
+  const a1 = view.apartments.find(a => a.id === 'A1-1');
+  const a2 = view.apartments.find(a => a.id === 'A1-2');
+  const PNG = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.alloc(40, 1)]);
+  const WEBM = Buffer.concat([Buffer.from([0x1a, 0x45, 0xdf, 0xa3]), Buffer.alloc(40, 2)]);
+  const PDF = Buffer.concat([Buffer.from('%PDF-1.7\n'), Buffer.alloc(40, 3)]);
+  const OCT = { 'content-type': 'application/octet-stream' };
+  const up = (pin, type, body, extra = {}) => call({ method: 'POST', query: { sv: 'pinfile', pin, type, name: 'photo.png', ...(extra.query ?? {}) },
+    token: extra.token ?? TOKEN_A, headers: { ...OCT, ...(extra.headers ?? {}) }, body });
+
+  const voiceOnly = await call({ method: 'POST', query: { sv: 'pin' }, token: TOKEN_A, headers: PIN_HEADERS,
+    body: { apartmentId: 'A1-1', planRef: a1.planRef, page: 0, xPct: 50, yPct: 50, text: '', attachments: true } });
+  ok(voiceOnly.statusCode === 200, 'a pin with no words but attachments to follow is saved');
+  const pinId = voiceOnly.json?.pin?.id;
+
+  const r = await up(pinId, 'image/png', PNG, { query: { name: '../../evil<script>.png' } });
+  ok(r.statusCode === 200 && typeof r.json?.file?.ref === 'string' && r.json.file.ref.length > 40, 'a photo on its own pin is saved and comes back as a sealed ref');
+  ok(!r.text.includes('UPLOADED_PINFILE') && !r.text.includes('FOLDER_A1_1'), 'the answer never names the Drive file or folder');
+  ok(!/[/<>\\]/.test(r.json?.file?.name ?? '/'), 'the file name is cleaned (no paths, no tags)');
+  const create = driveWrites.find(w => w[0] === 'create');
+  ok(create && create[1] === 'FOLDER_A1_1_PunchList_Outside' && create[3] === 'image/png', 'it lands in the apartment\'s own "Punch List/Outside" Drive folder');
+  const stored = db.get('sharedPins').get(pinId)?.fields;
+  ok(stored?.files?.length === 1 && stored.files[0].driveFileId === 'UPLOADED_PINFILE_1' && stored.text === '', 'the pin keeps the file (for the office); nothing else on it changed');
+  const streamed = await call({ query: { sv: 'file', f: r.json.file.ref }, token: TOKEN_A });
+  ok(streamed.statusCode === 200 && streamed.text === 'BYTES:UPLOADED_PINFILE_1', 'the attachment streams back through its ref');
+  ok((await call({ query: { sv: 'file', f: r.json.file.ref }, token: TOKEN_B })).statusCode === 404, 'another link cannot open it');
+
+  const voice = await up(pinId, 'audio/webm;codecs=opus', WEBM, { query: { name: 'memo.webm' } });
+  ok(voice.statusCode === 200 && voice.json?.file?.mimeType === 'audio/webm', 'a voice recording is saved');
+  const played = await call({ query: { sv: 'file', f: voice.json.file.ref }, token: TOKEN_A });
+  ok(played.statusCode === 200 && played.headers['content-type'] === 'audio/webm', 'the recording plays back through the server');
+  ok((await up(pinId, 'application/pdf', PDF)).statusCode === 200, 'a PDF is saved');
+
+  const back = await call({ query: { sv: 'data' }, token: TOKEN_A });
+  const bp = back.json.pins.find(p => p.id === pinId);
+  ok(bp?.files?.length === 3 && bp.files.every(f => f.ref && f.mimeType && f.name && !('driveFileId' in f)), 'the opening read carries each attachment as ref + type + name');
+  ok(!back.text.includes('UPLOADED_PINFILE'), 'the opening read never names an attachment\'s Drive file');
+
+  const otherId = 'sp_' + 'b'.repeat(32);
+  const before = driveWrites.length;
+  ok((await up(otherId, 'image/png', PNG)).statusCode === 404, 'attaching to another link\'s pin → 404');
+  ok((await up(pinId, 'image/png', PNG, { token: TOKEN_B })).statusCode === 404, 'attaching to this pin with another link\'s token → 404');
+  ok((await up(pinId, 'image/png', PNG, { token: TOKEN_OFF })).statusCode === 404, 'attaching under a turned-off link → 404');
+  ok((await up('sp_' + 'c'.repeat(32), 'image/png', PNG)).statusCode === 404, 'attaching to a pin that does not exist → 404');
+  ok((await up('../apartments/A1-1', 'image/png', PNG)).statusCode === 400, 'a path for the pin id → 400');
+  ok((await up(pinId, 'image/png', PNG, { headers: { 'content-length': String(5 * 1024 * 1024) } })).statusCode === 413, 'over 4 MB (by its length) → 413');
+  ok((await up(pinId, 'image/png', Buffer.concat([PNG, Buffer.alloc(4 * 1024 * 1024)]))).statusCode === 413, 'over 4 MB (by its bytes) → 413');
+  for (const t of ['image/svg+xml', 'text/html', 'application/javascript', 'video/mp4', 'application/octet-stream', '']) {
+    ok((await up(pinId, t, PNG)).statusCode === 415, `type "${t}" refused → 415`);
+  }
+  ok((await up(pinId, 'image/png', PDF)).statusCode === 415, 'bytes that are not what the type claims → 415');
+  ok((await up(pinId, 'audio/webm', Buffer.from('<html><script>x</script></html>'))).statusCode === 415, 'a web page dressed as a recording → 415');
+  ok((await up(pinId, 'image/png', PNG, { headers: { 'content-type': 'application/json' } })).statusCode === 400, 'not sent as raw bytes → 400');
+  ok((await up(pinId, 'image/png', Buffer.alloc(0))).statusCode === 400, 'an empty file → 400');
+  ok(driveWrites.length === before, 'nothing refused ever reached Drive');
+
+  // A pin on an apartment with no Drive folder: refused before anything is written.
+  const p2 = await call({ method: 'POST', query: { sv: 'pin' }, token: TOKEN_A, headers: PIN_HEADERS,
+    body: { apartmentId: 'A1-2', planRef: a2.planRef, page: 0, xPct: 5, yPct: 5, text: 'No folder here' } });
+  ok((await up(p2.json.pin.id, 'image/png', PNG)).statusCode === 409, 'an apartment with no Drive folder → 409, nothing uploaded');
+
+  for (let i = 3; i < 10; i++) await up(pinId, 'image/png', PNG);
+  ok((await up(pinId, 'image/png', PNG)).statusCode === 409, 'at most 10 attachments on a pin → 409');
+
+  const fid = voice.json.file.id;
+  ok((await call({ method: 'DELETE', query: { sv: 'pinfile', pin: otherId, id: fid }, token: TOKEN_A })).statusCode === 404, 'removing an attachment from another link\'s pin → 404');
+  ok((await call({ method: 'DELETE', query: { sv: 'pinfile', pin: pinId, id: fid }, token: TOKEN_B })).statusCode === 404, 'removing with another link\'s token → 404');
+  ok((await call({ method: 'DELETE', query: { sv: 'pinfile', pin: pinId, id: '../x' }, token: TOKEN_A })).statusCode === 400, 'removing with a junk id → 400');
+  const del = await call({ method: 'DELETE', query: { sv: 'pinfile', pin: pinId, id: fid }, token: TOKEN_A });
+  ok(del.statusCode === 200 && !db.get('sharedPins').get(pinId).fields.files.some(f => f.id === fid), 'removing its own attachment works');
+
+  const pinWrites = writes.filter(w => w.update?.name?.includes(`/sharedPins/${pinId}`) && w.updateMask);
+  ok(pinWrites.length > 0 && pinWrites.every(w => JSON.stringify(w.updateMask.fieldPaths) === '["files"]' && w.currentDocument?.updateTime),
+    'an attachment only ever touches the pin\'s `files`, and only the version it read');
 }
 
 {

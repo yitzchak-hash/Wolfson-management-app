@@ -12,7 +12,7 @@ function getAuth() {
 
 export default async function handler(req, res) {
   // The outside SHARED VIEW (/s/<token>) lives in lib/sharedView.js and is reached through this file with
-  // ?sv=data|photos|file|pin — /api may hold only 12 files and already does. It answers before anything below:
+  // ?sv=data|media|photos|file|pin|pinfile — /api may hold only 12 files and already does. It answers before anything below:
   // no CORS, no office API key, its own token check (owner, 2026-11-18).
   if (isSharedRequest(req)) return handleShared(req, res);
 

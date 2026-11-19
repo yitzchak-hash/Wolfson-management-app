@@ -151,7 +151,7 @@ export function SharedLinksSettings({ onToast }: { onToast: (msg: string, type?:
 
 const ACTION_WORDS: Record<SharedLogEntry['action'], string> = {
   open: 'Opened the link', apartment: 'Opened apartment', plan: 'Looked at the plan of', photo: 'Looked at photos',
-  'pin-add': 'Added a pin on', 'pin-remove': 'Removed a pin on',
+  'pin-add': 'Added a pin on', 'pin-remove': 'Removed a pin on', 'pin-file': 'Added a file to a pin on',
 };
 
 /** A link's log: when, what, which apartment, from where (city, country, IP) and on what device. */
