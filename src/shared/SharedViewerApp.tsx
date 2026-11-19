@@ -214,18 +214,27 @@ function ProjectView({ data, api, pins, setPins, s, W, lang, setLang, loading, o
 
   return (
     <div className="h-[100dvh] flex flex-col bg-gray-100" dir="ltr" data-shared-view>
-      <header className="flex items-center gap-3 px-3 py-2 text-white flex-shrink-0" style={{ backgroundColor: '#1e3a5f' }}>
-        <img src="/tzviair-logo.png" alt="TzviAir" className="h-8 w-auto rounded bg-white p-0.5" />
+      {/* The office header's look (owner, 2026-11-19): white, the full-colour TzviAir mark, a line, then the project's
+          own logo and name — never the TzviAir logo squeezed into a white box on navy. */}
+      <header className="flex items-center gap-3 px-3 md:px-5 py-2 bg-white border-b border-gray-200 flex-shrink-0" data-shared-header>
+        <img src="/tzviair-logo.png" alt="TzviAir" className="h-9 md:h-12 w-auto max-w-[110px] md:max-w-none object-contain flex-shrink-0"
+          style={{ filter: 'drop-shadow(0 1px 3px rgba(0,0,0,0.18))' }} />
+        <span className="w-px self-stretch bg-gray-200 flex-shrink-0" aria-hidden="true" />
+        {data.project.logo && (
+          <span className="w-10 h-10 md:w-12 md:h-12 rounded-lg overflow-hidden border border-gray-200 bg-white flex items-center justify-center flex-shrink-0">
+            <img src={data.project.logo} alt="" className="w-full h-full object-contain" />
+          </span>
+        )}
         <div className="min-w-0 flex-1">
-          <div className="font-bold truncate">{data.project.name}</div>
-          <div className="text-[11.5px] text-white/75 truncate flex items-center gap-1">
+          <div className="font-bold text-[#1e3a5f] truncate md:text-lg">{data.project.name}</div>
+          <div className="text-[11.5px] text-gray-500 truncate flex items-center gap-1">
             <Eye size={12} className="flex-shrink-0" /> {W('View only', 'צפייה בלבד')}{data.link.name ? ` · ${data.link.name}` : ''}
           </div>
         </div>
-        <button type="button" onClick={onRefresh} disabled={loading} className="p-2 rounded-lg hover:bg-white/10" title={W('Refresh', 'רענון')}>
+        <button type="button" onClick={onRefresh} disabled={loading} className="p-2 rounded-lg text-gray-500 hover:bg-gray-100" title={W('Refresh', 'רענון')}>
           {loading ? <Loader2 size={16} className="animate-spin" /> : <RefreshCw size={16} />}
         </button>
-        <button type="button" onClick={() => setLang(lang === 'he' ? 'en' : 'he')} className="px-2.5 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-xs font-bold">
+        <button type="button" onClick={() => setLang(lang === 'he' ? 'en' : 'he')} className="px-2.5 py-1.5 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-bold">
           {lang === 'he' ? 'EN' : 'עב'}
         </button>
       </header>

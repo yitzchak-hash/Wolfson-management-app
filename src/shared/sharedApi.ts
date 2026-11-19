@@ -12,7 +12,7 @@ export interface ViewerPin {
 }
 export interface SharedViewData {
   link: { name: string };
-  project: { id: string; name: string };
+  project: { id: string; name: string; logo?: string };
   buildings: Array<Pick<Building, 'id' | 'name'>>;
   board: BoardSetting;
   stages: Stage[];
