@@ -15,7 +15,7 @@
  */
 import { isStartStage } from '../../data/stageMarks';
 import { crewOf, acCompanyOf, isCompanyButton, isInspectedButton, isWallButton, DEFAULT_AC_COMPANY } from '../../data/aptCrew';
-import { inspectionsOf, doneWordOf, waitingInspection } from '../../data/stageHow';
+import { inspectionsOf, doneWordOf, waitingInspection, isTzviName } from '../../data/stageHow';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Apartment, Stage, CustomButton } from '../../types';
 import { realName } from '../../data/aptSale';
@@ -560,8 +560,8 @@ export default function BuildingView({ apartments, stages, onOpen, words, initia
                             </g>);
                           x += 56 + 10;
                         }
-                        // The plan is starred (approved): a green ✓; no plan, nothing at all (owner, 2026-11-19).
-                        if (apt.plansPdfLink) {
+                        // A green ✓ only when TZVI approved the plan (owner, 2026-11-19: "the green V is only supposed to be in the apartments where I approve the plans"); otherwise nothing.
+                        if (apt.plansPdfLink && isTzviName(apt.plansApprovedBy)) {
                           parts.push(
                             <g key="p" className="bv-flat-plan" data-flat-plan-ok>
                               <title>{w.planOk}</title>

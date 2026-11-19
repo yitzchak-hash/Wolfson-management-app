@@ -1777,6 +1777,14 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
               onConfirmAutoPlan={autoPlan && detectedPdfId ? () => starPlan({ id: detectedPdfId }) : undefined}
               approvedNote={!autoPlan && starredPlanId && fileId === starredPlanId && plansApprovedBy
                 ? ui.planApprovedBy.replace('{who}', plansApprovedBy) : undefined}
+              // Tzvi presses "Plan approved by Hodaya" → it becomes approved by him (owner, 2026-11-19); the building view's
+              // green ✓ shows only for his approvals.
+              onApproveAsMe={currentUser && isTzvi(currentUser.name) && plansApprovedBy && !isTzvi(plansApprovedBy) ? () => {
+                updateApartment(apartment!.id, { plansApprovedBy: currentUser.name, plansApprovedAt: new Date().toISOString() }, currentUser);
+                haptic('success');
+                onToast(ui.isRtl ? 'התוכנית אושרה על ידך' : 'Approved by you');
+              } : undefined}
+              approveAsMeLabel={ui.isRtl ? 'לאשר בעצמי' : 'Approve it myself'}
               // Unstar right beside "Plan approved by …" (owner, 2026-11-19): the plan is no longer the job's, nor approved.
               onUnstarPlan={currentUser ? () => {
                 setPlansPdfLink('');
