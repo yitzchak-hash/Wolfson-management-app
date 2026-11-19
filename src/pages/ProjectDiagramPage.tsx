@@ -1,11 +1,12 @@
-import React, { useState, useCallback, useMemo, useEffect } from 'react';
+import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import { StandardPlanButton } from '../components/building/StandardPlan';
 import { WOLFSON_PLAN, type BuildingPlan } from '../components/building/buildingPlan';
 import { NETIV_PLAN, NETIV_PLAN_B1 } from '../components/building/netivPlan';
 import { haptic } from '../data/haptics';
 import { Search, X, CheckSquare, Printer, ChevronDown, SlidersHorizontal } from 'lucide-react';
-import { Navigate, useNavigate } from 'react-router-dom';
-import { redeemReturn } from '../data/unitTravel';
+import { Navigate, useLocation, useNavigate } from 'react-router-dom';
+import { redeemReturn, holdTicketThroughBack } from '../data/unitTravel';
+import { readPlace, savePlace, type ProjectPlace } from '../data/projectPlace';
 import { Tooltip } from '../components/ui/Tooltip';
 import { useStore, trackUndo } from '../data/store';
 import { Apartment, BuildingId, isCountableApartment } from '../types';
@@ -95,14 +96,36 @@ export function ProjectDiagramPage() {
   const isNarrow = useNarrow();
   const roomForAll = useRoomForAll();
   const [filtersOpen, setFiltersOpen] = useState(false);
-  const [pickedBuilding, setSelectedBuilding] = useState<BuildingId | 'all'>('all');
+  /**
+   * WHERE HE STOOD in this project — the building tab, Board or Building, the floor — is remembered on this screen
+   * (owner, 2026-11-19: "when I go in and out, to come back to the same floor and the same place where I was").
+   * Kept per project, so it is read again the moment the project changes; see projectPlace.ts.
+   */
+  const [placeState, setPlaceState] = useState(() => ({ pid: currentProjectId, ...readPlace(currentProjectId) }));
+  const place = placeState.pid === currentProjectId ? placeState : { pid: currentProjectId, ...readPlace(currentProjectId) };
+  if (place !== placeState) setPlaceState(place);
+  const keepPlace = useCallback((patch: ProjectPlace) => {
+    const pid = useStore.getState().currentProjectId;
+    setPlaceState(s => {
+      const base = s.pid === pid ? s : { pid, ...readPlace(pid) };
+      // Nothing new: the SAME object back, or a floor told on every render would re-render the page for ever.
+      if (base === s && (Object.keys(patch) as (keyof ProjectPlace)[]).every(k => s[k] === patch[k])) return s;
+      return { ...base, ...patch };
+    });
+    const had = readPlace(pid);
+    if ((Object.keys(patch) as (keyof ProjectPlace)[]).some(k => had[k] !== patch[k])) savePlace(pid, patch);
+  }, []);
+  const pickedBuilding = (place.building ?? 'all') as BuildingId | 'all';
+  const setSelectedBuilding = useCallback((b: BuildingId | 'all') => keepPlace({ building: b }), [keepPlace]);
   // A building picked in ONE project means nothing in another (owner's picture, 2026-11-17: after switching from
   // Wolfson to Netiv the view drew Wolfson's tower "1" with no flats and no tab lit). Then it is All again.
   const selectedBuilding: BuildingId | 'all' = pickedBuilding !== 'all' && buildings.some(b => b.id === pickedBuilding) ? pickedBuilding : 'all';
   /** Board or the see-through building (owner, recording 2026-11-02), for one Wolfson building. */
   // The Building view is what opens first, on every device (owner, 2026-11-05: "everywhere it should be the building
   // view as the default. Also on the computer"). A workspace with no Building view shows its board as before.
-  const [view, setView] = useState<'board' | 'building'>('building');
+  const view: 'board' | 'building' = place.view ?? 'building';
+  const setView = useCallback((v: 'board' | 'building') => keepPlace({ view: v }), [keepPlace]);
+  const keepFloor = useCallback((k: string) => keepPlace({ floorKey: k }), [keepPlace]);
   /** On All, the floor whose row is open big in its own window. */
   const [floorWin, setFloorWin] = useState<{ b: BuildingId; key: string; label: string } | null>(null);
   const [activeStageIds, setActiveStageIds] = useState<string[]>([]);
@@ -418,6 +441,57 @@ export function ProjectDiagramPage() {
   function showToast(msg: string, type: 'success' | 'error' = 'success') {
     setToast({ msg, type });
   }
+
+  /** The apartment window closes — by its X, by the phone's Back, by anything. */
+  const leavingHome = useRef(false);
+  function closeDrawer() {
+    if (!selectedApt) return;
+    const id = selectedApt.id;
+    setSelectedApt(null);
+    // A glance that travelled here holds a return ticket — closing
+    // the SAME unit it opened goes straight back where you stood.
+    const back = redeemReturn(id);
+    if (back && back.projectId !== currentProjectId) {
+      leavingHome.current = true;
+      setCurrentProject(back.projectId);
+      navigate(back.path);
+    }
+  }
+  /**
+   * THE PHONE'S BACK CLOSES THE APARTMENT WINDOW (owner, 2026-11-19: "sometimes I go out and then it takes me to a
+   * different project … or back to all three buildings"). The window had no place in the browser's history, so
+   * Back on a phone did not close it: it left the page for wherever the history happened to point — another page,
+   * another project. An open window now owns ONE history entry (the same address, marked `apt`); Back removes that
+   * entry and the window closes, and closing it by the X takes the entry away again.
+   */
+  const location = useLocation();
+  const locState = (location.state ?? null) as { apt?: string } | null;
+  const aptEntry = locState?.apt ?? null;
+  const ownEntry = useRef(false);
+  const openId = selectedApt?.id ?? null;
+  useEffect(() => {
+    const here = location.pathname + location.search + location.hash;
+    if (openId && aptEntry === openId) { ownEntry.current = true; holdTicketThroughBack(true); return; }
+    if (openId && !aptEntry) {
+      if (ownEntry.current) {                       // Back took the entry away: close the window
+        ownEntry.current = false; holdTicketThroughBack(false);
+        closeDrawer();
+        return;
+      }
+      navigate(here, { state: { ...(locState ?? {}), apt: openId } });
+      return;
+    }
+    if (openId && aptEntry) { navigate(here, { replace: true, state: { ...(locState ?? {}), apt: openId } }); return; }
+    if (aptEntry) {                                 // closed, and the entry is still there
+      holdTicketThroughBack(false);
+      if (leavingHome.current) return;              // on its way to another page already
+      if (ownEntry.current) { ownEntry.current = false; navigate(-1); }
+      else { const { apt: _gone, ...rest } = locState ?? {}; navigate(here, { replace: true, state: rest }); }   // a refresh left the mark behind
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openId, aptEntry, location.key]);
+  useEffect(() => () => holdTicketThroughBack(false), []);
+  useEffect(() => { leavingHome.current = false; }, [currentProjectId]);
 
   // Only real units count — blank placeholder slots are not apartments
   const countable = apartments.filter(isCountableApartment);
@@ -740,13 +814,14 @@ export function ProjectDiagramPage() {
         <div className="short-scroll-body flex-1 overflow-auto scrollbar-thin bg-gray-100 print:overflow-visible print:bg-white">
           {showTrio ? (
             <div className="h-full p-4" style={{ minHeight: 380 }} data-building-view-wrap>
-              <BuildingTrio buildings={trioBuildings} stages={stages} onOpen={handleAptClick} plan={bvPlan}
+              <BuildingTrio key={currentProjectId} floorKey={place.floorKey} onFloorKey={keepFloor} buildings={trioBuildings} stages={stages} onOpen={handleAptClick} plan={bvPlan}
                 planSlot={(b, f) => <StandardPlanButton buildingId={b.id} buildingTitle={b.title} floorKey={f.key} floorLabel={f.label} />} interiorSrc={isWolfsonPlan ? WOLFSON_INTERIOR : undefined} lower={isWolfsonPlan ? lowerLevels : []} customButtons={boardSet?.customButtons}
                 words={{ floor: s.floorWindowTitle, notSold: s.notSoldWord, notStarted: s.notStartedOption.replace(/[—–]/g, '').trim(), upgraded: s.upgradedWord, open: s.bvOpen, floorsHint: s.bvHint, joinedWith: s.bvJoined, yes: s.customYes, no: s.customNo, unknown: s.customUnknown }} />
             </div>
           ) : showBuilding ? (
             <div className="h-full p-4" style={{ minHeight: 380 }} data-building-view-wrap>
               <BuildingView
+                key={currentProjectId} floorKey={place.floorKey} onFloorKey={keepFloor}
                 apartments={apartments.filter(a => a.buildingId === bvBuilding)}
                 stages={stages}
                 onOpen={handleAptClick}
@@ -835,17 +910,7 @@ export function ProjectDiagramPage() {
         {!bulkMode && liveApt && currentUser && (
           <ApartmentDetailDrawer
             apartment={liveApt}
-            onClose={() => {
-              const id = liveApt.id;
-              setSelectedApt(null);
-              // A glance that travelled here holds a return ticket — closing
-              // the SAME unit it opened goes straight back where you stood.
-              const back = redeemReturn(id);
-              if (back && back.projectId !== currentProjectId) {
-                setCurrentProject(back.projectId);
-                navigate(back.path);
-              }
-            }}
+            onClose={closeDrawer}
             currentUser={currentUser}
             onToast={showToast}
             onRequestAddTask={(apt) => { setSelectedApt(null); setAddTaskApt(apt); }}

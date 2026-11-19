@@ -66,7 +66,11 @@ export function AppLayout() {
       // navigate(), long before the transition renders, and a heavy workspace
       // switch can hold that transition past any reasonable delay.
       const ws = currentProjectId;
+      const from = lastWs.current;
       lastWs.current = currentProjectId;
+      // From one project straight to another (the header's switch): no entry. Back no longer moves between two
+      // projects (workspaceHistory.ts, owner 2026-11-19), so the entry would only be a Back press that does nothing.
+      if (from !== 'general' && ws !== 'general') return;
       const t = setTimeout(() => {
         const real = window.location.pathname + window.location.search + window.location.hash;
         if (real !== here) return;   // a navigation already carried the stamp

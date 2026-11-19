@@ -32,6 +32,7 @@ export const DEVICE_ONLY: Record<string, string> = {
 
   // ── this device itself ────────────────────────────────────────────────────
   'active_project': 'Which workspace THIS browser window is on.',
+  'project_place': 'Where THIS screen stood in each project (building tab, Board or Building, the floor) — so going out and back lands on the same spot.',
   'tv_screen_id': 'This TV panel\'s own identity (its settings live in the cloud under it).',
   'presence_tab_id': 'This browser tab\'s identity for "who is online".',
   'chunk_reload_at': 'Throttle for reloading once after a new version is published.',

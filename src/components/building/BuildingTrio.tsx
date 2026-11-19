@@ -15,7 +15,9 @@ import StreetStrip, { hasStreet } from './StreetStrip';
 /** `plan`: this building's own plan when it differs from its neighbours' (Netiv's Building 1 is Building 2 mirrored). */
 export interface TrioBuilding { id: string; title: string; apartments: Apartment[]; floorLabels?: Record<number, string>; plan?: BuildingPlan }
 
-export default function BuildingTrio({ buildings, stages, onOpen, words, interiorSrc, lower = [], customButtons, plan, planSlot }: {
+export default function BuildingTrio({ buildings, stages, onOpen, words, interiorSrc, lower = [], customButtons, plan, planSlot, floorKey, onFloorKey }: {
+  /** The floor it was on last time (`floorKeyOf`), and the word back when it moves — see projectPlace.ts. */
+  floorKey?: string; onFloorKey?: (key: string) => void;
   buildings: TrioBuilding[]; stages: Stage[]; onOpen: (apt: Apartment) => void;
   words?: Partial<BuildingViewWords>; interiorSrc?: string; lower?: LowerLevel[]; customButtons?: import('../../types').CustomButton[];
   /** The project's plan (Wolfson's when absent). */
@@ -30,9 +32,16 @@ export default function BuildingTrio({ buildings, stages, onOpen, words, interio
     return [...set].sort((x, y) => x - y);
   }, [buildings]);
   const levels = lower.length + floors.length;
-  const bus = useMemo(() => makeFloorBus(Math.max(0, levels - 1)), [levels]);
+  /** Every level's `floorKey`, bottom first — the same names one building uses. */
+  const keys = useMemo(() => [...lower.map(l => `L:${l.key}`), ...floors.map(String)], [lower, floors]);
+  // Opens on the remembered floor (the top one when there is none, or it is not in these buildings).
+  const bus = useMemo(() => {
+    const i = floorKey ? keys.indexOf(floorKey) : -1;
+    return makeFloorBus(i >= 0 ? i : Math.max(0, levels - 1));
+  }, [levels]); // eslint-disable-line react-hooks/exhaustive-deps
   const [at, setAt] = useState(Math.round(bus.get()));
-  useEffect(() => bus.subscribe(v => setAt(a => (a === Math.round(v) ? a : Math.round(v)))), [bus]);
+  useEffect(() => { setAt(Math.round(bus.get())); return bus.subscribe(v => setAt(a => (a === Math.round(v) ? a : Math.round(v)))); }, [bus]);
+  useEffect(() => { if (floors.length && keys[at]) onFloorKey?.(keys[at]); }, [at, keys]); // eslint-disable-line react-hooks/exhaustive-deps
   const lab = (f: number) => buildings[0]?.floorLabels?.[f] || String(f);
   // On a lower level the wide floor takes the pointer (its slots are presses);
   // the wheel there glides the same way as over a tower.

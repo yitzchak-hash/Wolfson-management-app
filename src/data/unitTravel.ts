@@ -34,6 +34,13 @@ export function redeemReturn(aptId: string): { projectId: string; path: string }
 
 export function clearReturnTicket(): void { ticket = null; }
 
+/**
+ * An open apartment window owns one history entry, so the phone's Back CLOSES it (ProjectDiagramPage). That Back is
+ * not "the browser's own way home" — the close it causes must still find the ticket and take the office home.
+ */
+let held = false;
+export function holdTicketThroughBack(on: boolean): void { held = on; }
+
 if (typeof window !== 'undefined') {
-  window.addEventListener('popstate', () => { ticket = null; });
+  window.addEventListener('popstate', () => { if (!held) ticket = null; });
 }

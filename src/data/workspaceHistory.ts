@@ -24,6 +24,7 @@ import { useStore } from './store';
  * in place.
  */
 let armed = false;
+let lastProject = '';
 export function armWorkspaceHistoryRestore(): void {
   if (armed) return;   // HMR re-imports must not stack listeners
   armed = true;
@@ -31,6 +32,17 @@ export function armWorkspaceHistoryRestore(): void {
     // React Router keeps an entry's user state under history.state.usr.
     const ws = (window.history.state?.usr as { ws?: string } | undefined)?.ws;
     const st = useStore.getState();
-    if (ws && ws !== st.currentProjectId) st.setCurrentProject(ws);
+    if (!ws || ws === st.currentProjectId) return;
+    // BACK NEVER MOVES BETWEEN TWO PROJECTS (owner, 2026-11-19: "it never supposed to change project between Netiv
+    // and Wolfson. It's always supposed to stay in the same project till physically I change, no matter what").
+    // Back may still take him between the Job Board and a project — those are different pages — but standing in
+    // Wolfson, an older entry that was looked at in Netiv is shown in Wolfson.
+    if (ws !== 'general' && st.currentProjectId !== 'general') return;
+    // Coming back from the Job Board: to the project he was last in, whatever the old entry says.
+    st.setCurrentProject(ws !== 'general' && lastProject ? lastProject : ws);
   });
+  // The project he was last in (never the Job Board), for the way back from the board.
+  const note = (id: string) => { if (id && id !== 'general') lastProject = id; };
+  note(useStore.getState().currentProjectId);
+  useStore.subscribe(s => note(s.currentProjectId));
 }

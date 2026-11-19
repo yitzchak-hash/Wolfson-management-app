@@ -23,6 +23,7 @@ import { haptic, hapticOnLift } from '../../data/haptics';
 import { LEVEL_FLOORS, STRIP, zoneFor, PLAN_BOX, pathOf, stripFor, type LowerLevel } from './wolfsonPlan';
 import { WOLFSON_PLAN, type BuildingPlan, type FloorSpec } from './buildingPlan';
 import StreetStrip, { hasStreet } from './StreetStrip';
+import { floorKeyOf } from '../../data/projectPlace';
 import './buildingView.css';
 
 export interface BuildingViewWords {
@@ -51,6 +52,9 @@ export interface BuildingViewProps {
   words?: Partial<BuildingViewWords>;
   /** The floor it opens on; the top floor when absent. */
   initialFloor?: number;
+  /** The floor it was on last time (`floorKeyOf`), which wins over the top floor — and the word back when it moves. */
+  floorKey?: string;
+  onFloorKey?: (key: string) => void;
   /** The number the board prints on each floor (record floor → label), so both views agree. */
   floorLabels?: Record<number, string>;
   /**
@@ -141,7 +145,7 @@ function slabPath(plan: BuildingPlan, spec: FloorSpec): string {
   return spec.slab.flatMap(k => [plan.shapes[k], ...(plan.terraces[k] ?? [])]).filter(Boolean).map(pathOf).join(' ') + ' ' + pathOf(spec.core);
 }
 
-export default function BuildingView({ apartments, stages, onOpen, words, initialFloor, floorLabels, interiorSrc, bus: sharedBus, compact, title, lower, tower = 0, hideLower, customButtons = [], plan = WOLFSON_PLAN, planSlot }: BuildingViewProps) {
+export default function BuildingView({ apartments, stages, onOpen, words, initialFloor, floorKey, onFloorKey, floorLabels, interiorSrc, bus: sharedBus, compact, title, lower, tower = 0, hideLower, customButtons = [], plan = WOLFSON_PLAN, planSlot }: BuildingViewProps) {
   /** A flat's answers as short words: "Wall ✓", "Wall ✗", "Wall ?". */
   const answersOf = (a: Apartment) => customButtons.flatMap(cb => {
     // A company button is said by the AC company chip below, never twice.
@@ -193,9 +197,11 @@ export default function BuildingView({ apartments, stages, onOpen, words, initia
 
   const topIdx = floors.length - 1;
   const startIdx = useMemo(() => {
+    const k = floorKey ? floors.findIndex(f => floorKeyOf(f) === floorKey) : -1;
+    if (k >= 0) return k;
     const i = initialFloor == null ? -1 : floors.findIndex(f => f.floor === initialFloor);
     return i >= 0 ? i : topIdx;
-  }, [floors, initialFloor, topIdx]);
+  }, [floors, initialFloor, floorKey, topIdx]);
 
   // The landed floor (an index into `floors`) — state, because the cards read it.
   const [landed, setLanded] = useState(startIdx);
@@ -280,6 +286,22 @@ export default function BuildingView({ apartments, stages, onOpen, words, initia
     if (!raf.current) raf.current = requestAnimationFrame(step);
   }), [bus, step, topIdx]);
   useEffect(() => { const v = bus.get(); target.current = pos.current = Math.max(0, Math.min(topIdx, v)); setLanded(Math.round(target.current)); paint(); }, [bus, topIdx, paint]);
+  // THE FLOOR IS REMEMBERED (owner, 2026-11-19: "come back to the same floor"). The view opens on `floorKey`; if the
+  // flats arrive a moment after the page (a cold start), it goes there once they do. From then on every floor it
+  // lands on is told back. One building only — the trio keeps its own floor through its shared bus.
+  const floorSettled = useRef(false);
+  useEffect(() => {
+    if (floorSettled.current || !floors.length) return;
+    floorSettled.current = true;
+    if (sharedBus || !floorKey) return;
+    const i = floors.findIndex(f => floorKeyOf(f) === floorKey);
+    if (i >= 0 && i !== Math.round(bus.get())) bus.set(i);
+  }, [floors, floorKey, bus, sharedBus]);
+  useEffect(() => {
+    if (!floorSettled.current || compact) return;
+    const row = floors[landed];
+    if (row) onFloorKey?.(floorKeyOf(row));
+  }, [landed, floors, compact]); // eslint-disable-line react-hooks/exhaustive-deps
   // A small tick in the hand each time a new floor lands (owner, 2026-11-08: "vibrations … when moving the floors").
   // Only the first view of the trio ticks — three buzzes for one floor would be one too many.
   const firstLanded = useRef(true);

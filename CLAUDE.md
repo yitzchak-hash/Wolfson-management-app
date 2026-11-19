@@ -53,6 +53,11 @@ Vercel serverless functions in `/api`.
   and every time I add something new, it should go into here as well"). Stages and custom buttons become columns by
   themselves (`jobMore` in `src/data/reportModel.ts`). Any NEW thing a feature stores on an apartment (a new box,
   selector, date, answer) gets a column in `jobFields` in the same round, so the AI report tiles can use it.
+- **The project NEVER changes by itself, and the page comes back to the same spot** (owner, 2026-11-19: "it never
+  supposed to change project between Netiv and Wolfson … till physically I change, no matter what"; "come back to the
+  same floor and the same place where I was"). Back/Forward never moves between two projects (`workspaceHistory.ts`);
+  an open apartment window owns one history entry so the phone's Back closes it; building tab, Board/Building and the
+  floor are kept per project per screen (`projectPlace.ts`). A new view on the project page keeps its place the same way.
 - The history of every past round is in `docs/archive/` if you need it.
 - **Never make him press "Allow" (owner, 2026-11-03: "why does this keep asking me?!?! … im on auto already").**
   Auto mode still stops on a shell command that holds a heredoc (`<<'EOF'`), quotes inside braces, or several
