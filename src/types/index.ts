@@ -1273,6 +1273,24 @@ export interface PinFile {
   url: string;
 }
 
+/**
+ * One file on an OUTSIDE person's pin (a shared link's photo, PDF or voice note — owner, 2026-11-19). Written only
+ * by the server (lib/sharedView.js, ?sv=pinfile) into the apartment's Drive "Punch List/Outside" folder. The office
+ * reads `driveFileId` off the `sharedPins` record; the outside page never gets it — it gets `ref`, sealed by the
+ * server for that one link.
+ */
+export interface SharedPinFile {
+  id: string;
+  mimeType: string;
+  name: string;
+  /** Office side (the stored record). */
+  driveFileId?: string;
+  size?: number;
+  createdAt?: string;
+  /** Outside side (the server's answer): the sealed ref its file route opens. */
+  ref?: string;
+}
+
 /** The drawing tools available when marking up a plan. */
 export type AnnTool =
   | 'pen' | 'marker' | 'highlighter' | 'pencil'

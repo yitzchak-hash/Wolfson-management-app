@@ -100,6 +100,15 @@ export function SharedApartmentWindow({ apartment, apartments, api, stages, boar
     shareFallback: W('Sharing isn\'t available here — the plan was downloaded instead.', 'שיתוף לא זמין כאן — התוכנית הורדה.'),
     pinFailed: W('That did not save — try again.', 'לא נשמר — נסו שוב.'), noLayers: W('This plan has no layers.', 'אין שכבות בתוכנית הזו.'),
     yourPins: W('pins', 'סיכות'), hide: W('Hide the plan', 'הסתרת התוכנית'),
+    attach: W('Attach a photo or PDF', 'צירוף תמונה או PDF'), dictate: W('Speak — the words are typed for you', 'דברו — המילים נכתבות בשבילכם'),
+    record: W('Record a voice note', 'הקלטת הודעה קולית'), stop: W('Stop', 'עצירה'),
+    uploading: W('Uploading {n} of {total}…', 'מעלה {n} מתוך {total}…'),
+    fileTooBig: W('That file is over 4 MB — it was not added.', 'הקובץ גדול מ־4MB — לא צורף.'),
+    fileType: W('Only photos, PDFs and voice notes can be added.', 'אפשר לצרף רק תמונות, PDF והודעות קוליות.'),
+    fileFailed: W('A file did not upload — try again.', 'קובץ לא עלה — נסו שוב.'),
+    noFolder: W('This apartment has no folder for files yet — tell the office.', 'לדירה הזו אין עדיין תיקייה לקבצים — עדכנו את המשרד.'),
+    tooMany: W('Up to 10 files on one pin.', 'עד 10 קבצים בסיכה אחת.'),
+    voiceNote: W('(voice note / files)', '(הודעה קולית / קבצים)'),
   };
 
   const planPane = (variant: 'side' | 'tab') => {

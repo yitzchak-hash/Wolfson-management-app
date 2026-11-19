@@ -16,6 +16,7 @@
 import { useEffect, useState } from 'react';
 import { fsListenWhere, fsSet, fsPatch, fsGetWhere, isFirebaseConfigured } from './firebase';
 import { bareDomain } from './portalLink';
+import type { SharedPinFile } from '../types';
 
 const LINKS = 'sharedLinks';
 const PINS = 'sharedPins';
@@ -50,6 +51,8 @@ export interface SharedPin {
   yPct: number;
   text: string;
   createdAt: string;
+  /** Photos, PDFs and voice notes the outside person added (in the apartment's Drive "Punch List/Outside"). */
+  files?: SharedPinFile[];
 }
 
 function hex(bytes: Uint8Array): string {
@@ -122,7 +125,7 @@ export function useSharedLinks(projectId: string): SharedLink[] | null {
 /** One line of a link's log, written by the server (lib/sharedView.js) — what the outside person did, from where. */
 export interface SharedLogEntry {
   id: string; linkId: string; at: string;
-  action: 'open' | 'apartment' | 'plan' | 'photo' | 'pin-add' | 'pin-remove';
+  action: 'open' | 'apartment' | 'plan' | 'photo' | 'pin-add' | 'pin-remove' | 'pin-file';
   apartmentId?: string; ip?: string; city?: string; country?: string; device?: string;
 }
 const LOGS = 'sharedLinkLogs';

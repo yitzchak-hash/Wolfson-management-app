@@ -4,11 +4,18 @@
  * Nothing in src/shared may import the store or Firebase — this page is opened by people outside the office, and it
  * must never hold the database's keys or a copy of anything the server did not choose to send.
  */
-import type { Apartment, Building, BoardSetting, Stage, ContractorPhoto } from '../types';
+import type { Apartment, Building, BoardSetting, Stage, ContractorPhoto, SharedPinFile } from '../types';
 
 export type SharedApartment = Apartment & { planRef?: string; planByTzvi?: boolean };
 export interface ViewerPin {
   id: string; apartmentId: string; planRef: string; page: number; xPct: number; yPct: number; text: string; createdAt: string;
+  /** Its photos, PDFs and voice notes — each a sealed `ref` the file route opens, never a Drive id. */
+  files?: SharedPinFile[];
+}
+/** Why an attachment did not go up. */
+export type PinFileFailure = 'too_big' | 'type' | 'no_folder' | 'too_many' | 'failed';
+export class PinFileError extends Error {
+  constructor(public reason: PinFileFailure) { super(reason); }
 }
 export interface SharedViewData {
   link: { name: string };
@@ -73,7 +80,38 @@ export function makeApi(token: string) {
       }
       return new Blob(parts as BlobPart[], { type });
     },
-    async addPin(pin: { apartmentId: string; planRef: string; page: number; xPct: number; yPct: number; text: string }): Promise<ViewerPin> {
+    /**
+     * One attachment for one of this link's pins, sent as raw bytes (≤ 4 MB). The server checks the type, the bytes
+     * and that the pin is this link's, puts it in the apartment's Drive folder and answers with a sealed ref.
+     */
+    async addPinFile(pinId: string, file: Blob, type: string, name: string): Promise<SharedPinFile> {
+      let r: Response;
+      try {
+        r = await fetch(`${API}?sv=pinfile&pin=${encodeURIComponent(pinId)}&type=${encodeURIComponent(type)}&name=${encodeURIComponent(name.slice(0, 100))}`, {
+          method: 'POST', headers: { ...headers, 'Content-Type': 'application/octet-stream' }, body: file,
+          cache: 'no-store', credentials: 'omit', referrerPolicy: 'no-referrer',
+        });
+      } catch { throw new PinFileError('failed'); }
+      if (r.status === 413) throw new PinFileError('too_big');
+      if (r.status === 415) throw new PinFileError('type');
+      if (r.status === 409) {
+        const why = await r.json().then(j => j?.error).catch(() => '');
+        throw new PinFileError(why === 'no_folder' ? 'no_folder' : 'too_many');
+      }
+      if (!r.ok) throw new PinFileError('failed');
+      return (await r.json()).file as SharedPinFile;
+    },
+    async deletePinFile(pinId: string, fileId: string): Promise<void> {
+      let r: Response;
+      try {
+        r = await fetch(`${API}?sv=pinfile&pin=${encodeURIComponent(pinId)}&id=${encodeURIComponent(fileId)}`, {
+          method: 'DELETE', headers, cache: 'no-store', credentials: 'omit', referrerPolicy: 'no-referrer',
+        });
+      } catch { throw new SharedError('offline'); }
+      if (r.status === 404) throw new SharedError('gone');
+      if (!r.ok) throw new SharedError('offline');
+    },
+    async addPin(pin: { apartmentId: string; planRef: string; page: number; xPct: number; yPct: number; text: string; attachments?: boolean }): Promise<ViewerPin> {
       let r: Response;
       try {
         r = await fetch(`${API}?sv=pin`, {
