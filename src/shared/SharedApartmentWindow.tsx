@@ -124,6 +124,15 @@ export function SharedApartmentWindow({ apartment, apartments, api, stages, boar
             onAspect={r => setPlanRatio(r)}
             onPinsChange={next => onPinsChange([...pins.filter(p => !(p.apartmentId === apartment.id && p.planRef === apartment.planRef)), ...next])} />
         </Suspense>
+        {/* Who approved it, over the plan (owner, 2026-11-19): green when Tzvi did; red while only the office has. */}
+        <div data-plan-approval={apartment.planByTzvi ? 'tzvi' : 'not-tzvi'}
+          className="absolute left-1/2 -translate-x-1/2 z-20 pointer-events-none rounded-full px-3 py-1 text-[12px] font-bold shadow-md whitespace-nowrap"
+          // Just under the plan's two bars, at the top of the sheet.
+          style={{ top: 96, ...(apartment.planByTzvi
+            ? { backgroundColor: '#dcfce7', color: '#166534', border: '1px solid #86efac' }
+            : { backgroundColor: '#fee2e2', color: '#b91c1c', border: '1px solid #fca5a5' }) }}>
+          {apartment.planByTzvi ? W('✓ Approved by Tzvi', '✓ אושר ע״י צבי') : W('This plan was not approved by Tzvi yet', 'התוכנית עוד לא אושרה ע״י צבי')}
+        </div>
       </div>
     );
   };

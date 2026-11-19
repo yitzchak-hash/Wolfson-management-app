@@ -6,7 +6,7 @@
  */
 import type { Apartment, Building, BoardSetting, Stage, ContractorPhoto } from '../types';
 
-export type SharedApartment = Apartment & { planRef?: string };
+export type SharedApartment = Apartment & { planRef?: string; planByTzvi?: boolean };
 export interface ViewerPin {
   id: string; apartmentId: string; planRef: string; page: number; xPct: number; yPct: number; text: string; createdAt: string;
 }
