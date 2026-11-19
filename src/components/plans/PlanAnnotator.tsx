@@ -7,7 +7,7 @@ import {
   Plus, Minus, Maximize2, Minimize2, Loader2, Pen, Pencil, Highlighter, Eraser, Minus as LineIcon,
   ArrowUpRight, Square, Circle, Type, Hand, Layers, FileDown, Check, ExternalLink,
   MessageSquare, Move, Layers2, ChevronsUpDown, User as UserIcon,
-  Monitor, ArrowRight, RotateCcw, RotateCw, MoreHorizontal, PenTool, Brush, Shapes, CloudCheck,
+  Monitor, ArrowRight, RotateCcw, RotateCw, MoreHorizontal, PenTool, Brush, Shapes, CloudCheck, Star,
 } from 'lucide-react';
 import './pdfCompat';   // must come before pdf.js
 import * as pdfjs from 'pdfjs-dist';
@@ -828,7 +828,7 @@ function PlanEditor({
   touchScale = 1, chooseSaveFolder = false, sheetOverlay,
   tabStrip, initialWork, workRef, onOpenPlanNewTab, onUnsavedChange,
   onClose, onToast, onPickPlan, onStartMarkup, onSavedToDrive, onShare, shareBusy, shareLabel,
-  onPreviewPlan, onStarPlan, starredPlanId, starAuto, autoPlanNote, autoPlanYesLabel, autoPlanOtherLabel, onConfirmAutoPlan, approvedNote,
+  onPreviewPlan, onStarPlan, starredPlanId, starAuto, autoPlanNote, autoPlanYesLabel, autoPlanOtherLabel, onConfirmAutoPlan, approvedNote, onUnstarPlan,
 }: {
   planFileId: string;
   /**
@@ -954,6 +954,8 @@ function PlanEditor({
   onConfirmAutoPlan?: () => void;
   /** "Plan approved by Esther" once somebody confirmed it. */
   approvedNote?: string;
+  /** The filled star beside it: press to unstar and unapprove (owner, 2026-11-19). */
+  onUnstarPlan?: () => void;
   onClose: () => void;
   onToast?: (msg: string, kind?: 'success' | 'error') => void;
   onPickPlan?: (p: PlanChoice) => void;
@@ -4347,6 +4349,12 @@ function PlanEditor({
             <span data-plan-approved className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold text-emerald-100 max-w-[260px]"
               style={{ backgroundColor: 'rgba(22,163,74,.28)' }}>
               <Check size={12} className="flex-shrink-0" /><span className="truncate">{approvedNote}</span>
+              {onUnstarPlan && (
+                <button type="button" data-plan-unstar onClick={onUnstarPlan} title="Unstar — take back the approval"
+                  aria-label="Unstar this plan" className="ms-0.5 -me-1 p-0.5 rounded-full hover:bg-white/15 flex-shrink-0">
+                  <Star size={13} fill="#fbbf24" color="#fbbf24" />
+                </button>
+              )}
             </span>
           )}
 

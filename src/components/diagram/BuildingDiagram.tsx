@@ -257,6 +257,20 @@ function AptCell({
   const rawSignal = useMemo(() => (apt ? signalOf(apt, [...allStages].sort((a, b) => a.order - b.order), { tipusStages }) : null),
     [apt, allStages, tipusStages]);
   const signal = viewer.workerId && rawSignal === 'ask' ? null : rawSignal;
+  /**
+   * Work a worker could not file (owner, 2026-11-19): a small yellow warning triangle to the RIGHT of the number,
+   * never over it — instead of the flashing tile. Waiting for inspection keeps its purple outline.
+   */
+  const askMark = signal === 'ask' ? (
+    <span data-ask-mark title="A worker finished work and didn't know where to file it"
+      className="inline-flex flex-shrink-0 align-middle" style={{ marginInlineStart: 4 }}>
+      <svg width="13" height="12" viewBox="0 0 24 22" aria-hidden="true">
+        <path d="M12 1.5 23 20.5H1z" fill="#facc15" stroke="#a16207" strokeWidth="1.6" strokeLinejoin="round" />
+        <rect x="10.9" y="7.5" width="2.2" height="7" rx="1.1" fill="#422006" />
+        <circle cx="12" cy="17.3" r="1.3" fill="#422006" />
+      </svg>
+    </span>
+  ) : null;
   const today = new Date().toDateString();
   const finishedHere = !!viewer.workerId && !!apt?.siteVisits?.some(v => v.byId === viewer.workerId && v.status !== 'working'
     && !!v.endedAt && new Date(v.endedAt).toDateString() === today)
@@ -369,7 +383,7 @@ function AptCell({
       // mid-word) moves its tipus under the number (index.css).
       data-has-tipus={placed && tipusLine ? '1' : undefined}
       data-big={bigCell ? '1' : undefined}
-      className={`${placed ? 'apt-tile ' : ''}${signal && !isDimmed ? `apt-signal-${signal} ` : ''}relative flex flex-col items-center justify-center cursor-pointer select-none rounded-md overflow-hidden transition-all duration-100 ${scale}`}
+      className={`${placed ? 'apt-tile ' : ''}${signal && signal !== 'ask' && !isDimmed ? `apt-signal-${signal} ` : ''}relative flex flex-col items-center justify-center cursor-pointer select-none rounded-md overflow-hidden transition-all duration-100 ${scale}`}
       onMouseEnter={() => apt && onHover?.(apt.id)}
       onMouseLeave={() => onHover?.(null)}
       style={{
@@ -466,9 +480,9 @@ function AptCell({
       ))}
       {placed && displayLabel && (
         <>
-          <span data-cell-number className="absolute font-bold leading-none whitespace-nowrap"
+          <span data-cell-number className="absolute font-bold leading-none whitespace-nowrap inline-flex items-center"
             style={{ left: 6, top: 6, fontSize: '13px' }}>
-            {numberLabel}
+            {numberLabel}{askMark}
           </span>
           {tipusLine && (
             <span data-tipus-line className="absolute font-bold leading-none whitespace-nowrap rounded"
@@ -532,7 +546,7 @@ function AptCell({
               // The badges sit in the top corners, above this line, so the
               // whole width is the name's.
               style={{ fontSize: '12.5px', padding: '0 3px' }}>
-              {numberLabel}
+              {numberLabel}{askMark}
               <span className="ms-1.5" style={{ fontWeight: unsold ? 500 : 700, fontStyle: unsold ? 'italic' : undefined, opacity: unsold ? 0.7 : 1 }}>
                 {nameLabel || (unsold ? ui.notSoldWord : '')}
               </span>
@@ -546,7 +560,7 @@ function AptCell({
             className="font-bold leading-tight text-center w-full block truncate flex-shrink-0"
             style={{ fontSize: numFontSize, padding: phone ? 0 : '0 1px' }}
           >
-            {displayLabel}
+            {displayLabel}{numberLabel ? askMark : null}
           </span>
           )}
           {tipusLine && (

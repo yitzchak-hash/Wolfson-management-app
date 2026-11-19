@@ -673,6 +673,11 @@ export interface SiteVisit {
   files?: InspectionFile[];
   answeredBy?: string;
   answeredAt?: string;
+  /**
+   * What he did when it was not a stage (owner, 2026-11-19): "Small fix" or the office's own words. Shown as its own
+   * line among the stages, by its date, with his pictures.
+   */
+  label?: string;
 }
 
 export function getStageName(stage: Stage, isRtl: boolean): string {

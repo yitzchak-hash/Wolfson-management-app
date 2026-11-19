@@ -60,7 +60,7 @@ import { photoSrcOf } from '../../data/photoSrc';
 import { shotKindOf } from '../../data/sitePhotos';
 import { printSheet, printEsc } from '../../data/printing';
 import { PlanAddressSuggest } from './PlanAddressSuggest';
-import { isWorkStage, progressOf, taskStageIds, recordStageIds, isStartStage } from '../../data/stageMarks';
+import { isWorkStage, progressOf, taskStageIds, recordStageIds, isStartStage, liveStateOf } from '../../data/stageMarks';
 import { ProblemForm } from './ProblemForm';
 import { ProblemBand } from './ProblemBand';
 import { problemState } from '../../data/problems';
@@ -1777,6 +1777,12 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
               onConfirmAutoPlan={autoPlan && detectedPdfId ? () => starPlan({ id: detectedPdfId }) : undefined}
               approvedNote={!autoPlan && starredPlanId && fileId === starredPlanId && plansApprovedBy
                 ? ui.planApprovedBy.replace('{who}', plansApprovedBy) : undefined}
+              // Unstar right beside "Plan approved by …" (owner, 2026-11-19): the plan is no longer the job's, nor approved.
+              onUnstarPlan={currentUser ? () => {
+                setPlansPdfLink('');
+                updateApartment(apartment!.id, { plansPdfLink: undefined, plansApprovedBy: undefined, plansApprovedAt: undefined }, currentUser);
+                onToast(ui.isRtl ? 'הכוכב הוסר — התוכנית לא מאושרת' : 'Unstarred — the plan is no longer approved');
+              } : undefined}
               /*
                 Plans is the chooser now, so what it picks has to land back
                 here. The rule the chip row carried is kept exactly: only an
@@ -2702,12 +2708,18 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                 onInspect={isTzvi(currentUser?.name) || sortedStages.some(st => howOf(st) === 'inspection' && userCanDo(st, currentUser, users))
                   ? (after, stageId) => setInspectAsk({ after, stageId }) : undefined}
                 canInspect={st => userCanDo(st, currentUser, users)}
-                onAnswer={(visitId, stageId) => {
+                onAnswer={(visitId, stageId, label) => {
                   const fresh = useStore.getState().apartments.find(a => a.id === apartment.id) ?? apartment;
                   const v = (fresh.siteVisits ?? []).find(x => x.id === visitId);
                   const siteVisits = (fresh.siteVisits ?? []).map(x => (x.id === visitId
-                    ? { ...x, status: 'answered' as const, stageId, answeredBy: currentUser.name, answeredAt: new Date().toISOString() } : x));
-                  finishStage(stageId, v?.byName ?? currentUser.name, { siteVisits });
+                    ? { ...x, status: 'answered' as const, stageId, ...(label ? { label } : {}), answeredBy: currentUser.name, answeredAt: new Date().toISOString() } : x));
+                  // A stage that is already finished only takes his pictures and date; a new one is finished in his name.
+                  // Small fix / the office's own words file the visit as its own line — no stage changes.
+                  if (stageId && liveStateOf(fresh, stageId, sortedStages, contractorAssignments) !== 'done') {
+                    finishStage(stageId, v?.byName ?? currentUser.name, { siteVisits });
+                  } else {
+                    trackUndo(null, () => updateApartment(apartment.id, { siteVisits }, currentUser));
+                  }
                   haptic('success');
                 }}
                 onCloseVisit={visitId => {

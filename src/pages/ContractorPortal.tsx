@@ -53,7 +53,7 @@ import { StageInfoButton } from '../components/portal/StageInfo';
 import { DayFilterChips } from '../components/portal/DayFilterChips';
 import { SiteHereBlock, WorkingBars, SiteVisitFlow, startSiteVisit, myOpenVisit } from '../components/portal/SiteVisit';
 import { InspectHereButton, SiteInspectFlow } from '../components/portal/SiteInspect';
-import { waitingInspection } from '../data/stageHow';
+import { waitingInspection, tradesOf, howOf } from '../data/stageHow';
 import { sortClosePhotos } from '../data/closeSort';
 import { installPortalManifest } from '../data/portalManifest';
 import { findPlanSetViaBackend, findAllPlansPdfsViaBackend } from '../data/driveApi';
@@ -4416,7 +4416,14 @@ plansPdfFileId && (
                           const allowed = contractor?.reportStages?.[currentProjectId];
                           const set = capt ? stageSetOf(capt, wsStageList, { tipusStages: tipusStagesPortal }) : wsStageList;
                           const stateOf = (id: string) => (capt ? liveStateOf(capt, id, wsStageList, contractorAssignments) : 'todo');
-                          const usable = set.filter(st => !isStartStage(st) && stateOf(st.id) !== 'off' && (!allowed?.length || allowed.includes(st.id)));
+                          // Who may answer with a stage (owner, 2026-11-19: "Framing can also be done by AC workers … Igor's
+                          // link only offers him installation. It shouldn't be like that"): a SITE stage whose "Who can do
+                          // it" (Settings → Stages) names his trade is always offered, on top of his own list.
+                          const cat = contractor?.category;
+                          const tradeOk = (st: Stage) => !cat || tradesOf(st).includes(cat);
+                          const namedForHim = (st: Stage) => !!(st.canTrades?.length || st.trade) && tradeOk(st);
+                          const usable = set.filter(st => !isStartStage(st) && stateOf(st.id) !== 'off' && howOf(st) === 'site'
+                            && (allowed?.length ? (allowed.includes(st.id) || namedForHim(st)) : tradeOk(st)));
                           // Half done first (he is most likely continuing it), then the rest still open, then what is finished.
                           const rank = (id: string) => (stateOf(id) === 'pending' ? 0 : stateOf(id) === 'done' ? 2 : 1);
                           const list = [...usable].sort((a, b) => rank(a.id) - rank(b.id) || a.order - b.order);
