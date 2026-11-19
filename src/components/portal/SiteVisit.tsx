@@ -228,6 +228,13 @@ export function SiteVisitFlow({ aptId, visitId: vid, start, worker, user, lang, 
     const a = freshApt(aptId); if (!a) return;
     const list = (a.siteVisits ?? []).map(v => (v.id === vid ? { ...v, files: [...(v.files ?? []), f] } : v));
     updateApartment(aptId, { siteVisits: list }, user, { quiet: true });
+    // Into the apartment's History and Recent activity like a task's uploads (owner, 2026-11-19: "I don't understand
+    // why the stuff Igor is uploading is not going into the history").
+    useStore.getState().addActivityLog({
+      apartmentId: aptId, apartmentNumber: a.apartmentNumber, buildingId: a.buildingId,
+      userId: worker.id, userName: worker.name, actionType: 'contractor_upload', fieldChanged: 'photo_uploaded',
+      previousValue: '', newValue: f.filename, stageId: suggestion?.id ?? '',
+    });
   };
 
   const sent = visit?.files ?? [];

@@ -2,12 +2,12 @@ import React, { useState } from 'react';
 import { haptic } from '../../data/haptics';
 import { Check, AlertTriangle, X, Plus, Hammer, CalendarDays, Clock, Camera, Video, Play, ChevronDown, Loader2 } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
-import { Stage, MainUiStrings, Apartment, ContractorAssignment, Contractor, ContractorPhoto, StageMark, getStageName, Inspection, InspectionFile } from '../../types';
+import { Stage, MainUiStrings, Apartment, ContractorAssignment, Contractor, ContractorPhoto, StageMark, getStageName, Inspection, InspectionFile, SiteVisit } from '../../types';
 import {
   stageSetOf, liveStateOf, cycleMark, tapMark, isOneTapStage, setMark, isWorkStage, taskStageIds, markerRole, isStartStage,
   StageState, SetContext,
 } from '../../data/stageMarks';
-import { driveThumbUrl } from '../../data/driveApi';
+import { driveThumbUrl } from '../../data/driveThumb';
 import type { CustomWhere } from './StagePicker';
 import { includeIn } from '../../data/stageIncludes';
 import { howOf, doneWordOf, waitingInspection, workingVisits, openQuestions, inspectionsOf } from '../../data/stageHow';
@@ -96,8 +96,44 @@ function InspectionRow({ ins, rtl, day, onOpenPhotos }: {
   );
 }
 
+/**
+ * A worker's visit the office filed as its own line — "Small fix" or its own words — standing among the stages by its
+ * date (owner, 2026-11-19: "I should be able to type what he did … it should add it between the stages based on the
+ * dates as another thing that he did"). Folded; the arrow shows his pictures.
+ */
+function OwnLine({ v, items, day, rtl, onOpenPhotos }: {
+  v: SiteVisit; items: StagePhotoItem[]; day: (iso?: string | null) => string; rtl: boolean;
+  onOpenPhotos: (items: StagePhotoItem[], index: number) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div data-own-line={v.id} className="rounded-xl border px-3 py-2.5" style={{ borderColor: '#e2e8f0', backgroundColor: '#f8fafc', borderInlineStartWidth: 4, borderInlineStartColor: '#64748b' }}>
+      <button type="button" aria-expanded={open} onClick={() => setOpen(o => !o)} className="w-full flex items-center gap-2.5 text-start">
+        <Hammer size={15} className="text-slate-500 flex-shrink-0" />
+        <span className="text-[15px] font-bold text-gray-900 min-w-0 truncate" dir="auto">{v.label}</span>
+        <span className="text-[12px] text-gray-600 flex-shrink-0">{v.byName} · {day(v.endedAt)}</span>
+        <span className="flex-1" />
+        {items.length > 0 && <span className="text-[11px] font-semibold text-gray-500 inline-flex items-center gap-1 flex-shrink-0"><Camera size={12} />{items.length}</span>}
+        {items.length > 0 && <ChevronDown size={15} className={`text-gray-500 flex-shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} />}
+      </button>
+      {open && items.length > 0 && (
+        <div className="mt-2 flex gap-1.5 flex-wrap">
+          {items.map((it, i) => (
+            <button key={i} type="button" onClick={() => onOpenPhotos(items, i)}
+              className="relative w-14 h-10 rounded-md overflow-hidden border border-gray-200 bg-gray-100">
+              {it.fileId ? <img src={driveThumbUrl(it.fileId, 400)} alt={it.filename} loading="lazy" className="w-full h-full object-cover" /> : it.thumbSrc && <img src={it.thumbSrc} alt="" className="w-full h-full object-cover" />}
+              {it.mimeType.startsWith('video/') && <span className="absolute inset-0 flex items-center justify-center text-white"><Play size={14} fill="#fff" /></span>}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function StageSection({
   apartment, stages, tasks, ctx, workers, photos, onMarks, onMarker, onAddCustom, ui, onReportProblem, onOpenPhotos, onInspect, inspecting, onOneTapDone, canInspect, onAnswer, onCloseVisit,
+  readOnly = false,
 }: {
   apartment: Apartment;
   stages: Stage[];
@@ -105,9 +141,15 @@ export function StageSection({
   ctx: SetContext;
   workers: Contractor[];
   photos: ContractorPhoto[];
-  onMarks: (next: Record<string, StageMark> | undefined) => void;
-  onMarker: (stageId: string) => void;
-  onAddCustom: (input: { name: string; color: string; where: CustomWhere }) => void;
+  /**
+   * The three writers. ABSENT in the outside shared view (/s/<token>, owner 2026-11-18), which passes `readOnly`:
+   * the stages are drawn exactly as the office sees them, and nothing on them can be pressed.
+   */
+  onMarks?: (next: Record<string, StageMark> | undefined) => void;
+  onMarker?: (stageId: string) => void;
+  onAddCustom?: (input: { name: string; color: string; where: CustomWhere }) => void;
+  /** Look, don't touch: no marking, no adding, no answering — and no names of who did what. */
+  readOnly?: boolean;
   ui: MainUiStrings;
   onReportProblem?: () => void;
   onOpenPhotos: (items: StagePhotoItem[], index: number) => void;
@@ -119,7 +161,8 @@ export function StageSection({
   /** May the person here do this inspection stage? (Settings → Stages → Who can do it.) */
   canInspect?: (st: Stage) => boolean;
   /** The office answers a worker's "No, something else": this is the stage he did. */
-  onAnswer?: (visitId: string, stageId: string) => void;
+  /** File a worker's unfiled visit: under a stage, or as its own line ("Small fix", or the office's words). */
+  onAnswer?: (visitId: string, stageId: string | null, label?: string) => void;
   /** The office closes a visit a worker forgot to finish. */
   onCloseVisit?: (visitId: string) => void;
 }) {
@@ -130,6 +173,10 @@ export function StageSection({
   /** Which question's stage the office picked. */
   const [answerPick, setAnswerPick] = useState<Record<string, string>>({});
   const rtl = !!ui.isRtl;
+  // Read-only: the writers are dropped here, once, so no press below can reach one.
+  const marksW = readOnly ? undefined : onMarks;
+  const markerW = readOnly ? undefined : onMarker;
+  const customW = readOnly ? undefined : onAddCustom;
   const marks = apartment.stageMarks;
   const set = stageSetOf(apartment, stages, ctx).filter(st => !isStartStage(st));
   const workStages = stages.filter(st => isWorkStage(st) && st.active && !isStartStage(st));
@@ -172,7 +219,32 @@ export function StageSection({
   const questions = openQuestions(apartment);
   const W = (en: string, he: string) => (rtl ? he : en);
   const hm = (iso?: string) => { try { return iso ? format(parseISO(iso), 'HH:mm') : ''; } catch { return ''; } };
-  const siteOpen = rows.filter(r => howOf(r.stage) === 'site' && r.state !== 'done' && r.state !== 'off').map(r => r.stage);
+  /** Every site stage of this apartment (finished ones too — he may have added to one), for "What did he do here?". */
+  const siteAll = rows.filter(r => howOf(r.stage) === 'site' && r.state !== 'off').map(r => r.stage);
+  /** Visits the office filed (answered, or his own yes) — their pictures and dates show under the stage. */
+  const filed = (apartment.siteVisits ?? []).filter(v => (v.status === 'answered' || v.status === 'done') && (v.files?.length ?? 0) > 0);
+  const filedUnder = (stageId: string) => filed.filter(v => v.stageId === stageId);
+  /** Visits filed as their own line (Small fix / custom words), placed among the stages by date. */
+  const ownLines = filed.filter(v => !v.stageId && v.label).sort((a, b) => (a.endedAt ?? '').localeCompare(b.endedAt ?? ''));
+  const doneAt = (stageId: string) => apartment.stageDone?.[stageId]?.at ?? filedUnder(stageId).map(v => v.endedAt ?? '').sort()[0] ?? '';
+  /** The own lines that stand right after this stage: dated after it, and before the next stage that has a date. */
+  const linesAfter = (index: number): SiteVisit[] => {
+    const here = doneAt(rows[index].stage.id);
+    const nextDated = rows.slice(index + 1).map(r => doneAt(r.stage.id)).find(Boolean) ?? '';
+    return ownLines.filter(v => {
+      const at = v.endedAt ?? '';
+      if (index === 0 && !here) return false;
+      return (!here || at >= here) && (!nextDated || at < nextDated);
+    });
+  };
+  const linesLead = ownLines.filter(v => !rows.some((_, i) => linesAfter(i).includes(v)));
+  const [openRows, setOpenRows] = useState<Record<string, boolean>>({});
+  const [customFor, setCustomFor] = useState<Record<string, string>>({});
+  const visitItems = (v: SiteVisit): StagePhotoItem[] => (v.files ?? []).map(f => ({
+    fileId: f.driveFileId ?? '', filename: f.filename, mimeType: f.mimeType,
+    thumbSrc: f.driveFileId ? driveThumbUrl(f.driveFileId, 1600) : (f.dataUrl ?? ''),
+    downloadHref: f.driveFileId ? `https://drive.google.com/uc?export=download&id=${f.driveFileId}` : (f.dataUrl ?? ''),
+  }));
 
   /** Who finished it and when — the newest closed task that did this stage. */
   function finishedLine(st: Stage): string {
@@ -280,14 +352,16 @@ export function StageSection({
       {working.map(v => (
         <div key={v.id} data-visit-working={v.id} className="flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-[13px] font-semibold text-emerald-900">
           <span className="w-2.5 h-2.5 rounded-full bg-emerald-600 apt-signal-work flex-shrink-0" />
-          <span className="flex-1 min-w-0 truncate">{W(`Working here · ${v.byName} since ${hm(v.startedAt)}`, `עובד כאן · ${v.byName} מ-${hm(v.startedAt)}`)}</span>
+          <span className="flex-1 min-w-0 truncate">{v.byName
+            ? W(`Working here · ${v.byName} since ${hm(v.startedAt)}`, `עובד כאן · ${v.byName} מ-${hm(v.startedAt)}`)
+            : W(`Someone is working here · since ${hm(v.startedAt)}`, `עובדים כאן · מ-${hm(v.startedAt)}`)}</span>
           {onCloseVisit && <button type="button" data-visit-close={v.id} onClick={() => onCloseVisit(v.id)}
             className="text-[12px] font-bold text-emerald-900 rounded-md border border-emerald-300 bg-white px-2 py-0.5">{W('Close', 'סגירה')}</button>}
         </div>
       ))}
 
       {/* A worker's "No, something else": his pictures, then the stage he really did, picked by the office. */}
-      {questions.map(v => {
+      {!readOnly && questions.map(v => {
         const asked = stages.find(x => x.id === v.askedStageId);
         const files = v.files ?? [];
         const items: StagePhotoItem[] = files.map(f => ({
@@ -297,10 +371,16 @@ export function StageSection({
         }));
         const pick = answerPick[v.id] ?? '';
         const picked = stages.find(x => x.id === pick);
+        const SMALL_FIX = '__fix', CUSTOM = '__custom';
+        const customText = (customFor[v.id] ?? '').trim();
+        const ownLabel = pick === SMALL_FIX ? W('Small fix', 'תיקון קטן') : pick === CUSTOM ? customText : '';
+        const canFile = !!picked || !!ownLabel;
+        void asked;
         return (
           <div key={v.id} data-visit-question={v.id} className="rounded-xl border-2 border-amber-300 bg-white p-3 space-y-2">
-            <div className="text-[14px] font-extrabold text-gray-900">
-              {asked ? W(`${v.byName} didn't do ${getStageName(asked, false)}`, `${v.byName} לא עשה ${getStageName(asked, true)}`) : W(`A question from ${v.byName}`, `שאלה מ${v.byName}`)}
+            <div className="text-[14px] font-extrabold text-gray-900 flex items-center gap-1.5">
+              <AlertTriangle size={15} className="text-amber-500 flex-shrink-0" />
+              {W(`${v.byName} finished work and didn't know where to file it`, `${v.byName} סיים עבודה ולא ידע איפה לתייק אותה`)}
             </div>
             <div className="text-[11.5px] text-gray-500">{day(v.endedAt)} {hm(v.endedAt)} · {W(`${files.length} pictures and videos`, `${files.length} תמונות וסרטונים`)}</div>
             {items.length > 0 && (
@@ -316,18 +396,27 @@ export function StageSection({
             )}
             <div className="text-[10.5px] font-semibold text-gray-500 uppercase tracking-wide">{W('What did he do here?', 'מה הוא עשה כאן?')}</div>
             <div className="flex flex-wrap gap-1.5">
-              {siteOpen.map(x => (
-                <button key={x.id} type="button" data-question-pick={x.id} aria-pressed={pick === x.id}
-                  onClick={() => setAnswerPick(m => ({ ...m, [v.id]: x.id }))}
-                  className={`rounded-full border px-2.5 py-1 text-[12px] font-bold ${pick === x.id ? 'bg-[#1e3a5f] border-[#1e3a5f] text-white' : 'bg-white border-gray-200 text-gray-700'}`}>
-                  {getStageName(x, rtl)}
+              {[...siteAll.map(x => ({ id: x.id, name: getStageName(x, rtl) })),
+                { id: SMALL_FIX, name: W('Small fix', 'תיקון קטן') }, { id: CUSTOM, name: W('Custom…', 'אחר…') }].map(o => (
+                <button key={o.id} type="button" data-question-pick={o.id} aria-pressed={pick === o.id}
+                  onClick={() => setAnswerPick(m => ({ ...m, [v.id]: o.id }))}
+                  className={`rounded-full border px-2.5 py-1 text-[12px] font-bold ${pick === o.id ? 'bg-[#1e3a5f] border-[#1e3a5f] text-white' : 'bg-white border-gray-200 text-gray-700'}`}>
+                  {o.name}
                 </button>
               ))}
             </div>
+            {pick === CUSTOM && (
+              <input data-question-custom autoFocus value={customFor[v.id] ?? ''} maxLength={80}
+                onChange={e => setCustomFor(m => ({ ...m, [v.id]: e.target.value }))}
+                placeholder={W('What did he do? (e.g. moved a drain)', 'מה הוא עשה? (למשל הזיז ניקוז)')}
+                className="w-full border border-gray-200 rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30" />
+            )}
             {onAnswer && (
-              <button type="button" data-question-answer disabled={!picked} onClick={() => picked && onAnswer(v.id, picked.id)}
+              <button type="button" data-question-answer disabled={!canFile}
+                onClick={() => { if (picked) onAnswer(v.id, picked.id); else if (ownLabel) onAnswer(v.id, null, ownLabel); }}
                 className="rounded-lg px-3 py-2 text-[13px] font-bold text-white disabled:opacity-40" style={{ backgroundColor: '#1e3a5f' }}>
-                {picked ? W(`Mark ${getStageName(picked, false)} done`, `לסמן ${getStageName(picked, true)} כבוצע`) : W('Pick the stage', 'לבחור שלב')}
+                {picked ? W(`File under ${getStageName(picked, false)}`, `לתייק תחת ${getStageName(picked, true)}`)
+                  : ownLabel ? W(`File as "${ownLabel}"`, `לתייק כ"${ownLabel}"`) : W('Pick what he did', 'לבחור מה הוא עשה')}
               </button>
             )}
           </div>
@@ -336,16 +425,23 @@ export function StageSection({
 
       <div data-stage-flow className="space-y-2">
       {lead.map(ins => <InspectionRow key={ins.id} ins={ins} rtl={rtl} day={day} onOpenPhotos={onOpenPhotos} />)}
-      {rows.map(({ stage: st, state }) => {
-        const pics = photos.filter(p => p.apartmentId === apartment.id && p.stageId === st.id && aptTaskIds.has(p.assignmentId)
+      {linesLead.map(v => <OwnLine key={v.id} v={v} items={visitItems(v)} day={day} rtl={rtl} onOpenPhotos={onOpenPhotos} />)}
+      {rows.map(({ stage: st, state }, rowIndex) => {
+        // Read-only (the shared view): the server already kept only this apartment's own tasks' pictures.
+        const pics = photos.filter(p => p.apartmentId === apartment.id && p.stageId === st.id && (readOnly || aptTaskIds.has(p.assignmentId))
           && (p.fileType ?? 'image') === 'image');
-        const items: StagePhotoItem[] = pics.map(p => ({
+        const visits = filedUnder(st.id);
+        const items: StagePhotoItem[] = [...pics.map(p => ({
           fileId: p.driveFileId ?? '', filename: p.filename, mimeType: p.mimeType ?? 'image/jpeg',
           thumbSrc: photoSrc(p, 1600), downloadHref: p.driveFileId ? `https://drive.google.com/uc?export=download&id=${p.driveFileId}` : (p.storageUrl || p.dataUrl),
-        }));
+        })), ...visits.flatMap(visitItems)];
         const doneBy = apartment.stageDone?.[st.id];
-        const who = state === 'done' ? (finishedLine(st) || (doneBy ? `${doneBy.by} · ${day(doneBy.at)} ${hm(doneBy.at)}` : ''))
+        const baseWho = state === 'done' ? (finishedLine(st) || (doneBy ? [doneBy.by, `${day(doneBy.at)} ${hm(doneBy.at)}`].filter(Boolean).join(' · ') : ''))
           : state === 'doing' || state === 'booked' ? openLine(st, state) : '';
+        // Every worker who filed work here, each with his own date (owner: "it shows Igor with two dates").
+        const visitWho = visits.map(v => `${v.byName} · ${day(v.endedAt)}`).filter(x => !baseWho.includes(x));
+        const who = [baseWho, ...visitWho].filter(Boolean).join('  ·  ');
+        const open = !!openRows[st.id];
         const waiting = waitingFor?.id === st.id && state !== 'done';
         const part = state === 'pending' || state === 'done' ? partLine(st) : '';
         const isOff = state === 'off';
@@ -355,11 +451,11 @@ export function StageSection({
             className={`group/st rounded-xl border px-3 py-2.5 ${isOff ? 'border-dashed border-gray-300 bg-gray-50' : 'border-gray-200 bg-white'}`}
             style={!isOff ? { borderInlineStartWidth: 4, borderInlineStartColor: st.color } : undefined}>
             <div className="flex items-center gap-2.5">
-              {isOff ? ring(st, state) : (
+              {isOff || !marksW ? <span className="flex-shrink-0" data-stage-bubble-static={st.id}>{ring(st, state)}</span> : (
                 <button type="button" data-stage-bubble={st.id} data-stage-state={state}
                   title={ui.setTapHint}
-                  onClick={() => { const nx = tapMark(marks, st, state); if (nx?.[st.id] === 'done') haptic('success'); onMarks(nx); if (isOneTapStage(st) && nx?.[st.id] === 'done') onOneTapDone?.(st.id); }}
-                  onContextMenu={e => { e.preventDefault(); const nx = cycleMark(marks, st.id, 'right', state); if (nx?.[st.id] === 'done') haptic('success'); onMarks(nx); }}
+                  onClick={() => { const nx = tapMark(marks, st, state); if (nx?.[st.id] === 'done') haptic('success'); marksW(nx); if (isOneTapStage(st) && nx?.[st.id] === 'done') onOneTapDone?.(st.id); }}
+                  onContextMenu={e => { e.preventDefault(); const nx = cycleMark(marks, st.id, 'right', state); if (nx?.[st.id] === 'done') haptic('success'); marksW(nx); }}
                   className="flex-shrink-0 rounded-full hover:scale-110 transition-transform">
                   {ring(st, state)}
                 </button>
@@ -373,11 +469,20 @@ export function StageSection({
               {state === 'booked' && <CalendarDays size={12} className="flex-shrink-0 text-gray-400" />}
               {state === 'pending' && <Clock size={12} className="flex-shrink-0" style={{ color: '#f97316' }} />}
               <span className="flex-1" />
-              {isOff ? (
-                <button type="button" data-stage-putback={st.id} onClick={() => onMarks(setMark(marks, st.id, 'todo'))}
+              {items.length > 0 && (
+                <button type="button" data-stage-fold={st.id} aria-expanded={open}
+                  onClick={() => setOpenRows(m => ({ ...m, [st.id]: !m[st.id] }))}
+                  title={open ? W('Hide the pictures', 'הסתרת התמונות') : W('Show the pictures', 'הצגת התמונות')}
+                  className="flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold text-gray-500 hover:bg-gray-100 flex-shrink-0">
+                  <Camera size={12} /> {items.length}
+                  <ChevronDown size={13} className={`transition-transform ${open ? 'rotate-180' : ''}`} />
+                </button>
+              )}
+              {!marksW ? null : isOff ? (
+                <button type="button" data-stage-putback={st.id} onClick={() => marksW(setMark(marks, st.id, 'todo'))}
                   className="text-[11px] font-semibold text-[#1e3a5f] px-2 py-0.5 rounded-full hover:bg-[#1e3a5f]/10">{ui.setPutBack}</button>
               ) : state !== 'done' && (
-                <button type="button" data-stage-off={st.id} onClick={() => onMarks(setMark(marks, st.id, 'off'))}
+                <button type="button" data-stage-off={st.id} onClick={() => marksW(setMark(marks, st.id, 'off'))}
                   title={ui.setNotNeededAct} aria-label={ui.setNotNeededAct}
                   className="w-6 h-6 rounded-full flex items-center justify-center text-gray-300 hover:text-red-500 hover:bg-red-50 opacity-0 group-hover/st:opacity-100 focus:opacity-100">
                   <X size={13} />
@@ -391,26 +496,29 @@ export function StageSection({
             )}
             {who && <div data-stage-who className="mt-1 text-[12.5px] text-gray-700">{who}</div>}
             {part && <div data-stage-part className="mt-0.5 text-[12.5px] text-amber-800">{part}</div>}
-            {items.length > 0 && (
+            {/* Folded by default; the arrow opens the stage's pictures right here (owner, 2026-11-19). */}
+            {items.length > 0 && open && (
               <div data-stage-thumbs className="mt-2 flex gap-1.5 flex-wrap">
                 {items.map((it, i) => (
                   <button key={i} type="button" data-stage-thumb onClick={() => onOpenPhotos(items, i)}
                     className="relative w-14 h-10 rounded-md overflow-hidden border border-gray-200 bg-gray-100
                                transition-transform duration-150 origin-top-left hover:scale-[3] hover:z-20 focus:scale-[3] focus:z-20 hover:shadow-xl motion-reduce:transition-none">
-                    <img src={photoSrc(pics[i], 400)} alt={it.filename} loading="lazy" className="w-full h-full object-cover" />
+                    <img src={i < pics.length ? photoSrc(pics[i], 400) : (it.fileId ? driveThumbUrl(it.fileId, 400) : it.thumbSrc)} alt={it.filename} loading="lazy" className="w-full h-full object-cover" />
+                    {it.mimeType.startsWith('video/') && <span className="absolute inset-0 flex items-center justify-center text-white"><Play size={14} fill="#fff" /></span>}
                   </button>
                 ))}
               </div>
             )}
           </div>
           {after(st.id).map(ins => <InspectionRow key={ins.id} ins={ins} rtl={rtl} day={day} onOpenPhotos={onOpenPhotos} />)}
+          {linesAfter(rowIndex).map(v => <OwnLine key={v.id} v={v} items={visitItems(v)} day={day} rtl={rtl} onOpenPhotos={onOpenPhotos} />)}
           </React.Fragment>
         );
       })}
       </div>
 
-      {/* + add a stage — from the workspace's list, or a new one. */}
-      <div>
+      {/* + add a stage — from the workspace's list, or a new one. Never in the read-only view. */}
+      {marksW && <div>
         {!adding ? (
           <button type="button" data-stage-add onClick={() => setAdding(true)}
             className="text-xs font-semibold text-gray-500 border border-dashed border-gray-300 rounded-full px-3 py-1 hover:border-[#1e3a5f] hover:text-[#1e3a5f]">
@@ -420,7 +528,7 @@ export function StageSection({
           <div data-stage-custom-form className="rounded-xl border border-dashed border-gray-400 bg-white p-2.5 space-y-2">
             <input data-stage-custom-name autoFocus value={custom.name} placeholder={ui.setCustomName}
               onChange={e => setCustom({ ...custom, name: e.target.value })}
-              onKeyDown={e => { if (e.key === 'Enter' && custom.name.trim()) { onAddCustom({ ...custom, name: custom.name.trim() }); setCustom(null); setAdding(false); } }}
+              onKeyDown={e => { if (e.key === 'Enter' && custom.name.trim()) { customW?.({ ...custom, name: custom.name.trim() }); setCustom(null); setAdding(false); } }}
               className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30" />
             <div className="flex gap-1.5">
               {CUSTOM_COLORS.map(c => (
@@ -447,7 +555,7 @@ export function StageSection({
             </div>
             <div className="flex gap-1.5">
               <button type="button" data-stage-custom-add disabled={!custom.name.trim()}
-                onClick={() => { onAddCustom({ ...custom, name: custom.name.trim() }); setCustom(null); setAdding(false); }}
+                onClick={() => { customW?.({ ...custom, name: custom.name.trim() }); setCustom(null); setAdding(false); }}
                 className="px-3 py-1.5 rounded-lg text-xs font-semibold text-white bg-[#1e3a5f] disabled:opacity-40">{ui.add}</button>
               <button type="button" onClick={() => setCustom(null)} className="px-3 py-1.5 rounded-lg text-xs text-gray-500 hover:bg-gray-50">{ui.cancel}</button>
             </div>
@@ -459,7 +567,7 @@ export function StageSection({
               <div className="flex flex-wrap gap-1.5 mb-2">
                 {notOnApt.map(st => (
                   <button key={st.id} type="button" data-stage-add-pick={st.id}
-                    onClick={() => { onMarks(setMark(marks, st.id, 'todo')); setAdding(false); }}
+                    onClick={() => { marksW(setMark(marks, st.id, 'todo')); setAdding(false); }}
                     className="inline-flex items-center gap-1.5 rounded-full border bg-white pl-1.5 pr-2.5 py-1 text-xs font-semibold text-gray-700 hover:border-[#1e3a5f]"
                     style={{ borderColor: `${st.color}88` }}>
                     <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: st.color }} />
@@ -477,16 +585,21 @@ export function StageSection({
             </div>
           </div>
         )}
-      </div>
+      </div>}
 
       {markers.length > 0 && (
         <div className="flex items-center gap-1.5 flex-wrap">
           <span className="text-xs font-semibold text-gray-500">{apartment.buildingId === 'G' ? ui.setJobIs : ui.setFlatIs}</span>
           {markers.map(m => {
             const on = apartment.currentStageId === m.id;
+            // Read-only: only the marker the flat stands on, as a label.
+            if (!markerW) return on ? (
+              <span key={m.id} data-stage-marker={m.id} data-on="1" className="text-[11px] font-semibold px-2 py-0.5 rounded-full border"
+                style={{ borderColor: m.color, backgroundColor: m.color, color: '#fff' }}>{getStageName(m, rtl)}</span>
+            ) : null;
             return (
               <button key={m.id} type="button" data-stage-marker={m.id} data-on={on ? '1' : undefined}
-                onClick={() => onMarker(m.id)}
+                onClick={() => markerW(m.id)}
                 className="text-[11px] font-semibold px-2 py-0.5 rounded-full border"
                 style={on ? { borderColor: m.color, backgroundColor: m.color, color: '#fff' } : { borderColor: '#e5e7eb', color: '#64748b', backgroundColor: '#fff' }}>
                 {getStageName(m, rtl)}

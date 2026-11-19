@@ -24,7 +24,7 @@ const isTzvi = (name?: string | null) => { const n = (name ?? '').trim(); return
 const CREW = ['Yaakov', 'Daniel', 'Igor'];
 import { TaskThread } from '../tasks/TaskThread';
 import { Translated } from '../ui/Translated';
-import { Send, CheckSquare, Square as SquareIcon, Sparkles } from 'lucide-react';
+import { Send, CheckSquare, Square as SquareIcon, Sparkles, Check } from 'lucide-react';
 import { AC_COMPANIES, crewOf, acCompanyOf, isCompanyButton, isInspectedButton } from '../../data/aptCrew';
 import { trashDriveFiles } from '../../data/driveTrash';
 import { haptic } from '../../data/haptics';
@@ -60,7 +60,7 @@ import { photoSrcOf } from '../../data/photoSrc';
 import { shotKindOf } from '../../data/sitePhotos';
 import { printSheet, printEsc } from '../../data/printing';
 import { PlanAddressSuggest } from './PlanAddressSuggest';
-import { isWorkStage, progressOf, taskStageIds, recordStageIds, isStartStage } from '../../data/stageMarks';
+import { isWorkStage, progressOf, taskStageIds, recordStageIds, isStartStage, liveStateOf } from '../../data/stageMarks';
 import { ProblemForm } from './ProblemForm';
 import { ProblemBand } from './ProblemBand';
 import { problemState } from '../../data/problems';
@@ -76,6 +76,7 @@ const PlanAnnotator = lazy(() =>
   import('../plans/PlanAnnotator').then(m => ({ default: m.PlanAnnotator })));
 import { ContractorStatusPanel } from './ContractorStatusPanel';
 import { StageSection } from './StageSection';
+import { drawerSizes, drawerPanelClass, drawerPanelStyle, drawerTabClass, DrawerTitleChips } from './drawerParts';
 import { openInSketcher } from '../../data/sketcherLink';
 import { buildingShort, realName } from '../../data/aptSale';
 import { OffListQuestion } from '../tasks/OffListQuestion';
@@ -113,6 +114,8 @@ function DriveImg({ src, alt, className }: { src: string; alt: string; className
 
 const EMPTY_TIPUSIM: string[] = [];
 const EMPTY_BUTTONS: CustomButton[] = [];
+/** Workspaces whose apartment window shows no address and no phone (the shared view never shows them anywhere). */
+const NO_CONTACT_PROJECTS = ['wolfson', 'netiv'];
 /** A stage colour with an alpha suffix — only for a six-digit hex, which can take one. */
 function tintHex(c: string | undefined, alpha: string): string {
   return c && /^#[0-9a-f]{6}$/i.test(c) ? c + alpha : (c || '#94a3b8');
@@ -138,6 +141,8 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
     contractorNotes, addContractorNote } = useStore();
   const isGeneralProject = currentProjectId === 'general';
   const isWolfsonProject = currentProjectId === 'wolfson';
+  /** No address or phone on the window — Wolfson (video 2026-11-03) and Netiv too (owner, 2026-11-18), for everyone. */
+  const hidesContact = NO_CONTACT_PROJECTS.includes(currentProjectId);
   const tipusim = useStore(st => st.boardSettings[st.currentProjectId]?.tipusim ?? EMPTY_TIPUSIM);
   const customButtons = useStore(st => st.boardSettings[st.currentProjectId]?.customButtons ?? EMPTY_BUTTONS);
   // The company buttons became the AC company dropdown, and "Inspected by Tzvi" is the Inspection stages' business
@@ -423,7 +428,6 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
    * Landscape √2 stands in for the moment before the measurement lands.
    */
   const [planRatio, setPlanRatio] = useState<number | null>(null);
-  const maxModalH = Math.min(980, window.innerHeight * 0.93);
   const sheetRatio = planRatio ?? Math.SQRT2;
   /**
    * ...but never wider than the screen LEAVES beside the 560px fields column
@@ -441,10 +445,7 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
    */
   // The plan gets at least HALF the window (owner, 2026-11-08, the Fold on its side: "make the details side smaller
   // and the plan side bigger … at least half"): the fields never take more than half, nor more than 560.
-  const availW = Math.round(window.innerWidth * 0.96);
-  const fieldsW = Math.max(340, Math.min(560, availW - 340, Math.round(availW / 2)));
-  const fitW = Math.max(280, Math.round(window.innerWidth * 0.96) - fieldsW);
-  const planW = Math.min(Math.round((maxModalH - 56) * sheetRatio), fitW);
+  // The arithmetic lives in drawerParts.ts, shared with the outside view's window so both are the same size.
   /**
    * When the width cap bit, the sheet needs less height too — the whole
    * window shrinks so the plan sits in a smaller square, instead of floating
@@ -452,8 +453,8 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
    * own two bars (47 + 38, measured); floored so the fields column stays a
    * usable height on a very wide, very short screen.
    */
-  const modalH = Math.min(maxModalH,
-    Math.max(Math.round(planW / sheetRatio) + 141, Math.min(640, maxModalH)));
+  const drawerSize = drawerSizes(window.innerWidth, window.innerHeight, sheetRatio);
+  const { fieldsW } = drawerSize;
 
   /** The plan pane beside the fields — off when there is no plan to show. */
   const [planWanted, setPlanWanted] = useState(true);
@@ -1570,7 +1571,70 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
           </Tooltip>
         )}
       </div>
+      {approvalStrip()}
       </>
+    );
+  }
+
+  /**
+   * THE APPROVAL STRIP (owner, 2026-11-19, Option A on the Z Fold 8 page): full width, right above the drawing, never
+   * squeezed out of a bar. Yellow while the starred plan is not approved by Tzvi — "Approved by Hodaya, not by you
+   * yet" with a big green Approve (Tzvi's user only); a slim green "Approved by Tzvi" once he has. The ★ at the end
+   * unstars. Shown only while the starred plan itself is on screen.
+   */
+  function approvalStrip() {
+    if (autoPlan || !starredPlanId || paneFileId !== starredPlanId) return null;
+    const byTzvi = isTzvi(plansApprovedBy);
+    const iAmTzvi = !!currentUser && isTzvi(currentUser.name);
+    const he = !!ui.isRtl;
+    const approve = () => {
+      if (!currentUser) return;
+      updateApartment(apartment!.id, { plansApprovedBy: currentUser.name, plansApprovedAt: new Date().toISOString() }, currentUser);
+      haptic('success');
+      onToast(he ? 'התוכנית אושרה על ידך' : 'Approved by you');
+    };
+    const unstar = () => {
+      if (!currentUser) return;
+      setPlansPdfLink('');
+      updateApartment(apartment!.id, { plansPdfLink: undefined, plansApprovedBy: undefined, plansApprovedAt: undefined }, currentUser);
+      onToast(he ? 'הכוכב הוסר — התוכנית לא מאושרת' : 'Unstarred — the plan is no longer approved');
+    };
+    const star = currentUser && (
+      <button type="button" data-plan-unstar onClick={unstar} title={he ? 'להסיר כוכב' : 'Unstar this plan'}
+        aria-label={he ? 'להסיר כוכב' : 'Unstar this plan'} className="p-1 rounded-full hover:bg-black/5 flex-shrink-0">
+        <Star size={17} fill="#f59e0b" color="#f59e0b" />
+      </button>
+    );
+    if (byTzvi) {
+      return (
+        <div data-plan-approval="tzvi" className="flex items-center gap-2 px-3 py-1 flex-shrink-0 text-[12.5px] font-bold"
+          style={{ backgroundColor: '#dcfce7', color: '#166534', borderBottom: '1px solid #86efac' }}>
+          <Check size={14} className="flex-shrink-0" />
+          <span className="truncate">{he ? 'אושר ע״י צבי' : 'Approved by Tzvi'}</span>
+          <span className="flex-1" />
+          {star}
+        </div>
+      );
+    }
+    const who = plansApprovedBy?.trim();
+    const words = who
+      ? (iAmTzvi ? (he ? `אושר ע״י ${who}, עוד לא על ידך` : `Approved by ${who}, not by you yet`) : (he ? `אושר ע״י ${who}, עוד לא ע״י צבי` : `Approved by ${who}, not by Tzvi yet`))
+      : (iAmTzvi ? (he ? 'מסומנת בכוכב, עוד לא אושרה על ידך' : 'Starred, not approved by you yet') : (he ? 'מסומנת בכוכב, עוד לא אושרה ע״י צבי' : 'Starred, not approved by Tzvi yet'));
+    return (
+      <div data-plan-approval="not-tzvi" className="flex items-center gap-2 px-3 py-1.5 flex-shrink-0 text-[13px] font-bold"
+        style={{ backgroundColor: '#fef3c7', color: '#92400e', borderBottom: '2px solid #f59e0b' }}>
+        <AlertTriangle size={15} className="flex-shrink-0" />
+        <span className="min-w-0 truncate">{words}</span>
+        <span className="flex-1" />
+        {iAmTzvi && (
+          <button type="button" data-plan-approve-me onClick={approve}
+            className="flex items-center gap-1 rounded-lg px-3 py-1.5 text-[13px] font-extrabold text-white flex-shrink-0 active:scale-[0.98]"
+            style={{ backgroundColor: '#16a34a' }}>
+            <Check size={14} /> {he ? 'לאשר' : 'Approve'}
+          </button>
+        )}
+        {star}
+      </div>
     );
   }
 
@@ -1774,8 +1838,8 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
               autoPlanYesLabel={ui.planAutoYes}
               autoPlanOtherLabel={ui.planAutoOther}
               onConfirmAutoPlan={autoPlan && detectedPdfId ? () => starPlan({ id: detectedPdfId }) : undefined}
-              approvedNote={!autoPlan && starredPlanId && fileId === starredPlanId && plansApprovedBy
-                ? ui.planApprovedBy.replace('{who}', plansApprovedBy) : undefined}
+              /* "Plan approved by …", its Approve and its ★ live in the approval strip above the plan now (Option A,
+                 owner 2026-11-19) — not as a small pill in the bar. */
               /*
                 Plans is the chooser now, so what it picks has to land back
                 here. The rule the chip row carried is kept exactly: only an
@@ -1974,8 +2038,7 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
       <div className="drawer-overlay fixed inset-0 bg-black/50 z-[110]" onClick={closeDrawer} />
 
       <div
-        className={`drawer-panel fixed bg-white shadow-2xl z-[120] flex flex-col overflow-hidden ${
-          isPhone ? '' : 'rounded-2xl'}`}
+        className={drawerPanelClass(isPhone)}
         /**
          * The tap that OPENED this window is not aimed at it.
          *
@@ -1993,23 +2056,10 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
         onClickCapture={e => {
           if (Date.now() - bornAt.current < 400) { e.preventDefault(); e.stopPropagation(); }
         }}
-        style={isPhone
-          // On a phone it is a FULL SCREEN, not a shrunken desktop window.
-          // Centred at 94vw × 93vh it left a useless margin all round while the
-          // content inside it was still too cramped to read — the worst of both.
-          // A phone has one thing on screen at a time; this is that thing.
-          ? { inset: 0, width: '100%', height: '100%' }
-          : {
-              left: '50%',
-              top: '50%',
-              transform: 'translate(-50%, -50%)',
-              // Wide enough to hold the fields AND the plan side by side, but still
-              // inset on every edge so it reads as a window over the board rather
-              // than as a page you have navigated to.
-              width: planSideOn ? `min(${fieldsW + planW}px, 96vw)` : 'min(1020px, 94vw)',
-              height: planSideOn ? `${modalH}px` : 'min(980px, 93vh)',
-              transition: 'width 180ms ease',
-            }}
+        // On a phone it is a FULL SCREEN, not a shrunken desktop window (centred at 94vw × 93vh it left a useless
+        // margin all round while the content was still too cramped). Elsewhere: wide enough to hold the fields AND
+        // the plan side by side, but inset on every edge so it reads as a window over the board.
+        style={drawerPanelStyle(isPhone, planSideOn, drawerSize)}
       >
         {/* Header — wraps on a narrow screen. Unwrapped, the Drive/Print/Worker
             row ran off the right edge and finished UNDERNEATH the close button,
@@ -2020,15 +2070,8 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
             <Building2 size={16} className="text-[#4aa8d8] flex-shrink-0" />
             {isGeneralProject
               ? <span className="text-[#4aa8d8] font-semibold text-sm flex-shrink-0">{ui.jobLabel}</span>
-              : <>
-                  <span data-drawer-building className="text-[#4aa8d8] font-semibold text-sm flex-shrink-0">{ui.buildingWord} {buildingShort(apartment.buildingId)}</span>
-                  {/* The floor as the building diagram LABELS it — Wolfson's
-                      towers print one lower than the stored floor, and the
-                      window said "Floor 4" over a unit the diagram shows on 3. */}
-                  {rowNumOf(apartment.buildingId, apartment.floor) && <span data-drawer-floor className="text-white/50 text-xs flex-shrink-0">· {ui.floorPrefix} {rowNumOf(apartment.buildingId, apartment.floor)}</span>}
-                  {apartment.apartmentNumber && <span data-drawer-aptno className="text-white/50 text-xs flex-shrink-0">· {ui.aptPrefix} {apartment.apartmentNumber}</span>}
-                  {apartment.tipus && <span data-tipus-chip className="text-white/85 text-xs font-bold flex-shrink-0 px-1.5 rounded bg-white/15">{apartment.tipus}</span>}
-                </>
+              : <DrawerTitleChips buildingId={apartment.buildingId} floor={apartment.floor}
+                  apartmentNumber={apartment.apartmentNumber} tipus={apartment.tipus} ui={ui} />
             }
             {mergedPartner && (
               <span className="text-white/60 text-xs flex-shrink-0">
@@ -2147,11 +2190,7 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                   .finally(() => setLoadingPhotos(false));
               }
             }}
-              className={`flex-1 whitespace-nowrap font-medium transition-colors relative ${
-                isPhone ? 'py-2 px-1 text-[12px]' : 'py-2.5 text-sm'
-              } ${
-                activeTab === tab ? 'border-b-2 border-[#1e3a5f] text-[#1e3a5f]' : 'text-gray-500 hover:text-gray-700'
-              }`}>
+              className={drawerTabClass(activeTab === tab, isPhone)}>
               {/* "Plan", not ui.engineeringPlans — the full label is two words
                   wide and squeezed the other five tabs off the row. */}
               {tab === 'plan' ? (ui.isRtl ? 'תוכנית' : 'Plan')
@@ -2386,7 +2425,7 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                 </div>
               )}
 
-              {!isWolfsonProject && (<>
+              {!hidesContact && (<>
               {/* Address and phone — one row on desktop, stacked on a phone.
                   The same block for apartments and General jobs on purpose. */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -2726,12 +2765,18 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                 onInspect={isTzvi(currentUser?.name) || sortedStages.some(st => howOf(st) === 'inspection' && userCanDo(st, currentUser, users))
                   ? (after, stageId) => setInspectAsk({ after, stageId }) : undefined}
                 canInspect={st => userCanDo(st, currentUser, users)}
-                onAnswer={(visitId, stageId) => {
+                onAnswer={(visitId, stageId, label) => {
                   const fresh = useStore.getState().apartments.find(a => a.id === apartment.id) ?? apartment;
                   const v = (fresh.siteVisits ?? []).find(x => x.id === visitId);
                   const siteVisits = (fresh.siteVisits ?? []).map(x => (x.id === visitId
-                    ? { ...x, status: 'answered' as const, stageId, answeredBy: currentUser.name, answeredAt: new Date().toISOString() } : x));
-                  finishStage(stageId, v?.byName ?? currentUser.name, { siteVisits });
+                    ? { ...x, status: 'answered' as const, stageId, ...(label ? { label } : {}), answeredBy: currentUser.name, answeredAt: new Date().toISOString() } : x));
+                  // A stage that is already finished only takes his pictures and date; a new one is finished in his name.
+                  // Small fix / the office's own words file the visit as its own line — no stage changes.
+                  if (stageId && liveStateOf(fresh, stageId, sortedStages, contractorAssignments) !== 'done') {
+                    finishStage(stageId, v?.byName ?? currentUser.name, { siteVisits });
+                  } else {
+                    trackUndo(null, () => updateApartment(apartment.id, { siteVisits }, currentUser));
+                  }
                   haptic('success');
                 }}
                 onCloseVisit={visitId => {

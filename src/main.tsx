@@ -30,7 +30,24 @@ window.addEventListener('vite:preloadError', event => {
  * BEFORE the app — and with it the store and the cloud connection — starts.
  */
 const root = ReactDOM.createRoot(document.getElementById('root')!);
-bootPreview((import.meta.env.VITE_DRIVE_API_KEY as string | undefined) ?? '')
+
+/**
+ * THE SHARED VIEW (/s/<token>, owner 2026-11-18) is a different app: it never loads the office app, the store or
+ * Firebase — only its own chunk, which gets everything from the server (src/shared, lib/sharedView.js).
+ */
+if (/^\/s\//.test(window.location.pathname)) {
+  Promise.all([import('./shared/SharedViewerApp.tsx'), import('./shared/sharedApi.ts')])
+    .then(([{ default: SharedViewerApp }, { tokenFromPath }]) => {
+      root.render(
+        <React.StrictMode>
+          <SharedViewerApp token={tokenFromPath(window.location.pathname)} />
+        </React.StrictMode>,
+      );
+    })
+    .catch(() => {
+      root.render(<div style={{ padding: 32, fontFamily: 'system-ui', color: '#7f1d1d' }}><h2>This page could not open</h2></div>);
+    });
+} else bootPreview((import.meta.env.VITE_DRIVE_API_KEY as string | undefined) ?? '')
   .then(() => import('./App.tsx'))
   .then(({ default: App }) => {
     root.render(

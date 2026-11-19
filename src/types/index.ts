@@ -673,6 +673,11 @@ export interface SiteVisit {
   files?: InspectionFile[];
   answeredBy?: string;
   answeredAt?: string;
+  /**
+   * What he did when it was not a stage (owner, 2026-11-19): "Small fix" or the office's own words. Shown as its own
+   * line among the stages, by its date, with his pictures.
+   */
+  label?: string;
 }
 
 export function getStageName(stage: Stage, isRtl: boolean): string {
@@ -1266,6 +1271,24 @@ export interface PinFile {
   mimeType: string;
   /** A Drive view link, or a small data URL when no backend is configured. */
   url: string;
+}
+
+/**
+ * One file on an OUTSIDE person's pin (a shared link's photo, PDF or voice note — owner, 2026-11-19). Written only
+ * by the server (lib/sharedView.js, ?sv=pinfile) into the apartment's Drive "Punch List/Outside" folder. The office
+ * reads `driveFileId` off the `sharedPins` record; the outside page never gets it — it gets `ref`, sealed by the
+ * server for that one link.
+ */
+export interface SharedPinFile {
+  id: string;
+  mimeType: string;
+  name: string;
+  /** Office side (the stored record). */
+  driveFileId?: string;
+  size?: number;
+  createdAt?: string;
+  /** Outside side (the server's answer): the sealed ref its file route opens. */
+  ref?: string;
 }
 
 /** The drawing tools available when marking up a plan. */

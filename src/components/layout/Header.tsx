@@ -16,6 +16,7 @@ import { GlobalSearch } from '../ui/GlobalSearch';
 import { subscribeCloudSync, isFirebaseConfigured, SyncStatus } from '../../data/firebase';
 import { clearReturnTicket } from '../../data/unitTravel';
 import { OfficeAlertsAsk } from './OfficeAlerts';
+import { NotificationTray } from './NotificationTray';
 import { UndoButtons } from '../board/UndoLayer';
 
 /**
@@ -589,6 +590,7 @@ export function Header() {
         {/* Desktop alerts are a computer's question — not asked in a phone's header. */}
         {currentUser && <span className="hidden md:contents"><OfficeAlertsAsk light={lightTheme} /></span>}
         {currentUser && <PendingStagesBell light={lightTheme} />}
+        {currentUser && <NotificationTray light={lightTheme} />}
         <CloudSyncBadge light={lightTheme} />
 
         {/* EN | עב, always in the bar at every width (owner, 2026-11-02: "every

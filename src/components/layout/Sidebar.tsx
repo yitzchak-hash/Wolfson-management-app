@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import {
   Building2, LayoutDashboard, FileText, Settings, Activity, Tv,
-  TrendingUp, ClipboardList, Briefcase, CalendarDays, MoreHorizontal,
+  TrendingUp, ClipboardList, Briefcase, CalendarDays, MoreHorizontal, Share2,
 } from 'lucide-react';
 import { useStore } from '../../data/store';
 import { projectColor } from '../../types';
@@ -37,6 +37,8 @@ function useNavItems() {
     { to: '/reports',          icon: FileText,        label: s.navReports },
     { to: '/activity',         icon: Activity,        label: s.navActivity },
     { to: '/settings',         icon: Settings,        label: s.navProjectSettings },
+    // Read-only links for people outside the office — its own section under Settings, after a line (owner, 2026-11-18).
+    ...(!isGeneral ? [{ to: '/shared', icon: Share2, label: 'Shared', divider: true }] : []),
     /**
      * What the TV sees, from a computer — Job Board only. The wall is ONE
      * shared screen whatever workspace you stand in, so a TV tab repeated in

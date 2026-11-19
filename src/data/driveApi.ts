@@ -473,10 +473,8 @@ export async function checkFolderHealthViaBackend(
 // These route through /api/* so contractors on any device can upload to Drive
 // via the service account — no per-user OAuth token required.
 
-/** Returns a thumbnail URL for a Drive file (file must be shared publicly) */
-export function driveThumbUrl(fileId: string, maxPx = 1200): string {
-  return `https://drive.google.com/thumbnail?id=${fileId}&sz=w${maxPx}`;
-}
+/** Returns a thumbnail URL for a Drive file (file must be shared publicly) — lives in driveThumb.ts (the shared view). */
+export { driveThumbUrl } from './driveThumb';
 
 /** Make a Drive file readable by anyone with the link, via backend service account */
 export async function shareFileToDrive(fileId: string): Promise<boolean> {

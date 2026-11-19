@@ -1,12 +1,13 @@
 import React, { createContext, useContext, useMemo, useState } from 'react';
 import { Link2, Lock, LockOpen, Check } from 'lucide-react';
 import { Apartment, BuildingId, Stage, relativeTime } from '../../types';
-import { useStore } from '../../data/store';
+// Read through the bridge, never the store: the outside shared view draws this same board without the database.
+import { useViewState } from '../../data/viewState';
 import { PROBLEM_FILL } from '../../data/problems';
 import { progressOf, StageProgress, isStartStage } from '../../data/stageMarks';
 import { signalOf } from '../../data/stageHow';
 import { realName, isSold } from '../../data/aptSale';
-import { driveThumbUrl } from '../../data/driveApi';
+import { driveThumbUrl, driveOpenUrl } from '../../data/driveThumb';
 
 /**
  * WHO IS LOOKING AT THE MAP. The office reads every site signal; a WORKER's phone (the portal sets this to his id)
@@ -243,19 +244,33 @@ function AptCell({
   aptSubLabel, taskInfo, nextStageName, onAddTask, allTasksDone, compact, phone, cellTextW, onNameUnnamed,
   mergeLink, extraStyle, isHoverGroup, onHover, problem, progress, onStripPiece,
 }: AptCellProps) {
-  const ui = useStore(state => state.mainUiStrings);
-  const projectId = useStore(state => state.currentProjectId);
+  const ui = useViewState(state => state.mainUiStrings);
+  const projectId = useViewState(state => state.currentProjectId);
   /**
    * THE SITE SIGNAL (owner, 2026-11-10): someone working here GLOWS green, a worker's question for the office FLASHES
    * amber, an apartment whose next stage is an inspection waits in dashed violet — on the office board and on the
    * worker's phone alike, read straight off the apartment (stageHow.signalOf).
    */
-  const allStages = useStore(state => state.stages);
-  const tipusStages = useStore(state => state.boardSettings[state.currentProjectId]?.tipusStages);
+  const allStages = useViewState(state => state.stages);
+  const tipusStages = useViewState(state => state.boardSettings[state.currentProjectId]?.tipusStages);
   const viewer = useContext(MapViewerContext);
   const rawSignal = useMemo(() => (apt ? signalOf(apt, [...allStages].sort((a, b) => a.order - b.order), { tipusStages }) : null),
     [apt, allStages, tipusStages]);
   const signal = viewer.workerId && rawSignal === 'ask' ? null : rawSignal;
+  /**
+   * Work a worker could not file (owner, 2026-11-19): a small yellow warning triangle to the RIGHT of the number,
+   * never over it — instead of the flashing tile. Waiting for inspection keeps its purple outline.
+   */
+  const askMark = signal === 'ask' ? (
+    <span data-ask-mark title="A worker finished work and didn't know where to file it"
+      className="inline-flex flex-shrink-0 align-middle" style={{ marginInlineStart: 4 }}>
+      <svg width="13" height="12" viewBox="0 0 24 22" aria-hidden="true">
+        <path d="M12 1.5 23 20.5H1z" fill="#facc15" stroke="#a16207" strokeWidth="1.6" strokeLinejoin="round" />
+        <rect x="10.9" y="7.5" width="2.2" height="7" rx="1.1" fill="#422006" />
+        <circle cx="12" cy="17.3" r="1.3" fill="#422006" />
+      </svg>
+    </span>
+  ) : null;
   const today = new Date().toDateString();
   const finishedHere = !!viewer.workerId && !!apt?.siteVisits?.some(v => v.byId === viewer.workerId && v.status !== 'working'
     && !!v.endedAt && new Date(v.endedAt).toDateString() === today)
@@ -368,7 +383,7 @@ function AptCell({
       // mid-word) moves its tipus under the number (index.css).
       data-has-tipus={placed && tipusLine ? '1' : undefined}
       data-big={bigCell ? '1' : undefined}
-      className={`${placed ? 'apt-tile ' : ''}${signal && !isDimmed ? `apt-signal-${signal} ` : ''}relative flex flex-col items-center justify-center cursor-pointer select-none rounded-md overflow-hidden transition-all duration-100 ${scale}`}
+      className={`${placed ? 'apt-tile ' : ''}${signal && signal !== 'ask' && !isDimmed ? `apt-signal-${signal} ` : ''}relative flex flex-col items-center justify-center cursor-pointer select-none rounded-md overflow-hidden transition-all duration-100 ${scale}`}
       onMouseEnter={() => apt && onHover?.(apt.id)}
       onMouseLeave={() => onHover?.(null)}
       style={{
@@ -465,9 +480,9 @@ function AptCell({
       ))}
       {placed && displayLabel && (
         <>
-          <span data-cell-number className="absolute font-bold leading-none whitespace-nowrap"
+          <span data-cell-number className="absolute font-bold leading-none whitespace-nowrap inline-flex items-center"
             style={{ left: 6, top: 6, fontSize: '13px' }}>
-            {numberLabel}
+            {numberLabel}{askMark}
           </span>
           {tipusLine && (
             <span data-tipus-line className="absolute font-bold leading-none whitespace-nowrap rounded"
@@ -531,7 +546,7 @@ function AptCell({
               // The badges sit in the top corners, above this line, so the
               // whole width is the name's.
               style={{ fontSize: '12.5px', padding: '0 3px' }}>
-              {numberLabel}
+              {numberLabel}{askMark}
               <span className="ms-1.5" style={{ fontWeight: unsold ? 500 : 700, fontStyle: unsold ? 'italic' : undefined, opacity: unsold ? 0.7 : 1 }}>
                 {nameLabel || (unsold ? ui.notSoldWord : '')}
               </span>
@@ -545,7 +560,7 @@ function AptCell({
             className="font-bold leading-tight text-center w-full block truncate flex-shrink-0"
             style={{ fontSize: numFontSize, padding: phone ? 0 : '0 1px' }}
           >
-            {displayLabel}
+            {displayLabel}{numberLabel ? askMark : null}
           </span>
           )}
           {tipusLine && (
@@ -833,8 +848,9 @@ function Stairwell({ compact, floorLabel }: { compact?: boolean; floorLabel?: st
  * state key; absent means pinned, which is the behaviour that was always there.
  */
 function BuildingNameBar({ buildingId, compact }: { buildingId: string; compact?: boolean }) {
-  const { boardSettings, currentProjectId, setBoardSetting } = useStore();
-  const pinned = boardSettings[currentProjectId]?.stickyBuildingName !== false;
+  const pinned = useViewState(st => st.boardSettings[st.currentProjectId]?.stickyBuildingName !== false);
+  // Absent in the shared view: the padlock is the office's, so there it is simply not drawn.
+  const setBoardSetting = useViewState(st => st.setBoardSetting);
   return (
     <div
       className={`${pinned ? 'sticky top-0 z-20' : 'relative'} group print:static text-center font-bold text-white tracking-widest rounded-t-lg ${
@@ -842,7 +858,7 @@ function BuildingNameBar({ buildingId, compact }: { buildingId: string; compact?
       style={{ backgroundColor: '#1e3a5f' }}
     >
       {buildingId}
-      <button
+      {setBoardSetting && <button
         onClick={() => setBoardSetting('stickyBuildingName', !pinned)}
         title={pinned
           ? 'The building name stays on top while you scroll — press to let it scroll away'
@@ -852,7 +868,7 @@ function BuildingNameBar({ buildingId, compact }: { buildingId: string; compact?
         style={pinned ? { color: '#ffffff99' } : { color: '#fbbf24' }}
       >
         {pinned ? <Lock size={compact ? 11 : 13} /> : <LockOpen size={compact ? 11 : 13} />}
-      </button>
+      </button>}
     </div>
   );
 }
@@ -912,14 +928,14 @@ function BuildingColumn({
   aptTaskData, nextStageLabels, onAddTask, aptCompletedData, compact, phone, onNameUnnamed,
   hoverGroup, onHoverApt, fixedColW, isLast, onStripPiece,
 }: ColumnProps) {
-  const ui = useStore(state => state.mainUiStrings);
-  const uiLang = useStore(state => state.uiLang);
-  const heights = useStore(state => state.boardSettings[state.currentProjectId]?.floorHeights?.[buildingId]);
-  const layout = useStore(state => state.boardSettings[state.currentProjectId]?.buildingLayout?.[buildingId]);
+  const ui = useViewState(state => state.mainUiStrings);
+  const uiLang = useViewState(state => state.uiLang);
+  const heights = useViewState(state => state.boardSettings[state.currentProjectId]?.floorHeights?.[buildingId]);
+  const layout = useViewState(state => state.boardSettings[state.currentProjectId]?.buildingLayout?.[buildingId]);
   const stageMap = useMemo(() => new Map(stages.map(s => [s.id, s])), [stages]);
   // The set model: one fraction + strip per apartment, from the stages, the
   // tipus sets and the marks — computed once per column, not per cell.
-  const tipusStages = useStore(state => state.boardSettings[state.currentProjectId]?.tipusStages);
+  const tipusStages = useViewState(state => state.boardSettings[state.currentProjectId]?.tipusStages);
   const sortedAll = useMemo(() => [...stages].sort((a, b) => a.order - b.order), [stages]);
   const progressMap = useMemo(
     () => new Map(apartments.map(a => [a.id, progressOf(a, sortedAll, { tipusStages })])),
@@ -1188,8 +1204,8 @@ export function BuildingDiagram({
   aptTaskData, nextStageLabels, onAddTask, aptCompletedData, compact, phone, onNameUnnamed,
   fixedColW,
 }: BuildingDiagramProps) {
-  const { isRtl } = useStore(state => state.mainUiStrings);
-  const buildings = useStore(state => state.buildings);
+  const { isRtl } = useViewState(state => state.mainUiStrings);
+  const buildings = useViewState(state => state.buildings);
   // Netiv stands Building 1 on the left, Building 2 on the right, like every project (owner, 2026-11-17: "building 1
   // is on the left, building 2 is on the right. That's the way I want it" — this replaces his 2026-11-09 order).
   const leftToRight = buildings;
@@ -1314,8 +1330,11 @@ export function BuildingDiagram({
 function StripPhotos({ piece, stages, apartments, onKeep, onClose }: {
   piece: StripPiece; stages: Stage[]; apartments: Apartment[]; onKeep: () => void; onClose: () => void;
 }) {
-  const photos = useStore(st => st.contractorPhotos);
-  const uiLang = useStore(st => st.uiLang);
+  const photos = useViewState(st => st.contractorPhotos);
+  const uiLang = useViewState(st => st.uiLang);
+  // The shared view fetches one apartment's photos when they are first asked for (office: absent, holds them all).
+  const loadPhotosFor = useViewState(st => st.loadPhotosFor);
+  React.useEffect(() => { loadPhotosFor?.(piece.aptId); }, [loadPhotosFor, piece.aptId]);
   const he = uiLang === 'he';
   const stage = stages.find(x => x.id === piece.stageId);
   const apt = apartments.find(a => a.id === piece.aptId);
@@ -1359,7 +1378,7 @@ function StripPhotos({ piece, stages, apartments, onKeep, onClose }: {
         <div className="grid grid-cols-3 gap-1.5">
           {list.slice(0, 9).map(p => {
             const src = p.driveFileId ? driveThumbUrl(p.driveFileId, 400) : p.storageUrl!;
-            const href = p.driveUrl || (p.driveFileId ? `https://drive.google.com/file/d/${p.driveFileId}/view` : p.storageUrl);
+            const href = p.driveUrl || (p.driveFileId ? driveOpenUrl(p.driveFileId) : p.storageUrl);
             return (
               <a key={p.id} href={href} target="_blank" rel="noreferrer" className="block rounded-md overflow-hidden bg-gray-100">
                 <img src={src} alt="" loading="lazy" className="w-full aspect-[3/4] object-cover" />

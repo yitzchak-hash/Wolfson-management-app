@@ -8,7 +8,7 @@ import { Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { redeemReturn, holdTicketThroughBack } from '../data/unitTravel';
 import { readPlace, savePlace, type ProjectPlace } from '../data/projectPlace';
 import { Tooltip } from '../components/ui/Tooltip';
-import { useStore, trackUndo } from '../data/store';
+import { useStore, trackUndo, cloudReady as cloudReadyNow } from '../data/store';
 import { Apartment, BuildingId, isCountableApartment } from '../types';
 import { setMark, isWorkStage } from '../data/stageMarks';
 import { problemStates } from '../data/problems';
@@ -83,6 +83,16 @@ const useNarrow = () => useMedia('(max-width: 899px)');
  */
 const useRoomForAll = () => useMedia('(min-width: 600px)');
 
+/** The flat named in the address the app was OPENED on (…/project?p=<project>&apt=<id>) — asked once, then gone. */
+let landingAsk: { p: string; apt: string } | null = (() => {
+  try {
+    if (window.location.pathname !== '/project') return null;
+    const q = new URLSearchParams(window.location.search);
+    const apt = q.get('apt');
+    return apt ? { apt, p: q.get('p') || '' } : null;
+  } catch { return null; }
+})();
+
 const EMPTY_LIST: string[] = [];
 
 export function ProjectDiagramPage() {
@@ -137,6 +147,31 @@ export function ProjectDiagramPage() {
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
   const [namingApt, setNamingApt] = useState<Apartment | null>(null);
   const [namingInput, setNamingInput] = useState('');
+
+  /**
+   * THE APARTMENT IN THE ADDRESS (owner, 2026-11-19: "a lot of times I just want to share the URL so people can go
+   * into a specific apartment"). An open window's address carries ?p=<project>&apt=<id>; closing it takes them off.
+   * Opening such an address switches to that project if needed and opens the window once the flat is there. Only
+   * for people logged in; outsiders use a Shared link.
+   *
+   * The address is written by the window's own history entry (see "THE PHONE'S BACK CLOSES THE APARTMENT WINDOW"
+   * below) — one writer, through the router, so the two never disagree. And only the address the APP WAS OPENED ON
+   * may ask (`landingAsk`): an old entry reached by Back must never switch the project (owner, 2026-11-19: "it
+   * never supposed to change project … till physically I change").
+   */
+  const urlAsk = useRef<{ p: string; apt: string } | null>(landingAsk);
+  useEffect(() => { landingAsk = null; }, []);
+  /** The address's flat was found and its window is on its way up — the address is left alone until it is. */
+  const askOpening = useRef(false);
+  useEffect(() => {
+    const ask = urlAsk.current;
+    if (!ask) return;
+    if (ask.p && ask.p !== currentProjectId && projects.some(pr => pr.id === ask.p)) { setCurrentProject(ask.p); return; }
+    const apt = apartments.find(a => a.id === ask.apt);
+    if (apt) { urlAsk.current = null; askOpening.current = true; setSelectedApt(apt); }
+    else if (apartments.length && cloudReadyNow()) urlAsk.current = null;   // a flat that no longer exists: let it go
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [apartments, currentProjectId]);
 
   // Open a specific apartment drawer — navigated here from the dashboard, or
   // asked for WHILE standing here (the header's pending list): the effect
@@ -461,35 +496,49 @@ export function ProjectDiagramPage() {
    * THE PHONE'S BACK CLOSES THE APARTMENT WINDOW (owner, 2026-11-19: "sometimes I go out and then it takes me to a
    * different project … or back to all three buildings"). The window had no place in the browser's history, so
    * Back on a phone did not close it: it left the page for wherever the history happened to point — another page,
-   * another project. An open window now owns ONE history entry (the same address, marked `apt`); Back removes that
-   * entry and the window closes, and closing it by the X takes the entry away again.
+   * another project. An open window now owns ONE history entry, marked `apt` and carrying the window's own
+   * address (?p=<project>&apt=<id>, the one he shares); Back removes that entry and the window closes, and closing
+   * it by the X takes the entry away again. The page under the window keeps the plain address.
    */
   const location = useLocation();
   const locState = (location.state ?? null) as { apt?: string } | null;
   const aptEntry = locState?.apt ?? null;
   const ownEntry = useRef(false);
   const openId = selectedApt?.id ?? null;
+  const urlApt = useMemo(() => new URLSearchParams(location.search).get('apt'), [location.search]);
   useEffect(() => {
-    const here = location.pathname + location.search + location.hash;
-    if (openId && aptEntry === openId) { ownEntry.current = true; holdTicketThroughBack(true); return; }
+    if (!openId && (urlAsk.current || askOpening.current)) return;   // the address's own flat is still on its way in
+    if (openId) askOpening.current = false;
+    const q = new URLSearchParams(location.search); q.delete('p'); q.delete('apt');
+    const plain = location.pathname + (q.toString() ? `?${q}` : '') + location.hash;
+    const named = (id: string) => { const w = new URLSearchParams(q); w.set('p', currentProjectId); w.set('apt', id); return `${location.pathname}?${w}${location.hash}`; };
+    if (openId && aptEntry === openId) {
+      ownEntry.current = true; holdTicketThroughBack(true);
+      if (urlApt !== openId) navigate(named(openId), { replace: true, state: locState });
+      return;
+    }
     if (openId && !aptEntry) {
       if (ownEntry.current) {                       // Back took the entry away: close the window
         ownEntry.current = false; holdTicketThroughBack(false);
         closeDrawer();
         return;
       }
-      navigate(here, { state: { ...(locState ?? {}), apt: openId } });
+      // Arrived by a shared address: the page UNDER the window is the plain one, then the window's entry goes on top.
+      if (urlApt) { navigate(plain, { replace: true, state: locState }); return; }
+      navigate(named(openId), { state: { ...(locState ?? {}), apt: openId } });
       return;
     }
-    if (openId && aptEntry) { navigate(here, { replace: true, state: { ...(locState ?? {}), apt: openId } }); return; }
+    if (openId && aptEntry) { navigate(named(openId), { replace: true, state: { ...(locState ?? {}), apt: openId } }); return; }
     if (aptEntry) {                                 // closed, and the entry is still there
       holdTicketThroughBack(false);
       if (leavingHome.current) return;              // on its way to another page already
       if (ownEntry.current) { ownEntry.current = false; navigate(-1); }
-      else { const { apt: _gone, ...rest } = locState ?? {}; navigate(here, { replace: true, state: rest }); }   // a refresh left the mark behind
+      else { const { apt: _gone, ...rest } = locState ?? {}; navigate(plain, { replace: true, state: rest }); }   // an old entry of a window that is gone
+      return;
     }
+    if (urlApt) navigate(plain, { replace: true, state: locState });   // nothing open: the address names no flat
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [openId, aptEntry, location.key]);
+  }, [openId, aptEntry, urlApt, location.key]);
   useEffect(() => () => holdTicketThroughBack(false), []);
   useEffect(() => { leavingHome.current = false; }, [currentProjectId]);
 

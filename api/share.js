@@ -1,4 +1,5 @@
 import { google } from 'googleapis';
+import { isSharedRequest, handleShared } from '../lib/sharedView.js';
 
 function getAuth() {
   const json = process.env.GOOGLE_SERVICE_ACCOUNT_JSON;
@@ -10,6 +11,11 @@ function getAuth() {
 }
 
 export default async function handler(req, res) {
+  // The outside SHARED VIEW (/s/<token>) lives in lib/sharedView.js and is reached through this file with
+  // ?sv=data|media|photos|file|pin|pinfile — /api may hold only 12 files and already does. It answers before anything below:
+  // no CORS, no office API key, its own token check (owner, 2026-11-18).
+  if (isSharedRequest(req)) return handleShared(req, res);
+
   res.setHeader('Access-Control-Allow-Origin', process.env.ALLOWED_ORIGIN || '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, x-api-key');

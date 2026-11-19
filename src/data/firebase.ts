@@ -821,6 +821,21 @@ export function fsListenDoc(collectionName: string, docId: string, callback: (da
   }, e => _notifyReadError(collectionName, e));
 }
 
+/** Live twin of fsGetWhere: only the documents whose fields equal the given values (a workspace's shared links). */
+export function fsListenWhere(collectionName: string, equals: Record<string, string>, callback: (items: Record<string, unknown>[]) => void): Unsubscribe {
+  if (!db) return () => {};
+  try {
+    const q = query(collection(db, collectionName), ...Object.entries(equals).map(([f, v]) => where(f, '==', v)));
+    return onSnapshot(q, snap => {
+      _countReads(_billed(snap), collectionName);
+      callback(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    }, e => _notifyReadError(collectionName, e));
+  } catch (e) {
+    console.warn(`Firestore listener failed for ${collectionName}:`, e);
+    return () => {};
+  }
+}
+
 /** The documents whose fields equal the given values (equality only — no index needed). */
 export async function fsGetWhere(collectionName: string, equals: Record<string, string>): Promise<Record<string, unknown>[]> {
   if (!db) return [];
